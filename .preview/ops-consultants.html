@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ops — Consultants / caseload, redesigned</title>
+<style>
+:root{--bg:#fff;--fg:#0a0a0a;--muted:#f5f5f5;--muted-fg:#52525b;--b:#0a0a0a;--bl:#d4d4d8;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--serif:Georgia,serif;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
+*{box-sizing:border-box;margin:0}
+body{font-family:var(--sans);background:#e8e8e8;color:var(--fg);font-size:.875rem}
+.page{max-width:1240px;margin:0 auto;padding:2rem 1.5rem 4rem}
+.eyebrow{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg)}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
+.lead{color:var(--muted-fg);font-size:.85rem}
+.note{font-size:.72rem;color:var(--muted-fg);border-left:3px solid var(--fg);padding:.6rem .9rem;margin:1.5rem 0;line-height:1.6;background:#fff}
+.frame{background:var(--bg);border:1px solid var(--bl);margin-top:1.25rem;padding:1.25rem}
+.hdr{display:flex;justify-content:space-between;align-items:flex-end;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem}
+.band{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1.5px solid var(--b);margin-bottom:1rem}
+.band>div{padding:.7rem 1rem;border-right:1px solid var(--bl)}
+.band>div:last-child{border-right:0}
+.band .n{font-family:var(--mono);font-weight:800;font-size:1.1rem}
+.band .k{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg)}
+.band>div.inv{background:var(--fg);color:var(--bg)}.band>div.inv .k{color:#bbb}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem}
+.pill{border:1px solid var(--b);padding:.28rem .7rem;font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.05em;background:var(--bg);cursor:pointer}
+.pill.on{background:var(--fg);color:var(--bg)}
+.pill .c{opacity:.6;margin-left:.35rem}
+.jlink{font-family:var(--mono);font-size:.62rem;text-decoration:underline;text-underline-offset:2px;color:var(--fg);background:none;border:0;cursor:pointer}
+.spill{display:inline-block;border:1px solid var(--b);padding:.1rem .45rem;font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.06em}
+.spill--solid{background:var(--fg);color:var(--bg)}
+.spill--act{text-decoration:underline;text-decoration-thickness:2px;font-weight:700}
+.split{display:flex;gap:1rem;align-items:flex-start}
+.list{flex:0 0 42%;min-width:22rem;border:1px solid var(--bl);background:var(--bg)}
+.detail{flex:1;min-width:0;border:1.5px solid var(--b);background:var(--bg);padding:1.25rem}
+.orow{border-bottom:1px solid var(--bl);padding:.75rem 1rem;cursor:pointer;display:flex;gap:.9rem;align-items:center}
+.orow:hover{background:var(--muted)}
+.orow.on{border-left:4px solid var(--fg);background:var(--muted)}
+.orow .ld{font-family:var(--mono);font-weight:800;font-size:1.15rem;min-width:2.2rem;text-align:center;border:1px solid var(--b);padding:.3rem 0}
+.orow .who b{display:block;font-weight:650}
+.orow .who small{color:var(--muted-fg);font-size:.68rem}
+.orow .right{margin-left:auto;text-align:right;font-family:var(--mono);font-size:.62rem;color:var(--muted-fg)}
+.strip{display:flex;height:5px;gap:1px;margin-top:.35rem;min-width:6rem}
+.strip i{flex:1;background:var(--bl)}
+.strip i.f1{background:#c9c9c9}.strip i.f2{background:#9a9a9a}.strip i.f3{background:#6b6b6b}.strip i.f4{background:#3d3d3d}.strip i.f5{background:var(--fg)}
+.dhead{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem}
+.dhead h3{font-size:1.15rem;font-weight:800;margin:.2rem 0}
+.dhead .sub{font-size:.72rem;color:var(--muted-fg)}
+.btn{border:1px solid var(--b);background:var(--bg);padding:.35rem .8rem;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;cursor:pointer}
+.btn--primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.dsec{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg);margin:1.2rem 0 .4rem;padding-bottom:.3rem;border-bottom:1.5px solid var(--b)}
+.dkv{display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--bl);font-size:.75rem}
+.dkv .k{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-fg)}
+.mini{border-bottom:1px solid var(--bl);padding:.55rem 0;display:flex;justify-content:space-between;gap:.75rem;font-size:.75rem;align-items:baseline}
+.mini .ref{font-family:var(--mono);font-size:.6rem;color:var(--muted-fg)}
+.mini b{font-weight:650}
+.mini .st{font-family:var(--mono);font-size:.6rem;color:var(--muted-fg)}
+.hours{display:grid;grid-template-columns:repeat(7,1fr);gap:.3rem;margin-top:.4rem}
+.hours div{text-align:center;font-family:var(--mono);font-size:.55rem;color:var(--muted-fg)}
+.hours b{display:block;border:1px solid var(--bl);padding:.3rem 0;font-size:.6rem;color:var(--fg);font-weight:600}
+.hours b.off{color:var(--bl)}
+.hours span{display:block;margin-top:.2rem}
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="eyebrow">Ops · consultants</p>
+  <h1>Caseload — the officers get a list and a record, like the cases do</h1>
+  <p class="lead">Today the caseload view is officer cards on top and every record re-listed in stage bands below — clicking an officer just narrows the same long list. The redesign gives officers the scaffold treatment: who they are on the left, what they're carrying on the right.</p>
+
+  <div class="frame">
+    <div class="hdr">
+      <div>
+        <h1 style="font-size:1.3rem">Consultants</h1>
+        <p class="lead">Who carries what — load, mix, and what has stalled.</p>
+      </div>
+      <div style="display:flex;gap:.4rem">
+        <span class="pill on">By officer</span><span class="pill">By stage</span><span class="pill">Unassigned <span class="c">3</span></span>
+      </div>
+    </div>
+
+    <div class="band">
+      <div><p class="n">5</p><p class="k">Officers carrying work</p></div>
+      <div><p class="n">38</p><p class="k">Open cases</p></div>
+      <div><p class="n">11</p><p class="k">Consultations</p></div>
+      <div><p class="n">7.6</p><p class="k">Avg load</p></div>
+      <div class="inv"><p class="n">4</p><p class="k">Stalled · 7d+</p></div>
+    </div>
+
+    <div class="split">
+      <div class="list">
+        <div class="orow on">
+          <span class="ld">9</span>
+          <div class="who"><b>A. Osei (you)</b><small>Consultant · Accra</small>
+            <div class="strip"><i class="f1" style="flex:2"></i><i class="f2" style="flex:3"></i><i class="f3" style="flex:2"></i><i class="f4" style="flex:1"></i><i class="f5" style="flex:1"></i></div>
+          </div>
+          <div class="right">6 cases · 3 consults<br>2 stalled</div>
+        </div>
+        <div class="orow">
+          <span class="ld">12</span>
+          <div class="who"><b>D. Larkai</b><small>Senior consultant · Accra</small>
+            <div class="strip"><i class="f1" style="flex:1"></i><i class="f3" style="flex:4"></i><i class="f4" style="flex:5"></i><i class="f5" style="flex:2"></i></div>
+          </div>
+          <div class="right">10 cases · 2 consults<br><span style="color:var(--fg);font-weight:700">2 stalled</span></div>
+        </div>
+        <div class="orow">
+          <span class="ld">7</span>
+          <div class="who"><b>M. Asante</b><small>Visa officer · London</small>
+            <div class="strip"><i class="f3" style="flex:1"></i><i class="f4" style="flex:5"></i><i class="f5" style="flex:1"></i></div>
+          </div>
+          <div class="right">7 cases · —</div>
+        </div>
+        <div class="orow">
+          <span class="ld">6</span>
+          <div class="who"><b>E. Nkrumah</b><small>Consultant · Accra</small>
+            <div class="strip"><i class="f1" style="flex:3"></i><i class="f2" style="flex:2"></i><i class="f3" style="flex:1"></i></div>
+          </div>
+          <div class="right">4 cases · 2 consults</div>
+        </div>
+        <div class="orow">
+          <span class="ld">4</span>
+          <div class="who"><b>J. Quartey</b><small>Consultant · Kumasi</small>
+            <div class="strip"><i class="f1" style="flex:2"></i><i class="f2" style="flex:2"></i></div>
+          </div>
+          <div class="right">3 cases · 1 consult</div>
+        </div>
+      </div>
+
+      <!-- the officer's record — new surface -->
+      <div class="detail">
+        <div class="dhead">
+          <div>
+            <span class="eyebrow">Officer record</span>
+            <h3>Akosua Osei</h3>
+            <p class="sub">Consultant · Accra branch · a.osei@centurynit.com</p>
+          </div>
+          <button class="btn btn--primary">Message</button>
+        </div>
+
+        <p class="dsec">Load · 9 open</p>
+        <div class="dkv"><span class="k">Cases</span><span>6 — heaviest in Applications (3)</span></div>
+        <div class="dkv"><span class="k">Consultations</span><span>3 upcoming</span></div>
+        <div class="dkv"><span class="k">Stalled</span><span><span class="spill spill--act">2 — 9d, 12d</span></span></div>
+
+        <p class="dsec">This week's hours</p>
+        <div class="hours">
+          <div><b>9–5</b><span>Mon</span></div>
+          <div><b>9–5</b><span>Tue</span></div>
+          <div><b>9–5</b><span>Wed</span></div>
+          <div><b>9–5</b><span>Thu</span></div>
+          <div><b>9–3</b><span>Fri</span></div>
+          <div><b class="off">—</b><span>Sat</span></div>
+          <div><b class="off">—</b><span>Sun</span></div>
+        </div>
+
+        <p class="dsec">Carrying</p>
+        <div class="mini"><span><span class="ref">APP-0041</span> <b>Kwame Mensah</b></span><span class="st">III · 2 to do</span><a class="jlink" href="#">open →</a></div>
+        <div class="mini"><span><span class="ref">APP-0038</span> <b>Ama Serwaa</b></span><span class="st">III · invoice out</span><a class="jlink" href="#">open →</a></div>
+        <div class="mini"><span><span class="ref">APP-0031</span> <b>Efua Asante</b></span><span class="st"><span class="spill spill--act">stalled 9d</span></span><a class="jlink" href="#">open →</a></div>
+        <div class="mini"><span><span class="ref">APP-0022</span> <b>Kofi Owusu</b></span><span class="st">IV · biometrics 20 Feb</span><a class="jlink" href="#">open →</a></div>
+        <div class="mini"><span><span class="ref">CN-0147</span> <b>A. Frimpong</b></span><span class="st">Consult · Tue 10:00</span><a class="jlink" href="#">open →</a></div>
+
+        <p class="dsec">Handoffs</p>
+        <div class="dkv"><span class="k">Waiting to take</span><span>1 — Y. Boateng needs a visa officer</span></div>
+        <div class="dkv"><span class="k">Given away</span><span>0 this week</span></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note">
+    <strong>WHAT CHANGES.</strong> (1) <strong>Officer cards → officer rows.</strong> The cards repeat a stage-strip legend on every card and sprawl across the grid; as rows, each officer is one line: load count in a bordered cell, name + role + branch, the strip inline (greyscale, early→late = light→dark), and the stalled count bold on the right. (2) <strong>A real detail.</strong> Clicking a card today only narrows the shared list — you still can't answer "what is Akosua carrying?" without scanning it. The record pane answers it directly: load breakdown, <strong>this week's working hours</strong> (the new staffWorkingHours API you added — who can actually take the next slot), their records with chapter + to-do counts, and pending handoffs. Message stays the primary action. (3) <strong>The stage bands demote to a view</strong> — "By stage" keeps the current banded layout for the manager's sweep, but it's a toggle, not the default stacked under the cards. "Unassigned" is a counted pill, not a separate queue panel. (4) Count band replaces the "Who carries what" header line: officers · open cases · consults · average load · stalled inverted.
+  </p>
+</div>
+</body>
+</html>

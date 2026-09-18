@@ -3,12 +3,12 @@
  *
  * Amounts are stored in USD cents. The settlement currency shown to people in
  * Ghana is GHS, so the default rendering is the cedi figure with the USD it
- * was priced in as a secondary — the same on an ops table and the applicant's
+ * was priced in as a secondary. The same on an ops table and the applicant's
  * invoice. The rate here is a display approximation; the API converts at
  * the live rate when it takes a payment.
  */
 let ghsPerUsd = 15;
-/** The rate every GHS figure renders at — set from the fee catalogue when an app loads. */
+/** The rate every GHS figure renders at. Set from the fee catalogue when an app loads. */
 export function setGhsPerUsd(rate: number): void {
 	if (Number.isFinite(rate) && rate > 0) ghsPerUsd = rate;
 }

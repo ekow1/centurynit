@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { API_PREFIX, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 import { branchName, OPS_BRANCHES } from "century-nit-core/ops";
-import { apiFetch } from "../lib/api";
+import { apiFetch, listClientUsers, type ClientUser } from "../lib/api";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
@@ -11,37 +11,7 @@ import { fmtBoth, fmtGhs } from "./currency";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 import { FilterGroup } from "./FilterGroup";
 
-export interface ClientUser {
-	id: string;
-	name: string;
-	email: string;
-	phoneNumber: string | null;
-	emailVerified: boolean;
-	banned: boolean;
-	banReason: string | null;
-	bannedAt: string | null;
-	bannedBy: string | null;
-	activeSessionsCount: number;
-	lastActiveAt: string;
-	status: "active" | "inactive" | "banned" | "unverified" | "registered";
-	leadStage: string | null;
-	applicantStatus: string | null;
-	createdAt: string;
-	updatedAt: string;
-}
-
 type DeleteAction = "disconnect" | "archive" | "purge";
-
-
-interface ClientListResponse {
-	clients: ClientUser[];
-	metrics: {
-		total: number;
-		active: number;
-		inactive: number;
-		banned: number;
-	};
-}
 
 export function ClientDirectory() {
 	const { opsRole } = useOpsAuth();
@@ -108,7 +78,7 @@ export function ClientDirectory() {
 	const fetchClients = useCallback(async () => {
 		setError(null);
 		try {
-			const res = await apiFetch<ClientListResponse>(`${API_PREFIX}/client-users`);
+			const res = await listClientUsers();
 			if (res && Array.isArray(res.clients)) {
 				setClients(res.clients);
 				if (res.metrics) setMetrics(res.metrics);
@@ -522,9 +492,14 @@ export function ClientDirectory() {
 									{" · "}{selected.emailVerified ? "verified" : "unverified"} {new Date(selected.createdAt).toLocaleDateString()}
 								</p>
 								<div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
-									<Link to={`/helpdesk?client=${selected.id}`} className="btn btn--sm">
+									<Link to={`/helpdesk?new=1&client=${selected.id}`} className="btn btn--sm">
 										Message →{ctx && ctx.openConversations > 0 ? ` (${ctx.openConversations})` : ""}
 									</Link>
+									{ctx && ctx.openConversations > 0 && (
+										<Link to={`/helpdesk?client=${selected.id}`} className="btn btn--sm btn--ghost">
+											Threads →
+										</Link>
+									)}
 									{selectedCases[0] && (
 										<Link to={`/applications?id=${selectedCases[0].id}`} className="btn btn--sm btn--ghost">
 											Case {selectedCases[0].appId} →

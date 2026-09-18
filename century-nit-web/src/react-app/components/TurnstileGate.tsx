@@ -10,7 +10,7 @@ import { useTurnstile } from "../hooks/useTurnstile";
  * (see `src/worker/index.ts`). Once verified, the overlay is gone for the
  * session and the public AI chat works without any per-message challenge.
  *
- * The authed portal (`/portal/*`, `/start/*`) never renders this gate — it is
+ * The authed portal (`/portal/*`, `/start/*`) never renders this gate. It is
  * mounted only on the public chrome (see `App.tsx`).
  */
 export function TurnstileGate() {
@@ -37,7 +37,7 @@ export function TurnstileGate() {
 			if (cancelled) return;
 			setSitekey(key);
 			// Don't show a gate that can never resolve (Turnstile not configured yet)
-			// — the public AI chat will return 503 until the secret is set, but the
+			//. The public AI chat will return 503 until the secret is set, but the
 			// rest of the site stays fully usable.
 			setStatus(!configured || verified ? "verified" : "unverified");
 		});

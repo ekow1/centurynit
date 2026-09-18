@@ -28,7 +28,7 @@ const CSS = `
 	--cn-chat-danger-fg: var(--danger-foreground, #ffffff);
 	--cn-chat-success: var(--success, #10b981);
 
-	/* Bubble colors — own vs. other */
+	/* Bubble colors. Own vs. other */
 	--cn-chat-bubble-mine-bg: var(--primary, #18181b);
 	--cn-chat-bubble-mine-fg: var(--primary-foreground, #ffffff);
 	--cn-chat-bubble-theirs-bg: var(--muted, #f4f4f5);

@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ops — Cases · Clients · Consultations · Live meetings</title>
+<style>
+:root{--bg:#fff;--fg:#0a0a0a;--muted:#f5f5f5;--muted-fg:#52525b;--b:#0a0a0a;--bl:#d4d4d8;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
+*{box-sizing:border-box;margin:0}
+body{font-family:var(--sans);background:#e8e8e8;color:var(--fg);font-size:.875rem}
+.page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 5rem}
+.eyebrow{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg)}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
+h2{font-size:1.15rem;font-weight:800;margin:2.5rem 0 .4rem}
+h3{font-size:.85rem;font-weight:700;margin:1.4rem 0 .3rem}
+.lead{color:var(--muted-fg);font-size:.85rem;max-width:46rem;line-height:1.6}
+.note{font-size:.72rem;color:var(--muted-fg);border-left:3px solid var(--fg);padding:.6rem .9rem;margin:1rem 0;line-height:1.6;background:#fff}
+.frame{background:var(--bg);border:1px solid var(--bl);margin-top:1.25rem;padding:1.5rem}
+.sev{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;border:1px solid var(--b);padding:.12rem .45rem;white-space:nowrap}
+.sev--bug{background:var(--fg);color:var(--bg)}
+.sev--new{background:var(--fg);color:var(--bg)}
+table.review{width:100%;border-collapse:collapse;font-size:.78rem;background:#fff;margin-top:.6rem}
+.review th{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);text-align:left;padding:.45rem .7rem;border-bottom:1px solid var(--b)}
+.review td{padding:.55rem .7rem;border-bottom:1px solid var(--bl);vertical-align:top;line-height:1.5}
+.review td:first-child{white-space:nowrap}
+code,pre{font-family:var(--mono);font-size:.72rem}
+code{background:var(--muted);padding:.05rem .3rem}
+
+/* ===== shared mock chrome ===== */
+.wk-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:.75rem;border-bottom:1.5px solid var(--b);padding-bottom:.9rem}
+.wk-head h1{font-size:1.5rem}
+.wk-sum{font-family:var(--mono);font-size:.65rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-fg);text-align:right;line-height:1.9}
+.wk-sum b{color:var(--fg)}
+.qbar{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin-top:1rem}
+.seg{display:inline-flex;border:1px solid var(--b)}
+.seg button{border:0;border-right:1px solid var(--bl);background:var(--bg);padding:.3rem .6rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.05em;text-transform:uppercase;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-checked="true"]{background:var(--fg);color:var(--bg)}
+.seg .n{opacity:.6;margin-left:.35rem}
+.seg--warn button.hot::before{content:"● ";font-size:.5rem;vertical-align:middle}
+.frow{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-top:.7rem}
+.btn{border:1px solid var(--b);background:var(--bg);padding:.32rem .7rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.05em;text-transform:uppercase;cursor:pointer}
+.btn--pri{background:var(--fg);color:var(--bg)}
+.btn[disabled]{opacity:.35;cursor:default}
+.pill{font-family:var(--mono);font-size:.56rem;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--b);padding:.1rem .4rem;white-space:nowrap}
+.pill--inv{background:var(--fg);color:var(--bg)}
+.split{display:grid;grid-template-columns:minmax(0,1fr) 19rem;gap:1.25rem;margin-top:1.1rem}
+@media(max-width:900px){.split{grid-template-columns:1fr}}
+
+/* list rows (cn-row stand-in) */
+.rows{border:1px solid var(--bl)}
+.row{display:flex;justify-content:space-between;align-items:flex-start;gap:.8rem;padding:.6rem .8rem;border-bottom:1px solid var(--bl);font-size:.78rem}
+.row:last-child{border-bottom:0}
+.row.sel{background:var(--muted);box-shadow:inset 2px 0 0 var(--fg)}
+.row .ref{font-family:var(--mono);font-size:.66rem;color:var(--muted-fg)}
+.row .nm{font-weight:700;font-size:.82rem;margin:.1rem 0}
+.row .sub{font-size:.72rem;color:var(--muted-fg)}
+.row .meta{font-size:.66rem;color:var(--muted-fg);margin-top:.25rem;font-family:var(--mono)}
+.row .arrow{color:var(--muted-fg);font-size:.8rem;padding-top:.4rem}
+.band{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);background:var(--bg);padding:.35rem .8rem;border-bottom:1px solid var(--bl);display:flex;justify-content:space-between}
+.band .hn{color:var(--fg)}
+.tag{font-family:var(--mono);font-size:.56rem;letter-spacing:.05em;text-transform:uppercase;border:1px solid var(--bl);padding:.05rem .3rem;color:var(--muted-fg)}
+.tag--coord{border-color:var(--fg);color:var(--fg)}
+.tag--hot{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+
+/* detail pane stand-in */
+.detail{border:1px solid var(--bl);min-height:20rem;padding:1rem}
+.detail .bar{display:flex;justify-content:flex-end;gap:.4rem;border-bottom:1px solid var(--muted);padding-bottom:.6rem;margin-bottom:.8rem}
+.rail{border:1px dashed var(--bl);min-height:20rem;padding:1rem;background:#fbfbfb}
+.rail .k{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);margin:0 0 .5rem}
+.kv{display:flex;gap:.8rem;font-size:.74rem;padding:.28rem 0;border-bottom:1px solid var(--muted)}
+.kv .k{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-fg);width:7rem;flex-shrink:0;padding-top:.1rem}
+
+/* meetings board */
+.mrow{display:flex;justify-content:space-between;align-items:center;gap:.8rem;padding:.6rem .8rem;border-bottom:1px solid var(--bl);font-size:.78rem}
+.mrow:last-child{border-bottom:0}
+.mrow .nm{font-weight:700}
+.dot{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;background:var(--fg);margin-right:.4rem}
+.dot--hollow{background:transparent;border:1.5px solid var(--fg)}
+.dot--off{background:var(--bl)}
+.prog{height:.3rem;background:var(--muted);margin-top:.3rem;width:10rem}
+.prog i{display:block;height:100%;background:var(--fg)}
+
+.anno{position:relative}
+.anno::after{content:attr(data-n);position:absolute;top:-.55rem;left:-.55rem;width:1.1rem;height:1.1rem;border-radius:50%;background:var(--fg);color:var(--bg);font-family:var(--mono);font-size:.6rem;display:grid;place-items:center;z-index:2}
+.legend{display:flex;flex-wrap:wrap;gap:1rem;font-size:.72rem;margin-top:.8rem}
+.legend b{display:inline-grid;place-items:center;width:1.1rem;height:1.1rem;border-radius:50%;background:var(--fg);color:var(--bg);font-family:var(--mono);font-size:.6rem;margin-right:.3rem}
+.legend span{max-width:16rem;line-height:1.45}
+</style>
+</head>
+<body>
+<div class="page">
+
+<p class="eyebrow">Ops · proposal for review</p>
+<h1>Cases · Clients · Consultations · Live meetings</h1>
+<p class="lead">
+Four pages, one review. They already share a spine — <code>CaseScaffold</code> list+detail — but each has
+drifted in its own direction: three different filter widgets, two selection models, one page that polls
+every 10&nbsp;seconds, and a meetings page that can only show what is live <i>right now</i>. The theme of
+every change below: <b>the list should answer "what needs me" before you open a record</b> — and every
+control should be a URL, a keyboard, or a chip, consistently.
+</p>
+
+<h2>0 · Cross-cutting — fixes that land on all four</h2>
+<table class="review">
+<tr><th>Change</th><th>Why</th><th>Where today</th></tr>
+<tr><td><b>URL state everywhere</b> — <code>?id= ?status= ?branch= ?q= ?view=</code></td>
+<td>A filtered list becomes a link: paste it in chat, bookmark it, refresh keeps it. Worklist already does this; these four pages don't (Cases has <code>?chapter</code> + <code>?id</code> only).</td>
+<td>All four</td></tr>
+<tr><td><b>One filter widget</b> — shared <code>FilterGroup</code> radiogroup chips with live counts</td>
+<td>Cases uses custom <code>tablist</code> pills, Clients uses another set of custom pills, Consultations uses a <code>&lt;select&gt;</code> with counts baked into option text. Three widgets, one job. FilterGroup adds arrow-key nav + <code>aria-checked</code> for free.</td>
+<td>Cases chapters, Clients access chips, Consultations status select</td></tr>
+<tr><td><b>Empty-detail rail</b> — use <code>CaseScaffold</code>'s existing <code>rail</code> prop</td>
+<td>Today an unselected detail pane shows "◈ select a record". The scaffold already supports a persistent rail — fill it with queue health: <i>needs a handler · today · stalled · my next-up</i>. The dead space becomes the triage summary.</td>
+<td>Cases, Consultations (Clients gets a "client health" rail)</td></tr>
+<tr><td><b>One scope line</b> — slim <code>dash-day</code> summary</td>
+<td>Consultations wraps its scope in an inverted black banner; Cases uses a quiet dash-day line. Pick the quiet one — same information, less noise.</td>
+<td>Consultations banner → dash-day</td></tr>
+<tr><td><b>Selection bug on Cases</b> — <code>?id=</code> opens the detail but doesn't mark the row</td>
+<td><code>isSelected</code> checks <code>selectedApp</code> only, not the URL-derived <code>liveSelected</code>. Deep-linked case: detail open, row unmarked.</td>
+<td><code>EnterpriseCases.tsx</code> row render</td></tr>
+<tr><td><b>Kill the 10s poll on Clients</b></td>
+<td>The directory refetches every 10&nbsp;seconds forever — hundreds of rows, every visit. Refresh on focus + after actions + a manual ↻ is plenty for account data.</td>
+<td><code>ClientDirectory.tsx</code> interval</td></tr>
+</table>
+
+<!-- ══════════ CASES ══════════ -->
+<h2>1 · Cases <span class="sev">/applications</span></h2>
+<p class="lead">The queue of every client journey. Keep the list/board switch and the scaffold — the upgrade is in the
+rows and the rail: <b>each row says its next step and how long it's been quiet</b>, and the empty pane works while
+nothing is selected.</p>
+
+<div class="frame">
+<div class="wk-head">
+	<div>
+		<h1>Cases</h1>
+		<p class="muted xs" style="margin-top:.2rem">Every client's journey — one list, by chapter; open a case to work it.</p>
+	</div>
+	<div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
+		<span class="seg"><button aria-checked="true">List</button><button aria-checked="false">Board</button></span>
+		<button class="btn">Branch: All ▾</button>
+	</div>
+</div>
+
+<div class="qbar anno" data-n="1">
+	<span class="seg"><button aria-checked="true">All <span class="n">38</span></button><button>Enrol <span class="n">14</span></button><button>Visa <span class="n">11</span></button><button>Depart <span class="n">7</span></button><button>Done <span class="n">6</span></button></span>
+	<span class="seg"><button aria-checked="false">Everyone <span class="n">38</span></button><button aria-checked="true">Mine <span class="n">9</span></button></span>
+	<span class="seg seg--warn"><button>Any status <span class="n">38</span></button><button class="hot">Needs handler <span class="n">5</span></button><button>Action required <span class="n">4</span></button></span>
+</div>
+<div class="frow anno" data-n="2">
+	<input class="btn" style="text-align:left;text-transform:none;letter-spacing:0;font-family:var(--sans);min-width:15rem" value="Search case ID, client, university…" readonly>
+	<span class="pill">Sort: Last activity ▾</span>
+	<span class="muted xs" style="margin-left:auto">38 cases · Manager scope · <b>5 need a handler</b></span>
+</div>
+
+<div class="split">
+	<div class="rows anno" data-n="3">
+		<div class="row">
+			<div>
+				<span class="ref">CN-APP-1042</span> <span class="pill">Accepted</span> <span class="tag tag--hot">Needs handler</span>
+				<p class="nm">Ama Serwaa</p>
+				<p class="sub">University of Manitoba · MSc Public Health — <b>visa · docs review</b></p>
+				<p class="meta">Kumasi · last move 6d ago · next: place visa officer → <span class="tag tag--coord">→ Efua</span></p>
+			</div>
+			<span class="arrow">→</span>
+		</div>
+		<div class="row sel">
+			<div>
+				<span class="ref">CN-APP-1038</span> <span class="pill pill--inv">Under review</span>
+				<p class="nm">Kojo Frimpong</p>
+				<p class="sub">Leeds Beckett · BEng Civil — <b>enrol · offer pending</b></p>
+				<p class="meta">Accra · <u>You</u> · moved 2h ago · next: upload offer letter · 2 to do</p>
+			</div>
+			<span class="arrow">→</span>
+		</div>
+		<div class="row">
+			<div>
+				<span class="ref">CN-APP-1035</span> <span class="pill">Accepted</span>
+				<p class="nm">Efua Owusu</p>
+				<p class="sub">McGill · MBA — <b>depart · travel booked</b></p>
+				<p class="meta">Takoradi · Kwame B. · moved 1d ago · next: pre-departure fee · GH₵2,400 due</p>
+			</div>
+			<span class="arrow">→</span>
+		</div>
+		<div class="row">
+			<div>
+				<span class="ref">CN-APP-1029</span> <span class="pill">Action required</span>
+				<p class="nm">Yaw Darko</p>
+				<p class="sub">Coventry · BSc Nursing — <b>visa · biometrics booked</b></p>
+				<p class="meta">Accra · Abena · moved 4d ago · next: client uploads bank statement</p>
+			</div>
+			<span class="arrow">→</span>
+		</div>
+	</div>
+
+	<div class="rail anno" data-n="4">
+		<p class="k">Queue — nothing selected</p>
+		<div class="kv"><span class="k">Needs handler</span><span><b>5</b> — oldest 6d (Ama Serwaa)</span></div>
+		<div class="kv"><span class="k">Stalled 7d+</span><span><b>3</b> — all in visa</span></div>
+		<div class="kv"><span class="k">Awaiting client</span><span><b>8</b> — docs or fee</span></div>
+		<div class="kv"><span class="k">My next up</span><span>CN-APP-1038 · upload offer letter</span></div>
+		<p class="k" style="margin-top:1rem">By chapter</p>
+		<div class="kv"><span class="k">Enrol</span><span>14 · 1 stalled</span></div>
+		<div class="kv"><span class="k">Visa</span><span>11 · 3 stalled</span></div>
+		<div class="kv"><span class="k">Depart</span><span>7 · none stalled</span></div>
+		<p class="muted xs" style="margin-top:1rem">Select a case to work it — the rail keeps the queue's pulse meanwhile.</p>
+	</div>
+</div>
+
+<div class="legend">
+	<div><b>1</b><span><b>FilterGroup chips, three groups.</b> Chapter pills (existing data, now accessible + URL'd via <code>?chapter=</code>). <b>Mine/Everyone</b> replaces the odd "My cases" toggle buried in the summary line. <b>Needs handler</b> is a hot chip — the count already exists as <code>unassignedCases</code>.</span></div>
+	<div><b>2</b><span><b>Sort for the list view</b> — the board already orders by age/activity/name; the list gets the same <code>?sort=</code>. The scope line folds into this row, right-aligned, same as Worklist.</span></div>
+	<div><b>3</b><span><b>Rows say the next step, not just "N to do".</b> <code>tasksForApplication</code> already computes the task list — render the top one's label (<code>taskActionLabel</code>) plus days-since-activity, branch tag for all-branch viewers, and the <code>→ Efua</code> coordinator tag from the Worklist.</span></div>
+	<div><b>4</b><span><b>The rail replaces the empty hint.</b> <code>CaseScaffold rail=</code> already exists — this is content, not plumbing. Needs handler / stalled / awaiting-client / my next-up; chapter breakdown under it.</span></div>
+</div>
+</div>
+
+<!-- ══════════ CLIENTS ══════════ -->
+<h2>2 · Clients <span class="sev">/clients</span></h2>
+<p class="lead">Portal accounts — who can sign in, who has a case, who needs access managed. The upgrade: stop polling,
+URL the state, and let the record panel grow into the client's whole relationship — cases, journey coordinator,
+next consultation — not just access facts.</p>
+
+<div class="frame">
+<div class="wk-head">
+	<div>
+		<h1>Clients</h1>
+		<p class="muted xs" style="margin-top:.2rem">Every portal account — access, cases, and the person behind them.</p>
+	</div>
+	<div class="wk-sum"><b>412</b> registered · <b>96</b> with a case · <b>3</b> suspended</div>
+</div>
+
+<div class="qbar anno" data-n="1">
+	<span class="seg"><button aria-checked="true">All <span class="n">412</span></button><button>With a case <span class="n">96</span></button><button>Active <span class="n">58</span></button><button>Dormant <span class="n">310</span></button><button class="hot">Unverified <span class="n">21</span></button><button class="hot">Suspended <span class="n">3</span></button></span>
+</div>
+<div class="frow">
+	<input class="btn" style="text-align:left;text-transform:none;letter-spacing:0;font-family:var(--sans);min-width:15rem" value="Search name, email, phone…" readonly>
+	<span class="muted xs" style="margin-left:auto">↻ refreshed 2m ago — updates on focus, not every 10s</span>
+</div>
+
+<div class="split">
+	<div class="rows anno" data-n="2">
+		<div class="row">
+			<div>
+				<span class="ref">ama@serwaa.com</span> <span class="pill pill--inv">Active</span>
+				<p class="nm">Ama Serwaa <span class="muted" style="font-weight:400">✓</span></p>
+				<p class="sub">2 cases · CN-APP-1042 in visa · journey → Efua</p>
+				<p class="meta">seen today · 1 device · joined Mar 2024</p>
+			</div>
+			<span class="arrow">→</span>
+		</div>
+		<div class="row sel">
+			<div>
+				<span class="ref">k.frimpong@mail.com</span> <span class="pill">Dormant</span>
+				<p class="nm">Kojo Frimpong <span class="muted" style="font-weight:400">✓</span></p>
+				<p class="sub">1 case · CN-APP-1038 in enrol · handler You</p>
+				<p class="meta">seen 12d ago · no devices · joined Jan 2025</p>
+			</div>
+			<span class="arrow">→</span>
+		</div>
+		<div class="row">
+			<div>
+				<span class="ref">newclient@mail.com</span> <span class="tag tag--hot">Unverified</span>
+				<p class="nm">Naya Osei</p>
+				<p class="sub">No case yet — lead · never signed in</p>
+				<p class="meta">registered 2d ago · email not verified</p>
+			</div>
+			<span class="arrow">→</span>
+		</div>
+		<div class="row">
+			<div>
+				<span class="ref">suspended@mail.com</span> <span class="tag tag--hot">Suspended</span>
+				<p class="nm">Former Client</p>
+				<p class="sub">1 case · CN-APP-0990 archived</p>
+				<p class="meta">suspended — duplicate account</p>
+			</div>
+			<span class="arrow">→</span>
+		</div>
+	</div>
+
+	<div class="detail anno" data-n="3">
+		<div class="bar"><button class="btn">✕ Close</button></div>
+		<p class="eyebrow">Client record</p>
+		<h3 style="margin:.3rem 0 .1rem">Kojo Frimpong</h3>
+		<p class="muted xs">k.frimpong@mail.com · +233 55 000 0000</p>
+		<p class="k" style="margin-top:1rem">Access</p>
+		<div class="kv"><span class="k">Status</span><span><span class="pill">Dormant</span> · email verified</span></div>
+		<div class="kv"><span class="k">Sessions</span><span>none · <span class="tag">revoke all</span> greyed</span></div>
+		<div class="kv"><span class="k">Member since</span><span>Jan 12, 2025</span></div>
+		<p class="k" style="margin-top:1rem">Relationship</p>
+		<div class="kv"><span class="k">Cases</span><span>CN-APP-1038 · enrol · Accra · <span class="tag">open →</span></span></div>
+		<div class="kv"><span class="k">Journey</span><span>steered by Efua — <span class="tag">delegate…</span></span></div>
+		<div class="kv"><span class="k">Next consult</span><span>Thu 14:00 · online · K. Frimpong → You</span></div>
+		<div class="kv"><span class="k">Handler</span><span>You</span></div>
+		<p class="k" style="margin-top:1rem">Access control</p>
+		<p class="muted xs">Suspending signs them out everywhere and blocks login.</p>
+		<p class="xs" style="margin-top:.4rem"><span class="tag tag--hot">suspend account</span> · <span class="tag">delete…</span></p>
+	</div>
+</div>
+
+<div class="legend">
+	<div><b>1</b><span><b>Six chips that answer real questions.</b> "With a case" is the one staff actually want; "Unverified" exists in the data today but has no filter. All FilterGroup radiogroup, all in <code>?status=</code>.</span></div>
+	<div><b>2</b><span><b>Rows become the relationship.</b> Case count, latest case's chapter, journey coordinator, devices, last-seen — the table's Sessions/Joined columns fold into the meta line so a row reads as a sentence. Selection goes to <code>?id=</code>.</span></div>
+	<div><b>3</b><span><b>The record gains "Relationship".</b> Today's panel stops at access facts + a case link. Add: every case (linked), journey coordinator with the shared DelegateSheet, next consultation. Access control stays, unchanged, at the bottom where danger belongs.</span></div>
+</div>
+</div>
+
+<!-- ══════════ CONSULTATIONS ══════════ -->
+<h2>3 · Consultations <span class="sev">/consultations</span></h2>
+<p class="lead">A flat list + a status dropdown today. But a consultation's first question is <b>when</b> — so the
+list bands itself by day, marks the channel (online vs in-person), and lights up what's joinable now.</p>
+
+<div class="frame">
+<div class="wk-head">
+	<div>
+		<h1>Consultations</h1>
+		<p class="muted xs" style="margin-top:.2rem">Bookings arrive from the client portal — place a handler to begin the assessment.</p>
+	</div>
+	<div class="wk-sum"><b>4</b> today · <b>2</b> awaiting assignment · <b>1</b> reschedule asked</div>
+</div>
+
+<div class="qbar anno" data-n="1">
+	<span class="seg"><button aria-checked="true">All <span class="n">26</span></button><button class="hot">Under review <span class="n">2</span></button><button>Confirmed <span class="n">9</span></button><button class="hot">Reschedule <span class="n">1</span></button><button>In assessment <span class="n">2</span></button><button>Done <span class="n">12</span></button></span>
+	<span class="seg"><button>Everyone <span class="n">26</span></button><button aria-checked="false">Mine <span class="n">7</span></button></span>
+</div>
+<div class="frow">
+	<input class="btn" style="text-align:left;text-transform:none;letter-spacing:0;font-family:var(--sans);min-width:15rem" value="Search applicant, ref, country…" readonly>
+	<span class="muted xs" style="margin-left:auto">26 consultations · Manager scope</span>
+</div>
+
+<div class="split">
+	<div class="rows anno" data-n="2">
+		<div class="band"><span>Today · <span class="hn">4</span></span><span>Accra +2 · Kumasi +2</span></div>
+		<div class="row">
+			<div>
+				<span class="ref">CN-CON-2201</span> <span class="pill pill--inv">In assessment</span> <span class="tag tag--coord">◉ online · live</span>
+				<p class="nm">Ama Serwaa</p>
+				<p class="sub">14:00–14:45 · Canada · initial — <b>call running 22m</b></p>
+				<p class="meta">Efua · <span class="tag">join →</span></p>
+			</div>
+			<span class="arrow">→</span>
+		</div>
+		<div class="row sel">
+			<div>
+				<span class="ref">CN-CON-2204</span> <span class="pill">Confirmed</span> <span class="tag tag--coord">◉ online</span>
+				<p class="nm">Kojo Frimpong</p>
+				<p class="sub">16:30–17:15 · UK · initial — <b>join opens 16:00</b></p>
+				<p class="meta">You · room minted · LiveKit</p>
+			</div>
+			<span class="arrow">→</span>
+		</div>
+		<div class="row">
+			<div>
+				<span class="ref">CN-CON-2206</span> <span class="pill">Confirmed</span> <span class="tag">◎ in person</span>
+				<p class="nm">Yaw Darko</p>
+				<p class="sub">17:00 · Kumasi office · document review</p>
+				<p class="meta">Kwame B. · no call link needed</p>
+			</div>
+			<span class="arrow">→</span>
+		</div>
+		<div class="band"><span>Needs scheduling · <span class="hn">2</span></span><span>action required</span></div>
+		<div class="row">
+			<div>
+				<span class="ref">CN-CON-2199</span> <span class="tag tag--hot">Reschedule asked</span> <span class="tag tag--coord">◉ online</span>
+				<p class="nm">Efua Owusu</p>
+				<p class="sub">Wed 10:00 → <b>Thu 11:00 asked</b> · US · follow-up</p>
+				<p class="meta">Abena · client: "work shift changed" · <span class="tag">review →</span></p>
+			</div>
+			<span class="arrow">→</span>
+		</div>
+		<div class="row">
+			<div>
+				<span class="ref">CN-CON-2212</span> <span class="pill">Under review</span> <span class="tag tag--coord">◉ online</span>
+				<p class="nm">New Booking</p>
+				<p class="sub">Fri 09:00 · Canada · initial — <b>no handler yet</b></p>
+				<p class="meta">unassigned · <span class="tag">place handler…</span></p>
+			</div>
+			<span class="arrow">→</span>
+		</div>
+		<div class="band"><span>Later this week · <span class="hn">8</span></span><span></span></div>
+		<div class="row"><div><span class="ref">CN-CON-2210</span> <span class="pill">Confirmed</span><p class="nm">Akosua M.</p><p class="sub">Fri 13:00 · Australia</p></div><span class="arrow">→</span></div>
+	</div>
+
+	<div class="rail anno" data-n="3">
+		<p class="k">Today — nothing selected</p>
+		<div class="kv"><span class="k">Live now</span><span><b>1</b> — Ama Serwaa · 22m in · <span class="tag">join</span></span></div>
+		<div class="kv"><span class="k">Up next</span><span>16:30 Kojo F. · 17:00 Yaw D.</span></div>
+		<div class="kv"><span class="k">Awaiting handler</span><span><b>2</b> — oldest CN-CON-2212</span></div>
+		<div class="kv"><span class="k">Reschedule</span><span><b>1</b> asked — Thu 11:00</span></div>
+		<p class="k" style="margin-top:1rem">This week</p>
+		<div class="kv"><span class="k">Online</span><span>11 · LiveKit 8 · Meet 3</span></div>
+		<div class="kv"><span class="k">In person</span><span>4 · Kumasi 3 · Accra 1</span></div>
+	</div>
+</div>
+
+<div class="legend">
+	<div><b>1</b><span><b>Status select → FilterGroup chips</b>, plus Mine/Everyone. "Reschedule asked" and "Under review" go hot — they're the two states that need a human. Counts live on the chips, not inside a dropdown nobody opens.</span></div>
+	<div><b>2</b><span><b>Day bands + channel tags.</b> Today / Needs scheduling / Later this week — the mental model is a diary, not a table. Every row marks <code>◉ online</code> (with provider) or <code>◎ in person</code>; a running call says "call running Nm" and offers Join; a future one states its join window.</span></div>
+	<div><b>3</b><span><b>Rail = today's diary.</b> Live now / up next / awaiting handler / reschedule asked — the four things a coordinator checks between calls. Same <code>rail</code> prop as Cases.</span></div>
+</div>
+</div>
+
+<!-- ══════════ LIVE MEETINGS ══════════ -->
+<h2>4 · Live meetings <span class="sev">/live-meetings</span></h2>
+<p class="lead">Today this page answers exactly one question: <i>what is live right now?</i> — and goes blank the rest
+of the day. The booking data already carries <code>endsAt</code>, <code>meetingParticipants</code>, providers and
+reschedule requests, so the page becomes <b>the call board for today</b>: live · up next · wrapped.</p>
+
+<div class="frame">
+<div class="wk-head">
+	<div>
+		<h1>Calls today</h1>
+		<p class="muted xs" style="margin-top:.2rem">Live, upcoming and wrapped — every online consultation on today's diary.</p>
+	</div>
+	<div class="wk-sum"><b>1</b> live · <b>2</b> up next · <b>3</b> wrapped · checked 30s ago</div>
+</div>
+
+<div class="qbar">
+	<span class="seg"><button aria-checked="true">All branches</button><button>Accra</button><button>Kumasi</button><button>Takoradi</button></span>
+	<span class="muted xs" style="margin-left:auto">auto-refresh 60s · also on the Dashboard (compact)</span>
+</div>
+
+<div class="rows" style="margin-top:1rem">
+	<div class="band"><span>Live now · <span class="hn">1</span></span><span></span></div>
+	<div class="mrow anno" data-n="1">
+		<div>
+			<span class="dot"></span><span class="nm">Ama Serwaa</span> <span class="muted xs">CN-CON-2201 · initial · LiveKit</span>
+			<p class="sub" style="margin-top:.2rem">Efua hosting · <b>3 in the room</b> · started 22m ago</p>
+			<div class="prog"><i style="width:49%"></i></div>
+			<p class="meta" style="margin-top:.2rem">22m of 45m · ends 14:45</p>
+		</div>
+		<div style="display:flex;gap:.4rem;flex-shrink:0">
+			<button class="btn btn--pri">Join →</button>
+			<button class="btn">Case →</button>
+		</div>
+	</div>
+	<div class="band"><span>Up next · <span class="hn">2</span></span><span>join window opens 30m early</span></div>
+	<div class="mrow anno" data-n="2">
+		<div>
+			<span class="dot dot--hollow"></span><span class="nm">Kojo Frimpong</span> <span class="muted xs">CN-CON-2204 · initial · LiveKit</span>
+			<p class="sub" style="margin-top:.2rem">You · starts in 1h 12m · <b>join opens 16:00</b></p>
+		</div>
+		<div style="display:flex;gap:.4rem;flex-shrink:0">
+			<button class="btn" disabled>Join · 16:00</button>
+			<button class="btn">Prep case →</button>
+		</div>
+	</div>
+	<div class="mrow">
+		<div>
+			<span class="dot dot--hollow"></span><span class="nm">Akosua M.</span> <span class="muted xs">CN-CON-2210 · follow-up · Google Meet</span>
+			<p class="sub" style="margin-top:.2rem">Abena · Fri 13:00 — tomorrow, shown for tomorrow's prep</p>
+		</div>
+		<div style="flex-shrink:0"><button class="btn">Case →</button></div>
+	</div>
+	<div class="band"><span>Wrapped · <span class="hn">3</span></span><span></span></div>
+	<div class="mrow">
+		<div>
+			<span class="dot dot--off"></span><span class="nm">Yaw Darko</span> <span class="muted xs">CN-CON-2195 · follow-up · LiveKit</span>
+			<p class="sub" style="margin-top:.2rem">Kwame B. · ran 41m · 4 joined · outcome recorded</p>
+		</div>
+		<div style="flex-shrink:0"><button class="btn">Case →</button></div>
+	</div>
+	<div class="mrow anno" data-n="3">
+		<div>
+			<span class="dot dot--off"></span><span class="nm">Missing Client</span> <span class="muted xs">CN-CON-2192 · initial · LiveKit</span>
+			<p class="sub" style="margin-top:.2rem">Efua · slot passed 11:00 — <b>nobody ever joined · likely no-show</b></p>
+		</div>
+		<div style="display:flex;gap:.4rem;flex-shrink:0">
+			<button class="btn">Follow up →</button>
+			<button class="btn">Case →</button>
+		</div>
+	</div>
+</div>
+
+<div class="legend">
+	<div><b>1</b><span><b>Live rows gain context.</b> Participant count (<code>meetingParticipants</code> is already polled), a progress bar against <code>endsAt</code>, the host's name, and a link straight to the consultation — not just Join.</span></div>
+	<div><b>2</b><span><b>"Up next" is the new band.</b> Today's confirmed online bookings that haven't started — the data is already in <code>bookings</code>. Disabled Join carries its open time; "Prep case →" opens the consultation detail.</span></div>
+	<div><b>3</b><span><b>No-show flag.</b> Slot ended, <code>meetingActive</code> never went true → "likely no-show — follow up". Inference, not a new status — labelled as such.</span></div>
+</div>
+<div class="note"><b>Optional merge:</b> if you'd rather have one fewer page, the "Today" band of the upgraded
+Consultations list already shows live/up-next — this board could fold into it as <code>?view=calls</code>,
+keeping <code>/live-meetings</code> as a redirect. Keeping it separate (recommended) preserves the Dashboard
+widget's "View all" target and gives ops a screen to leave on a wall display.</div>
+</div>
+
+<!-- ══════════ DETAIL PANES ══════════ -->
+<h2>5 · The detail panes — case &amp; client record</h2>
+<p class="lead">The lists above are half the upgrade; the other half is what opens when you click a row. Today's
+case detail stacks a dense facts <code>&lt;dl&gt;</code>, a state line, a to-do list and the I–VI chip spine —
+correct content, no hierarchy. The client record is a narrow aside that stops at access facts. Same data,
+recomposed:</p>
+
+<h3>5a · Case detail — the audit first</h3>
+<p class="lead">Before the redesign: what the pane actually is today, line by line — what's load-bearing, what's
+dead weight, and what's quietly wrong.</p>
+<div class="frame">
+<h3 style="margin-top:0">Anatomy — top to bottom</h3>
+<table class="review">
+<tr><th>Block</th><th>What it is</th><th>Finding</th></tr>
+<tr><td><b>Flash lines</b></td><td><code>actionSuccess</code>/<code>actionError</code> — bare <code>&lt;p&gt;</code> above the header</td><td><b>Not announced.</b> No <code>role="status"</code>/<code>role="alert"</code> — screen readers never hear "Consent recorded". Also survives a record switch: change cases within the 4s window and the success from the <i>previous</i> case shows on the new one.</td></tr>
+<tr><td><b>CaseHeader</b> <code>cn-case</code></td><td>Name + ref + portal-stage pill + History button; facts <code>&lt;dl&gt;</code>: Stage, Branch, Consultant+Handler…, chapter officers, Country, Programme; mailto/tel links</td><td><b>Two layout systems fight.</b> The stylesheet defines <code>cn-case__facts</code> as flex; the JSX overrides it inline to a grid — dead CSS, and the override is a lint-warning inline style. Facts run 6–8 rows deep in one column — no visual hierarchy between "who is this" and "who works it".</td></tr>
+<tr><td><b>CaseStateLine</b> <code>cn-state</code></td><td>Derived pill (Active / New / Needs attention / Completed) + facts: consent date, deposit, opened-from-consultation</td><td><b>Good — keep.</b> State is read from what happened, never set by hand. Minor: "New" is the pill for <i>paused</i> and <i>declined</i> too — a declined case wearing "New" misleads at a glance.</td></tr>
+<tr><td><b>CaseTodo</b> <code>cn-todo</code></td><td>Numbered next-actions — handoff gate, consent gate, advance button, then <code>tasksForApplication</code> items, each with its clearing control; waiting-on rows hollow; <code>blockedBy</code> line</td><td><b>Good bones, flat hierarchy.</b> Every item gets the same weight — "place a visa officer" and "upload a transcript" look identical. The single most important action deserves a headline; the rest can collapse. Also: items are recomputed per render — fine — but <code>tasksForApplication</code> runs again for every row in the list above, so the work is duplicated across the page.</td></tr>
+<tr><td><b>Sheets</b></td><td><code>ApplicationAssignSheet</code>, <code>HistorySheet</code>, reason sheet (consent/decline)</td><td><b>Good.</b> History lazy-loads only when opened; reason sheet replaces a <code>prompt()</code> properly. Keep as-is.</td></tr>
+<tr><td><b>CaseSpine</b> <code>cn-spine</code></td><td>Chip tablist: Overview · I–V chapters · hardcoded "VI Complete" · Money · Docs — chips styled by state (passed/now/locked)</td><td><b>Three vocabularies in one control.</b> Numerals (I–VI) are journey language; "Money/Docs" are views; "Overview" is neither. Passed/now/locked differ only by border style — a dashed vs solid 1px border is the whole signal for "you cannot click this". Not a real tablist: <code>role="tab"</code> chips have no arrow-key nav and no <code>aria-controls</code>→tabpanel linkage. The VI chip is <code>aria-hidden</code>, so screen readers never hear the journey's end.</td></tr>
+<tr><td><b>Tab bodies</b></td><td>8 bodies, ~3.4k lines — Overview (profile fact groups), Consultation, Enrolment, Applications, Visa, Departure, Money, Documents</td><td><b>Sound, out of scope here.</b> Each is a chapter's workbench; the audit's changes are all in the frame around them.</td></tr>
+</table>
+
+<h3>Data flow — the quiet problems</h3>
+<table class="review">
+<tr><th>Issue</th><th>Evidence</th><th>Consequence</th></tr>
+<tr><td><b>The detail never re-fetches its own record</b></td><td><code>liveSelected</code> resolves against the cached <code>applications</code> list — the same stale-data bug the ConsultationDetail fix addressed (meeting link invisible until your own mutation).</td><td>Another tab's advance, a webhook'd payment, a coordinator's reassignment — all invisible here until a mutation you make returns a fresh row. <b>Fix: <code>applicationsApi.get(id)</code> on open</b>, same as <code>refreshConsultation</code>.</td></tr>
+<tr><td><b>Consultation tab can lock permanently</b></td><td><code>consultations.find(c =&gt; c.id === app.consultationId)</code> — if the consultation isn't in the cached list (scoped out, or list page-size), the tab is "locked: opened from a consultation" forever — on a case that literally has one.</td><td>Locked hint lies. Fix: fetch the linked consultation by id when absent from the list.</td></tr>
+<tr><td><b>Invoices fetched twice</b></td><td><code>listInvoices({applicationId})</code> in the detail <i>and</i> the global <code>useInvoiceApi()</code> list — the visa invoice is then found twice (<code>visaApiInvoice</code> vs <code>visaInvoice</code>), one source for the Visa tab, another for the row meta.</td><td>Two sources of truth that can disagree mid-render. Fix: the per-case fetch is canonical; drop the global list for invoice purposes.</td></tr>
+<tr><td><b>?id= doesn't highlight the row</b></td><td><code>isSelected = selectedApp?.appId === app.appId</code> — URL-derived <code>queryMatch</code> ignored.</td><td>Deep-linked case opens with no row marked. One-line fix: compare against <code>liveSelected</code>.</td></tr>
+<tr><td><b>No keyboard path through the list</b></td><td>Rows are <code>role="button"</code> divs with Enter/Space — no ↑/↓ to move between rows, no <code>j</code>/<code>k</code>.</td><td>The Worklist already keyboard-selects; the cases list doesn't. Same treatment.</td></tr>
+<tr><td><b><code>?tab=</code> written on every tab click</b></td><td><code>useCaseTab.setTab</code> always sets the param — including when it equals the fallback.</td><td>URLs gain <code>?tab=overview</code> noise. Fix: delete the param when it equals the record's own chapter.</td></tr>
+</table>
+</div>
+
+<h3>5b · Case detail — proposed frame</h3>
+<div class="frame">
+	<div class="detail" style="min-height:auto">
+		<div class="bar"><button class="btn">History · 6</button><button class="btn">⤢ Expand</button><button class="btn">✕ Close</button></div>
+		<div class="anno" data-n="1" style="border-bottom:1px solid var(--b);padding-bottom:.7rem">
+			<div style="display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap">
+				<h3 style="margin:0;font-size:1.15rem">Kojo Frimpong</h3>
+				<span class="ref" style="font-family:var(--mono);font-size:.7rem;color:var(--muted-fg)">CN-APP-1038</span>
+				<span class="pill pill--inv">Enrolment · offer pending</span>
+			</div>
+			<p class="meta" style="font-family:var(--mono);font-size:.62rem;color:var(--muted-fg);margin-top:.35rem">
+				k.frimpong@mail.com · +233 55 000 0000 · Accra · UK · BEng Civil, Leeds Beckett
+			</p>
+		</div>
+		<div class="anno" data-n="2" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.3rem 1.2rem;padding:.7rem 0;border-bottom:1px solid var(--muted)">
+			<div class="kv" style="border:0;padding:.15rem 0"><span class="k" style="width:auto">Consultant</span><span><b>You</b> · <span class="tag">change…</span></span></div>
+			<div class="kv" style="border:0;padding:.15rem 0"><span class="k" style="width:auto">Visa officer</span><span>Abena K.</span></div>
+			<div class="kv" style="border:0;padding:.15rem 0"><span class="k" style="width:auto">Coordinated</span><span><span class="tag tag--coord">→ Efua</span> · via journey</span></div>
+		</div>
+		<div class="anno" data-n="3" style="padding:.7rem 0;border-bottom:1px solid var(--muted)">
+			<div style="display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap">
+				<span style="font-size:.82rem"><b>Next:</b> upload the offer letter — waiting on you · <span class="muted xs">+2 more · awaiting client: deposit receipt</span></span>
+				<button class="btn btn--pri">Upload offer →</button>
+			</div>
+		</div>
+		<div class="anno" data-n="4" style="display:flex;align-items:center;gap:0;padding:.8rem 0 .3rem;overflow-x:auto">
+			<div style="text-align:center;min-width:4.5rem"><div style="width:.6rem;height:.6rem;border-radius:50%;background:var(--fg);margin:0 auto"></div><div class="muted" style="font-family:var(--mono);font-size:.54rem;margin-top:.3rem">✓ Consult</div></div>
+			<div style="flex:1;height:1.5px;background:var(--fg);min-width:1.5rem"></div>
+			<div style="text-align:center;min-width:4.5rem"><div style="width:.6rem;height:.6rem;border-radius:50%;background:var(--bg);border:2px solid var(--fg);margin:0 auto"></div><div style="font-family:var(--mono);font-size:.54rem;margin-top:.3rem"><b>■ Enrolment</b></div></div>
+			<div style="flex:1;height:1.5px;background:var(--bl);min-width:1.5rem"></div>
+			<div style="text-align:center;min-width:4.5rem"><div style="width:.6rem;height:.6rem;border-radius:50%;background:var(--bl);margin:0 auto"></div><div class="muted" style="font-family:var(--mono);font-size:.54rem;margin-top:.3rem">○ Applications</div></div>
+			<div style="flex:1;height:1.5px;background:var(--bl);min-width:1.5rem"></div>
+			<div style="text-align:center;min-width:4.5rem"><div style="width:.6rem;height:.6rem;border-radius:50%;background:var(--bl);margin:0 auto"></div><div class="muted" style="font-family:var(--mono);font-size:.54rem;margin-top:.3rem">○ Visa</div></div>
+			<div style="flex:1;height:1.5px;background:var(--bl);min-width:1.5rem"></div>
+			<div style="text-align:center;min-width:4.5rem"><div style="width:.6rem;height:.6rem;border-radius:50%;background:var(--bl);margin:0 auto"></div><div class="muted" style="font-family:var(--mono);font-size:.54rem;margin-top:.3rem">○ Depart</div></div>
+			<div style="flex:1;height:1.5px;background:var(--bl);min-width:1.5rem"></div>
+			<div style="text-align:center;min-width:4.5rem"><div style="width:.6rem;height:.6rem;border-radius:50%;background:var(--bl);margin:0 auto"></div><div class="muted" style="font-family:var(--mono);font-size:.54rem;margin-top:.3rem">○ Complete</div></div>
+		</div>
+		<div class="anno" data-n="5" style="display:flex;gap:.35rem;flex-wrap:wrap;border-bottom:1px solid var(--muted);padding-bottom:.8rem">
+			<span class="seg"><button>Overview</button><button aria-checked="true">Enrolment</button><button>Applications</button><button>Visa</button><button>Departure</button></span>
+			<span class="seg"><button>Money <span class="n">1 due</span></button><button>Docs <span class="n">3</span></button></span>
+		</div>
+		<p class="muted xs" style="margin-top:.8rem">— the selected chapter's body renders here, unchanged —</p>
+	</div>
+
+	<div class="legend">
+		<div><b>1</b><span><b>Identity becomes one line.</b> Name + reference + the portal-stage pill (the words the client sees). The facts <code>&lt;dl&gt;</code>'s Country/Programme/Branch collapse into the mono meta line with contact — the same facts, one row instead of six.</span></div>
+		<div><b>2</b><span><b>A "people" strip.</b> Consultant (+Change) · chapter officers · journey coordinator — everyone on the case in one row, each a chat badge. Replaces handler rows scattered through the facts list. Coordinator shown read-only — delegation stays in Workspace.</span></div>
+		<div><b>3</b><span><b>The to-do list gets a headline.</b> Today's <code>CaseTodo</code> numbers every item equally. The top action becomes a command line — "Next: upload the offer letter" + its one button — with "+2 more" expanding to the full list. Waiting-on items stay hollow.</span></div>
+		<div><b>4</b><span><b>The spine becomes a journey track.</b> The I–VI numerals read as decoration; a connected track reads as progress — ✓ passed, ■ current, ○ locked — the same states the chips already compute, drawn as the shape of the journey. Still clickable, still a tablist.</span></div>
+		<div><b>5</b><span><b>Chapter tabs keep their words.</b> The track shows where the case <i>is</i>; the chips below it are how you <i>navigate</i> — labels not numerals, Money/Docs with their counts, locked ones greyed with their unlock hint.</span></div>
+	</div>
+</div>
+
+<h3>5c · Client record — from aside to detail pane</h3>
+<p class="lead">The client record stops being a narrow side-card and becomes a first-class detail in the same
+scaffold — so access, the relationship and the danger zone get room, and the page behaves like every other
+list+detail.</p>
+<div class="frame">
+	<div class="detail" style="min-height:auto">
+		<div class="bar"><button class="btn">✕ Close</button></div>
+		<div class="anno" data-n="1" style="border-bottom:1px solid var(--b);padding-bottom:.7rem">
+			<div style="display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap">
+				<h3 style="margin:0;font-size:1.15rem">Kojo Frimpong</h3>
+				<span class="pill">Dormant</span> <span class="tag">✓ email verified</span>
+			</div>
+			<p class="meta" style="font-family:var(--mono);font-size:.62rem;color:var(--muted-fg);margin-top:.35rem">
+				k.frimpong@mail.com · +233 55 000 0000 · member since Jan 2025
+			</p>
+		</div>
+		<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;padding:.8rem 0 0">
+			<div class="anno" data-n="2">
+				<p class="k" style="font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);margin:0 0 .4rem">Access</p>
+				<div class="kv"><span class="k">Status</span><span><span class="pill">Dormant</span> — last seen 12d ago</span></div>
+				<div class="kv"><span class="k">Sessions</span><span>none</span></div>
+				<div class="kv"><span class="k">Portal</span><span>password + Google</span></div>
+			</div>
+			<div class="anno" data-n="3">
+				<p class="k" style="font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);margin:0 0 .4rem">Relationship</p>
+				<div class="kv"><span class="k">Case</span><span>CN-APP-1038 · enrolment · Accra · <span class="tag">open →</span></span></div>
+				<div class="kv"><span class="k">Journey</span><span>steered by Efua · <span class="tag">delegate…</span></span></div>
+				<div class="kv"><span class="k">Next consult</span><span>Thu 16:30 · online</span></div>
+				<div class="kv"><span class="k">Money</span><span>GH₵2,400 outstanding</span></div>
+			</div>
+		</div>
+		<div class="anno" data-n="4" style="border-top:1px solid var(--muted);margin-top:.8rem;padding-top:.6rem">
+			<p class="k" style="font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);margin:0 0 .4rem">Recent activity</p>
+			<div class="kv"><span class="k">Mon 14:02</span><span>Signed in · portal</span></div>
+			<div class="kv"><span class="k">Sun 19:40</span><span>Uploaded bank statement</span></div>
+			<div class="kv"><span class="k">Fri 09:15</span><span>Booked CN-CON-2204</span></div>
+		</div>
+		<div class="anno" data-n="5" style="border:1px solid var(--bl);margin-top:1rem;padding:.7rem .9rem">
+			<p class="k" style="font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;margin:0 0 .3rem">Access control</p>
+			<p class="muted xs">Suspending signs them out everywhere and blocks login. Deleting is permanent.</p>
+			<p class="xs" style="margin-top:.5rem"><span class="tag tag--hot">suspend account</span> · <span class="tag">revoke sessions</span> · <span class="tag">delete…</span></p>
+		</div>
+	</div>
+
+	<div class="legend">
+		<div><b>1</b><span><b>Header = identity + access state.</b> Name, the access pill (Active/Dormant/Suspended/Unverified), verified mark, contact line. Same facts the aside shows — recomposed to match the case detail's shape, so switching between them costs nothing.</span></div>
+		<div><b>2</b><span><b>Access card.</b> Sessions with revoke, sign-in methods, last seen — what the aside has now, plus sign-in method which it lacks.</span></div>
+		<div><b>3</b><span><b>Relationship card.</b> Every case (linked), journey coordinator with the shared DelegateSheet, next consultation, money owed — the things staff open a client record to find.</span></div>
+		<div><b>4</b><span><b>Activity line.</b> Last portal events — sign-ins, uploads, bookings — from the audit/activity stream that already exists per applicant.</span></div>
+		<div><b>5</b><span><b>Danger zone, same rules.</b> Suspend/restore, revoke, delete — unchanged controls, boxed and last on the pane where danger belongs.</span></div>
+	</div>
+</div>
+
+<!-- ══════════ BUILD LIST ══════════ -->
+<h2>6 · Build list</h2>
+<table class="review">
+<tr><th>#</th><th>Change</th><th>Files</th><th>Effort</th></tr>
+<tr><td>1</td><td>URL state (<code>?id= ?status= ?branch= ?q= ?view= ?sort=</code>) + FilterGroup chips on all four pages; fix the Cases <code>?id=</code> row-highlight bug</td><td><code>EnterpriseCases.tsx · ClientDirectory.tsx · EnterpriseConsultations.tsx · LiveMeetings.tsx</code> + <code>FilterGroup</code> reuse</td><td>M</td></tr>
+<tr><td>2</td><td>CaseScaffold rails — "queue pulse" on Cases, "today's diary" on Consultations, "client health" on Clients</td><td>same three files; <code>rail</code> prop already exists</td><td>S</td></tr>
+<tr><td>3</td><td>Richer rows: next-step label (<code>taskActionLabel</code>), stalled days, branch tag, <code>→ coord</code> tag, Mine chip; list sort</td><td><code>EnterpriseCases.tsx · EnterpriseConsultations.tsx · ClientDirectory.tsx</code></td><td>M</td></tr>
+<tr><td>4</td><td>Consultations day bands + channel tags + live/joinable markers + reschedule hot row</td><td><code>EnterpriseConsultations.tsx</code></td><td>M</td></tr>
+<tr><td>5</td><td>Calls-today board: live (elapsed bar, participants, host), up next (join window), wrapped, no-show flag — all from existing <code>Booking</code> fields</td><td><code>LiveMeetings.tsx</code> (compact widget unchanged)</td><td>M</td></tr>
+<tr><td>6</td><td>Client record "Relationship" section (cases, journey coordinator + DelegateSheet, next consultation); drop the 10s poll → refresh-on-focus</td><td><code>ClientDirectory.tsx</code></td><td>S</td></tr>
+<tr><td>7</td><td><i>Optional:</i> fold the call board into Consultations <code>?view=calls</code>, redirect <code>/live-meetings</code></td><td><code>EnterpriseConsultations.tsx · App.tsx</code></td><td>S</td></tr>
+<tr><td>8</td><td>Case detail recompose: one-line identity header, people strip (consultant/chapter officers/coordinator read-only), "Next:" command line over the full to-do list, journey-track spine, word-labelled chapter tabs</td><td><code>CaseDetail.tsx · CaseHeader.tsx (core) · CaseTodo.tsx · CaseSpine.tsx</code></td><td>M</td></tr>
+<tr><td>9</td><td>Client record → scaffold detail pane: Access / Relationship / Activity / Access-control cards, <code>?id=</code> selection</td><td><code>ClientDirectory.tsx</code></td><td>S</td></tr>
+<tr><td>10</td><td>Remove "+ Add school application" from the Cases header — button, modal, and its state</td><td><code>EnterpriseCases.tsx</code> (modal file stays — it may be reused elsewhere)</td><td>XS</td></tr>
+</table>
+
+<div class="note"><b>Nothing server-side.</b> Every field shown — participants, endsAt, providers, reschedule
+requests, coordinator, task labels — is already in the API payloads these pages consume. Item 3's "likely
+no-show" is client-side inference (slot passed + never active), labelled as inference in the UI. If you want a
+recorded no-show <i>status</i> later, that's a booking-status change, not a display one.</div>
+
+<p class="muted xs" style="margin-top:2rem">Companion docs: <code>delegation.html</code> (delegation rehomed — now shipped), <code>ops-workspace.html</code> (Worklist/Caseload upgrade — shipped).</p>
+
+</div>
+</body>
+</html>

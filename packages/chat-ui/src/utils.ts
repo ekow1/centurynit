@@ -49,7 +49,7 @@ export function formatDayDivider(iso: string): string {
 	return d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
 }
 
-/** Day bucket key for grouping messages — stable across timezone boundaries. */
+/** Day bucket key for grouping messages. Stable across timezone boundaries. */
 export function dayKey(iso: string): string {
 	const d = new Date(iso);
 	if (Number.isNaN(d.getTime())) return "";

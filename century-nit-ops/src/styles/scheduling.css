@@ -143,6 +143,234 @@
 	opacity: 0.65;
 }
 
+/* ── Documents as a file cabinet ────────────────────────────────────────
+   One directory row per client; opening it reveals a folder per case and
+   a General tray, each holding file rows inside a tree rail. The icons are
+   drawn in borders — no image assets. */
+
+/* A folder: bordered body with the raised tab on the top-left. Fills ink
+   while open. */
+.ico-folder {
+	position: relative;
+	width: 1.15rem;
+	height: 0.85rem;
+	border: 1.5px solid var(--foreground);
+	background: var(--background);
+	flex-shrink: 0;
+	margin-top: 0.25rem;
+}
+
+.ico-folder::before {
+	content: "";
+	position: absolute;
+	top: -0.36rem;
+	left: -1.5px;
+	width: 0.55rem;
+	height: 0.36rem;
+	border: 1.5px solid var(--foreground);
+	border-bottom: none;
+	background: var(--background);
+}
+
+.ico-folder--open,
+.ico-folder--open::before {
+	background: var(--foreground);
+}
+
+.ico-folder--sm {
+	width: 0.9rem;
+	height: 0.68rem;
+	margin-top: 0.2rem;
+}
+
+.ico-folder--sm::before {
+	top: -0.28rem;
+	width: 0.42rem;
+	height: 0.28rem;
+}
+
+/* A file: a page with the top-right corner folded, type stamped inside. */
+.ico-file {
+	position: relative;
+	width: 0.8rem;
+	height: 1rem;
+	border: 1.5px solid var(--foreground);
+	background: var(--background);
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: flex-end;
+	justify-content: center;
+}
+
+.ico-file::before {
+	content: "";
+	position: absolute;
+	top: -1.5px;
+	right: -1.5px;
+	width: 0.28rem;
+	height: 0.28rem;
+	background: var(--background);
+	border-left: 1.5px solid var(--foreground);
+	border-bottom: 1.5px solid var(--foreground);
+}
+
+.ico-file i {
+	font-style: normal;
+	font-family: var(--font-mono);
+	font-size: 0.4rem;
+	letter-spacing: 0.02em;
+	padding-bottom: 0.1rem;
+}
+
+/* The tree rail: each nesting level sits inside an ink rule so the
+   hierarchy reads without indentation maths. */
+.doc-tree {
+	border-left: 1.5px solid var(--foreground);
+	margin-left: 2.05rem;
+}
+
+.doc-tree .doc-tree {
+	margin-left: 1.4rem;
+}
+
+/* One client directory row — caret, folder, identity, state, cases, size. */
+.doc-dir {
+	display: grid;
+	grid-template-columns: 1.1rem 1.3rem minmax(0, 1fr) auto auto auto auto;
+	gap: 0.55rem;
+	align-items: center;
+	padding: 0.55rem 1.25rem;
+	border-bottom: 1px solid var(--border-light);
+	background: var(--background);
+	font-size: var(--text-sm);
+	cursor: pointer;
+}
+
+.doc-dir:hover {
+	background: var(--muted);
+}
+
+.doc-dir:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: -2px;
+}
+
+.doc-dir--open {
+	background: var(--muted);
+}
+
+.doc-dir__caret {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	color: var(--muted-foreground);
+}
+
+.doc-dir__who {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.doc-dir__who .sub {
+	font-size: var(--text-xs);
+	color: var(--muted-foreground);
+}
+
+.doc-dir__mn {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	color: var(--muted-foreground);
+	white-space: nowrap;
+}
+
+/* A case folder row inside an open directory. */
+.doc-subf {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 0.6rem;
+	padding: 0.45rem 1.25rem 0.45rem 0.8rem;
+	background: var(--background);
+	border-bottom: 1px solid var(--border-light);
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	cursor: pointer;
+}
+
+.doc-subf:hover {
+	background: var(--muted);
+}
+
+.doc-subf .l {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-width: 0;
+}
+
+.doc-subf .n {
+	color: var(--muted-foreground);
+	white-space: nowrap;
+}
+
+/* A file row — icon, name + provenance, status, size, age. */
+.doc-file {
+	display: grid;
+	grid-template-columns: 1.4rem minmax(0, 1fr) auto auto auto;
+	gap: 0.55rem;
+	align-items: center;
+	padding: 0.4rem 1.25rem 0.4rem 0.95rem;
+	border-bottom: 1px dotted var(--border-light);
+	background: var(--background);
+	font-size: var(--text-sm);
+	cursor: pointer;
+}
+
+.doc-file:hover {
+	background: var(--muted);
+}
+
+.doc-file:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: -2px;
+}
+
+.doc-file--on,
+.doc-file--on:hover {
+	background: var(--foreground);
+	color: var(--background);
+}
+
+.doc-file--on .doc-file__sub,
+.doc-file--on .doc-file__mn {
+	color: var(--background);
+	opacity: 0.7;
+}
+
+.doc-file__name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.doc-file__sub {
+	font-size: var(--text-xs);
+	color: var(--muted-foreground);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.doc-file__mn {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	color: var(--muted-foreground);
+	white-space: nowrap;
+}
+
 .ops-people {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));

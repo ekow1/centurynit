@@ -37,7 +37,7 @@ export type Program = {
 	 * Indicative annual tuition in USD.
 	 *
 	 * `tuition` is a display string in the university's own currency, so it
-	 * cannot be summed or converted — this is the figure used for shortlist
+	 * cannot be summed or converted. This is the figure used for shortlist
 	 * totals and GH₵ conversion. Paid to the institution, never to Century NIT.
 	 */
 	tuitionUsd: number;
@@ -1062,7 +1062,7 @@ export const BRANCH_AVAILABILITY: Record<string, number[]> = {
  * Slot occupancy and calendar rules live in ./availability.ts.
  *
  * `BOOKED_SLOTS` and `isSlotBooked` used to sit here as a hard-coded list of six
- * absolute dates that nothing ever wrote to — so real bookings never took a slot
+ * absolute dates that nothing ever wrote to. So real bookings never took a slot
  * and the seeded dates expired into the past. `isBranchOpenOnDay` moved with
  * them to keep every scheduling rule in one place.
  */
@@ -1285,7 +1285,7 @@ export const testimonials = [
 /**
  * Video testimonials for the Red Seat.
  *
- * NOTE: `videoUrl` values are placeholders — swap them for the real uploads
+ * NOTE: `videoUrl` values are placeholders. Swap them for the real uploads
  * (or a YouTube/Vimeo embed URL) before this goes live. `poster` is what the
  * card shows until the viewer presses play.
  */
@@ -1296,7 +1296,7 @@ export const videoTestimonials = [
 		program: "MSc Public Health",
 		country: "Ghana → United Kingdom",
 		length: "2:14",
-		headline: "“The visa file was airtight — I walked in confident.”",
+		headline: "“The visa file was airtight. I walked in confident.”",
 		poster: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&q=80",
 		videoUrl: "",
 	},
@@ -1825,7 +1825,7 @@ export const PROCESS_STAGES: {
 		id: "awaiting_handler",
 		index: 5,
 		label: PORTAL_STEP.awaiting_handler.label,
-		detail: "Deposit received — your consultant is being assigned",
+		detail: "Deposit received. Your consultant is being assigned",
 		owner: "system",
 		path: "/portal/awaiting-handler",
 		band: "application",
@@ -1906,7 +1906,7 @@ export const PROCESS_STAGES: {
 		id: "completed",
 		index: 14,
 		label: PORTAL_STEP.completed.label,
-		detail: "Departed — post-arrival plan continues",
+		detail: "Departed. Post-arrival plan continues",
 		owner: "system",
 		path: "/portal/complete",
 		band: "done",
@@ -2280,7 +2280,7 @@ export const AGENCY_DEPOSIT_PORTION = 0.1;
  * Milestones for the service fee settlement.
  *
  * The deposit is paid first and gates plan selection. The remaining balance
- * is then split per the chosen plan — full or installments. Payment can
+ * is then split per the chosen plan. Full or installments. Payment can
  * continue after departure; only the deposit is required upfront.
  */
 export const AGENCY_STAGES = [
@@ -2293,7 +2293,7 @@ export const AGENCY_STAGES = [
 	{
 		id: "agency_predeparture",
 		label: "Service fee · pre-departure",
-		detail: "Due after your visa is approved — releases your travel documents",
+		detail: "Due after your visa is approved. Releases your travel documents",
 		portion: 0.3,
 	},
 	{
@@ -2313,7 +2313,7 @@ export const POST_ARRIVAL_SCHEDULES = [
 	{
 		id: "weekly" as const,
 		label: "Weekly",
-		detail: "8 payments — every week",
+		detail: "8 payments. Every week",
 		payments: 8,
 		intervalDays: 7,
 		graceDays: 14,
@@ -2321,7 +2321,7 @@ export const POST_ARRIVAL_SCHEDULES = [
 	{
 		id: "biweekly" as const,
 		label: "Bi-weekly",
-		detail: "4 payments — every 2 weeks",
+		detail: "4 payments. Every 2 weeks",
 		payments: 4,
 		intervalDays: 14,
 		graceDays: 14,
@@ -2329,7 +2329,7 @@ export const POST_ARRIVAL_SCHEDULES = [
 	{
 		id: "monthly" as const,
 		label: "Monthly",
-		detail: "4 payments — every month",
+		detail: "4 payments. Every month",
 		payments: 4,
 		intervalDays: 30,
 		graceDays: 30,
@@ -2337,7 +2337,7 @@ export const POST_ARRIVAL_SCHEDULES = [
 	{
 		id: "quarterly" as const,
 		label: "Quarterly",
-		detail: "2 payments — every 3 months",
+		detail: "2 payments. Every 3 months",
 		payments: 2,
 		intervalDays: 90,
 		graceDays: 30,
@@ -2359,14 +2359,14 @@ export {
 /**
  * Every document the agency knows how to ask for. A package names the ones
  * it needs (`requiredDocuments`); the standard set below is the default for
- * a client who has not chosen a package yet — collected during the
+ * a client who has not chosen a package yet. Collected during the
  * Consultation chapter so nothing is chased later.
  */
 export const DOCUMENT_TYPES = [
 	{
 		id: "passport",
 		name: "Passport bio page",
-		hint: "Clear colour scan of the photo page — must be valid for at least 6 months",
+		hint: "Clear colour scan of the photo page. Must be valid for at least 6 months",
 	},
 	{
 		id: "transcript",
@@ -2413,7 +2413,7 @@ export const DOCUMENT_TYPES = [
 		name: "Passport photograph",
 		hint: "Recent, plain background, as required for visa forms",
 	},
-	// ── Visa stage ────────────────────────────────────────────────────────
+	// Visa stage
 	{
 		id: "admission_letter",
 		name: "Admission letter / CAS / LOA / I-20",
@@ -2432,15 +2432,15 @@ export const DOCUMENT_TYPES = [
 	{
 		id: "police_clearance",
 		name: "Police clearance",
-		hint: "Where the destination requires one — issued within the last 6 months",
+		hint: "Where the destination requires one. Issued within the last 6 months",
 	},
-	// ── Official — placed by Century as the client's agent ───────────────
+	// Official. Placed by Century as the client's agent
 	{
 		id: "visa_grant",
 		name: "Visa grant / e-visa",
 		hint: "The grant notice or e-visa PDF from the authority, filed by your consultant",
 	},
-	// ── Departure ─────────────────────────────────────────────────────────
+	// Departure
 	{
 		id: "insurance",
 		name: "Health insurance certificate",
@@ -2464,7 +2464,7 @@ export const DEFAULT_REQUIRED_DOCUMENT_IDS: DocumentTypeId[] = ["passport", "tra
  */
 export const VISA_DOCUMENT_IDS: DocumentTypeId[] = ["passport", "photo", "financial", "admission_letter", "visa_form", "tb_test"];
 
-/** The standard set with its names and hints — what the vault renders when no package applies. */
+/** The standard set with its names and hints. What the vault renders when no package applies. */
 export const REQUIRED_DOCUMENTS = DOCUMENT_TYPES.filter((d) => (DEFAULT_REQUIRED_DOCUMENT_IDS as string[]).includes(d.id));
 
 /** Names and hints for a list of document type ids, in the given order; unknown ids are kept with the id as their name. */
@@ -2555,7 +2555,7 @@ export type PreDepartureTask = {
 	doneBy?: string | null;
 	doneAt?: string | null;
 	waivedReason?: string | null;
-	/** For proof items: where the client's upload stands — done when verified. */
+	/** For proof items: where the client's upload stands. Done when verified. */
 	proofStatus?: "PENDING_UPLOAD" | "UPLOADED" | "VERIFIED" | "REJECTED" | null;
 	proofDocumentId?: string | null;
 	label: string;
@@ -2572,12 +2572,12 @@ export type PreDepartureTask = {
  * (the template editor can ask for one) but the standard list asks for none.
  */
 export const PRE_DEPARTURE_TASKS: PreDepartureTask[] = [
-	// Century's deliverables — the only items that gate completion. The officer closes them (or the system does, from the fact).
+	// Century's deliverables. The only items that gate completion. The officer closes them (or the system does, from the fact).
 	{ id: "pd-briefing", category: "orientation", owner: "century", required: true, label: "Pre-departure briefing", detail: "Your consultant walks you through arrival, the first week and who to call.", done: false },
 	{ id: "pd-flights", category: "travel", owner: "century", required: true, label: "Flight booked", detail: "Booked by Century NIT, or confirmed if you booked it yourself.", done: false },
-	{ id: "pd-airport", category: "travel", owner: "century", required: true, label: "Airport pickup arranged", detail: "Your university's pickup, or one we arrange — you will get the details before you fly.", done: false },
+	{ id: "pd-airport", category: "travel", owner: "century", required: true, label: "Airport pickup arranged", detail: "Your university's pickup, or one we arrange. You will get the details before you fly.", done: false },
 	{ id: "pd-visa-copy", category: "documents", owner: "century", required: true, label: "Visa, passport and admission copies filed", detail: "Digital copies in your vault; carry printed copies in your hand luggage.", done: false },
-	// The client's own arrangements with the school and for the move — reminders, never a gate.
+	// The client's own arrangements with the school and for the move. Reminders, never a gate.
 	{ id: "pd-accommodation", category: "accommodation", owner: "client", required: false, label: "Accommodation confirmed", detail: "On-campus housing or a private rental, arranged with your school.", done: false },
 	{ id: "pd-insurance", category: "health", owner: "client", required: false, label: "Health insurance arranged", detail: "International student cover or the university's plan.", done: false },
 	{ id: "pd-tuition", category: "finance", owner: "client", required: false, label: "Tuition payment plan confirmed", detail: "Confirm deadlines and how you will pay with your university.", done: false },

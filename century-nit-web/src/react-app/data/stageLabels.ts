@@ -2,7 +2,7 @@ import type { ProcessStageId } from "century-nit-core";
 import { PORTAL_STAGE_SHORT } from "century-nit-shared";
 
 /**
- * Short stage names for tight surfaces — the mobile app bar, pills, chips.
+ * Short stage names for tight surfaces. The mobile app bar, pills, chips.
  * The short form of the same entry the spine uses (century-nit-shared
  * labels.ts), never separate wording.
  */

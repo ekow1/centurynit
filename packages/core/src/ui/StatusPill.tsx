@@ -23,7 +23,7 @@ export function StatusPill({ tone = "neutral", children, dot = false }: { tone?:
 	);
 }
 
-/* ── Tone maps: one place decides what colour a status is ────────────────── */
+/* Tone maps: one place decides what colour a status is */
 
 export function invoiceTone(status: string): Tone {
 	switch (status) {

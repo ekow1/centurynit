@@ -511,6 +511,10 @@ export function createChatConversation(body: {
 	title?: string;
 	participantOpsUserIds?: string[];
 	initialMessage?: string;
+	/** Staff-initiated client thread — the portal user the thread is with. */
+	clientUserId?: string;
+	/** Journey stage key for a stage-scoped client thread. */
+	stageKey?: string;
 }): Promise<ChatConversation> {
 	return apiFetch<ChatConversation>(`${CHAT}/conversations`, {
 		method: "POST",
@@ -694,6 +698,41 @@ export async function uploadStagedAttachment(
 	});
 	if (!res.ok) throw new Error(`Upload failed (${res.status})`);
 	return staged.attachmentId;
+}
+
+/* ── Client users (portal accounts) ── */
+
+export type ClientUser = {
+	id: string;
+	name: string;
+	email: string;
+	phoneNumber: string | null;
+	emailVerified: boolean;
+	banned: boolean;
+	banReason: string | null;
+	bannedAt: string | null;
+	bannedBy: string | null;
+	activeSessionsCount: number;
+	lastActiveAt: string;
+	status: "active" | "inactive" | "banned" | "unverified" | "registered";
+	leadStage: string | null;
+	applicantStatus: string | null;
+	createdAt: string;
+	updatedAt: string;
+};
+
+export type ClientListResponse = {
+	clients: ClientUser[];
+	metrics: {
+		total: number;
+		active: number;
+		inactive: number;
+		banned: number;
+	};
+};
+
+export function listClientUsers(): Promise<ClientListResponse> {
+	return apiFetch<ClientListResponse>(`${API_PREFIX}/client-users`);
 }
 
 /* ── Communication (context-aware case chat — /communication) ── */

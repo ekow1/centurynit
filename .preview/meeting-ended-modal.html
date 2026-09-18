@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Meeting ended — the modal fix</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1120px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.mock{background:#fafafa;border:1px solid #bbb;padding:0;overflow:hidden}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.vs{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start}
+	@media(max-width:900px){.vs{grid-template-columns:1fr}}
+	.vs .h{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.5rem}
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap;text-decoration:none}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.pill{display:inline-block;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;padding:.28rem .6rem;border:1px solid var(--ink)}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line)}
+	code{font-family:var(--mono);font-size:.74rem;background:var(--muted-bg);padding:.1rem .35rem}
+	table.diff{width:100%;border-collapse:collapse;font-size:.78rem;max-width:64rem}
+	table.diff th{font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;text-align:left;padding:.45rem .6rem;border-bottom:1.5px solid var(--ink)}
+	table.diff td{padding:.5rem .6rem;border-bottom:1px solid var(--line-light);vertical-align:top}
+
+	/* portal page fragment */
+	.ptop{background:#fff;padding:1.25rem}
+	.ptop h1{font-size:1.4rem;letter-spacing:-0.01em}
+	.appt-error{border-left:3px solid #b00020;padding:.6rem .9rem;margin:.75rem 0;font-size:.875rem;background:#fff}
+
+	/* modal mock — same shell as the "opens at" modal */
+	.scrim{background:rgba(0,0,0,.45);padding:3rem 1rem;display:flex;justify-content:center}
+	.modal{background:#fff;border:1.5px solid var(--ink);max-width:26rem;width:100%;box-shadow:6px 6px 0 rgba(0,0,0,.25)}
+	.modal .m-head{border-bottom:1.5px solid var(--ink);padding:.7rem 1.1rem;display:flex;justify-content:space-between;align-items:center}
+	.modal .m-body{padding:1.1rem;text-align:center}
+	.modal .clock{font-family:var(--mono);font-size:2.4rem;letter-spacing:-0.02em;margin:.3rem 0 .1rem}
+	.modal .m-sub{font-size:.78rem;color:var(--fg-muted);line-height:1.55}
+	.modal .m-foot{border-top:1px solid var(--line-light);padding:.8rem 1.1rem;display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap}
+	.countchip{display:inline-block;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);padding:.25rem .55rem;margin-top:.55rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<h1 class="page">Meeting ended — the modal fix</h1>
+	<p class="note">
+		The "opens at" modal shipped, but its twin didn't: <code>MEETING_ENDED</code> still renders as a
+		stray red-edged line at the top of the page. This is the same dialog, ended-state — diagnosis,
+		the mock, and the change map. Nothing here is built yet.
+	</p>
+	<div class="jump">
+		<a href="#diag">A · Diagnosis</a>
+		<a href="#before">B · Before → after</a>
+		<a href="#modal">C · The modal</a>
+		<a href="#map">D · Change map</a>
+	</div>
+
+	<!-- ── A · DIAGNOSIS ─────────────────────────────────────────────── -->
+	<span class="tag" id="diag">A · What I found</span>
+	<table class="diff">
+		<tr><th style="width:22rem">What you see</th><th>Root cause</th><th style="width:9rem">Status</th></tr>
+		<tr>
+			<td>"This meeting window has passed" sits as a plain line above the page header</td>
+			<td>The window check works — the <code>MEETING_ENDED</code> 409 lands correctly. But <code>useJoinMeeting</code> only catches <code>MEETING_NOT_OPEN</code>; anything else falls into <code>setError</code>, which renders as the inline <code>.appt-error</code> strip wherever the Join button sits.</td>
+			<td><span class="pill pill--hollow">Half-built</span></td>
+		</tr>
+		<tr>
+			<td>The line can't say <i>which</i> slot passed or what to do next</td>
+			<td>Unlike <code>MEETING_NOT_OPEN</code>, the <code>MEETING_ENDED</code> 409 carries no <code>details</code> payload — just the sentence (<code>booking.ts:761</code>). The modal needs <code>startsAt</code>/<code>endsAt</code>/<code>timezone</code>/<code>reference</code> the same way.</td>
+			<td><span class="pill pill--hollow">API gap</span></td>
+		</tr>
+		<tr>
+			<td>Same problem on every Join surface, not just this page</td>
+			<td>Three join paths bypass or duplicate the hook's catch: the portal's <code>ConsultationAppointmentCard</code> (own <code>joinMeeting</code>, same gap), and ops' <code>ConsultationDetail</code> (toasts the error). Whatever the fix is, it has to reach all of them.</td>
+			<td><span class="pill pill--hollow">3 surfaces</span></td>
+		</tr>
+	</table>
+
+	<!-- ── B · BEFORE → AFTER ────────────────────────────────────────── -->
+	<span class="tag tag--after" id="before">B · The stray line → a dialog</span>
+	<div class="vs">
+		<div>
+			<p class="h">Before — what you screenshotted</p>
+			<div class="mock">
+				<div class="ptop">
+					<p class="appt-error">This meeting window has passed.</p>
+					<p class="eyebrow">Chapter I · Consultation</p>
+					<h1 style="margin-top:.25rem">Consultation · booked</h1>
+					<p class="muted" style="font-size:.78rem;margin-top:.3rem">Your session is paid and on the calendar. This page is your case file…</p>
+				</div>
+				<div class="ptop" style="border-top:1px solid var(--line-light)">
+					<p class="muted" style="font-size:.72rem">↑ the whole error. No slot, no next step — and it sits above the header, easy to scroll past.</p>
+				</div>
+			</div>
+		</div>
+		<div>
+			<p class="h">After — the ended modal</p>
+			<div class="mock">
+				<div class="scrim">
+					<div class="modal">
+						<div class="m-head">
+							<span class="eyebrow">Consultation · CNS-2026-0001</span>
+							<span class="mono" style="font-size:.7rem;cursor:pointer">✕</span>
+						</div>
+						<div class="m-body">
+							<p class="eyebrow" style="color:var(--ink)">This meeting window has passed</p>
+							<p class="clock" style="text-decoration:line-through">11:45 AM</p>
+							<p class="m-sub">
+								Online consultation · Thu 17 Sep · 11:00 – 11:45 AM<br>
+								The join window stays open 2 hours after the slot —<br>
+								it closed at 1:45 PM.
+							</p>
+							<span class="countchip">Window closed</span>
+						</div>
+						<div class="m-foot">
+							<span class="btn btn--sm">Reschedule →</span>
+							<span class="btn btn--sm btn--ghost">Got it</span>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- ── C · THE MODAL ─────────────────────────────────────────────── -->
+	<span class="tag tag--after" id="modal">C · Same shell, ended copy</span>
+	<p class="note">
+		It reuses the <code>MeetingWindowModal</code> shell — same scrim, same black-bordered card, same
+		footer row — so the two states read as one product. The struck-through clock is the one visual
+		difference: where the not-open modal shows when you <i>can</i> join, this one shows the end of the
+		slot you missed.
+	</p>
+	<div class="callout">
+		<ul>
+			<li><b>Machine-readable:</b> the 409 body gains <code>startsAt</code>/<code>endsAt</code>/<code>timezone</code>/<code>reference</code> — the same fields <code>MEETING_NOT_OPEN</code> already sends — so the modal names the slot in the booking's timezone instead of a frozen sentence.</li>
+			<li><b>The CTA differs by side:</b> portal gets <b>Reschedule →</b> (into the existing move flow on Appointments). Ops gets dismiss-only — they manage the slot from the case, not from a popup.</li>
+			<li><b>Zero per-surface wiring where the hook is used:</b> it renders inside <code>useJoinMeeting</code>'s <code>overlay</code>, next to the not-open modal and the call UI.</li>
+			<li><b>No window change:</b> the join window itself (staff −30 / client −15, +2h after the end) stays exactly as the server enforces it — this is only a better rendering of the same 409.</li>
+		</ul>
+	</div>
+
+	<!-- ── D · CHANGE MAP ────────────────────────────────────────────── -->
+	<span class="tag" id="map">D · Change map</span>
+	<table class="diff">
+		<tr><th>File</th><th>Change</th></tr>
+		<tr><td class="mono">api · services/booking.ts</td><td><code>MEETING_ENDED</code> 409 gains <code>details</code> — <code>{ startsAt, endsAt, timezone, reference, windowClosedAt }</code> — mirroring the <code>MEETING_NOT_OPEN</code> payload</td></tr>
+		<tr><td class="mono">web+ops · ConsultationCall.tsx</td><td><code>useJoinMeeting</code> catches <code>MEETING_ENDED</code> → new <code>MeetingEndedModal</code> (same shell) renders through the <code>overlay</code> slot; the inline <code>error</code> path is skipped</td></tr>
+		<tr><td class="mono">web · ConsultationAppointmentCard.tsx</td><td>Its private <code>joinMeeting</code> gains the same <code>MEETING_ENDED</code> catch (or swaps to the shared hook outright)</td></tr>
+		<tr><td class="mono">ops · ConsultationDetail.tsx</td><td>Inline join catches <code>MEETING_ENDED</code> → modal instead of an error toast</td></tr>
+	</table>
+	<p class="note" style="margin-top:1rem">
+		<b>Open question:</b> where should the portal's <b>Reschedule →</b> land — the Appointments
+		"Move" flow on the same booking, or the booking sheet for a fresh slot? The mock assumes the
+		existing move flow.
+	</p>
+</div>
+</body>
+</html>

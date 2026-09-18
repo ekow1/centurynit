@@ -1,6 +1,7 @@
 import { useState, useSyncExternalStore } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAppState } from "../../context/AppState";
-import { ConsultationCall, MeetingWindowModal, type MeetingWindowInfo } from "../../components/ConsultationCall";
+import { ConsultationCall, MeetingEndedModal, MeetingWindowModal, type MeetingEndedInfo, type MeetingWindowInfo } from "../../components/ConsultationCall";
 import { ApiError, bookingsApi } from "century-nit-core/api";
 import {
 	CONSULTATION_DURATIONS,
@@ -70,12 +71,14 @@ export function ConsultationAppointmentCard() {
 	const [joining, setJoining] = useState(false);
 	const [joinError, setJoinError] = useState<string | null>(null);
 	const [notOpen, setNotOpen] = useState<MeetingWindowInfo | null>(null);
+	const [ended, setEnded] = useState<MeetingEndedInfo | null>(null);
 	const [call, setCall] = useState<{ url: string; token: string } | null>(null);
+	const nav = useNavigate();
 	const [withdrawing, setWithdrawing] = useState(false);
 
 	/**
 	 * The one door in. Token'd providers (Daily, LiveKit) need a per-person
-	 * credential — the join endpoint mints it; other providers return the
+	 * credential. The join endpoint mints it; other providers return the
 	 * stored link untouched. LiveKit hands back {ws url, token} and the call
 	 * happens in-app; everything else opens externally. Copy takes the same
 	 * path so a copied link actually works on another device.
@@ -85,7 +88,7 @@ export function ConsultationAppointmentCard() {
 	async function joinTicket(): Promise<JoinResult | null> {
 		if (!booking.bookingId) {
 			const link = booking.meetingLink ?? "";
-			// Token'd rooms have no shareable URL — without a booking to mint
+			// Token'd rooms have no shareable URL. Without a booking to mint
 			// through, opening one is a dead end (blank page / "not available").
 			if (link.startsWith("livekit:") || link.includes("daily.co")) return null;
 			return link ? { url: link, provider: "manual" } : null;
@@ -97,6 +100,7 @@ export function ConsultationAppointmentCard() {
 		setJoining(true);
 		setJoinError(null);
 		setNotOpen(null);
+		setEnded(null);
 		try {
 			const res = await joinTicket();
 			if (res?.provider === "livekit" && res.token) {
@@ -113,6 +117,14 @@ export function ConsultationAppointmentCard() {
 			) {
 				setNotOpen({
 					...(err.details as Omit<MeetingWindowInfo, "title">),
+					title: `Consultation · ${booking.confirmationId ?? ""}`,
+				});
+			} else if (
+				err instanceof ApiError && err.code === "MEETING_ENDED" &&
+				typeof err.details === "object" && err.details !== null && "endsAt" in err.details
+			) {
+				setEnded({
+					...(err.details as Omit<MeetingEndedInfo, "title">),
 					title: `Consultation · ${booking.confirmationId ?? ""}`,
 				});
 			} else {
@@ -145,7 +157,7 @@ export function ConsultationAppointmentCard() {
 		try {
 			const res = await joinTicket();
 			const url = res?.provider === "livekit" ? null : (res?.url ?? booking.meetingLink);
-			if (!url) return; // a livekit join can't travel as a link — it needs the in-app call
+			if (!url) return; // a livekit join can't travel as a link. It needs the in-app call
 			await navigator.clipboard.writeText(url);
 			setCopied(true);
 			window.setTimeout(() => setCopied(false), 2000);
@@ -263,10 +275,10 @@ export function ConsultationAppointmentCard() {
 								Online video call
 								{booking.meetingLink ? (
 									booking.meetingLink.startsWith("livekit:") || booking.meetingLink.includes("daily.co") ? (
-										/* Token'd rooms have no shareable URL — Join mints
+										/* Token'd rooms have no shareable URL. Join mints
 										   a per-person credential. Never render the raw value. */
 										<span className="appt__note">
-											Private room — use Join above when it opens
+											Private room. Use Join above when it opens
 										</span>
 									) : (
 										/* Not .mono - that class uppercases, and a mangled URL
@@ -337,7 +349,7 @@ export function ConsultationAppointmentCard() {
 				</div>
 			</div>
 
-			{/* Pending reschedule — the held slot stays live until ops decides,
+			{/* Pending reschedule. The held slot stays live until ops decides,
 			    so it sits between the facts and the actions, not in place of them */}
 			{booking.rescheduleRequestedAt && booking.rescheduleRequestedStartsAt ? (
 				<div
@@ -351,7 +363,7 @@ export function ConsultationAppointmentCard() {
 					}}
 				>
 					<span className="mono" style={{ fontSize: "0.62rem", letterSpacing: "0.12em", textTransform: "uppercase", display: "block", marginBottom: "0.15rem" }}>
-						Reschedule requested — awaiting your consultant
+						Reschedule requested. Awaiting your consultant
 					</span>
 					You asked to move to{" "}
 					<b>
@@ -359,7 +371,7 @@ export function ConsultationAppointmentCard() {
 							weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
 						})}
 					</b>
-					. The slot above holds until they confirm — the join details stay valid for it.
+					. The slot above holds until they confirm. The join details stay valid for it.
 					{booking.rescheduleRequestReason ? (
 						<span className="muted"> Reason: “{booking.rescheduleRequestReason}”</span>
 					) : null}
@@ -433,6 +445,13 @@ export function ConsultationAppointmentCard() {
 			) : null}
 			{notOpen ? (
 				<MeetingWindowModal info={notOpen} onClose={() => setNotOpen(null)} />
+			) : null}
+			{ended ? (
+				<MeetingEndedModal
+					info={ended}
+					onClose={() => setEnded(null)}
+					onReschedule={() => { setEnded(null); nav("/portal/appointments"); }}
+				/>
 			) : null}
 		</div>
 	);

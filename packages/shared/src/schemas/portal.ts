@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/* ── Pre-departure checklist ──────────────────────────────────────────────── */
+/* Pre-departure checklist */
 
 /*
  * `category` and `detail` are optional rather than required: the previous
@@ -17,7 +17,7 @@ const preDepartureTaskSchema = z.object({
 	done: z.boolean(),
 });
 
-/* ── Post-arrival payment schedule ────────────────────────────────────────── */
+/* Post-arrival payment schedule */
 
 const postArrivalScheduleSchema = z.object({
 	id: z.string(),
@@ -28,7 +28,7 @@ const postArrivalScheduleSchema = z.object({
 	graceDays: z.number().int(),
 });
 
-/* ── Portal state (persisted as JSONB on applicants table) ────────────────── */
+/* Portal state (persisted as JSONB on applicants table) */
 
 export const portalStateSchema = z.object({
 	preDepartureTasks: z.array(preDepartureTaskSchema).optional(),
@@ -46,7 +46,7 @@ export const updatePortalStateSchema = z.object({
 });
 export type UpdatePortalState = z.infer<typeof updatePortalStateSchema>;
 
-/* ── In-app notification ──────────────────────────────────────────────────── */
+/* In-app notification */
 
 export const notificationSchema = z.object({
 	id: z.string().uuid(),

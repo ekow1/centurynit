@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Admin areas — the redesign</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1180px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3.5rem 0 .6rem}
+	.tag--solid{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.screen{background:#f2f2f2;border:1px solid #999;box-shadow:5px 5px 0 rgba(0,0,0,.12)}
+	.screen-bar{background:var(--ink);color:#fff;font-family:var(--mono);font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;padding:.4rem .8rem;display:flex;justify-content:space-between}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.8rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.callout--warn{border-left-style:dashed}
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	code{font-family:var(--mono);font-size:.74rem;background:var(--muted-bg);padding:.1rem .35rem}
+	.pill{display:inline-block;font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;padding:.24rem .55rem;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line)}
+	.pill--dashed{color:var(--fg-muted);border-style:dashed}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.72rem;font-weight:700;padding:.55rem 1rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;white-space:nowrap;font-family:var(--sans);text-decoration:none}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--sm{padding:.35rem .7rem;font-size:.6rem}
+	.btn--wave{background:#fff;color:var(--ink);text-decoration:underline;text-decoration-style:wavy;border-color:var(--line)}
+	.chip{font-family:var(--mono);font-size:.6rem;letter-spacing:.06em;padding:.3rem .65rem;border:1px solid var(--ink);background:#fff;cursor:pointer;text-transform:uppercase}
+	.chip.on{background:var(--ink);color:#fff}
+	.chip .n{opacity:.6;margin-left:.3rem}
+	.chip--dashed{border-style:dashed;color:var(--fg-muted)}
+	.input{border:1px solid var(--ink);background:#fff;font-size:.74rem;padding:.45rem .6rem;font-family:var(--sans);min-width:0}
+	.pagehead{padding:1rem 1.25rem .6rem;background:#fff;border-bottom:1px solid var(--line-light)}
+	.pagehead h2{font-size:1.15rem;letter-spacing:-0.01em}
+	.pagehead .lead{font-size:.72rem;color:var(--fg-muted);margin-top:.15rem}
+	.statstrip{display:flex;gap:1.4rem;padding:.55rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);font-size:.72rem;align-items:center;flex-wrap:wrap}
+	.statstrip b{font-size:.95rem;margin-right:.2rem}
+	.statstrip .lbl{color:var(--fg-muted);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono)}
+	.statstrip .sep{color:var(--line)}
+	.statstrip .link{margin-left:auto;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em}
+	.chips{display:flex;gap:.4rem;padding:.55rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);flex-wrap:wrap;align-items:center}
+	.chips input{margin-left:auto}
+
+	/* tables */
+	.tbl{width:100%;border-collapse:collapse;font-size:.76rem;background:#fff}
+	.tbl th{font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);text-align:left;padding:.5rem .8rem;border-bottom:1.5px solid var(--ink);background:var(--muted-bg)}
+	.tbl td{padding:.5rem .8rem;border-bottom:1px solid var(--line-light);vertical-align:top}
+	.tbl tr.on td{background:var(--muted-bg);box-shadow:inset 3px 0 0 var(--ink)}
+	.tbl .r{text-align:right}
+	.tbl .sub{font-size:.66rem;color:var(--fg-muted)}
+	.tbl .nm{font-weight:700}
+	.tbl .mn{font-family:var(--mono);font-size:.66rem;color:var(--fg-muted)}
+	.dot{display:inline-block;width:7px;height:7px;background:var(--ink)}
+	.dot--hollow{background:#fff;border:1px solid var(--ink)}
+	.dot--dash{width:7px;height:2px;background:var(--fg-muted)}
+
+	/* split panes */
+	.split{display:grid;background:#fff}
+	.split--2{grid-template-columns:1fr 300px}
+	.split--3{grid-template-columns:1fr 320px}
+	.pane{border-left:1px solid var(--line-light);background:#fff}
+	.pane-h{font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);padding:.5rem .8rem;border-bottom:1px solid var(--line-light);background:var(--muted-bg)}
+	.pane .sec{font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);padding:.6rem .8rem .3rem}
+	.kv{display:flex;justify-content:space-between;gap:.6rem;padding:.3rem .8rem;font-size:.72rem;border-bottom:1px dotted var(--line-light)}
+	.kv:last-child{border-bottom:0}
+	.kv .k{color:var(--fg-muted);font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;padding-top:.1rem}
+	.kv .v{text-align:right}
+	.linkish{font-family:var(--mono);font-size:.64rem;text-transform:uppercase;letter-spacing:.06em;text-decoration:underline;cursor:pointer}
+	.danger{border-top:1.5px solid var(--ink);margin-top:.5rem}
+	.danger .sec{color:var(--ink)}
+
+	/* cards grid */
+	.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.8rem;padding:1rem 1.25rem;background:#fff}
+	.card{border:1px solid var(--ink);background:#fff}
+	.card .h{font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;padding:.45rem .7rem;border-bottom:1px solid var(--ink);display:flex;justify-content:space-between}
+	.card .b{padding:.6rem .7rem;font-size:.74rem}
+	.card .f{border-top:1px solid var(--line-light);padding:.4rem .7rem;font-size:.7rem;display:flex;gap:.8rem}
+
+	/* toggle */
+	.tgl{display:inline-flex;border:1px solid var(--ink)}
+	.tgl span{padding:.25rem .6rem;font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;cursor:pointer}
+	.tgl span.on{background:var(--ink);color:#fff}
+
+	/* perm matrix */
+	.mx{width:100%;border-collapse:collapse;font-size:.7rem}
+	.mx th{font-family:var(--mono);font-size:.54rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted);padding:.4rem .5rem;border-bottom:1.5px solid var(--ink);text-align:center}
+	.mx th:first-child{text-align:left}
+	.mx td{padding:.35rem .5rem;border-bottom:1px solid var(--line-light);text-align:center}
+	.mx td:first-child{text-align:left;font-weight:600}
+	.mx .box{width:14px;height:14px;border:1.5px solid var(--ink);display:inline-block;vertical-align:middle;cursor:pointer}
+	.mx .box.on{background:var(--ink)}
+
+	/* before/after annotation */
+	.before{border:1px dashed var(--line);background:#fff;padding:.5rem .7rem;font-size:.72rem;color:var(--fg-muted)}
+	.before s{opacity:.75}
+	.legend{display:flex;gap:1.2rem;flex-wrap:wrap;font-size:.68rem;color:var(--fg-muted);padding:.5rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light)}
+	.legend b{color:var(--ink);font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1 class="page">Admin areas — analysis &amp; redesign</h1>
+<p class="note">
+	<b>Staff &amp; roles · Clients directory · Authentication · Audit logs · Notifications &amp; system config.</b>
+	The pattern this time is different from helpdesk/marketing: most of these pages already read real APIs — but the
+	admin area hides <b>~1,000 lines of unreachable fiction</b> (Security Center, Integrations, Branches, Feature Flags
+	render mock data and are routed nowhere) and the real pages <b>mix fabricated data into live rows</b>
+	(the audit log injects 4 fake events and stamps every real row with <code>127.0.0.1</code>). The redesign is
+	primarily about <b>honesty</b>: real columns for real data, dead fiction deleted, and the two colour-leak pages
+	brought back to monochrome.
+</p>
+<div class="jump">
+	<a href="#s1">01 Staff &amp; roles</a>
+	<a href="#s2">02 Clients directory</a>
+	<a href="#s3">03 Authentication</a>
+	<a href="#s4">04 Audit logs</a>
+	<a href="#s5">05 Notifications &amp; system</a>
+	<a href="#s6">06 The fiction file — what gets deleted</a>
+	<a href="#s7">07 Build order</a>
+</div>
+
+<!-- ════════════════════ 01 STAFF & ROLES ════════════════════ -->
+<h2 id="s1" class="tag tag--solid">01 · Staff &amp; roles — /users</h2>
+<p class="note">
+	The 3,066-line mega-page is <b>mostly real</b>: invite flow, role matrix, per-module toggles all hit
+	<code>/roles</code> and <code>/staff</code>. Three fixes: the directory gets <b>presence and ownership</b>
+	(real <code>staff_presence.lastSeenAt</code> + the conversation-owner role we just built); the
+	<b>"Client accounts" sub-tab is deleted</b> — it embeds the entire ClientDirectory, duplicating
+	<code>/clients</code> under a second nav path; and the invite-success banner stops leaking green.
+</p>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /users</span><span>staff &amp; roles</span></div>
+	<div class="pagehead">
+		<h2>Staff &amp; roles</h2>
+		<p class="lead">Who can sign in to the console, what they can touch, and who owns which conversations.</p>
+	</div>
+	<div class="statstrip">
+		<span><b>7</b> <span class="lbl">staff</span></span><span class="sep">·</span>
+		<span><b>5</b> <span class="lbl">active this week</span></span><span class="sep">·</span>
+		<span><b>4</b> <span class="lbl">roles</span></span><span class="sep">·</span>
+		<span><b>2</b> <span class="lbl">branches covered</span></span><span class="sep">·</span>
+		<span><b>3</b> <span class="lbl">conversations unowned</span></span>
+		<a class="link" href="#s2">clients → /clients</a>
+	</div>
+	<div class="chips">
+		<span class="chip on">Directory<span class="n">7</span></span>
+		<span class="chip">Role matrix</span>
+		<span class="chip">Invites<span class="n">1 pending</span></span>
+		<span class="chip chip--dashed">Clients → moved to /clients</span>
+		<input class="input" placeholder="Search staff…">
+	</div>
+	<table class="tbl">
+		<thead><tr>
+			<th>Staff</th><th>Role</th><th>Branch</th><th>Presence</th><th>MFA</th><th>Owns</th><th>Modules</th><th class="r"></th>
+		</tr></thead>
+		<tbody>
+			<tr class="on">
+				<td><span class="nm">K. Mensah</span><div class="sub">kofi@century-nit.com</div></td>
+				<td><span class="pill pill--solid">Consultant</span></td>
+				<td class="mn">Accra HQ</td>
+				<td><span class="dot"></span> <span class="mn">now</span></td>
+				<td><span class="mn">✓</span></td>
+				<td><span class="mn">4 convs · 6 cases</span></td>
+				<td class="mn">12/18</td>
+				<td class="r"><span class="linkish">edit</span></td>
+			</tr>
+			<tr>
+				<td><span class="nm">A. Owusu</span><div class="sub">ama@century-nit.com</div></td>
+				<td><span class="pill">Ops manager</span></td>
+				<td class="mn">Accra HQ</td>
+				<td><span class="dot"></span> <span class="mn">12m ago</span></td>
+				<td><span class="mn">✓</span></td>
+				<td><span class="mn">2 convs · 3 cases</span></td>
+				<td class="mn">16/18</td>
+				<td class="r"><span class="linkish">edit</span></td>
+			</tr>
+			<tr>
+				<td><span class="nm">E. Darko</span><div class="sub">ekua@century-nit.com</div></td>
+				<td><span class="pill">Consultant</span></td>
+				<td class="mn">Kumasi</td>
+				<td><span class="dot--dash"></span> <span class="mn">2d ago</span></td>
+				<td><span class="mn">—</span></td>
+				<td><span class="mn">1 conv · 4 cases</span></td>
+				<td class="mn">9/18</td>
+				<td class="r"><span class="linkish">edit</span></td>
+			</tr>
+			<tr>
+				<td><span class="nm">D. Boateng</span><div class="sub">daniel@century-nit.com</div></td>
+				<td><span class="pill pill--hollow">Invited</span></td>
+				<td class="mn">—</td>
+				<td class="mn">never signed in</td>
+				<td class="mn">—</td>
+				<td class="mn">—</td>
+				<td class="mn">—</td>
+				<td class="r"><span class="linkish">resend</span> · <span class="linkish">revoke</span></td>
+			</tr>
+		</tbody>
+	</table>
+	<div class="split split--3" style="border-top:1.5px solid var(--ink)">
+		<div>
+			<div class="pane-h">Role matrix — consultant</div>
+			<table class="mx">
+				<thead><tr><th>Module</th><th>Admin</th><th>Ops mgr</th><th>Consultant</th><th>Finance</th></tr></thead>
+				<tbody>
+					<tr><td>Applications</td><td><span class="box on"></span></td><td><span class="box on"></span></td><td><span class="box on"></span></td><td><span class="box"></span></td></tr>
+					<tr><td>Helpdesk</td><td><span class="box on"></span></td><td><span class="box on"></span></td><td><span class="box on"></span></td><td><span class="box"></span></td></tr>
+					<tr><td>Invoices</td><td><span class="box on"></span></td><td><span class="box on"></span></td><td><span class="box"></span></td><td><span class="box on"></span></td></tr>
+					<tr><td>Marketing</td><td><span class="box on"></span></td><td><span class="box on"></span></td><td><span class="box"></span></td><td><span class="box"></span></td></tr>
+					<tr><td>Settings</td><td><span class="box on"></span></td><td><span class="box"></span></td><td><span class="box"></span></td><td><span class="box"></span></td></tr>
+				</tbody>
+			</table>
+		</div>
+		<aside class="pane">
+			<div class="pane-h">K. Mensah — record</div>
+			<p class="sec">Account</p>
+			<div class="kv"><span class="k">Role</span><span class="v">Consultant · rank 3</span></div>
+			<div class="kv"><span class="k">Branch</span><span class="v">Accra HQ</span></div>
+			<div class="kv"><span class="k">MFA</span><span class="v">enrolled Aug 2</span></div>
+			<div class="kv"><span class="k">Last seen</span><span class="v">now · Accra IP</span></div>
+			<p class="sec">Load</p>
+			<div class="kv"><span class="k">Owns</span><span class="v">4 conversations</span></div>
+			<div class="kv"><span class="k">Cases</span><span class="v">6 active</span></div>
+			<div class="kv"><span class="k">Bookings</span><span class="v">3 this week</span></div>
+			<div class="danger">
+				<p class="sec">Access</p>
+				<div class="kv"><span class="k">Sessions</span><span class="v"><span class="linkish">revoke all</span></span></div>
+				<div class="kv"><span class="k">Account</span><span class="v"><span class="linkish">deactivate</span></span></div>
+			</div>
+		</aside>
+	</div>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>Presence + ownership columns are real</b> — <code>staff_presence.lastSeenAt</code> and the conversation <code>owner</code> role already exist in the schema; the directory just never rendered them.</li>
+		<li><b>"Client accounts" sub-tab deleted</b> — it mounts the whole <code>ClientDirectory</code> inside /users; one directory lives at /clients, linked from the header strip.</li>
+		<li><b>Row click opens the record rail</b> — role/branch/MFA/ownership load and the danger zone, same pattern as the helpdesk context rail.</li>
+		<li><b>Role matrix stays</b> — it's already real; restyled to the checkbox-grid so four roles compare side-by-side.</li>
+	</ul>
+</div>
+
+<!-- ════════════════════ 02 CLIENTS ════════════════════ -->
+<h2 id="s2" class="tag tag--solid">02 · Clients directory — /clients</h2>
+<p class="note">
+	Already real — list, ban/unban, session-revoke, three-way delete. The gaps: it <b>polls every 10 seconds</b>
+	(the SSE infrastructure we just built makes that obsolete), there's <b>no branch or stage filter</b> even though
+	both exist on the record, and the record pane can't do the two things ops actually needs next —
+	<b>message the client</b> and <b>see their money position</b> — both of which the new context aggregate already answers.
+</p>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /clients</span><span>client directory</span></div>
+	<div class="pagehead">
+		<h2>Clients</h2>
+		<p class="lead">Every portal account — who can sign in, who has a case, who needs access managed.</p>
+	</div>
+	<div class="statstrip">
+		<span><b>214</b> <span class="lbl">registered</span></span><span class="sep">·</span>
+		<span><b>31</b> <span class="lbl">active now</span></span><span class="sep">·</span>
+		<span><b>96</b> <span class="lbl">with a case</span></span><span class="sep">·</span>
+		<span><b>4</b> <span class="lbl">suspended</span></span>
+		<span class="link">live · no polling</span>
+	</div>
+	<div class="chips">
+		<span class="chip on">All<span class="n">214</span></span>
+		<span class="chip">Active<span class="n">31</span></span>
+		<span class="chip">Dormant<span class="n">48</span></span>
+		<span class="chip">Suspended<span class="n">4</span></span>
+		<span class="chip chip--dashed">Accra HQ</span>
+		<span class="chip chip--dashed">Kumasi</span>
+		<input class="input" placeholder="Search name, email, phone…">
+	</div>
+	<div class="split split--3">
+		<div>
+			<table class="tbl">
+				<thead><tr><th>Client</th><th>Access</th><th>Branch</th><th>Stage</th><th>Last seen</th><th class="r"></th></tr></thead>
+				<tbody>
+					<tr class="on">
+						<td><span class="nm">Yaw Boateng <span class="mn">✓</span></span><div class="sub">yaw.b@gmail.com · +233 24…</div></td>
+						<td><span class="pill pill--solid">Active</span></td>
+						<td class="mn">Accra HQ</td>
+						<td><span class="pill pill--hollow">Visa</span></td>
+						<td class="mn">2m ago</td>
+						<td class="r"><span class="linkish">close ↑</span></td>
+					</tr>
+					<tr>
+						<td><span class="nm">Ama Serwaa</span><div class="sub">ama.serwaa@yahoo.com</div></td>
+						<td><span class="pill pill--solid">Active</span></td>
+						<td class="mn">Kumasi</td>
+						<td><span class="pill pill--hollow">Applications</span></td>
+						<td class="mn">14m ago</td>
+						<td class="r"><span class="linkish">record →</span></td>
+					</tr>
+					<tr>
+						<td><span class="nm">Kojo Annan</span><div class="sub">k.annan@outlook.com</div></td>
+						<td><span class="pill">Dormant</span></td>
+						<td class="mn">Accra HQ</td>
+						<td><span class="pill pill--hollow">Consultation</span></td>
+						<td class="mn">41d ago</td>
+						<td class="r"><span class="linkish">record →</span></td>
+					</tr>
+					<tr>
+						<td><span class="nm">Efua Mensimah</span><div class="sub">efua.m@gmail.com</div></td>
+						<td><span class="pill pill--hollow" style="text-decoration:underline;text-decoration-style:wavy">Suspended</span><div class="sub">payment dispute</div></td>
+						<td class="mn">—</td>
+						<td><span class="pill pill--hollow">Lead</span></td>
+						<td class="mn">—</td>
+						<td class="r"><span class="linkish">record →</span></td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+		<aside class="pane">
+			<div class="pane-h">Client record</div>
+			<div style="padding:.6rem .8rem;border-bottom:1px solid var(--line-light)">
+				<b style="font-size:.85rem">Yaw Boateng</b>
+				<div class="sub" style="font-size:.68rem;color:var(--fg-muted)">yaw.b@gmail.com · verified Aug 4</div>
+				<div style="margin-top:.45rem;display:flex;gap:.5rem">
+					<span class="btn btn--sm">Message →</span>
+					<span class="btn btn--sm btn--ghost">Case CN-1042 →</span>
+				</div>
+			</div>
+			<p class="sec">File</p>
+			<div class="kv"><span class="k">Case</span><span class="v">CN-1042 · Visa · Accra HQ</span></div>
+			<div class="kv"><span class="k">Handler</span><span class="v">K. Mensah</span></div>
+			<div class="kv"><span class="k">Next appt</span><span class="v">Thu 14:00 · online</span></div>
+			<p class="sec">Money</p>
+			<div class="kv"><span class="k">Open invoice</span><span class="v">INV-0091 · $250 due</span></div>
+			<div class="kv"><span class="k">Paid to date</span><span class="v">$1,850</span></div>
+			<p class="sec">Access</p>
+			<div class="kv"><span class="k">Status</span><span class="v"><span class="pill pill--solid">Active</span></span></div>
+			<div class="kv"><span class="k">Sessions</span><span class="v">2 devices · <span class="linkish">revoke all</span></span></div>
+			<div class="danger">
+				<p class="sec">Access control</p>
+				<div class="kv"><span class="k">Account</span><span class="v"><span class="linkish">suspend</span> · <span class="linkish">delete…</span></span></div>
+			</div>
+		</aside>
+	</div>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>Polling removed</b> — the 10s <code>setInterval(fetchClients)</code> is replaced by the existing SSE channel (or a plain refresh button if the directory doesn't warrant a stream).</li>
+		<li><b>Branch chips</b> — branch already rides on the case join; it just wasn't filterable or rendered.</li>
+		<li><b>Record pane gets File + Money + Message</b> — the same <code>getConversationContext</code> aggregate the helpdesk rail uses: case/stage/handler, open invoice, next appointment, and a one-click "Message →" that opens (or creates) their support thread in /helpdesk.</li>
+		<li><b>Stage column is honest</b> — real journey stage from the linked application, "Lead" only when there is no case.</li>
+	</ul>
+</div>
+
+<!-- ════════════════════ 03 AUTH ════════════════════ -->
+<h2 id="s3" class="tag tag--solid">03 · Authentication — /auth</h2>
+<p class="note">
+	The settings themselves are real (<code>getAuthSettings</code>, TOTP stats) — but the page answers
+	<b>"who"</b> nowhere: it knows 3 of 5 staff lack MFA but won't say who. And it hosts the only green/red
+	flash banners left in the console. The dead-code Security Center (unrouted) gets <b>folded in honestly</b>:
+	a real sessions table from <code>sessions</code>, a real MFA roster, and a real sign-in log — or those
+	panels don't render.
+</p>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /auth</span><span>authentication &amp; sessions</span></div>
+	<div class="pagehead">
+		<h2>Authentication</h2>
+		<p class="lead">How staff and applicants sign in, who still needs MFA, and who's signed in right now.</p>
+	</div>
+	<div class="statstrip">
+		<span><b>7</b> <span class="lbl">staff accounts</span></span><span class="sep">·</span>
+		<span><b>4/7</b> <span class="lbl">MFA enrolled</span></span><span class="sep">·</span>
+		<span><b>3</b> <span class="lbl">MFA outstanding</span></span><span class="sep">·</span>
+		<span><b>9</b> <span class="lbl">active sessions</span></span>
+	</div>
+	<div class="cards">
+		<div class="card" style="grid-column:span 2">
+			<div class="h"><span>Sign-in policy</span><span class="pill pill--solid">Live</span></div>
+			<table class="mx" style="margin-top:.2rem">
+				<thead><tr><th>Surface</th><th>Password</th><th>Google</th><th>Magic link</th><th>MFA</th></tr></thead>
+				<tbody>
+					<tr><td>Client portal</td><td><span class="box on"></span></td><td><span class="box on"></span></td><td><span class="box"></span></td><td><span class="box"></span></td></tr>
+					<tr><td>Ops console</td><td><span class="box on"></span></td><td><span class="box"></span></td><td><span class="box"></span></td><td><span class="box on"></span></td></tr>
+				</tbody>
+			</table>
+			<div class="f"><span class="linkish">edit policy →</span><span class="muted mono" style="font-size:.6rem">changes apply at next login</span></div>
+		</div>
+		<div class="card">
+			<div class="h"><span>MFA outstanding</span><span class="pill">3</span></div>
+			<div class="b" style="padding:0">
+				<div class="kv"><span class="k">E. Darko</span><span class="v">Kumasi · consultant</span></div>
+				<div class="kv"><span class="k">Y. Appiah</span><span class="v">Accra · finance</span></div>
+				<div class="kv"><span class="k">D. Boateng</span><span class="v">invited, never signed in</span></div>
+			</div>
+			<div class="f"><span class="linkish">send reminders</span></div>
+		</div>
+	</div>
+	<div class="split split--2" style="border-top:1.5px solid var(--ink)">
+		<div>
+			<div class="pane-h">Active sessions — real rows from `sessions`</div>
+			<table class="tbl">
+				<thead><tr><th>Staff</th><th>Device</th><th>IP</th><th>Signed in</th><th class="r"></th></tr></thead>
+				<tbody>
+					<tr><td><span class="nm">K. Mensah</span> <span class="mn">YOU</span></td><td class="mn">Edge · Windows</td><td class="mn">41.215.…</td><td class="mn">Aug 6 08:12</td><td class="r"><span class="mn">current</span></td></tr>
+					<tr><td><span class="nm">A. Owusu</span></td><td class="mn">Safari · iPhone</td><td class="mn">154.160.…</td><td class="mn">Aug 6 07:44</td><td class="r"><span class="linkish">revoke</span></td></tr>
+					<tr><td><span class="nm">K. Mensah</span></td><td class="mn">Chrome · Android</td><td class="mn">41.215.…</td><td class="mn">Aug 5 19:02</td><td class="r"><span class="linkish">revoke</span></td></tr>
+				</tbody>
+			</table>
+		</div>
+		<aside class="pane">
+			<div class="pane-h">Recent sign-in events</div>
+			<div class="b" style="padding:.3rem 0;font-size:.72rem">
+				<div class="kv"><span class="k">08:12</span><span class="v">kofi@… signed in · TOTP ✓</span></div>
+				<div class="kv"><span class="k">07:44</span><span class="v">ama@… signed in · TOTP ✓</span></div>
+				<div class="kv"><span class="k">07:31</span><span class="v">unknown@… 3 failed attempts</span></div>
+				<div class="kv"><span class="k">06:58</span><span class="v">ekua@… password reset</span></div>
+			</div>
+			<div class="f" style="border-top:1px solid var(--line-light);padding:.4rem .7rem"><span class="linkish">full log → /audit</span></div>
+		</aside>
+	</div>
+</div>
+<div class="callout callout--warn">
+	<ul>
+		<li><b>The honest swap:</b> today's <code>SecurityCenter</code> renders hardcoded sessions/failed-logins and an IP allowlist that <i>claims</i> "only these ranges can access the console" while writing to <code>useState</code>. It is also unreachable — no route, no nav. The redesign shows real <code>sessions</code> rows + a real sign-in event stream; the IP allowlist is deleted outright rather than pretending to enforce.</li>
+		<li><b>MFA outstanding names names</b> — <code>authStats</code> knows the count; extending it to return the roster makes the "3 outstanding" stat actionable.</li>
+		<li><b>Colour leaks out</b> — the green <code>#d1fae5</code> saved-banner and red <code>#fee2e2</code> error become ink/white blocks like every other surface.</li>
+	</ul>
+</div>
+
+<!-- ════════════════════ 04 AUDIT ════════════════════ -->
+<h2 id="s4" class="tag tag--solid">04 · Audit logs — /audit</h2>
+<p class="note">
+	The page reads the real <code>settings_audit</code> table — then <b>injects 4 fabricated events</b>
+	(<code>STATIC_SYSTEM_AUDITS</code>: a fake MFA-policy change, a fake role grant, a fake fee update, a fake
+	invitation) and stamps every real row with a fabricated <code>ip: "127.0.0.1"</code>. The redesign removes
+	the fiction, derives the category honestly, and extends the writer so actor IP and action are
+	<b>actually recorded</b> instead of guessed from the key name.
+</p>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /audit</span><span>audit trail</span></div>
+	<div class="pagehead">
+		<h2>Audit trail</h2>
+		<p class="lead">Every recorded admin action. If it isn't in the table, it isn't on this page.</p>
+	</div>
+	<div class="chips">
+		<span class="chip on">All<span class="n">142</span></span>
+		<span class="chip">Config<span class="n">38</span></span>
+		<span class="chip">Auth<span class="n">51</span></span>
+		<span class="chip">Roles<span class="n">12</span></span>
+		<span class="chip">Financials<span class="n">22</span></span>
+		<span class="chip">Staff<span class="n">19</span></span>
+		<input class="input" placeholder="Actor, action, key, IP…">
+		<input class="input" style="max-width:9rem" type="date">
+	</div>
+	<table class="tbl">
+		<thead><tr><th>When</th><th>Category</th><th>Action</th><th>Target</th><th>Actor</th><th>IP</th><th class="r"></th></tr></thead>
+		<tbody>
+			<tr class="on">
+				<td class="mn">Aug 6 08:02:14</td>
+				<td><span class="pill pill--solid">Config</span></td>
+				<td>Set payment.paystack_public_key</td>
+				<td class="mn">PAYSTACK_PK</td>
+				<td class="mn">super@…</td>
+				<td class="mn">41.215.…</td>
+				<td class="r"><span class="linkish">inspect</span></td>
+			</tr>
+			<tr>
+				<td class="mn">Aug 6 07:31:55</td>
+				<td><span class="pill pill--solid">Auth</span></td>
+				<td>3 failed sign-ins, then locked</td>
+				<td class="mn">ops-login</td>
+				<td class="mn">unknown@…</td>
+				<td class="mn">102.89.…</td>
+				<td class="r"><span class="linkish">inspect</span></td>
+			</tr>
+			<tr>
+				<td class="mn">Aug 5 17:20:03</td>
+				<td><span class="pill pill--solid">Roles</span></td>
+				<td>Granted invoices → Ops manager</td>
+				<td class="mn">role:ops_mgr</td>
+				<td class="mn">super@…</td>
+				<td class="mn">41.215.…</td>
+				<td class="r"><span class="linkish">inspect</span></td>
+			</tr>
+			<tr>
+				<td class="mn">Aug 5 15:44:19</td>
+				<td><span class="pill pill--solid">Staff</span></td>
+				<td>Suspended client yaw.b@…</td>
+				<td class="mn">client:8f2a…</td>
+				<td class="mn">ama@…</td>
+				<td class="mn">154.160.…</td>
+				<td class="r"><span class="linkish">inspect</span></td>
+			</tr>
+		</tbody>
+	</table>
+	<div class="legend">
+		<span><b>Before — deleted:</b> 4 fabricated rows ("Enforced mandatory MFA policy…"), fabricated <code>127.0.0.1</code> on every real row, action text guessed from the key name.</span>
+	</div>
+	<div class="legend" style="border-top:0">
+		<span><b>After:</b> <code>settings_audit</code> gains <code>actor_ip</code> + <code>action</code> written at the call site; a parallel <code>admin_audit</code> stream records staff/auth/financial events; date-range + actor filters; pagination instead of "last 50".</span>
+	</div>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>Backend change required:</b> the API response today is <code>{id, key, actorEmail, masked values, at}</code> — no IP, no action, no category. Add <code>actor_ip</code> + <code>action</code> columns to <code>settings_audit</code>, capture them in the settings writer, and add an <code>admin_audit</code> writer to the staff-ban/delete/invite and role-grant paths.</li>
+		<li><b>Until a row type is real it doesn't render</b> — the same rule as the helpdesk rewrite. Sign-in events appear only once the auth hook writes them.</li>
+	</ul>
+</div>
+
+<!-- ════════════════════ 05 NOTIFICATIONS + SYSTEM ════════════════════ -->
+<h2 id="s5" class="tag tag--solid">05 · Notifications &amp; system config — /notifications · /system · /settings</h2>
+<p class="note">
+	Three pages, three different problems. <b>Notifications</b> is real data with green/red pills.
+	<b>System overview</b> renders a hardcoded "Service Health" board (<i>SMS Gateway · 97.2% uptime</i> — a service
+	that doesn't exist) and a hardcoded "Platform Configuration" card while a real <code>/health</code> readiness
+	endpoint sits unused. <b>Settings</b> is genuinely real — TOTP step-up and all — it just needs the
+	notification-log page's pill treatment.
+</p>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /system</span><span>system overview</span></div>
+	<div class="pagehead">
+		<h2>System</h2>
+		<p class="lead">What the platform is actually doing — measured, not declared.</p>
+	</div>
+	<div class="cards">
+		<div class="card">
+			<div class="h"><span>API</span><span class="pill pill--solid">Up</span></div>
+			<div class="b"><b style="font-size:1.1rem">200 · 14ms</b><div class="sub muted" style="font-size:.66rem">/health · just now</div></div>
+			<div class="f"><span class="mn">commit 8f3a1c · node 22</span></div>
+		</div>
+		<div class="card">
+			<div class="h"><span>Postgres</span><span class="pill pill--solid">Connected</span></div>
+			<div class="b"><b style="font-size:1.1rem">SELECT 1 ok</b><div class="sub muted" style="font-size:.66rem">session pooler :5432</div></div>
+			<div class="f"><span class="mn">Neon · eu-central</span></div>
+		</div>
+		<div class="card">
+			<div class="h"><span>Redis / queues</span><span class="pill pill--solid">Up</span></div>
+			<div class="b"><b style="font-size:1.1rem">3 queues · 0 waiting</b><div class="sub muted" style="font-size:.66rem">emails · notifications · campaigns</div></div>
+			<div class="f"><span class="mn">BullMQ · ping 4ms</span></div>
+		</div>
+		<div class="card">
+			<div class="h"><span>Email worker</span><span class="pill pill--hollow">Idle</span></div>
+			<div class="b"><b style="font-size:1.1rem">last job 12m ago</b><div class="sub muted" style="font-size:.66rem">0 failed today</div></div>
+			<div class="f"><span class="mn">via Resend</span></div>
+		</div>
+	</div>
+	<div class="split split--2" style="border-top:1.5px solid var(--ink)">
+		<div>
+			<div class="pane-h">Notifications — delivery log (real)</div>
+			<table class="tbl">
+				<thead><tr><th>Recipient</th><th>Template</th><th>Status</th><th>Sent</th></tr></thead>
+				<tbody>
+					<tr><td class="mn">yaw.b@…</td><td>booking.confirmed</td><td><span class="pill pill--solid">Delivered</span></td><td class="mn">08:02</td></tr>
+					<tr><td class="mn">ama.s@…</td><td>invoice.issued</td><td><span class="pill pill--solid">Delivered</span></td><td class="mn">07:58</td></tr>
+					<tr><td class="mn">k.annan@…</td><td>consultation.reminder</td><td><span class="pill pill--hollow" style="text-decoration:underline;text-decoration-style:wavy">Failed</span><div class="sub">mailbox full</div></td><td class="mn">06:41</td></tr>
+				</tbody>
+			</table>
+			<div class="legend"><span><b>Change:</b> delivered = solid ink, failed = wavy-underline hollow + the error string — no green, no red.</span></div>
+		</div>
+		<aside class="pane">
+			<div class="pane-h">Configured — from the settings store, not prose</div>
+			<div class="kv"><span class="k">Session TTL</span><span class="v">8h sliding <span class="mn">(setting)</span></span></div>
+			<div class="kv"><span class="k">Ops MFA</span><span class="v">enforced <span class="mn">(setting)</span></span></div>
+			<div class="kv"><span class="k">Portal sign-in</span><span class="v">password + Google</span></div>
+			<div class="kv"><span class="k">Channels</span><span class="v">email <span class="mn">— no SMS provider</span></span></div>
+			<div class="kv"><span class="k">Meetings</span><span class="v">LiveKit · or manual link</span></div>
+			<div class="f" style="padding:.45rem .8rem"><span class="linkish">edit → /settings</span></div>
+		</aside>
+	</div>
+</div>
+<div class="callout callout--warn">
+	<ul>
+		<li><b>System Overview rebuilt on <code>/health</code></b> — extend the readiness route to also ping Redis/queues and report version + commit; the page renders what it returns, nothing more. The fake "99.99% uptime / SMS Gateway degraded" board is deleted.</li>
+		<li><b>"Platform Configuration" becomes the settings truth</b> — the same values <code>/settings</code> edits, read-only here, deep-linked.</li>
+		<li><b>Notification pills monochrome</b> — <code>#d1fae5/#166534/#fee2e2/#991b1b</code> all out; failed rows carry the provider error inline.</li>
+		<li><b>Settings page</b> keeps its real TOTP step-up flow; only the flash banners get the mono treatment.</li>
+	</ul>
+</div>
+
+<!-- ════════════════════ 06 FICTION FILE ════════════════════ -->
+<h2 id="s6" class="tag">06 · The fiction file — deleted, not redesigned</h2>
+<div class="screen">
+	<div class="screen-bar"><span>enterpriseadministration.tsx · ~1,000 lines</span><span>unreachable code</span></div>
+	<table class="tbl">
+		<thead><tr><th>Dead section</th><th>What it shows</th><th>The truth</th><th>Decision</th></tr></thead>
+		<tbody>
+			<tr><td class="nm">SecurityCenter</td><td>Sessions, failed logins, IP allowlist "enforcement"</td><td>All <code>useState</code>; not routed; allowlist enforces nothing</td><td><span class="pill pill--solid">Delete</span> — real sessions move to /auth</td></tr>
+			<tr><td class="nm">IntegrationsManager</td><td>6 API keys incl. "Twilio SMS", 3 webhooks, env tabs</td><td><code>MOCK_KEY_REPLACE_WITH_REAL</code> literals; no API keys table exists</td><td><span class="pill pill--solid">Delete</span> — real integrations live in /settings</td></tr>
+			<tr><td class="nm">BranchManagement</td><td>Branch CRUD, staff counts, activate/deactivate</td><td>Hardcoded array; no <code>branches</code> table — branch is a text field on records</td><td><span class="pill">Decide</span> — build real table or drop</td></tr>
+			<tr><td class="nm">FeatureFlagsManager</td><td>Flag toggles</td><td>Hardcoded; nothing reads a flag</td><td><span class="pill pill--solid">Delete</span> — add when a flag system exists</td></tr>
+			<tr><td class="nm">SYSTEM_HEALTH</td><td>4 services, fake uptimes</td><td>Constants</td><td><span class="pill pill--solid">Delete</span> — replaced by /health data</td></tr>
+			<tr><td class="nm">STATIC_SYSTEM_AUDITS</td><td>4 audit events that never happened</td><td>Injected into the real log</td><td><span class="pill pill--solid">Delete</span> — immediately</td></tr>
+		</tbody>
+	</table>
+</div>
+
+<!-- ════════════════════ 07 ORDER ════════════════════ -->
+<h2 id="s7" class="tag">07 · Build order</h2>
+<div class="callout" style="max-width:none">
+	<ul>
+		<li><b>1 · Honesty pass (½ day):</b> delete STATIC_SYSTEM_AUDITS + fabricated IPs, delete the four dead sections + their styles, monochrome the notification pills and auth flash banners, remove the /users "clients" sub-tab.</li>
+		<li><b>2 · Audit backend (1 day):</b> <code>settings_audit</code> gains <code>actor_ip</code> + <code>action</code>; <code>admin_audit</code> stream on ban/delete/invite/role-grant/sign-in paths; page gets date + actor filters and pagination.</li>
+		<li><b>3 · Staff &amp; auth (1 day):</b> presence + ownership columns, staff record rail, real sessions table + MFA roster on /auth, health-endpoint extension (redis, queue depth, version) feeding a real System overview.</li>
+		<li><b>4 · Clients (½ day):</b> kill the 10s poll, branch chips, record pane File/Money/Message using <code>getConversationContext</code>.</li>
+		<li><b>Total ≈ 3 days</b>, and only two small migrations (<code>actor_ip</code>/<code>action</code>, <code>admin_audit</code>) — everything else renders data that already exists.</li>
+	</ul>
+</div>
+
+</div>
+</body>
+</html>

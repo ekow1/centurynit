@@ -13,8 +13,8 @@ import { BRANCH_AVAILABILITY, BOOKING_STORAGE_KEY, branches } from "./content.js
  * Occupancy is now derived from what has actually been booked, read from both
  * halves of the product:
  *
- *   - `century-nit-ops-state` .consultations[]  — everything ops knows about
- *   - `century-nit-booking`                     — the portal applicant's own
+ *   - `century-nit-ops-state` .consultations[] . Everything ops knows about
+ *   - `century-nit-booking`                    . The portal applicant's own
  *
  * Reading the other app's storage key directly is the established pattern here
  * (`OpsDirectiveBridge` and `useSiteContent` both do it) and works because the
@@ -22,13 +22,13 @@ import { BRANCH_AVAILABILITY, BOOKING_STORAGE_KEY, branches } from "./content.js
  *
  * The appointment's `dateTime` field is a DISPLAY string ("Today, 10:00 AM"),
  * which is why a structured `slotBranchId` / `slotDate` / `slotTime` triple
- * exists alongside it. Never try to parse `dateTime` — that is what made a
+ * exists alongside it. Never try to parse `dateTime`. That is what made a
  * conflict check impossible before.
  */
 
 const OPS_STATE_KEY = "century-nit-ops-state";
 
-/** `branch|YYYY-MM-DD|HH:MM` — the identity of one bookable slot. */
+/** `branch|YYYY-MM-DD|HH:MM`. The identity of one bookable slot. */
 export type SlotKey = string;
 
 export function slotKey(branchId: string, date: string, time: string): SlotKey {
@@ -54,7 +54,7 @@ export function resolveBranchId(label: string): string | null {
 	return match?.id ?? null;
 }
 
-/** Display string for a slot — "Fri 15 Aug 2026 · 10:00 AM". */
+/** Display string for a slot. "Fri 15 Aug 2026 · 10:00 AM". */
 export function formatSlot(date: string, time: string): string {
 	const [y, m, d] = date.split("-").map(Number);
 	const [hh, mm] = time.split(":").map(Number);
@@ -69,7 +69,7 @@ export function formatSlot(date: string, time: string): string {
 	return `${day} · ${clock}`;
 }
 
-/** A slot `dayOffset` days from today — used to seed demo data that never expires. */
+/** A slot `dayOffset` days from today. Used to seed demo data that never expires. */
 export function slotFromToday(
 	branchLabel: string,
 	dayOffset: number,
@@ -87,7 +87,7 @@ export function slotFromToday(
 	};
 }
 
-/* ── Seeded occupancy ───────────────────────────────────────────────────────
+/* Seeded occupancy
  * Texture so a fresh demo does not show a completely empty calendar. Offsets
  * are relative to today on purpose: absolute dates are what let the previous
  * version rot into meaninglessness.
@@ -117,7 +117,7 @@ function seededSlots(): Set<SlotKey> {
 	return out;
 }
 
-/* ── Live occupancy ──────────────────────────────────────────────────────── */
+/* Live occupancy */
 
 function readJSON<T>(key: string): T | null {
 	try {
@@ -158,7 +158,7 @@ function liveSlots(): Set<SlotKey> {
 	}
 
 	// The portal applicant's own slot counts as taken as soon as they have paid
-	// or been given a confirmation — before that it is just a draft selection.
+	// or been given a confirmation. Before that it is just a draft selection.
 	const booking = readJSON<StoredBooking>(BOOKING_STORAGE_KEY);
 	if (booking?.branchId && booking.date && booking.time) {
 		const committed = Boolean(booking.confirmationId) || booking.paymentStatus === "success";
@@ -175,7 +175,7 @@ export function bookedSlots(): Set<SlotKey> {
 	return all;
 }
 
-/** Occupied times at one branch on one date — what a slot picker needs. */
+/** Occupied times at one branch on one date. What a slot picker needs. */
 export function bookedTimesOn(branchId: string, date: string): Set<string> {
 	const prefix = `${branchId}|${date}|`;
 	const times = new Set<string>();
@@ -189,7 +189,7 @@ export function isSlotBooked(branchId: string, date: string, time: string): bool
 	return bookedSlots().has(slotKey(branchId, date, time));
 }
 
-/* ── Calendar rules ──────────────────────────────────────────────────────── */
+/* Calendar rules */
 
 export function isBranchOpenOnDay(branchId: string, dayOfWeek: number): boolean {
 	const days = BRANCH_AVAILABILITY[branchId];
@@ -207,7 +207,7 @@ export type BookableDay = {
 };
 
 /**
- * The next `count` days a branch could host a session. Today is never offered —
+ * The next `count` days a branch could host a session. Today is never offered,
  * same-day booking is too short notice, and it also sidesteps "is 09:00 still
  * available at 11am" entirely.
  */

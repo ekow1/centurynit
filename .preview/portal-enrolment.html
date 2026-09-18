@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portal — Chapter II · Enrolment (proposed)</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1120px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem}
+	.jump a{color:inherit}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.5rem clamp(1.25rem,3vw,2.25rem) 2.5rem}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.struck{text-decoration:line-through;opacity:.55}
+
+	/* ---- portal chrome ---- */
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.title{font-size:1.75rem;font-weight:500;letter-spacing:-.01em;margin-top:.25rem}
+	.lead{color:var(--fg-muted);font-size:.92rem;margin-top:.5rem;max-width:44rem}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.pill{display:inline-flex;align-items:center;padding:.25rem .65rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+
+	/* split + rail */
+	.split{display:grid;grid-template-columns:minmax(0,1fr) 21rem;gap:2rem;align-items:start;margin-top:1.5rem}
+	@media(max-width:900px){.split{grid-template-columns:1fr}}
+	.prail{position:sticky;top:1rem}
+
+	/* section heads */
+	.psec{margin-top:1.6rem}
+	.psec p{display:flex;align-items:baseline;gap:.6rem}
+	.psec__no{font-family:var(--mono);font-size:.62rem;border:1.5px solid var(--ink);width:1.4rem;height:1.4rem;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+	.psec__title{font-size:.95rem;font-weight:700;letter-spacing:.01em}
+	.psec__hint{font-size:.72rem;color:var(--fg-muted);margin:.4rem 0 0 2rem}
+
+	/* package cards */
+	.picks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.6rem;margin-top:.7rem}
+	@media(max-width:760px){.picks{grid-template-columns:1fr}}
+	.pick{position:relative;display:flex;flex-direction:column;gap:.3rem;text-align:left;border:1px solid var(--line-light);background:#fff;padding:.9rem;cursor:pointer;font-family:var(--sans)}
+	.pick--on{border:1.5px solid var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+	.pick__tag{position:absolute;top:-.6rem;left:.8rem;background:var(--ink);color:#fff;font-family:var(--mono);font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;padding:.15rem .5rem}
+	.pick__name{font-size:1rem;font-weight:700}
+	.pick__price{margin-top:.45rem;border-top:1px solid var(--line-light);padding-top:.55rem}
+	.money{display:block}
+	.money__primary{display:block;font-size:1.35rem;font-weight:700;letter-spacing:-.01em}
+	.money__secondary{display:block;font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);margin-top:.1rem}
+	.pick__due{font-family:var(--mono);font-size:.62rem;letter-spacing:.06em;margin-top:.4rem;color:var(--ink)}
+	.pick__due b{background:var(--ink);color:#fff;padding:.1rem .35rem}
+	.pick--pending{border-style:dashed;cursor:default}
+	.pick--pending .pick__price{padding-top:.55rem}
+	.pending-fig{font-size:.95rem;font-weight:600;color:var(--fg-muted)}
+
+	/* chips */
+	.pchips{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.6rem}
+	.pchip{border:1px solid var(--line-light);background:#fff;padding:.55rem .85rem;font-size:.78rem;cursor:pointer;font-family:var(--sans)}
+	.pchip small{display:block;font-family:var(--mono);font-size:.58rem;color:var(--fg-muted);letter-spacing:.06em;margin-top:.1rem}
+	.pchip--on{border:1.5px solid var(--ink);font-weight:700}
+
+	/* rail card */
+	.sharp-card{border:1.5px solid var(--ink);background:#fff;padding:1.1rem}
+	.sharp-card--key{box-shadow:6px 6px 0 var(--ink)}
+	.prail__title{font-size:1.05rem;font-weight:700;margin:.4rem 0 .8rem}
+	.pkv{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;padding:.4rem 0;border-top:1px solid var(--line-light);font-size:.8rem}
+	.pkv__k{color:var(--fg-muted)}
+	.pkv__v{text-align:right;font-weight:600}
+	.money-inline__alt{color:var(--fg-muted);font-family:var(--mono);font-size:.68rem}
+	.pkv--hero{border:1.5px solid var(--ink);background:var(--muted-bg);padding:.6rem .7rem;margin-top:.55rem;align-items:center}
+	.pkv--hero .pkv__k{color:var(--ink);font-weight:700}
+	.pkv--hero .hero-fig{font-size:1.15rem;font-weight:700;display:block}
+	.pkv--hero .money-inline__alt{display:block;font-size:.6rem}
+	.rail-note{font-size:.68rem;color:var(--fg-muted);line-height:1.5;margin:.8rem 0}
+	.unlocks{border-top:1px solid var(--line-light);margin-top:.7rem;padding-top:.6rem;font-size:.7rem}
+	.unlocks .eyebrow{margin-bottom:.35rem;display:block}
+	.unlocks li{margin:.18rem 0 .18rem 1rem;color:var(--micro)}
+
+	/* ops form snippet */
+	.opsform{max-width:26rem;border:1px solid var(--line);background:#fff;padding:1rem;margin-top:.8rem}
+	.opsform label{font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;display:block;color:var(--fg-muted)}
+	.opsform .field{display:flex;border:1.5px solid var(--ink);margin-top:.35rem}
+	.opsform .field .cur{padding:.55rem .7rem;border-right:1px solid var(--line-light);font-family:var(--mono);font-size:.8rem;background:var(--muted-bg)}
+	.opsform .field input{border:0;flex:1;padding:.55rem .7rem;font-size:.9rem;font-family:var(--sans)}
+	.opsform .calc{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);margin-top:.4rem;line-height:1.6}
+	.opsform .calc b{color:var(--ink)}
+	.errline{font-family:var(--mono);font-size:.62rem;margin-top:.35rem;color:var(--ink);background:var(--muted-bg);border-left:3px solid var(--ink);padding:.3rem .5rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1 class="page">Portal — Chapter II · Enrolment: the GH₵1 package problem</h1>
+<p class="note">
+	Screenshot: funding-track cards render <b>GH₵1 ($0.05)</b>, <b>GH₵5 ($0.35)</b> — a $0.05 consultancy package,
+	a deposit of a few pesewas, and a “Pay the deposit” button for essentially nothing.
+</p>
+
+<div class="callout">
+	<b>Diagnosis — three separate faults, one screen:</b>
+	<li><b>Data (root cause):</b> the live <code>service_packages</code> rows hold <code>price_cents = 5, 33, 33</code> — literally $0.05 / $0.33 / $0.33.
+		The seeded $1,500 / $2,000 / $2,500 were overwritten — someone typed <code>0.05</code> into the ops “Price (USD)” field, which multiplies by 100 into cents.</li>
+	<li><b>Portal:</b> <code>priceCents &gt; 0</code> is the only guard, so $0.05 <b>overrides</b> the honest computed fee. Deposit = 10% of it → GH₵0.08.
+		The page also ignores the package’s <code>currency</code> column entirely — pesewas would render as dollars too.</li>
+	<li><b>Ops editor:</b> “Price (USD)” accepts any number with no floor, no preview of what the client will see, no confirm. Saving $0.05 succeeds silently.</li>
+</div>
+<p class="note" style="margin-top:.6rem">
+	The fix is two-layer: <b>repair the rows + guard the write</b> (ops validation, currency respected), and
+	<b>render honestly</b> — a package priced below a sane floor shows “pricing being updated”, never GH₵1.
+</p>
+
+<!-- ==================== BEFORE ==================== -->
+<div class="tag">Current — as screenshotted</div>
+<div class="mock">
+	<p class="eyebrow">Chapter II · Enrolment</p>
+	<h2 class="title">Confirm your enrolment</h2>
+
+	<div class="psec">
+		<p><span class="psec__no">2</span><span class="psec__title">Funding track</span></p>
+		<div class="picks">
+			<div class="pick pick--on">
+				<span class="eyebrow">Self-funded / family-funded</span>
+				<span class="pick__name">Non-Scholarship Pathway</span>
+				<span class="muted" style="font-size:.75rem">Streamlined admission &amp; visa support…</span>
+				<span class="pick__price">
+					<span class="money"><span class="money__primary">GH₵1</span><span class="money__secondary">$0.05 USD</span></span>
+				</span>
+			</div>
+			<div class="pick">
+				<span class="eyebrow">Partial award + self-fund</span>
+				<span class="pick__name">Hybrid Pathway</span>
+				<span class="muted" style="font-size:.75rem">Start non-scholarship; upgrade after…</span>
+				<span class="pick__price">
+					<span class="money"><span class="money__primary">GH₵5</span><span class="money__secondary">$0.33 USD</span></span>
+				</span>
+			</div>
+			<div class="pick">
+				<span class="eyebrow">Funded / award-led path</span>
+				<span class="pick__name">Scholarship Pathway</span>
+				<span class="muted" style="font-size:.75rem">Full scholarship search, application…</span>
+				<span class="pick__price">
+					<span class="money"><span class="money__primary">GH₵5</span><span class="money__secondary">$0.33 USD</span></span>
+				</span>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="callout">
+	<li>A <b>$0.05 service package</b> renders as an authoritative price — same weight as a real one.</li>
+	<li>Rail shows “Service fee GH₵1 · Deposit due now GH₵0 · Pay the deposit” — a Paystack charge for 5 pesewas.</li>
+	<li>Nothing on screen signals the price is wrong; a client could actually pay it and enrol for free.</li>
+</div>
+
+<!-- ==================== AFTER ==================== -->
+<div class="tag tag--after">Proposed — repaired data + honest render</div>
+<div class="mock">
+	<p class="eyebrow">Chapter II · Enrolment</p>
+	<h2 class="title">Confirm your enrolment</h2>
+	<p class="lead">Choose your funding track, degree level and school count — the deposit unlocks school selection.</p>
+
+	<div class="split">
+		<div>
+			<div class="psec" style="margin-top:0">
+				<p><span class="psec__no">2</span><span class="psec__title">Funding track</span></p>
+				<p class="psec__hint">One figure per track — the full Century NIT service fee. School fees &amp; tuition are the institutions’, not ours.</p>
+				<div class="picks">
+					<div class="pick pick--on">
+						<span class="eyebrow">Self-funded / family-funded</span>
+						<span class="pick__name">Non-Scholarship Pathway</span>
+						<span class="muted" style="font-size:.75rem">Streamlined admission &amp; visa support for self-funded students.</span>
+						<span class="pick__price">
+							<span class="money"><span class="money__primary">GH₵22,500</span><span class="money__secondary">$1,500 USD · service fee</span></span>
+							<span class="pick__due"><b>DUE NOW</b> GH₵2,250 deposit (10%)</span>
+						</span>
+					</div>
+					<div class="pick">
+						<span class="pick__tag">Advisor's pick</span>
+						<span class="eyebrow">Partial award + self-fund</span>
+						<span class="pick__name">Hybrid Pathway</span>
+						<span class="muted" style="font-size:.75rem">Start non-scholarship; upgrade to scholarship search after consultation.</span>
+						<span class="pick__price">
+							<span class="money"><span class="money__primary">GH₵30,000</span><span class="money__secondary">$2,000 USD · service fee</span></span>
+							<span class="pick__due"><b>DUE NOW</b> GH₵3,000 deposit (10%)</span>
+						</span>
+					</div>
+					<div class="pick pick--pending">
+						<span class="eyebrow">Funded / award-led path</span>
+						<span class="pick__name">Scholarship Pathway</span>
+						<span class="muted" style="font-size:.75rem">Full scholarship search, application, and negotiation support.</span>
+						<span class="pick__price">
+							<span class="pending-fig">Pricing being updated</span>
+							<span class="money__secondary">ask the desk — don’t book against this figure</span>
+						</span>
+					</div>
+				</div>
+			</div>
+
+			<div class="psec">
+				<p><span class="psec__no">3</span><span class="psec__title">Degree level</span></p>
+				<div class="pchips">
+					<span class="pchip">BSc<small>undergraduate</small></span>
+					<span class="pchip pchip--on">MSc<small>postgraduate</small></span>
+					<span class="pchip">PhD<small>doctorate</small></span>
+				</div>
+			</div>
+
+			<div class="psec">
+				<p><span class="psec__no">4</span><span class="psec__title">Target schools</span></p>
+				<div class="pchips">
+					<span class="pchip">1</span><span class="pchip">2</span><span class="pchip pchip--on">3<small>included in fee</small></span>
+				</div>
+				<p class="psec__hint">Non-Scholarship covers up to 3 schools — extras price per school on the invoice.</p>
+			</div>
+		</div>
+
+		<div class="prail">
+			<div class="sharp-card sharp-card--key">
+				<p class="eyebrow">Your package</p>
+				<p class="prail__title">Non-Scholarship · MSc · 3 schools</p>
+				<div class="pkv"><span class="pkv__k">Service fee</span><span class="pkv__v">GH₵22,500 <span class="money-inline__alt">($1,500)</span></span></div>
+				<div class="pkv pkv--hero">
+					<span class="pkv__k">Deposit · due now (10%)</span>
+					<span class="pkv__v"><span class="hero-fig">GH₵2,250</span><span class="money-inline__alt">$150 USD</span></span>
+				</div>
+				<div class="pkv"><span class="pkv__k">Pre-departure milestone</span><span class="pkv__v">GH₵20,250 <span class="money-inline__alt">($1,350)</span></span></div>
+				<div class="pkv"><span class="pkv__k">— due</span><span class="pkv__v muted">once your flight is booked</span></div>
+				<div class="unlocks">
+					<span class="eyebrow">The deposit unlocks</span>
+					<li>School selection (up to 3)</li>
+					<li>Your named consultant + handler</li>
+					<li>Application submissions begin</li>
+				</div>
+				<p class="rail-note">Admission letter, visa documents and e-ticket release after the pre-departure milestone. School application fees and tuition are the institutions’, not ours.</p>
+				<span class="btn" style="display:block;text-align:center">Pay the deposit · GH₵2,250</span>
+				<span class="btn btn--ghost" style="display:block;text-align:center;margin-top:.5rem">Save &amp; pay later</span>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="callout">
+	<b>What changed on screen:</b>
+	<li><b>“DUE NOW” on every card</b> — the 10% deposit is visible at the decision point, not only after you scroll to the rail.</li>
+	<li><b>“· service fee” qualifier</b> — the figure can’t be mistaken for tuition or a per-school price.</li>
+	<li><b>Deposit is the rail hero</b> — boxed, larger, the CTA repeats the exact amount being charged.</li>
+	<li><b>“The deposit unlocks”</b> — three concrete things the payment buys, replacing legalese as the reason to pay.</li>
+	<li><b>Scholarship card shows the guard state</b> — a price below the sanity floor renders “Pricing being updated”, dashed, unselectable. A nonsense number can never reach a client again.</li>
+</div>
+
+<!-- ==================== OPS SIDE ==================== -->
+<div class="tag tag--after">Ops — the write path that caused it</div>
+<div class="mock">
+	<p class="eyebrow">Enterprise → Service packages → edit</p>
+	<div class="opsform">
+		<label>Price — USD dollars</label>
+		<div class="field"><span class="cur">$</span><input value="1500" readonly></div>
+		<div class="calc">
+			stored as <b>150,000 cents</b> · shown to clients as <b>GH₵22,500 ≈ $1,500</b><br>
+			floor: $500 — a package can’t be cheaper than the consultation that sells it
+		</div>
+	</div>
+	<div class="opsform" style="border-color:var(--ink)">
+		<label>What rejected today</label>
+		<div class="field" style="border-color:var(--line)"><span class="cur">$</span><input value="0.05" readonly style="color:var(--fg-muted)"></div>
+		<div class="errline">Below the $500 floor — check the unit. Did you mean 500 or 5,000?</div>
+	</div>
+</div>
+<div class="callout">
+	<b>Build notes (after approval):</b>
+	<li><b>Data repair:</b> one UPDATE on <code>service_packages</code> restoring <code>price_cents</code> to the seeded 150000 / 200000 / 250000 — or whatever pricing ops confirms.</li>
+	<li><b>Ops validation:</b> <code>EnterprisePackages.tsx</code> — label becomes “Price (USD dollars)”, live “stored as N cents → client sees GH₵X” preview, refuse below a floor.</li>
+	<li><b>Portal guard:</b> <code>PortalPages.tsx</code> — floor-check <code>priceCents</code>; implausible → pending state, fall back to <code>serviceFeeForPackage()</code> for the rail. Respect <code>currency</code> (pesewas ≠ cents).</li>
+	<li><b>API belt:</b> <code>PATCH /packages</code> rejects <code>priceCents</code> under the floor — a form bug can’t write $0.05 again.</li>
+</div>
+
+</div>
+</body>
+</html>

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * Cloudflare Turnstile widget lifecycle for the public web chat.
  *
  * Loads the Turnstile script once and renders a widget explicitly (so we can
- * reset it after each submit — tokens are single-use). The portal surfaces do
+ * reset it after each submit. Tokens are single-use). The portal surfaces do
  * not use this; only the public, unauthenticated EnquiryWidget does.
  *
  * @returns `containerRef` to attach to the widget's host element and the current
@@ -66,7 +66,7 @@ export function useTurnstile(sitekey: string, action: string, enabled: boolean) 
 				});
 			})
 			.catch(() => {
-				// script failed to load — token stays null, send stays disabled
+				// script failed to load. Token stays null, send stays disabled
 			});
 
 		return () => {

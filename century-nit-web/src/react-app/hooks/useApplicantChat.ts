@@ -4,12 +4,12 @@ import type { ChatMessage } from "century-nit-shared";
 import { useChatStream } from "./useChatStream";
 
 /**
- * Applicant-facing chat hook — loads the conversation with the assigned
+ * Applicant-facing chat hook. Loads the conversation with the assigned
  * consultant, sends messages, and subscribes to real-time SSE updates so
  * the thread updates instantly without polling.
  *
  * The backend doesn't yet expose edit/delete/react/forward/typing endpoints
- * for applicants — those actions are staff-only for now. The hook exposes
+ * for applicants. Those actions are staff-only for now. The hook exposes
  * `send` and `markRead`; the shared `MessageList` renders with a reduced
  * action set (reply + copy only) for applicant messages.
  */
@@ -45,7 +45,7 @@ export function useApplicantChat(enabled: boolean): ApplicantChatState {
 			const res = await meApi.getConversationMessages({ limit: 50 });
 			setMessages(res.messages as unknown as ChatMessage[]);
 		} catch {
-			// keep local values — the conversation may not exist yet
+			// keep local values. The conversation may not exist yet
 		} finally {
 			setLoading(false);
 		}

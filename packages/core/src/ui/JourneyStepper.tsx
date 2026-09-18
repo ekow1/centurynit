@@ -23,7 +23,7 @@ export function JourneyStepper({
 	stageStatuses: Record<string, JourneyStepStatus>;
 	/** What opens the next step, when the case is waiting on something. */
 	nextUnlock?: string | null;
-	/** Makes open steps clickable — the console jumps to that chapter's tab. */
+	/** Makes open steps clickable. The console jumps to that chapter's tab. */
 	onStep?: (stage: PortalStepId) => void;
 	/** Smaller markers and no unlock line, for list rows. */
 	compact?: boolean;

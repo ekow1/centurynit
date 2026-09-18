@@ -1,7 +1,7 @@
 {
 	"name": "Century NIT International",
 	"short_name": "Century NIT",
-	"description": "Premium global education platform — explore, consult, and apply.",
+	"description": "Premium global education platform. Explore, consult, and apply.",
 	"start_url": "/",
 	"display": "standalone",
 	"background_color": "#FFFFFF",

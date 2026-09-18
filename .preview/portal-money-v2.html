@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portal Money v2 — preview</title>
+<style>
+  :root{
+    --background:#ffffff; --foreground:#0a0a0a;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#0a0a0a; --border-light:#d4d4d8;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --text-xs:.72rem; --text-sm:.875rem;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:#fafafa;color:var(--foreground);font-size:var(--text-sm)}
+  .page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--muted-foreground)}
+  .sharp-card{background:var(--background);border:1px solid var(--border-light);padding:1.25rem}
+  .sharp-card--key{background:var(--foreground);color:var(--background)}
+  .sharp-card--key .eyebrow{color:rgba(255,255,255,.6)}
+  .btn{border:1px solid var(--border);background:var(--background);color:var(--foreground);font:inherit;
+    font-size:var(--text-xs);font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+    padding:.55rem .9rem;cursor:pointer;text-decoration:none;display:inline-block}
+  .btn--ghost{border-color:var(--border-light)}
+  .portal-pill{display:inline-block;border:1px solid var(--border);padding:.2rem .6rem;
+    font-family:var(--font-mono);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em}
+  .portal-pill--solid{background:var(--foreground);color:var(--background)}
+  .portal-pill--done{background:var(--muted);border-color:var(--border-light);color:var(--muted-foreground)}
+  .portal-pill--hollow{border-color:var(--border-light);color:var(--muted-foreground);border-style:dashed}
+
+  .page-title{font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
+  .lead{color:var(--muted-foreground);max-width:44rem}
+
+  /* position band — paid / due now / still to come */
+  .pos{display:grid;grid-template-columns:1fr 1fr 1fr;border:1.5px solid var(--border);background:var(--background);margin-top:1.5rem}
+  .pos>div{padding:1.25rem 1.5rem}
+  .pos .num{font-size:1.7rem;font-weight:800;letter-spacing:-.02em;margin-top:.3rem}
+  .pos .sub{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);margin-top:.2rem}
+  .pos__due{background:var(--foreground);color:var(--background)}
+  .pos__due .eyebrow{color:rgba(255,255,255,.6)}
+  .pos__due .sub{color:rgba(255,255,255,.6)}
+
+  .split{display:grid;grid-template-columns:1fr 20rem;gap:1.5rem;align-items:start;margin-top:1.5rem}
+  .rail{display:flex;flex-direction:column;gap:1rem;position:sticky;top:1rem}
+  .kv{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--border-light);font-size:var(--text-xs)}
+  .kv:last-child{border-bottom:none}
+  .kv .k{font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground);font-size:.62rem;padding-top:.1rem}
+  .kv .v{text-align:right}
+  .sharp-card--key .kv{border-color:rgba(255,255,255,.25)}
+  .sharp-card--key .kv .k{color:rgba(255,255,255,.55)}
+
+  .psec{display:flex;align-items:baseline;gap:.7rem;margin:1.8rem 0 .8rem}
+  .psec:first-child{margin-top:0}
+  .psec__t{font-weight:700;font-size:1.05rem}
+  .psec__hint{margin-left:auto;font-family:var(--font-mono);font-size:.65rem;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.08em}
+
+  /* the ledger — chapter-numbered, invoice numbers and receipts inline */
+  table.ledger{width:100%;border-collapse:collapse;border:1px solid var(--border-light);background:var(--background);font-size:var(--text-xs)}
+  .ledger th{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;
+    color:var(--muted-foreground);text-align:left;padding:.6rem .9rem;border-bottom:1px solid var(--border-light)}
+  .ledger td{padding:.75rem .9rem;border-bottom:1px solid var(--border-light);vertical-align:top}
+  .ledger tr:last-child td{border-bottom:none}
+  .ledger .mk{font-family:var(--font-mono);font-weight:700;font-size:.7rem;width:1.8rem}
+  .ledger .fee{font-weight:600;font-size:.85rem}
+  .ledger .sub{display:block;color:var(--muted-foreground);font-size:.68rem;margin-top:.15rem}
+  .ledger .inv{display:block;font-family:var(--font-mono);font-size:.58rem;color:var(--muted-foreground);margin-top:.2rem}
+  .ledger .amt{font-weight:700;text-align:right;white-space:nowrap;font-size:.85rem}
+  .ledger .acts{text-align:right;white-space:nowrap}
+  .ledger tr.now td{box-shadow:inset 4px 0 0 var(--foreground);background:var(--muted)}
+  .jlink{background:none;border:none;padding:0;font:inherit;text-decoration:underline;cursor:pointer;color:inherit;font-size:var(--text-xs)}
+
+  /* university money — deliberately set apart */
+  .uni{border:1px dashed var(--border);padding:1rem 1.25rem;background:var(--background)}
+  .uni .ledger{border:none}
+  .uni .ledger td{border-color:var(--border-light)}
+
+  @media (max-width:900px){.split{grid-template-columns:1fr}.rail{position:static}.pos{grid-template-columns:1fr}.ledger .cov,.ledger .due{display:none}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <p class="eyebrow">Money</p>
+    <h1 class="page-title" style="margin-top:.3rem">Payments &amp; settlements</h1>
+    <p class="lead" style="margin-top:.5rem">Every fee in its chapter — what you've paid, what's due now, and what each payment unlocks.</p>
+  </header>
+
+  <!-- the position -->
+  <div class="pos">
+    <div>
+      <p class="eyebrow">Paid to date</p>
+      <p class="num">GH₵8,900</p>
+      <p class="sub">3 receipts on file</p>
+    </div>
+    <div class="pos__due">
+      <p class="eyebrow">Due now</p>
+      <p class="num">—</p>
+      <p class="sub">nothing — next fee arrives with its chapter</p>
+    </div>
+    <div>
+      <p class="eyebrow">Still to come</p>
+      <p class="num">GH₵14,650</p>
+      <p class="sub">visa fee · milestone · ticket</p>
+    </div>
+  </div>
+
+  <div class="split">
+    <div>
+      <!-- the ledger — Century NIT fees, chapter-numbered -->
+      <div class="psec">
+        <span class="psec__t">The ledger</span>
+        <span class="psec__hint">Century NIT fees · GH₵</span>
+      </div>
+      <table class="ledger">
+        <thead>
+          <tr><th></th><th>Fee</th><th class="cov">Covers</th><th class="due">Due</th><th style="text-align:right">Amount</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="mk">I</td>
+            <td><span class="fee">Consultation fee</span><span class="inv">CNT-2026-0314 · 8 FEB</span></td>
+            <td class="cov">Your session &amp; assessment</td>
+            <td class="due">At booking</td>
+            <td class="amt">GH₵1,950</td>
+            <td><span class="portal-pill portal-pill--done">Paid</span></td>
+            <td class="acts"><button class="jlink">Receipt</button></td>
+          </tr>
+          <tr>
+            <td class="mk">II</td>
+            <td><span class="fee">Deposit · 10%</span><span class="inv">INV-2026-0161 · 20 FEB</span></td>
+            <td class="cov">Enrolment — assigns your consultant</td>
+            <td class="due">At enrolment</td>
+            <td class="amt">GH₵4,500</td>
+            <td><span class="portal-pill portal-pill--done">Paid</span></td>
+            <td class="acts"><button class="jlink">Receipt</button></td>
+          </tr>
+          <tr>
+            <td class="mk">III</td>
+            <td><span class="fee">Application fee</span><span class="sub">3 schools</span><span class="inv">INV-2026-0184 · 4 MAR</span></td>
+            <td class="cov">Each university's own application fee, at cost</td>
+            <td class="due">After school selection</td>
+            <td class="amt">GH₵2,450</td>
+            <td><span class="portal-pill portal-pill--done">Paid</span></td>
+            <td class="acts"><button class="jlink">Receipt</button></td>
+          </tr>
+          <tr>
+            <td class="mk">IV</td>
+            <td><span class="fee">Visa fee</span><span class="sub">processing + biometrics handling</span></td>
+            <td class="cov">Your visa file</td>
+            <td class="due">When you accept an offer</td>
+            <td class="amt">GH₵8,900</td>
+            <td><span class="portal-pill portal-pill--hollow">Not yet</span></td>
+            <td class="acts"></td>
+          </tr>
+          <tr>
+            <td class="mk">V</td>
+            <td><span class="fee">Pre-departure milestone · 50%</span><span class="sub">releases letter, visa docs &amp; ticket</span></td>
+            <td class="cov">Balance of your service fee</td>
+            <td class="due">After the visa is approved</td>
+            <td class="amt">GH₵5,400</td>
+            <td><span class="portal-pill portal-pill--hollow">Not yet</span></td>
+            <td class="acts"></td>
+          </tr>
+          <tr>
+            <td class="mk">V</td>
+            <td><span class="fee">Ticket</span><span class="sub">raised when your officer prices the flight</span></td>
+            <td class="cov">Flight &amp; transfers, at cost</td>
+            <td class="due">With the milestone</td>
+            <td class="amt">—</td>
+            <td><span class="portal-pill portal-pill--hollow">Not raised</span></td>
+            <td class="acts"></td>
+          </tr>
+          <tr>
+            <td class="mk">VI</td>
+            <td><span class="fee">Post-arrival · 40%</span><span class="sub">on the schedule you chose</span></td>
+            <td class="cov">Settlement support</td>
+            <td class="due">After you arrive</td>
+            <td class="amt">GH₵3,600</td>
+            <td><span class="portal-pill portal-pill--hollow">Not yet</span></td>
+            <td class="acts"></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- university money — a different pot, styled apart -->
+      <div class="psec">
+        <span class="psec__t">To the universities</span>
+        <span class="psec__hint">paid to the institution, never to us</span>
+      </div>
+      <div class="uni">
+        <table class="ledger">
+          <tbody>
+            <tr>
+              <td><span class="fee">Leeds Beckett — tuition deposit</span><span class="sub">MSc Data Science · offer terms</span></td>
+              <td class="due">By 30 Jun</td>
+              <td class="amt">£4,000</td>
+              <td><span class="portal-pill portal-pill--hollow">On accept</span></td>
+            </tr>
+            <tr>
+              <td><span class="fee">Portsmouth — tuition deposit</span><span class="sub">MSc Data Science · offer terms</span></td>
+              <td class="due">By 15 Jul</td>
+              <td class="amt">£3,500</td>
+              <td><span class="portal-pill portal-pill--hollow">On accept</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="mono muted" style="font-size:.6rem;margin-top:.8rem">PAID DIRECTLY TO THE SCHOOL — YOUR CONSULTANT WALKS YOU THROUGH IT. DEADLINES COME OFF THE OFFER LETTER.</p>
+      </div>
+
+      <!-- receipts — every recorded payment -->
+      <div class="psec">
+        <span class="psec__t">Receipts</span>
+        <span class="psec__hint">3 payments recorded</span>
+      </div>
+      <table class="ledger">
+        <thead>
+          <tr><th>Date</th><th>Reference</th><th>Method</th><th>Invoice</th><th style="text-align:right">Amount</th><th></th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="mono">4 MAR</td>
+            <td class="mono">PSK-884210</td>
+            <td>Paystack · card</td>
+            <td class="mono">INV-2026-0184</td>
+            <td class="amt">GH₵2,450</td>
+            <td class="acts"><button class="jlink">PDF</button></td>
+          </tr>
+          <tr>
+            <td class="mono">20 FEB</td>
+            <td class="mono">PSK-771405</td>
+            <td>Paystack · MoMo</td>
+            <td class="mono">INV-2026-0161</td>
+            <td class="amt">GH₵4,500</td>
+            <td class="acts"><button class="jlink">PDF</button></td>
+          </tr>
+          <tr>
+            <td class="mono">8 FEB</td>
+            <td class="mono">PSK-601922</td>
+            <td>Paystack · card</td>
+            <td class="mono">CNT-2026-0314</td>
+            <td class="amt">GH₵1,950</td>
+            <td class="acts"><button class="jlink">PDF</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- the rail -->
+    <div class="rail">
+      <div class="sharp-card sharp-card--key">
+        <p class="eyebrow">Next payment</p>
+        <div class="kv"><span class="k">Visa fee</span><span class="v"><strong>GH₵8,900</strong></span></div>
+        <div class="kv"><span class="k">Opens</span><span class="v">when you accept an offer</span></div>
+        <p class="mono" style="font-size:.6rem;color:rgba(255,255,255,.6);margin-top:.7rem">NOTHING IS DUE TODAY — THIS IS WHAT'S COMING</p>
+      </div>
+
+      <div class="sharp-card">
+        <p class="eyebrow">Your plan</p>
+        <div class="kv"><span class="k">Plan</span><span class="v">Two milestones</span></div>
+        <div class="kv"><span class="k">Service fee</span><span class="v">GH₵13,500</span></div>
+        <div class="kv"><span class="k">Paid of it</span><span class="v">GH₵4,500 · 33%</span></div>
+        <p style="margin-top:.7rem"><a class="jlink" href="#">Manage plan →</a></p>
+      </div>
+
+      <div class="sharp-card">
+        <p class="eyebrow">Two pots of money</p>
+        <p class="muted" style="font-size:var(--text-xs);margin-top:.5rem;line-height:1.6">
+          <strong>Ledger</strong> — fees to Century NIT, in a fixed chapter order.<br><br>
+          <strong>Universities</strong> — tuition and deposits paid to the school itself, on the offer's terms.
+          We never hold university money.
+        </p>
+      </div>
+
+      <div class="sharp-card">
+        <p class="eyebrow">The order is fixed</p>
+        <p class="muted" style="font-size:var(--text-xs);margin-top:.5rem;line-height:1.6">
+          Deposit at enrolment · application fee at submissions · visa fee on your offer · the milestone
+          after your visa — your letter, visa documents and ticket release with it.
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

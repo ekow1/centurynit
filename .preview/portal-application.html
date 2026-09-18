@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portal — Chapter III · Applications (proposed)</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1120px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.5rem clamp(1.25rem,3vw,2.25rem) 2.5rem}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.struck{text-decoration:line-through;opacity:.55}
+
+	/* ---- portal chrome ---- */
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.title{font-size:1.75rem;font-weight:500;letter-spacing:-.01em;margin-top:.25rem}
+	.lead{color:var(--fg-muted);font-size:.92rem;margin-top:.5rem;max-width:44rem}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap;text-decoration:none}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--inv{background:#fff;color:var(--ink);border-color:#fff}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.plnk{font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;text-decoration:underline;text-underline-offset:3px;color:var(--fg-muted);background:none;border:0;padding:0;cursor:pointer}
+	.plnk:hover{color:var(--ink)}
+
+	/* band */
+	.now{background:var(--ink);color:#fff;padding:1.6rem clamp(1.25rem,3vw,2.5rem);display:flex;flex-wrap:wrap;gap:1.25rem;justify-content:space-between;align-items:flex-start;margin-top:1.5rem}
+	.now .eyebrow{color:rgba(255,255,255,.6)}
+	.now h2{font-size:1.3rem;font-weight:500;margin-top:.35rem}
+	.now p.d{margin-top:.45rem;max-width:38rem;font-size:.9rem;color:#fff}
+
+	/* step strip */
+	.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem;margin-top:1.25rem}
+	.step{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border:1px solid var(--line-light);font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-muted);min-width:0}
+	.step .m{width:1.4rem;height:1.4rem;border:1px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;flex-shrink:0}
+	.step .l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+	.step .s{margin-left:auto;font-size:.58rem;opacity:.8;white-space:nowrap}
+	.step--done{background:var(--muted-bg)}
+	.step--on{border:1.5px solid var(--ink);color:var(--ink);font-weight:700}
+	.step--done .m,.step--on .m{background:var(--ink);color:#fff}
+
+	/* split + rail */
+	.split{display:grid;grid-template-columns:minmax(0,1fr) 21rem;gap:2rem;align-items:start;margin-top:1.75rem}
+	@media(max-width:900px){.split{grid-template-columns:1fr}.steps{grid-template-columns:1fr 1fr}}
+	.rail{display:flex;flex-direction:column;gap:.8rem}
+	.card{background:#fff;border:1px solid var(--ink);padding:1.25rem}
+	.rail .card{padding:1.1rem}
+	.card--key{border-width:1.5px}
+	.card--inv{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.card--inv .eyebrow{color:rgba(255,255,255,.6)}
+	.card--inv .muted{color:rgba(255,255,255,.7)}
+	.pkv{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--line-light);font-size:.78rem}
+	.pkv:last-child{border-bottom:none}
+	.pkv .k{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--micro);font-size:.64rem;padding-top:.1rem}
+	.pkv .v{text-align:right;min-width:0}
+	.pkv--due .k{color:var(--ink)} .pkv--due .v{font-family:var(--mono);font-weight:700;font-size:.9rem}
+	.card--inv .pkv{border-color:rgba(255,255,255,.25)} .card--inv .pkv .k{color:rgba(255,255,255,.6)}
+	.ink{background:var(--ink);color:#fff;padding:1.25rem 1.1rem}
+	.ink .k{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.6)}
+	.ink .big{font-size:1.7rem;font-weight:700;margin-top:.3rem}
+	.ink .s{font-family:var(--mono);font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.7);margin-top:.35rem}
+
+	/* sections */
+	.sec{margin-bottom:1.75rem}
+	.sh{display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem;flex-wrap:wrap}
+	.no{display:inline-flex;align-items:center;justify-content:center;width:1.4rem;height:1.4rem;border:1px solid var(--line);font-family:var(--mono);font-size:.65rem;font-weight:700}
+	.no--done{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.st{font-weight:700;font-size:.95rem}
+	.hint{font-family:var(--mono);font-size:.66rem;color:var(--fg-muted);letter-spacing:.04em;margin-left:.35rem}
+	.later{font-size:.85rem;color:var(--fg-muted);line-height:1.55;max-width:38rem}
+	.between{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.5rem}
+	.sub{font-size:.85rem;color:var(--fg-muted);margin-top:.35rem}
+	.mt1{margin-top:.5rem}.mt2{margin-top:.8rem}.mt3{margin-top:1rem}.mt4{margin-top:1.4rem}
+
+	/* school cards */
+	.schools{display:grid;grid-template-columns:repeat(auto-fit,minmax(17rem,1fr));gap:.8rem}
+	.sch{border:1px solid var(--line-light);background:#fff;padding:1.1rem 1.15rem;display:flex;flex-direction:column;gap:.35rem;min-width:0}
+	.sch--key{border:1.5px solid var(--ink)}
+	.sch--dim{color:var(--fg-muted)}
+	.sch .dest{font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted);display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem}
+	.sch .uni{font-weight:700;font-size:1.05rem;line-height:1.25}
+	.sch .prog{font-size:.9rem}
+	.sch .meta{font-family:var(--mono);font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-muted)}
+	.sch .fee{display:flex;justify-content:space-between;align-items:baseline;gap:.75rem;margin-top:.5rem;padding-top:.55rem;border-top:1px dashed var(--line-light);font-size:.8rem}
+	.sch .fee b{font-family:var(--mono);font-weight:700;font-size:.9rem}
+	.sch .fee span{font-family:var(--mono);font-size:.6rem;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-muted);text-align:right}
+	.sch .note2{font-size:.82rem;line-height:1.45;color:var(--fg-muted);margin-top:.3rem}
+	.sch .act{display:flex;justify-content:space-between;align-items:center;gap:.75rem;margin-top:.6rem;flex-wrap:wrap}
+	.sch--add{border-style:dashed;align-items:center;justify-content:center;text-align:center;gap:.4rem;min-height:11rem}
+	.sch--add .plus{width:2rem;height:2rem;border:1px solid var(--ink);display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:600;margin:0 auto}
+	.sch--add .t{font-weight:700;font-size:.95rem}
+	.sch--add .s{font-family:var(--mono);font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-muted)}
+	.ptag{display:inline-block;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;padding:.15rem .45rem;border:1px solid currentColor;white-space:nowrap;flex-shrink:0}
+	.ptag--ink{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+	/* pipeline on a card */
+	.pipe{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-top:.5rem}
+	.pipe span{height:4px;background:var(--line-light)}
+	.pipe .on{background:var(--ink)}
+	.pipe .half{background:repeating-linear-gradient(90deg,var(--ink) 0 4px,transparent 4px 8px)}
+	.pipe-l{display:grid;grid-template-columns:repeat(3,1fr);font-family:var(--mono);font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-muted);margin-top:.3rem}
+	.pipe-l span:nth-child(2){text-align:center}
+	.pipe-l span:nth-child(3){text-align:right}
+
+	/* offer block inside a tracking card */
+	.offer{margin-top:.6rem;border:1px solid var(--ink);padding:.7rem .8rem;display:flex;flex-direction:column;gap:.3rem}
+	.offer .k{font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted)}
+	.offer .orow{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem;font-size:.8rem}
+	.offer .orow b{font-family:var(--mono);font-weight:700;text-align:right}
+	.offer .osub{margin-top:-.25rem;font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);display:flex;justify-content:space-between}
+	.offer .ofrom{font-size:.78rem;line-height:1.45;color:var(--fg-muted);margin-top:.2rem;padding-top:.4rem;border-top:1px dashed var(--line-light)}
+
+	/* picker */
+	.picker{border:1px solid var(--ink);padding:1.1rem 1.15rem;display:flex;flex-direction:column;gap:.8rem;margin-top:.8rem}
+	.picker .prow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:.6rem;align-items:end}
+	@media(max-width:820px){.picker .prow{grid-template-columns:1fr 1fr}}
+	.picker label{display:block;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.3rem}
+	.picker .in{border:1px solid var(--line);padding:.6rem .7rem;font-size:.85rem;background:var(--muted-bg);color:var(--fg-muted);height:44px;display:flex;align-items:center}
+	.picker .peek{display:flex;align-items:baseline;gap:.75rem;flex-wrap:wrap;font-size:.85rem;padding-top:.6rem;border-top:1px dashed var(--line-light)}
+	.picker .peek .k{font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted)}
+	.picker .peek b{font-family:var(--mono)}
+	.picker .peek .s{color:var(--fg-muted);font-size:.78rem}
+
+	/* section footer */
+	.pfoot{display:flex;align-items:center;gap:1rem;margin-top:.9rem;flex-wrap:wrap}
+	.pfoot .fnote{font-size:.78rem;color:var(--fg-muted);max-width:30rem;line-height:1.5}
+
+	/* invoice */
+	.order{border:1.5px solid var(--ink);background:#fff}
+	.order .orow{display:flex;justify-content:space-between;gap:1rem;padding:.8rem 1.1rem;border-bottom:1px solid var(--line-light);font-size:.88rem;align-items:center}
+	.order .orow small{display:block;color:var(--fg-muted);font-size:.72rem;margin-top:.15rem}
+	.order .orow:last-child{border-bottom:none}
+	.order .total{border-top:1.5px solid var(--ink);font-weight:700}
+	.order .amt{font-family:var(--mono);font-weight:700;white-space:nowrap}
+
+	/* timeline */
+	.tl{list-style:none;margin:.5rem 0 0;padding:0}
+	.tl li{padding:.7rem 0;border-bottom:1px solid var(--line-light)}
+	.tl .who{font-weight:600;font-size:.88rem} .tl .when{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);margin-left:.5rem}
+	.tl p{font-size:.85rem;margin-top:.15rem}
+	.tl li:last-child{border-bottom:none}
+
+	/* consent three-way */
+	.consent{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-top:.8rem}
+	@media(max-width:700px){.consent{grid-template-columns:1fr}}
+	.consent .c{border:1px solid var(--line-light);padding:.9rem .95rem;font-size:.8rem;color:var(--fg-muted)}
+	.consent .c b{display:block;color:var(--ink);font-size:.88rem;margin-bottom:.25rem}
+	.consent .c--on{border:1.5px solid var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<h1 class="page">Chapter III · Applications — proposed layout</h1>
+	<p class="note">Same server data, less of it on screen. The <b>band owns the one action</b> (the rail action card is gone — today every CTA exists twice). The <b>day strip and the "What happens next" card are gone</b> — the step strip already says both. The handler's name appears <b>once</b>, in the rail, not four times. Sections: <b>1 Your schools · 2 Application invoice · 3 Your decision · 4 Updates</b> — decision and updates only render when they have content. The unreachable package/deposit gate cards (the page redirects before they can show) are deleted. Everything else — picker, tracking pipes, offer blocks, invoice card, consent card — is the same components in a quieter frame.</p>
+	<div class="jump"><a href="#a">A · building the list</a><a href="#b">B · invoice due</a><a href="#c">C · filed — waiting on replies</a><a href="#d">D · offers in — decide</a></div>
+
+	<!-- ================= STATE A — building the list ================= -->
+	<span class="tag tag--after" id="a">State A — list open · 2 of 5 picked</span>
+	<div class="mock">
+		<p class="eyebrow">Chapter III · Applications</p>
+		<h1 class="title">Applications</h1>
+		<p class="lead">Pick up to five schools. Ama prices their application fees, you settle one invoice, and every file is lodged and chased for you.</p>
+
+		<div class="now">
+			<div>
+				<p class="eyebrow">You are here</p>
+				<h2>Choose your target schools — 2 of 5 picked</h2>
+				<p class="d">Add up to five; the catalogue filters to your package. When the list is right, send it — Ama raises one invoice for all of them.</p>
+			</div>
+			<a class="btn btn--inv" href="#a1">Review your list ↓</a>
+		</div>
+
+		<div class="steps">
+			<div class="step step--on"><span class="m">1</span><span class="l">Target schools</span><span class="s">2 of 5</span></div>
+			<div class="step"><span class="m">2</span><span class="l">Invoice</span><span class="s"></span></div>
+			<div class="step"><span class="m">3</span><span class="l">Decisions</span><span class="s"></span></div>
+			<div class="step"><span class="m">4</span><span class="l">Accept an offer</span><span class="s"></span></div>
+		</div>
+
+		<div class="split">
+			<div>
+				<section class="sec" id="a1">
+					<div class="sh"><span class="no">1</span><span class="st">Your schools</span><span class="hint">2 of 5 · Master's · Hybrid funding</span></div>
+					<div class="schools">
+						<div class="sch">
+							<div class="dest"><span>🇭🇺 Hungary · Debrecen</span><span class="ptag">Added 10 Sep</span></div>
+							<div class="uni">University of Debrecen</div>
+							<div class="prog">MSc Computer Science</div>
+							<div class="meta">Sep 2026 · 2 yrs</div>
+							<div class="fee"><b>€6,500/yr</b><span>tuition · paid to the university</span></div>
+							<div class="act"><button class="plnk">Remove</button></div>
+						</div>
+						<div class="sch">
+							<div class="dest"><span>🇵🇱 Poland · Warsaw</span><span class="ptag">Added 11 Sep</span></div>
+							<div class="uni">Warsaw University of Technology</div>
+							<div class="prog">MSc Data Engineering</div>
+							<div class="meta">Oct 2026 · 1.5 yrs</div>
+							<div class="fee"><b>€4,000/yr</b><span>tuition · paid to the university</span></div>
+							<div class="act"><button class="plnk">Remove</button></div>
+						</div>
+						<div class="sch sch--add">
+							<span class="plus">+</span>
+							<span class="t">Add a school</span>
+							<span class="s">3 more · MSc · Hybrid funding</span>
+						</div>
+					</div>
+					<div class="picker">
+						<div class="prow">
+							<div><label>Destination</label><div class="in">Choose a country</div></div>
+							<div><label>University</label><div class="in">Choose a university</div></div>
+							<div><label>Programme</label><div class="in">Choose a programme</div></div>
+							<div><label>Intake</label><div class="in">Choose an intake</div></div>
+							<a class="btn btn--ghost">Add school</a>
+						</div>
+						<p class="peek"><span class="s">Pick a programme to see its tuition before you add it.</span></p>
+					</div>
+					<div class="pfoot">
+						<a class="btn">Confirm list &amp; send to Ama →</a>
+						<span class="fnote">Ama prices the application fees from this list. You can add schools later — they go on a supplementary invoice.</span>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">2</span><span class="st">Application invoice</span><span class="hint">not raised</span></div>
+					<p class="later">Raised by Ama once your list is confirmed — each university's own application fee, paid on your behalf at cost.</p>
+				</section>
+			</div>
+
+			<div class="rail">
+				<div class="ink">
+					<p class="k">Your position</p>
+					<p class="big">2 targeted</p>
+					<p class="s">of 5 · invoice not raised</p>
+				</div>
+				<div class="card">
+					<p class="eyebrow">This chapter</p>
+					<div class="pkv"><span class="k">Package</span><span class="v">Hybrid funding · MSc</span></div>
+					<div class="pkv"><span class="k">Invoice</span><span class="v muted">Not raised</span></div>
+					<div class="pkv"><span class="k">Handler</span><span class="v">Ama Serwaa</span></div>
+					<div class="pkv"><span class="k">Next unlock</span><span class="v">IV · Visa — when you're admitted</span></div>
+				</div>
+				<div class="card">
+					<p class="eyebrow">How the list works</p>
+					<p class="sub">Up to five schools within your package. Confirming sends the list to Ama — she prices each university's application fee and raises one invoice. Late additions go on a supplementary invoice.</p>
+				</div>
+			</div>
+		</div>
+	</div>
+	<ul class="callout" style="list-style:none;padding-left:.9rem">
+		<li>— The header's reference/handler block, the "Now ·" day strip, and the rail's action card and 3-step "What happens next" card are all removed; the band and the step strip carry that information once.</li>
+		<li>— "Confirm list &amp; send" appears once, at the foot of the picker — not again in the rail.</li>
+		<li>— The package/deposit gate cards are deleted (the page redirects to /portal/package before they can ever render — dead code today).</li>
+	</ul>
+
+	<!-- ================= STATE B — invoice due ================= -->
+	<span class="tag tag--after" id="b">State B — list confirmed · invoice issued</span>
+	<div class="mock">
+		<p class="eyebrow">Chapter III · Applications</p>
+		<h1 class="title">Applications</h1>
+		<p class="lead">Pick up to five schools. Ama prices their application fees, you settle one invoice, and every file is lodged and chased for you.</p>
+
+		<div class="now">
+			<div>
+				<p class="eyebrow">You are here</p>
+				<h2>Pay the application invoice · GH₵ 2,450</h2>
+				<p class="d">Three university application fees, passed on at cost. Files are lodged within two business days of payment.</p>
+			</div>
+			<a class="btn btn--inv" href="#b2">Pay GH₵ 2,450 ↓</a>
+		</div>
+
+		<div class="steps">
+			<div class="step step--done"><span class="m">✓</span><span class="l">Target schools</span><span class="s">3 schools</span></div>
+			<div class="step step--on"><span class="m">2</span><span class="l">Invoice</span><span class="s">GH₵ 2,450 due</span></div>
+			<div class="step"><span class="m">3</span><span class="l">Decisions</span><span class="s"></span></div>
+			<div class="step"><span class="m">4</span><span class="l">Accept an offer</span><span class="s"></span></div>
+		</div>
+
+		<div class="split">
+			<div>
+				<section class="sec">
+					<div class="sh"><span class="no no--done">✓</span><span class="st">Your target list</span><span class="hint">3 schools · confirmed 14 Sep</span></div>
+					<div class="schools">
+						<div class="sch">
+							<div class="dest"><span>🇭🇺 Hungary · Debrecen</span><span class="ptag">With Ama</span></div>
+							<div class="uni">University of Debrecen</div>
+							<div class="prog">MSc Computer Science</div>
+							<div class="meta">Sep 2026 · 2 yrs</div>
+							<div class="fee"><b>€6,500/yr</b><span>tuition · paid to the university</span></div>
+							<div class="act"><button class="plnk">Ask to change</button></div>
+						</div>
+						<div class="sch">
+							<div class="dest"><span>🇵🇱 Poland · Warsaw</span><span class="ptag">With Ama</span></div>
+							<div class="uni">Warsaw University of Technology</div>
+							<div class="prog">MSc Data Engineering</div>
+							<div class="meta">Oct 2026 · 1.5 yrs</div>
+							<div class="fee"><b>€4,000/yr</b><span>tuition · paid to the university</span></div>
+							<div class="act"><button class="plnk">Ask to change</button></div>
+						</div>
+						<div class="sch">
+							<div class="dest"><span>🇭🇺 Hungary · Pécs</span><span class="ptag">With Ama</span></div>
+							<div class="uni">University of Pécs</div>
+							<div class="prog">MSc Business Analytics</div>
+							<div class="meta">Sep 2026 · 2 yrs</div>
+							<div class="fee"><b>€5,200/yr</b><span>tuition · paid to the university</span></div>
+							<div class="act"><button class="plnk">Ask to change</button></div>
+						</div>
+					</div>
+				</section>
+
+				<section class="sec" id="b2">
+					<div class="sh"><span class="no">2</span><span class="st">Application invoice</span><span class="hint">INV-2026-0412 · issued</span></div>
+					<div class="card card--key" style="padding:0">
+						<div class="order" style="border:0">
+							<div class="orow"><span>University of Debrecen — application fee<small>Paid on your behalf, at cost</small></span><span class="amt">GH₵ 950</span></div>
+							<div class="orow"><span>Warsaw University of Technology — application fee<small>Paid on your behalf, at cost</small></span><span class="amt">GH₵ 700</span></div>
+							<div class="orow"><span>University of Pécs — application fee<small>Paid on your behalf, at cost</small></span><span class="amt">GH₵ 800</span></div>
+							<div class="orow total"><span>Due now</span><span class="amt">GH₵ 2,450</span></div>
+						</div>
+						<div style="padding:1.1rem 1.25rem">
+							<a class="btn">Pay GH₵ 2,450 →</a>
+							<p class="fnote muted mt2" style="font-size:.78rem">Paystack · card or mobile money · the receipt lands in Money.</p>
+						</div>
+					</div>
+				</section>
+			</div>
+
+			<div class="rail">
+				<div class="ink">
+					<p class="k">Your position</p>
+					<p class="big">GH₵ 2,450 due</p>
+					<p class="s">3 schools confirmed · invoice issued</p>
+				</div>
+				<div class="card">
+					<p class="eyebrow">This chapter</p>
+					<div class="pkv"><span class="k">Package</span><span class="v">Hybrid funding · MSc</span></div>
+					<div class="pkv pkv--due"><span class="k">Invoice</span><span class="v">GH₵ 2,450 due</span></div>
+					<div class="pkv"><span class="k">Handler</span><span class="v">Ama Serwaa</span></div>
+					<div class="pkv"><span class="k">Next unlock</span><span class="v">IV · Visa — when you're admitted</span></div>
+				</div>
+				<div class="card">
+					<p class="eyebrow">What you're paying for</p>
+					<p class="sub">Each university's own application fee, passed on at cost — Century NIT adds nothing to it. Payment lodges all three files within two business days.</p>
+				</div>
+			</div>
+		</div>
+	</div>
+	<ul class="callout" style="list-style:none;padding-left:.9rem">
+		<li>— One pay button: the band's CTA anchors to the invoice card. Today the same Pay button renders in the rail <i>and</i> the card.</li>
+		<li>— The "being prepared / what happens next" prose collapses into one rail card that explains the money.</li>
+	</ul>
+
+	<!-- ================= STATE C — filed, waiting ================= -->
+	<span class="tag tag--after" id="c">State C — invoice paid · files lodged · no decisions yet</span>
+	<div class="mock">
+		<p class="eyebrow">Chapter III · Applications</p>
+		<h1 class="title">Applications</h1>
+		<p class="lead">Pick up to five schools. Ama prices their application fees, you settle one invoice, and every file is lodged and chased for you.</p>
+
+		<div class="now">
+			<div>
+				<p class="eyebrow">You are here</p>
+				<h2>3 files lodged — universities reply in 2–6 weeks</h2>
+				<p class="d">Nothing to do. Ama chases replies weekly; a decision lands on the school's card the moment it arrives.</p>
+			</div>
+		</div>
+
+		<div class="steps">
+			<div class="step step--done"><span class="m">✓</span><span class="l">Target schools</span><span class="s">3 schools</span></div>
+			<div class="step step--done"><span class="m">✓</span><span class="l">Invoice</span><span class="s">paid</span></div>
+			<div class="step step--on"><span class="m">3</span><span class="l">Decisions</span><span class="s">0 of 3</span></div>
+			<div class="step"><span class="m">4</span><span class="l">Accept an offer</span><span class="s"></span></div>
+		</div>
+
+		<div class="split">
+			<div>
+				<section class="sec">
+					<div class="sh"><span class="no no--done">✓</span><span class="st">Your schools</span><span class="hint">3 filed · 0 decided</span></div>
+					<div class="schools">
+						<div class="sch">
+							<div class="dest"><span>🇭🇺 Hungary · Debrecen</span><span class="ptag">Submitted</span></div>
+							<div class="uni">University of Debrecen</div>
+							<div class="prog">MSc Computer Science</div>
+							<div class="meta">Sep 2026 · 2 yrs · ref DEB-88412</div>
+							<div class="pipe"><span class="on"></span><span class="on"></span><span></span></div>
+							<div class="pipe-l"><span>Preparing</span><span>Submitted</span><span>Decided</span></div>
+							<div class="act"><span class="meta" style="margin:0">Lodged 16 Sep · replies take 2–6 weeks</span><button class="plnk">Proof of submission</button></div>
+						</div>
+						<div class="sch">
+							<div class="dest"><span>🇵🇱 Poland · Warsaw</span><span class="ptag">Submitted</span></div>
+							<div class="uni">Warsaw University of Technology</div>
+							<div class="prog">MSc Data Engineering</div>
+							<div class="meta">Oct 2026 · 1.5 yrs · ref WUT-55301</div>
+							<div class="pipe"><span class="on"></span><span class="on"></span><span></span></div>
+							<div class="pipe-l"><span>Preparing</span><span>Submitted</span><span>Decided</span></div>
+							<div class="act"><span class="meta" style="margin:0">Lodged 16 Sep · replies take 2–6 weeks</span></div>
+						</div>
+						<div class="sch">
+							<div class="dest"><span>🇭🇺 Hungary · Pécs</span><span class="ptag">Preparing</span></div>
+							<div class="uni">University of Pécs</div>
+							<div class="prog">MSc Business Analytics</div>
+							<div class="meta">Sep 2026 · 2 yrs</div>
+							<div class="pipe"><span class="half"></span><span></span><span></span></div>
+							<div class="pipe-l"><span>Preparing</span><span>Submitted</span><span>Decided</span></div>
+							<div class="act"><span class="meta" style="margin:0">Ama is preparing the file</span></div>
+						</div>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no no--done">✓</span><span class="st">Application invoice</span><span class="hint">INV-2026-0412 · paid 16 Sep</span></div>
+					<p class="later">GH₵ 2,450 settled in full — receipt in your Money ledger.</p>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">3</span><span class="st">Updates</span><span class="hint">from Ama</span></div>
+					<div class="card">
+						<ol class="tl">
+							<li><div><span class="who">Ama Serwaa</span><span class="when">16 Sep</span></div><p>Debrecen and Warsaw are lodged — refs on the cards. Pécs goes out once they confirm the October intake list, likely this week.</p></li>
+							<li><div><span class="who">Ama Serwaa</span><span class="when">15 Sep</span></div><p>Files are being packaged. Debrecen wants the passport scan at higher resolution — already pulled from your vault.</p></li>
+						</ol>
+					</div>
+				</section>
+			</div>
+
+			<div class="rail">
+				<div class="ink">
+					<p class="k">Your position</p>
+					<p class="big">3 filed</p>
+					<p class="s">0 decided · invoice paid</p>
+				</div>
+				<div class="card">
+					<p class="eyebrow">This chapter</p>
+					<div class="pkv"><span class="k">Package</span><span class="v">Hybrid funding · MSc</span></div>
+					<div class="pkv"><span class="k">Invoice</span><span class="v">Paid 16 Sep</span></div>
+					<div class="pkv"><span class="k">Handler</span><span class="v">Ama Serwaa</span></div>
+					<div class="pkv"><span class="k">Next unlock</span><span class="v">IV · Visa — when you're admitted</span></div>
+				</div>
+				<div class="card">
+					<p class="eyebrow">While you wait</p>
+					<p class="sub">Ama chases every school weekly. A decision shows on its card first — an offer opens Chapter IV · Visa. Nothing is asked of you here.</p>
+				</div>
+			</div>
+		</div>
+	</div>
+	<ul class="callout" style="list-style:none;padding-left:.9rem">
+		<li>— The paid invoice collapses to a done head + one mono line; the full card only lives here while money is owed.</li>
+		<li>— "Submission &amp; decisions" is gone as a section — the pipes on the school cards already are the tracking view. What remains is the Updates feed, numbered 3.</li>
+		<li>— No band CTA: waiting is the state, and the rail explains it once.</li>
+	</ul>
+
+	<!-- ================= STATE D — offers in ================= -->
+	<span class="tag tag--after" id="d">State D — 2 offers · one declined · your call</span>
+	<div class="mock">
+		<p class="eyebrow">Chapter III · Applications</p>
+		<h1 class="title">Applications</h1>
+		<p class="lead">Pick up to five schools. Ama prices their application fees, you settle one invoice, and every file is lodged and chased for you.</p>
+
+		<div class="now">
+			<div>
+				<p class="eyebrow">You are here</p>
+				<h2>2 offers in — pick your school</h2>
+				<p class="d">Accepting one confirms your destination; the visa file and departure are prepared for that school. The university's own deposit is paid to them directly.</p>
+			</div>
+			<a class="btn btn--inv" href="#d3">Choose your school ↓</a>
+		</div>
+
+		<div class="steps">
+			<div class="step step--done"><span class="m">✓</span><span class="l">Target schools</span><span class="s">3 schools</span></div>
+			<div class="step step--done"><span class="m">✓</span><span class="l">Invoice</span><span class="s">paid</span></div>
+			<div class="step step--done"><span class="m">✓</span><span class="l">Decisions</span><span class="s">3 of 3</span></div>
+			<div class="step step--on"><span class="m">4</span><span class="l">Accept an offer</span><span class="s">2 offers</span></div>
+		</div>
+
+		<div class="split">
+			<div>
+				<section class="sec">
+					<div class="sh"><span class="no no--done">✓</span><span class="st">Your schools</span><span class="hint">3 filed · 3 decided · 2 offers</span></div>
+					<div class="schools">
+						<div class="sch sch--key">
+							<div class="dest"><span>🇭🇺 Hungary · Debrecen</span><span class="ptag ptag--ink">Admitted</span></div>
+							<div class="uni">University of Debrecen</div>
+							<div class="prog">MSc Computer Science</div>
+							<div class="meta">Sep 2026 · 2 yrs · ref DEB-88412</div>
+							<div class="pipe"><span class="on"></span><span class="on"></span><span class="on"></span></div>
+							<div class="pipe-l"><span>Preparing</span><span>Submitted</span><span>Decided</span></div>
+							<div class="offer">
+								<span class="k">Your offer</span>
+								<div class="orow"><span>Tuition</span><b>€6,500/yr</b></div>
+								<div class="osub"><span></span><span>≈ GH₵ 91,000 · $6,500</span></div>
+								<div class="orow"><span>University deposit · due 1 Oct</span><b>€800</b></div>
+								<div class="orow"><span>Offer letter</span><button class="plnk" style="color:var(--ink)">View ↗</button></div>
+								<p class="ofrom">From the university: conditional on final WASSCE verification.</p>
+							</div>
+							<div class="act"><a class="btn btn--sm">Accept this offer</a><button class="plnk">Ask Ama first</button></div>
+						</div>
+						<div class="sch sch--key">
+							<div class="dest"><span>🇭🇺 Hungary · Pécs</span><span class="ptag ptag--ink">Admitted</span></div>
+							<div class="uni">University of Pécs</div>
+							<div class="prog">MSc Business Analytics</div>
+							<div class="meta">Sep 2026 · 2 yrs</div>
+							<div class="pipe"><span class="on"></span><span class="on"></span><span class="on"></span></div>
+							<div class="pipe-l"><span>Preparing</span><span>Submitted</span><span>Decided</span></div>
+							<div class="offer">
+								<span class="k">Your offer</span>
+								<div class="orow"><span>Tuition</span><b>€5,200/yr</b></div>
+								<div class="osub"><span></span><span>≈ GH₵ 72,800 · $5,200</span></div>
+								<div class="orow"><span>University deposit · due 15 Oct</span><b>€600</b></div>
+								<div class="orow"><span>Offer letter</span><button class="plnk" style="color:var(--ink)">View ↗</button></div>
+							</div>
+							<div class="act"><a class="btn btn--sm">Accept this offer</a><button class="plnk">Ask Ama first</button></div>
+						</div>
+						<div class="sch sch--dim">
+							<div class="dest"><span>🇵🇱 Poland · Warsaw</span><span class="ptag">Unsuccessful</span></div>
+							<div class="uni">Warsaw University of Technology</div>
+							<div class="prog">MSc Data Engineering</div>
+							<div class="meta">Oct 2026 · 1.5 yrs · ref WUT-55301</div>
+							<div class="pipe"><span class="on"></span><span class="on"></span><span class="on"></span></div>
+							<div class="pipe-l"><span>Preparing</span><span>Submitted</span><span>Decided</span></div>
+							<p class="note2">Decided 19 Sep · programme at capacity for this intake — Ama can suggest a comparable option if you want a third.</p>
+							<div class="act"><span class="meta" style="margin:0">Decided 19 Sep</span></div>
+						</div>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no no--done">✓</span><span class="st">Application invoice</span><span class="hint">INV-2026-0412 · paid 16 Sep</span></div>
+					<p class="later">GH₵ 2,450 settled in full — receipt in your Money ledger.</p>
+				</section>
+
+				<section class="sec" id="d3">
+					<div class="sh"><span class="no">3</span><span class="st">Your decision</span><span class="hint">accept → visa processing</span></div>
+					<div class="card card--key">
+						<p class="eyebrow">Admitted · 2 schools</p>
+						<p class="title" style="font-size:1.25rem">Congratulations — continue to the visa stage?</p>
+						<p class="sub">Pick the offer on its card above, then decide whether Century NIT handles your visa processing.</p>
+						<div class="consent">
+							<div class="c c--on"><b>Continue →</b>Your case goes to Operations — a visa specialist is assigned and the visa fee invoice is prepared.</div>
+							<div class="c"><b>Hold</b>Need time to compare offers or arrange funding? Your file stays open; no invoices are raised.</div>
+							<div class="c"><b>Handle it myself</b>You take the visa application forward independently — your file stays on record.</div>
+						</div>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">4</span><span class="st">Updates</span><span class="hint">from Ama</span></div>
+					<div class="card">
+						<ol class="tl">
+							<li><div><span class="who">Ama Serwaa</span><span class="when">19 Sep</span></div><p>Warsaw came back unsuccessful — intake full. Debrecen and Pécs are both strong offers; the Debrecen deposit deadline is the tighter one.</p></li>
+						</ol>
+					</div>
+				</section>
+			</div>
+
+			<div class="rail">
+				<div class="ink">
+					<p class="k">Your position</p>
+					<p class="big">2 offers</p>
+					<p class="s">3 decided · invoice paid</p>
+				</div>
+				<div class="card">
+					<p class="eyebrow">This chapter</p>
+					<div class="pkv"><span class="k">Package</span><span class="v">Hybrid funding · MSc</span></div>
+					<div class="pkv"><span class="k">Invoice</span><span class="v">Paid 16 Sep</span></div>
+					<div class="pkv"><span class="k">Handler</span><span class="v">Ama Serwaa</span></div>
+					<div class="pkv pkv--due"><span class="k">Next unlock</span><span class="v">IV · Visa — accept an offer</span></div>
+				</div>
+				<div class="card">
+					<p class="eyebrow">How accepting works</p>
+					<p class="sub">Accepting confirms your destination — the visa file and departure are prepared for that school. The university's own deposit is paid to them directly; Ama walks you through it.</p>
+				</div>
+			</div>
+		</div>
+	</div>
+	<ul class="callout" style="list-style:none;padding-left:.9rem">
+		<li>— "Choose your school" (the prompt) and the visa consent are one section — today they're two stacked cards inside "Accept an offer".</li>
+		<li>— The accept action stays on each offer card where the terms are; the band only anchors down to it.</li>
+	</ul>
+
+	<!-- ================= cut list ================= -->
+	<span class="tag">What leaves the page entirely</span>
+	<div class="callout">
+		<ul>
+			<li><b>The "Now ·" day strip</b> — the band states the now-action; the counts live in the rail's position block.</li>
+			<li><b>The header ref/handler block</b> — handler appears once, in "This chapter". Reference moves to the appointment/ledger surfaces that need it.</li>
+			<li><b>The rail action card</b> — every action already exists in its section (or the band); nothing is duplicated.</li>
+			<li><b>The "What happens next" 3-step card</b> — the 4-step strip already shows the pipeline; one explainer card adapts to the state instead.</li>
+			<li><b>"Submission &amp; decisions" as a numbered section</b> — the tracking pipes on the school cards are that view; the section was a paragraph restating them.</li>
+			<li><b>The package/deposit gate cards</b> — unreachable: the page redirects to /portal/package first. Deleted, not moved.</li>
+			<li><b>The separate "Choose your school" prompt card</b> — folded into "Your decision" with the consent.</li>
+		</ul>
+	</div>
+</div>
+</body>
+</html>

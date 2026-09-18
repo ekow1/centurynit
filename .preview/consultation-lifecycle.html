@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Consultation lifecycle — scheduled state, links, reschedule visibility</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --line-light:#d4d4d8;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1120px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:66rem;margin:.4rem 0 1.25rem;line-height:1.55}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.mock{background:#fafafa;border:1px solid #bbb;padding:0;overflow:hidden}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:66rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.vs{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start}
+	@media(max-width:900px){.vs{grid-template-columns:1fr}}
+	.vs .h{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.5rem}
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);font-family:var(--sans);white-space:nowrap;text-decoration:none}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.btn--dead{opacity:.45}
+	.card{background:#fff;border:1px solid var(--ink);padding:1.25rem}
+	.card--invert{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.pill{display:inline-block;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;padding:.28rem .6rem;border:1px solid var(--ink)}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--dash{border-style:dashed;color:var(--fg-muted)}
+	table.diff{width:100%;border-collapse:collapse;font-size:.78rem;max-width:66rem;background:#fff}
+	table.diff th{font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;text-align:left;padding:.45rem .6rem;border-bottom:1.5px solid var(--ink)}
+	table.diff td{padding:.5rem .6rem;border-bottom:1px solid var(--line-light);vertical-align:top}
+	code{font-family:var(--mono);font-size:.74rem;background:var(--muted-bg);padding:.1rem .35rem}
+	.struck{text-decoration:line-through;opacity:.55}
+	.new{border-left:3px solid var(--ink);padding-left:.4rem}
+
+	/* portal page header mock */
+	.phead{background:#fff;border:1px solid #bbb;padding:1.25rem;display:flex;justify-content:space-between;align-items:flex-start;gap:1rem}
+	.phead h1{font-size:1.35rem;letter-spacing:-0.01em;margin-top:.15rem}
+	.phead .lead{font-size:.78rem;color:var(--fg-muted);margin-top:.3rem;max-width:34rem}
+
+	/* appointment card mock (portal) */
+	.appt{background:#fff;border:1px solid var(--ink);padding:1.1rem 1.25rem;max-width:34rem}
+	.appt .top{display:flex;justify-content:space-between;align-items:flex-start}
+	.appt .when{font-size:1.05rem;font-weight:700;margin-top:.35rem}
+	.appt .sub{font-size:.74rem;color:var(--fg-muted);margin-top:.15rem}
+	.appt .row{display:flex;gap:.5rem;margin-top:.8rem;flex-wrap:wrap}
+	.reqstrip{border:1.5px dashed var(--ink);background:var(--muted-bg);padding:.6rem .8rem;font-size:.74rem;margin-top:.8rem;line-height:1.5}
+	.reqstrip b{font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;display:block;margin-bottom:.15rem}
+
+	/* ops row mock */
+	.orow{background:#fff;border:1px solid var(--line-light);border-left:3px solid var(--ink);padding:.8rem 1rem;max-width:38rem;display:flex;justify-content:space-between;align-items:center;gap:1rem}
+	.orow .ref{font-family:var(--mono);font-size:.68rem;font-weight:700}
+	.orow .nm{font-weight:700;font-size:.85rem;margin-top:.1rem}
+	.orow .sub{font-size:.72rem;color:var(--fg-muted);margin-top:.1rem}
+	.orow .meta{font-size:.68rem;color:var(--fg-muted);margin-top:.3rem}
+
+	/* lifecycle diagram */
+	.flow{display:flex;align-items:stretch;gap:0;max-width:66rem;overflow-x:auto;background:#fff;border:1px solid #bbb}
+	.fstep{flex:1;min-width:120px;padding:.8rem .9rem;border-right:1px solid var(--line-light)}
+	.fstep:last-child{border-right:0}
+	.fstep .k{font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted)}
+	.fstep .v{font-size:.76rem;font-weight:700;margin-top:.25rem;line-height:1.35}
+	.fstep .d{font-size:.68rem;color:var(--fg-muted);margin-top:.2rem;line-height:1.4}
+	.fstep--bad{background:repeating-linear-gradient(45deg,#fafafa,#fafafa 8px,#f0f0f0 8px,#f0f0f0 16px)}
+	.fstep--ok{background:var(--ink);color:#fff}
+	.fstep--ok .k,.fstep--ok .d{color:rgba(255,255,255,.65)}
+	.farrow{align-self:center;font-family:var(--mono);color:var(--fg-muted);padding:0 .15rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<h1 class="page">Consultation lifecycle — scheduled state, meeting links, reschedule visibility</h1>
+	<p class="note">
+		Your pass, four threads. Two are missing code paths, two are surfaces that never render data the API already sends.
+		Diagnosis first, then the shape of each fix — nothing here is built yet.
+		Companion page: <a href="/meeting-join-fixes">/meeting-join-fixes</a> covers the opens-at modal, ops Join, and the manual-link editor.
+	</p>
+	<div class="jump mono">
+		<a href="#a">A · Book button while scheduled</a>
+		<a href="#b">B · When the link is born</a>
+		<a href="#c">C · Reschedule → what happens to the link</a>
+		<a href="#d">D · Reschedule request on the card</a>
+	</div>
+
+	<!-- ───────────────────────── A ───────────────────────── -->
+	<p class="tag tag--after" id="a">A · Scheduled? No book button</p>
+	<p class="note" style="margin-top:.5rem">
+		<b>Today:</b> the appointments header always renders <code>+ Book appointment</code> and the consultant card always renders
+		<code>Book call</code> — even when a confirmed slot sits right below. Three separate CTAs, none of them aware of the booking.
+		<b>Rule proposed:</b> if any upcoming non-cancelled booking exists, every "book" CTA on the portal becomes a "manage" CTA.
+	</p>
+	<div class="vs">
+		<div>
+			<p class="h">Now — booked, still says Book</p>
+			<div class="mock">
+				<div class="phead">
+					<div>
+						<p class="eyebrow">Appointments</p>
+						<h1>Your calendar</h1>
+						<p class="lead">Consultations and check-ins with your Century NIT team.</p>
+					</div>
+					<span class="btn">+ Book appointment</span>
+				</div>
+				<div style="padding:1rem 1.25rem">
+					<div class="appt" style="max-width:none">
+						<p class="eyebrow">Next appointment</p>
+						<p class="when">Tue 16 Sep · 11:00 GMT</p>
+						<p class="sub">Consultation · Online · with E. Mensah · REF BK-1042</p>
+					</div>
+				</div>
+			</div>
+			<ul class="callout">
+				<li>Header CTA ignores <code>next</code> — always Book.</li>
+				<li>Consultant card's <code>Book call</code> links to the same page you just came from.</li>
+				<li>Result: two "book" paths and a live booking on one screen.</li>
+			</ul>
+		</div>
+		<div>
+			<p class="h">After — booked, says Manage</p>
+			<div class="mock">
+				<div class="phead">
+					<div>
+						<p class="eyebrow">Appointments</p>
+						<h1>Your calendar</h1>
+						<p class="lead">Next: Tue 16 Sep · 11:00 GMT — consultation with E. Mensah.</p>
+					</div>
+					<span class="btn">Manage appointment</span>
+				</div>
+				<div style="padding:1rem 1.25rem">
+					<div class="appt" style="max-width:none">
+						<p class="eyebrow">Next appointment</p>
+						<p class="when">Tue 16 Sep · 11:00 GMT</p>
+						<p class="sub">Consultation · Online · with E. Mensah · REF BK-1042</p>
+						<div class="row">
+							<span class="btn btn--sm">Join meeting</span>
+							<span class="btn btn--sm btn--ghost">Request reschedule</span>
+						</div>
+					</div>
+				</div>
+			</div>
+			<ul class="callout">
+				<li>Header CTA switches to <b>Manage appointment</b> (scrolls to the booking) when <code>next</code> exists; <b>+ Book appointment</b> only renders when nothing is scheduled.</li>
+				<li>Consultant card: <code>Book call</code> → <code>Appointments →</code> when a booking is live; unchanged when none.</li>
+				<li>"Book another" stays reachable only inside the booking's own menu — never as a header action.</li>
+			</ul>
+		</div>
+	</div>
+
+	<!-- ───────────────────────── B ───────────────────────── -->
+	<p class="tag tag--after" id="b">B · Confirm click → generate the link</p>
+	<p class="note" style="margin-top:.5rem">
+		<b>Your correction, confirmed in code:</b> "slot confirmed" is the handler's <b>Confirm slot</b> click in ops
+		(<code>POST /consultations/:id/confirm-slot</code>). And today that endpoint <b>blocks</b> when no link exists —
+		<code>if (online && !booking.meetingUrl) → 409 "Add a meeting link before confirming"</code>.
+		Room creation only fires inside <code>assignBooking</code> — so if it failed or wasn't configured at assign time,
+		the handler hits a wall at confirm and has to paste a link by hand.
+	</p>
+	<p class="h" style="font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.5rem">Now — confirm is a dead end when the room is missing</p>
+	<div class="flow">
+		<div class="fstep"><p class="k">1 · Client books + pays</p><p class="v">Slot picked</p><p class="d">Booking + consultation created. No room yet — none needed yet.</p></div>
+		<div class="fstep"><p class="k">2 · Handler assigned</p><p class="v">Room <i>should</i> mint</p><p class="d"><code>assignBooking → syncCalendarForBooking</code>. But: provider not configured yet? creation threw? → silently no room.</p></div>
+		<div class="fstep fstep--bad"><p class="k">3 · Handler clicks Confirm slot</p><p class="v">409 — blocked</p><p class="d">"Add a meeting link before confirming." The system knows a link is missing and refuses — instead of making one.</p></div>
+		<div class="fstep"><p class="k">4 · Client</p><p class="v">Waits</p><p class="d">No confirm, no slot-locked email, no join path.</p></div>
+	</div>
+	<p class="h" style="font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-muted);margin:.9rem 0 .5rem">After — confirm mints the room on the spot</p>
+	<div class="flow">
+		<div class="fstep"><p class="k">1 · Client books + pays</p><p class="v">Slot picked</p><p class="d">Unchanged.</p></div>
+		<div class="fstep"><p class="k">2 · Handler assigned</p><p class="v">Room minted if possible</p><p class="d">Unchanged — best effort at assign time.</p></div>
+		<div class="fstep fstep--ok"><p class="k">3 · Handler clicks Confirm slot</p><p class="v">Missing link? Mint it now</p><p class="d">Confirm runs the same ensure-room path first. Provider configured → room created, email carries the join path, confirm proceeds in one click.</p></div>
+		<div class="fstep"><p class="k">4 · No provider at all</p><p class="v">Then — and only then — 409</p><p class="d">"Add a meeting link" stays as the honest fallback for Zoom/Meet-paste cases.</p></div>
+	</div>
+	<ul class="callout">
+		<li><b>Net effect:</b> clicking Confirm is the guaranteed checkpoint — the client can never be told "slot confirmed" without a working join path behind it.</li>
+		<li><b>Ops UI mirrors it:</b> the <i>"Add a meeting link to confirm"</i> warning row (line ~279) becomes <i>"Meeting link will be generated on confirm"</i> when a provider is configured — so the handler knows the click does the work.</li>
+		<li><b>Also covers the self-heal:</b> a booking created before LiveKit was configured gets its room retroactively at confirm — no manual paste needed.</li>
+	</ul>
+
+	<!-- ───────────────────────── C ───────────────────────── -->
+	<p class="tag tag--after" id="c">C · Reschedule → what happens to the link</p>
+	<p class="note" style="margin-top:.5rem">
+		<b>Answer to "how does reschedule affect the link":</b> by design, <b>it doesn't change</b> — same room, same link,
+		client keeps what they have. What moves is the <i>window</i>, not the address. Per provider:
+	</p>
+	<table class="diff">
+		<tr><th style="width:9rem">Provider</th><th>On reschedule</th><th>Why it's correct</th></tr>
+		<tr>
+			<td><b>LiveKit</b></td>
+			<td class="new">Nothing to do — room has no baked window</td>
+			<td>The window lives entirely in the JWT minted at each <code>/join</code> — new slot → new token window automatically. The whole <code>nbf-room</code> class of bug can't occur.</td>
+		</tr>
+		<tr>
+			<td><b>Daily</b></td>
+			<td class="new"><code>PATCH /rooms/{name}</code> re-binds nbf/exp to the new slot (already shipped in e9b24a1)</td>
+			<td>Daily bakes the window into the room at creation — without the patch the room stays locked to the old time.</td>
+		</tr>
+		<tr>
+			<td><b>Manual / Zoom / Meet</b></td>
+			<td class="new">Link untouched</td>
+			<td>A Zoom link knows nothing about your calendar — it just works whenever opened. Reschedule email still goes out with the same join path.</td>
+		</tr>
+	</table>
+	<ul class="callout">
+		<li><b>Why it "seemed not to capture":</b> two real causes, both fixed by this plan — (1) unassigned bookings had <i>no room at all</i> (fix B), and (2) pasting a Zoom link left <code>meetingProvider: "livekit"</code> so <code>/join</code> minted a LiveKit token and ignored your link (fix on the companion page — provider flips to <code>"manual"</code> on save).</li>
+		<li><b>Pending request vs. confirmed move:</b> while a reschedule request is <i>awaiting approval</i>, the old slot — and its room window — stay live. The card shows both times so nobody joins a dead room.</li>
+	</ul>
+
+	<!-- ───────────────────────── D ───────────────────────── -->
+	<p class="tag tag--after" id="d">D · Reschedule request — visible on the card, not just the case</p>
+	<p class="note" style="margin-top:.5rem">
+		<b>Today:</b> the API sends <code>rescheduleRequestedAt / rescheduleRequestedStartsAt / rescheduleRequestReason</code> on every
+		consultation payload — but only three places render it: the ops case detail, the ops work-queue task, and the portal's
+		appointments list. The <b>portal consultation card</b> and the <b>ops consultations list row</b> show nothing.
+	</p>
+	<div class="vs">
+		<div>
+			<p class="h">Portal · consultation card (chapter I)</p>
+			<div class="mock" style="padding:1rem">
+				<div class="appt" style="max-width:none">
+					<div class="top">
+						<div>
+							<p class="eyebrow">Your consultation</p>
+							<p class="when">Tue 16 Sep · 11:00 GMT</p>
+							<p class="sub">Online · with E. Mensah · REF CNS-2026-0002</p>
+						</div>
+						<span class="pill pill--solid">Confirmed</span>
+					</div>
+					<div class="reqstrip">
+						<b>Reschedule requested — awaiting your consultant</b>
+						You asked to move to <b>Wed 17 Sep · 14:00 GMT</b>. The slot above holds until they confirm — join details stay valid for it.
+						<span class="muted">Reason: "Work shift changed"</span>
+					</div>
+					<div class="row">
+						<span class="btn btn--sm">Join meeting</span>
+						<span class="btn btn--sm btn--ghost btn--dead">Request reschedule</span>
+						<span class="pill pill--dash" style="align-self:center">1 request in flight</span>
+					</div>
+				</div>
+			</div>
+			<ul class="callout">
+				<li>Dashed strip = pending, not confirmed. Old slot still shown as the live one — no ambiguity about which time is real.</li>
+				<li>"Request reschedule" dims while one is in flight — stops duplicate requests.</li>
+				<li>Withdraw-offer link sits inside the strip ("changed your mind? withdraw request").</li>
+			</ul>
+		</div>
+		<div>
+			<p class="h">Ops · consultations list row</p>
+			<div class="mock" style="padding:1rem">
+				<div class="orow" style="max-width:none">
+					<div>
+						<p class="ref">CNS-2026-0002 <span class="pill pill--solid" style="margin-left:.4rem">Reschedule asked</span></p>
+						<p class="nm">Ama Serwaa</p>
+						<p class="sub">Tue 16 Sep · 11:00 → <b>Wed 17 Sep · 14:00</b> · Online · Ghana</p>
+						<p class="meta">Handler: E. Mensah · Coord: K. Owusu</p>
+					</div>
+					<span class="mono muted">→</span>
+				</div>
+				<div class="orow" style="max-width:none;margin-top:.6rem;border-left-color:var(--line-light)">
+					<div>
+						<p class="ref">CNS-2026-0003 <span class="pill pill--dash" style="margin-left:.4rem">Confirmed</span></p>
+						<p class="nm">Kofi Adjei</p>
+						<p class="sub">Thu 18 Sep · 09:30 · Online · Ghana</p>
+						<p class="meta">No handler</p>
+					</div>
+					<span class="mono muted">→</span>
+				</div>
+			</div>
+			<ul class="callout">
+				<li>Solid <b>Reschedule asked</b> pill + the requested time inline (<code>old → new</code>) — visible while scanning the list, no need to open the case.</li>
+				<li>Also added to the status filter: <code>Reschedule asked · 2</code> becomes a facet alongside Confirmed/Completed.</li>
+				<li>Same strip lands on the ops workspace "today" card and Now pane — one component, three mounts.</li>
+			</ul>
+		</div>
+	</div>
+
+	<!-- ───────────────────────── sequencing ───────────────────────── -->
+	<p class="tag">Ship order</p>
+	<table class="diff">
+		<tr><th style="width:5rem">Step</th><th>Change</th><th>Touches</th></tr>
+		<tr><td><b>1</b></td><td><code>confirmConsultationSlot</code>: run ensure-room before the missing-link 409 — Confirm mints the room when a provider is configured</td><td><code>consultations.ts</code> confirm path + ops warning-row copy</td></tr>
+		<tr><td><b>2</b></td><td>Reschedule-request strips: portal consultation card + ops list row/workspace/Now</td><td><code>ConsultationAppointmentCard</code>, <code>EnterpriseConsultations</code>, <code>Workspace</code>, <code>NowPane</code></td></tr>
+		<tr><td><b>3</b></td><td>Portal book-CTA suppression when <code>next</code> booking exists</td><td><code>PortalAppointments</code> header, consultant card in <code>PortalPages</code></td></tr>
+		<tr><td><b>4</b></td><td>Companion fixes already previewed: opens-at modal, ops Join casing bug, manual-link provider flip</td><td>see <a href="/meeting-join-fixes">/meeting-join-fixes</a></td></tr>
+	</table>
+	<p class="note" style="margin-top:1rem">Approve and I implement 1–3 plus the companion page's fixes in one pass — typecheck, tests, deploy.</p>
+</div>
+</body>
+</html>

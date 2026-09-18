@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chat &amp; marketing — the UI proposal</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1180px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3.5rem 0 .6rem}
+	.tag--solid{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.screen{background:#f2f2f2;border:1px solid #999;box-shadow:5px 5px 0 rgba(0,0,0,.12)}
+	.screen-bar{background:var(--ink);color:#fff;font-family:var(--mono);font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;padding:.4rem .8rem;display:flex;justify-content:space-between}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.8rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	code{font-family:var(--mono);font-size:.74rem;background:var(--muted-bg);padding:.1rem .35rem}
+	.pill{display:inline-block;font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;padding:.24rem .55rem;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line)}
+	.pill--dashed{color:var(--fg-muted);border-style:dashed}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.72rem;font-weight:700;padding:.55rem 1rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;white-space:nowrap;font-family:var(--sans)}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--sm{padding:.35rem .7rem;font-size:.6rem}
+	.chip{font-family:var(--mono);font-size:.6rem;letter-spacing:.06em;padding:.3rem .65rem;border:1px solid var(--ink);background:#fff;cursor:pointer;text-transform:uppercase}
+	.chip.on{background:var(--ink);color:#fff}
+	.chip .n{opacity:.6;margin-left:.3rem}
+	.input{border:1px solid var(--ink);background:#fff;font-size:.74rem;padding:.45rem .6rem;font-family:var(--sans);min-width:0}
+	.pagehead{padding:1rem 1.25rem .6rem;background:#fff;border-bottom:1px solid var(--line-light)}
+	.pagehead h2{font-size:1.15rem;letter-spacing:-0.01em}
+	.pagehead .lead{font-size:.72rem;color:var(--fg-muted);margin-top:.15rem}
+	.statstrip{display:flex;gap:1.4rem;padding:.55rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);font-size:.72rem;align-items:center;flex-wrap:wrap}
+	.statstrip b{font-size:.95rem;margin-right:.2rem}
+	.statstrip .lbl{color:var(--fg-muted);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono)}
+	.statstrip .sep{color:var(--line)}
+	.statstrip .link{margin-left:auto;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em}
+	.chips{display:flex;gap:.4rem;padding:.55rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);flex-wrap:wrap;align-items:center}
+	.chips input{margin-left:auto}
+
+	/* ── helpdesk split ── */
+	.hd3{display:grid;grid-template-columns:290px 1fr 215px;min-height:560px;background:#fff}
+	.hd3 .queue{border-right:1px solid var(--line-light);overflow:hidden}
+	.hd3 .band{font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);padding:.5rem .8rem;border-bottom:1px solid var(--line-light);background:var(--muted-bg);display:flex;justify-content:space-between;position:sticky;top:0}
+	.hd3 .row{display:block;width:100%;text-align:left;padding:.55rem .8rem;border-bottom:1px solid var(--line-light);background:#fff;cursor:pointer}
+	.hd3 .row.on{background:var(--muted-bg);box-shadow:inset 3px 0 0 var(--ink)}
+	.hd3 .row .k{font-family:var(--mono);font-size:.56rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted)}
+	.hd3 .row .t{font-weight:700;font-size:.78rem;display:flex;align-items:center;gap:.4rem}
+	.hd3 .row .m{font-size:.7rem;color:var(--fg-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:.1rem}
+	.hd3 .row .side{float:right;text-align:right;font-family:var(--mono);font-size:.58rem;color:var(--fg-muted);line-height:1.5}
+	.hd3 .unread{display:inline-block;background:var(--ink);color:#fff;font-family:var(--mono);font-size:.56rem;padding:0 .35rem}
+	.hd3 .wait{display:inline-block;border:1px solid var(--ink);font-family:var(--mono);font-size:.54rem;padding:.08rem .3rem}
+	.hd3 .wait.long{background:var(--ink);color:#fff}
+	.hd3 .owner{display:inline-block;font-family:var(--mono);font-size:.52rem;border:1px solid var(--line);color:var(--fg-muted);padding:.05rem .3rem}
+	.hd3 .owner.you{border-color:var(--ink);color:var(--ink);font-weight:700}
+	.hd3 .thread{display:flex;flex-direction:column;min-width:0}
+	.hd3 .thead{padding:.55rem .9rem;border-bottom:1px solid var(--line-light);display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+	.hd3 .msgs{flex:1;padding:.9rem;display:flex;flex-direction:column;gap:.5rem;overflow:hidden}
+	.bubble{max-width:72%;border:1px solid var(--line);padding:.5rem .7rem;font-size:.75rem;line-height:1.45;background:#fff}
+	.bubble.me{align-self:flex-end;background:var(--ink);color:#fff;border-color:var(--ink)}
+	.bubble .who{font-family:var(--mono);font-size:.54rem;letter-spacing:.1em;text-transform:uppercase;opacity:.6;margin-bottom:.15rem}
+	.bubble .tick{font-family:var(--mono);font-size:.54rem;opacity:.6;margin-top:.2rem;text-align:right}
+	.note-b{align-self:stretch;border:1px dashed var(--line);background:var(--muted-bg);font-size:.7rem;padding:.45rem .7rem;color:var(--micro)}
+	.note-b .who{font-family:var(--mono);font-size:.54rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted)}
+	.divider{display:flex;align-items:center;gap:.6rem;font-family:var(--mono);font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted);margin:.25rem 0}
+	.divider::before,.divider::after{content:"";flex:1;border-top:1px solid var(--line-light)}
+	.hd3 .composer{border-top:1px solid var(--line-light);padding:.55rem .8rem}
+	.hd3 .composer .row2{display:flex;gap:.45rem;align-items:center}
+	.tabseg{display:inline-flex;border:1px solid var(--ink);font-family:var(--mono);font-size:.56rem}
+	.tabseg span{padding:.28rem .55rem;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+	.tabseg span.on{background:var(--ink);color:#fff}
+	.hd3 .ctx{border-left:1px solid var(--line-light);padding:.8rem;font-size:.72rem;background:#fff}
+	.hd3 .ctx .blk{border-bottom:1px solid var(--line-light);padding:.5rem 0}
+	.hd3 .ctx .blk:first-child{padding-top:0}
+	.hd3 .ctx .blk:last-child{border-bottom:0}
+	.hd3 .ctx dt{font-family:var(--mono);font-size:.53rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted)}
+	.hd3 .ctx dd{margin:.12rem 0 .3rem;font-size:.73rem}
+	.attachchip{display:inline-flex;align-items:center;gap:.35rem;border:1px solid var(--line);padding:.25rem .5rem;font-family:var(--mono);font-size:.6rem;margin-top:.35rem}
+
+	/* ── staff chat full page ── */
+	.chat2{display:grid;grid-template-columns:280px 1fr;min-height:480px;background:#fff}
+	.chat2 .clist{border-right:1px solid var(--line-light)}
+	.chat2 .search{padding:.55rem .7rem;border-bottom:1px solid var(--line-light)}
+	.chat2 .citem{display:block;width:100%;text-align:left;padding:.55rem .8rem;border-bottom:1px solid var(--line-light);background:#fff}
+	.chat2 .citem.on{background:var(--muted-bg);box-shadow:inset 3px 0 0 var(--ink)}
+	.chat2 .citem .nm{font-weight:700;font-size:.76rem;display:flex;justify-content:space-between}
+	.chat2 .citem .pv{font-size:.68rem;color:var(--fg-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+	.pres{display:inline-block;width:7px;height:7px;margin-right:.35rem;vertical-align:1px}
+	.pres.on{background:var(--ink)} .pres.away{border:1px solid var(--line)}
+	.grp{font-family:var(--mono);font-size:.54rem;border:1px solid var(--line);padding:.05rem .3rem;color:var(--fg-muted)}
+
+	/* ── client widget ── */
+	.wwidgets{display:flex;gap:2.5rem;align-items:flex-end;padding:1.5rem;background:#f2f2f2;flex-wrap:wrap}
+	.launcher--sq{width:52px;height:52px;background:var(--ink);color:#fff;border:1.5px solid var(--ink);display:flex;align-items:center;justify-content:center;position:relative;box-shadow:4px 4px 0 rgba(0,0,0,.2)}
+	.launcher--sq .bdg{position:absolute;top:-8px;right:-8px;background:#fff;color:var(--ink);font-size:10px;font-weight:800;font-family:var(--mono);padding:1px 5px;border:1.5px solid var(--ink)}
+	.cwin{width:330px;border:1.5px solid var(--ink);background:#fff;box-shadow:6px 6px 0 rgba(0,0,0,.15)}
+	.cwin .wh{padding:.55rem .8rem;border-bottom:1px solid var(--ink);display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;text-transform:uppercase}
+	.cwin .wt{display:flex;border-bottom:1px solid var(--line-light)}
+	.cwin .wt span{flex:1;text-align:center;padding:.45rem 0;font-family:var(--mono);font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted)}
+	.cwin .wt span.on{color:var(--ink);box-shadow:inset 0 -2px 0 var(--ink);font-weight:700}
+	.cwin .wb{padding:.8rem;display:flex;flex-direction:column;gap:.45rem;min-height:210px}
+	.cwin .wb .bubble{font-size:.72rem}
+	.cwin .wc{border-top:1px solid var(--line-light);padding:.5rem .7rem;display:flex;gap:.4rem;align-items:center}
+	.cwin .wc input{flex:1;border:0;font-size:.72rem;outline:none;font-family:var(--sans)}
+	.cwin .wc .ic{font-family:var(--mono);font-size:.8rem;cursor:pointer;color:var(--fg-muted)}
+	.seen{align-self:flex-end;font-family:var(--mono);font-size:.54rem;color:var(--fg-muted);margin-top:-.3rem}
+
+	/* ── campaigns ── */
+	table.camp{width:100%;border-collapse:collapse;font-size:.75rem;background:#fff}
+	table.camp th{font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;text-align:left;padding:.5rem .75rem;border-bottom:1.5px solid var(--ink)}
+	table.camp td{padding:.55rem .75rem;border-bottom:1px solid var(--line-light);vertical-align:middle}
+	table.camp tr.sub td{background:var(--muted-bg);font-size:.7rem;padding:.5rem .75rem .6rem 2.2rem}
+	.ledger{display:flex;flex-direction:column;gap:.3rem;max-width:46rem}
+	.ledger .lr{display:grid;grid-template-columns:1fr auto auto;gap:.7rem;font-size:.68rem;align-items:center;border-bottom:1px dashed var(--line-light);padding:.2rem 0}
+	.ledger .lr .em{font-family:var(--mono)}
+	.ledger .lr .err{font-size:.62rem;color:var(--fg-muted)}
+	.act{font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+	.act a{color:var(--ink);text-decoration:none;margin-left:.7rem;border-bottom:1px solid var(--ink)}
+	.act a:first-child{margin-left:0}
+	.statgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:.7rem;padding:.9rem 1.25rem;background:#f2f2f2}
+	@media(max-width:900px){.statgrid{grid-template-columns:repeat(3,1fr)}}
+	.statgrid .s{border:1px solid var(--ink);background:#fff;padding:.6rem .8rem}
+	.statgrid .s .n{font-size:1.25rem;font-weight:800}
+	.statgrid .s .l{font-family:var(--mono);font-size:.53rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);margin-top:.1rem}
+	.compose{background:#fff;border:1px solid var(--ink);border-left:4px solid var(--ink);margin:0 1.25rem 1rem;padding:1rem 1.15rem}
+	.compose .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;margin-bottom:.7rem}
+	@media(max-width:800px){.compose .g3{grid-template-columns:1fr}}
+	.compose label{display:block;font-family:var(--mono);font-size:.54rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.25rem}
+	.compose .f{width:100%;border:1px solid var(--ink);padding:.45rem .6rem;font-size:.75rem;background:#fff;font-family:var(--sans)}
+	.compose textarea.f{min-height:80px;resize:vertical}
+	.compose .foot{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;margin-top:.7rem}
+	.mergehint{font-family:var(--mono);font-size:.58rem;color:var(--fg-muted);margin-top:.25rem}
+	.mergehint b{color:var(--ink)}
+
+	/* email preview mock */
+	.emailmock{max-width:480px;margin:0 auto;border:3px solid var(--ink);background:#fff}
+	.emailmock .eh{background:var(--ink);color:#fff;padding:1.1rem 1.5rem}
+	.emailmock .eh .br{display:inline-block;padding:2px 7px;border:1px solid #fff;font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px}
+	.emailmock .eh h4{font-size:1rem;font-weight:700;font-family:Georgia,serif}
+	.emailmock .eb{padding:1.4rem 1.5rem;font-size:.8rem;line-height:1.6;font-family:Georgia,serif}
+	.emailmock .ef{background:var(--muted-bg);border-top:2px solid var(--ink);padding:1rem 1.5rem;text-align:center;font-size:.62rem;color:var(--fg-muted);font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1 class="page">Chat &amp; marketing — the screens</h1>
+<p class="note">
+	The UI proposal for the deep review (<a href="chat-marketing-proposal.html" style="color:inherit">analysis here</a>).
+	Every screen below renders the real layout at real density — the helpdesk triage page, the staff <code>/chat</code>
+	page the notifications already link to, the client widget, and the campaigns cockpit. All monochrome; nothing here
+	needs a new component library.
+</p>
+<div class="jump mono">
+	<a href="#s1">1 · Ops helpdesk</a>
+	<a href="#s2">2 · Staff /chat page</a>
+	<a href="#s3">3 · Client widget</a>
+	<a href="#s4">4 · Campaigns</a>
+	<a href="#s5">5 · Compose + send lifecycle</a>
+	<a href="#s6">6 · True email preview</a>
+	<a href="#s7">7 · Templates</a>
+	<a href="#s8">8 · Lists &amp; contacts</a>
+</div>
+
+<!-- ═══════════════ SCREEN 1 · HELPDESK ═══════════════ -->
+<div class="tag tag--solid" id="s1">1 · Ops helpdesk — triage that can finish a job</div>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /helpdesk</span><span>proposed</span></div>
+	<div class="pagehead"><h2>Helpdesk</h2><p class="lead">Every client conversation, the ones waiting on you first.</p></div>
+	<div class="statstrip">
+		<span><b>6</b> <span class="lbl">open</span></span>
+		<span><b>2</b> <span class="lbl">awaiting your reply</span></span>
+		<span><b>4</b> <span class="lbl">unclaimed</span></span>
+		<span><b>2h</b> <span class="lbl">longest wait</span></span>
+		<span class="sep">|</span>
+		<span class="link">Resolved today · 3</span>
+	</div>
+	<div class="chips">
+		<button class="chip on">All <span class="n">6</span></button>
+		<button class="chip">Awaiting <span class="n">2</span></button>
+		<button class="chip">Unclaimed <span class="n">4</span></button>
+		<button class="chip">Mine <span class="n">1</span></button>
+		<button class="chip">Support <span class="n">3</span></button>
+		<button class="chip">Case <span class="n">2</span></button>
+		<input class="input" style="width:200px" placeholder="Search client, message…">
+	</div>
+	<div class="hd3">
+		<!-- queue -->
+		<div class="queue">
+			<div class="band"><span>Awaiting your reply · 2</span><span>longest first</span></div>
+			<div class="row on">
+				<span class="side">14:02<br><span class="unread">3</span><br><span class="wait">2h</span></span>
+				<div class="k">Case · APP-2026-0142</div>
+				<div class="t">Ama Serwaa <span class="owner you">you</span></div>
+				<div class="m">Ama: the receipt still isn't showing…</div>
+			</div>
+			<div class="row">
+				<span class="side">11:47<br><span class="wait">4h</span></span>
+				<div class="k">Support</div>
+				<div class="t">Kwame Osei <span class="owner">unclaimed</span></div>
+				<div class="m">Kwame: how do I upload the police report?</div>
+			</div>
+			<div class="band"><span>In conversation · 3</span><span>handled</span></div>
+			<div class="row">
+				<span class="side">09:15</span>
+				<div class="k">Stage · Visa</div>
+				<div class="t">Efua Boateng <span class="owner">K. Mensah</span></div>
+				<div class="m">You: interview is confirmed for Friday</div>
+			</div>
+			<div class="row">
+				<span class="side">08:30</span>
+				<div class="k">Support</div>
+				<div class="t">Yaw Annan <span class="owner">A. Owusu</span></div>
+				<div class="m">Yaw: got it, thanks!</div>
+			</div>
+			<div class="band"><span>Resolved · 3</span><span>hide ▸</span></div>
+			<div class="row" style="opacity:.55">
+				<span class="side">Mon</span>
+				<div class="k">Support</div>
+				<div class="t">Kofi Darko <span class="owner">you</span></div>
+				<div class="m">resolved · you · Mon 16:20</div>
+			</div>
+		</div>
+		<!-- thread -->
+		<div class="thread">
+			<div class="thead">
+				<div style="flex:1;min-width:0">
+					<div class="eyebrow">Case · APP-2026-0142 · support</div>
+					<div style="font-weight:700;font-size:.82rem">Ama Serwaa</div>
+					<div class="muted" style="font-size:.6rem;font-family:var(--mono)">claimed by you · replying as Century Support</div>
+				</div>
+				<span class="btn btn--ghost btn--sm">Case →</span>
+				<span class="btn btn--ghost btn--sm">Reassign</span>
+				<span class="btn btn--sm">Resolve ✓</span>
+			</div>
+			<div class="msgs">
+				<div class="divider">Resolved by K. Mensah · Mon 09:40 — reopened by new message</div>
+				<div class="bubble"><div class="who">Ama · 13:58</div>Hi, I paid the application fee on Friday but the receipt still isn't showing in my portal.</div>
+				<div class="bubble me"><div class="who">You · 14:02</div>Checking the ledger now — one moment.<div class="tick">seen 14:03</div></div>
+				<div class="note-b"><div class="who">Internal note · you · 14:05 · staff only</div>Paystack shows settled; webhook landed late. Receipt regenerated manually — confirming with client.</div>
+				<div class="bubble me"><div class="who">You · 14:09</div>Found it — the confirmation arrived late on our side. Your receipt is in the vault under "Payments".
+					<span class="attachchip" style="border-color:#fff;color:#fff">▤ receipt-APP-0142.pdf · 84 KB</span>
+				</div>
+			</div>
+			<div class="composer">
+				<div class="row2">
+					<span class="tabseg"><span class="on">Reply</span><span>Note</span></span>
+					<input class="input" style="flex:1" placeholder="Reply to Ama…">
+					<span class="pill pill--hollow" title="Canned replies">⌗</span>
+					<span class="pill pill--hollow" title="Attach">📎</span>
+					<span class="btn btn--sm">Send</span>
+				</div>
+			</div>
+		</div>
+		<!-- context rail -->
+		<div class="ctx">
+			<div class="blk">
+				<dt>Client</dt>
+				<dd><b>Ama Serwaa</b></dd>
+				<dd class="muted">Accra HQ · since Mar</dd>
+			</div>
+			<div class="blk">
+				<dt>Journey</dt>
+				<dd>III · Applications</dd>
+				<dd class="muted">offer pending — KNUST</dd>
+			</div>
+			<div class="blk">
+				<dt>Money</dt>
+				<dd>App fee — <b>paid</b></dd>
+				<dd class="muted">Visa fee — not invoiced</dd>
+			</div>
+			<div class="blk">
+				<dt>Next</dt>
+				<dd>Visa consult · Fri 11:00</dd>
+			</div>
+			<div class="blk">
+				<dt>Thread</dt>
+				<dd class="muted">12 messages · resolved once<br>handler: <b>you</b></dd>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="callout">
+	<b>New on this screen:</b>
+	<ul>
+		<li><b>Resolve ✓ / Reopen</b> in the thread head — writes the existing <code>status</code>/<code>closedAt</code> columns
+		and posts a system divider. Resolved rows dim into the Resolved band with who/when; a new client message re-opens.</li>
+		<li><b>Owner pills</b> — <span class="pill">you</span> / <span class="pill">K. Mensah</span> / <span class="pill">unclaimed</span>
+		via the existing participant <code>owner</code> role. First reply auto-claims; Reassign opens a staff picker.</li>
+		<li><b>Unclaimed chip</b> — the queue's real triage cut: threads nobody owns yet.</li>
+		<li><b>Reply ⇄ Note toggle</b> + dashed staff-only strip in-thread (<code>messages.visibility</code> — the one migration).</li>
+		<li><b>📎 + ⌗</b> — attachments (the pipe that's 80% laid) and canned-reply chips.</li>
+		<li><b>Context rail</b> — client, journey, money, next appointment. One aggregate endpoint; no more tab-hopping.</li>
+	</ul>
+</div>
+
+<!-- ═══════════════ SCREEN 2 · STAFF /chat ═══════════════ -->
+<div class="tag tag--solid" id="s2">2 · Staff /chat — the page the notifications already link to</div>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /chat?conversation=…</span><span>proposed — fixes every dead link</span></div>
+	<div class="chat2">
+		<div class="clist">
+			<div class="search"><input class="input" style="width:100%" placeholder="Search people &amp; messages…"></div>
+			<div class="band" style="font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);padding:.5rem .8rem;border-bottom:1px solid var(--line-light);background:var(--muted-bg)">Recent</div>
+			<div class="citem on">
+				<div class="nm"><span><span class="pres on"></span>K. Mensah</span><span class="mono muted" style="font-size:.58rem">14:11</span></div>
+				<div class="pv">Send me the revised invoice when it's up</div>
+			</div>
+			<div class="citem">
+				<div class="nm"><span><span class="grp">TEAM</span> Visa desk</span><span class="mono muted" style="font-size:.58rem">13:40</span></div>
+				<div class="pv">A. Owusu: mock interview slots for Oct…</div>
+			</div>
+			<div class="citem">
+				<div class="nm"><span><span class="pres away"></span>A. Owusu</span><span class="mono muted" style="font-size:.58rem">11:02</span></div>
+				<div class="pv">Can you cover the 11:00 consult?</div>
+			</div>
+			<div class="citem">
+				<div class="nm"><span><span class="grp">CASE</span> APP-2026-0098</span><span class="mono muted" style="font-size:.58rem">Mon</span></div>
+				<div class="pv">Docs verified — moving to submission</div>
+			</div>
+		</div>
+		<div class="thread" style="display:flex;flex-direction:column">
+			<div class="thead" style="padding:.55rem .9rem;border-bottom:1px solid var(--line-light);display:flex;align-items:center;gap:.5rem">
+				<div style="flex:1">
+					<div style="font-weight:700;font-size:.82rem"><span class="pres on"></span>K. Mensah</div>
+					<div class="muted" style="font-size:.6rem;font-family:var(--mono)">coordinator · available</div>
+				</div>
+				<input class="input" style="width:160px" placeholder="Search thread…">
+			</div>
+			<div class="msgs" style="flex:1;padding:.9rem;display:flex;flex-direction:column;gap:.5rem">
+				<div class="bubble"><div class="who">K. Mensah · 13:58</div>Did the receipt regenerate for APP-0142?</div>
+				<div class="bubble me"><div class="who">You · 14:02</div>Yes — Paystack webhook landed late. Sent it to the client already.<div class="tick">read 14:05</div></div>
+				<div class="bubble"><div class="who">K. Mensah · 14:11</div>Send me the revised invoice when it's up</div>
+			</div>
+			<div class="composer" style="border-top:1px solid var(--line-light);padding:.55rem .8rem;display:flex;gap:.45rem;align-items:center">
+				<input class="input" style="flex:1" placeholder="Message K. Mensah…  (@ to mention)">
+				<span class="pill pill--hollow">📎</span>
+				<span class="btn btn--sm">Send</span>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>This page already has an audience</b> — every <code>chat.message</code> notification and every offline-reply
+		email links to <code>/chat?conversation=…</code> and lands on the catch-all today. The page is a route, not a build:
+		same <code>MessageList</code> + <code>Composer</code> + conversation hooks the floating hub uses.</li>
+		<li><b>Square presence dots</b> (ink = online, hollow = away) — no green anywhere.</li>
+		<li><b>Search in two scopes</b> — the list box filters people/conversations; the thread box runs the new
+		<code>?q=</code> message query.</li>
+		<li><b>The floating hub stays</b> for quick replies — it just gets an "Open full ↗" that lands here.</li>
+	</ul>
+</div>
+
+<!-- ═══════════════ SCREEN 3 · CLIENT WIDGET ═══════════════ -->
+<div class="tag tag--solid" id="s3">3 · Client widget — the portal's own language</div>
+<div class="screen">
+	<div class="screen-bar"><span>portal · CommunicationCenter</span><span>proposed</span></div>
+	<div class="wwidgets">
+		<div class="launcher--sq">
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+			<span class="bdg">2</span>
+		</div>
+		<div class="cwin">
+			<div class="wh"><span>Messages</span><span>— ✕</span></div>
+			<div class="wt"><span class="on">Support</span><span>Officer</span><span>Assistant</span></div>
+			<div class="wb">
+				<div class="divider">Resolved · K. Mensah · Mon — receipt question</div>
+				<div class="bubble"><div class="who">K. Mensah · Support</div>Welcome back — anything else on the receipt?</div>
+				<div class="bubble me"><div class="who">You · 14:20</div>All good, found it. One more thing — can I get the stamped copy for the bank?</div>
+				<div class="seen">Seen 14:21</div>
+				<div class="bubble"><div class="who">K. Mensah · Support</div>On it — attaching the stamped copy now.
+					<span class="attachchip">▤ receipt-stamped.pdf</span>
+				</div>
+			</div>
+			<div class="wc">
+				<span class="ic" title="Attach">📎</span>
+				<input placeholder="Type a message…">
+				<span class="btn btn--sm">Send</span>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>Square launcher, square window, ink-on-white badge</b> — the green dot and red bubble were the only
+		saturated pixels in the portal; both gone. Header reads MESSAGES, not CHAT.</li>
+		<li><b>"Seen 14:21"</b> — the serializer already computes delivery/read state per viewer; the client surface
+		just wasn't rendering it. Ends the "did anyone see this?" follow-ups.</li>
+		<li><b>Resolved divider</b> — when ops resolves (screen 1), the client sees the boundary and the next message
+		starts a fresh segment. One thread stays the model; it stops reading as an endless stream.</li>
+		<li><b>📎 for the client too</b> — "here's the receipt screenshot" is half of support volume.</li>
+	</ul>
+</div>
+
+<!-- ═══════════════ SCREEN 4 · CAMPAIGNS ═══════════════ -->
+<div class="tag tag--solid" id="s4">4 · Campaigns — a real lifecycle, in ink</div>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /marketing/email</span><span>proposed</span></div>
+	<div class="pagehead" style="display:flex;justify-content:space-between;align-items:flex-end">
+		<div><h2>Email Campaigns</h2><p class="lead">Broadcast newsletters to your lists — draft, schedule, send, measure.</p></div>
+		<span class="btn">+ New campaign</span>
+	</div>
+	<div class="statgrid">
+		<div class="s"><div class="n">14</div><div class="l">Campaigns</div></div>
+		<div class="s"><div class="n">2</div><div class="l">Drafts</div></div>
+		<div class="s"><div class="n">1</div><div class="l">Scheduled</div></div>
+		<div class="s"><div class="n">11</div><div class="l">Sent</div></div>
+		<div class="s"><div class="n">96.1%</div><div class="l">Delivered</div></div>
+		<div class="s"><div class="n">58%</div><div class="l">Opened</div></div>
+	</div>
+	<div class="chips">
+		<button class="chip on">All <span class="n">14</span></button>
+		<button class="chip">Drafts <span class="n">2</span></button>
+		<button class="chip">Scheduled <span class="n">1</span></button>
+		<button class="chip">Sent <span class="n">11</span></button>
+		<input class="input" style="width:180px" placeholder="Search campaigns…">
+	</div>
+	<table class="camp">
+		<tr><th style="width:32%">Campaign</th><th>Status</th><th>Audience</th><th>Delivered</th><th>Opened</th><th style="text-align:right">Actions</th></tr>
+		<tr>
+			<td><b>October Intake Reminder</b><br><span class="muted" style="font-size:.66rem">created Mon · by K. Mensah</span></td>
+			<td><span class="pill">Scheduled</span><br><span class="mono muted" style="font-size:.56rem">Oct 1 · 09:00</span></td>
+			<td class="muted">Applicants — unpaid<br><span class="mono" style="font-size:.6rem">118 confirmed</span></td>
+			<td class="muted">—</td><td class="muted">—</td>
+			<td class="act" style="text-align:right"><a href="#">Edit</a><a href="#">Cancel send</a></td>
+		</tr>
+		<tr>
+			<td><b>Fall Intake Newsletter</b><br><span class="muted" style="font-size:.66rem">sent Sep 2 · by K. Mensah</span></td>
+			<td><span class="pill pill--solid">Sent</span><br><span class="mono muted" style="font-size:.56rem">Sep 2</span></td>
+			<td class="muted">All applicants<br><span class="mono" style="font-size:.6rem">420 contacts</span></td>
+			<td>412 / 420<br><span class="mono muted" style="font-size:.56rem">8 failed</span></td>
+			<td class="mono">61%</td>
+			<td class="act" style="text-align:right"><a href="#">▾ Report</a><a href="#">Duplicate</a></td>
+		</tr>
+		<tr class="sub"><td colspan="6">
+			<div class="ledger">
+				<div class="lr"><span class="em">kwame.o@gmail.com</span><span class="pill">delivered</span><span class="muted" style="font-size:.6rem">opened Sep 3</span></div>
+				<div class="lr"><span class="em">ama.s@outlook.com</span><span class="pill">delivered</span><span class="muted" style="font-size:.6rem">—</span></div>
+				<div class="lr"><span class="em">yaw.a@yahoo.com</span><span class="pill pill--dashed">failed</span><span class="err">550 mailbox unavailable</span></div>
+				<div class="lr"><span class="em">+ 5 more failed</span><span></span><span class="act"><a href="#">Retry 8 failed →</a></span></div>
+			</div>
+		</td></tr>
+		<tr>
+			<td><b>Spring Webinar Invite</b><br><span class="muted" style="font-size:.66rem">created today · by you</span></td>
+			<td><span class="pill pill--hollow">Draft</span></td>
+			<td class="muted">Leads — hot<br><span class="mono" style="font-size:.6rem">64 confirmed</span></td>
+			<td class="muted">—</td><td class="muted">—</td>
+			<td class="act" style="text-align:right"><a href="#">Edit</a><a href="#">Send test</a></td>
+		</tr>
+	</table>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>The statuses are real</b> — <span class="pill pill--hollow">Draft</span> <span class="pill">Scheduled</span>
+		<span class="pill pill--solid">Sent</span> map directly onto the states the API already implements. Every row's
+		actions match its state: drafts Edit/Test, scheduled Edit/Cancel, sent Report/Duplicate.</li>
+		<li><b>▾ Report</b> expands the existing <code>/recipients</code> ledger — per-contact delivered/failed
+		<i>with the error string that's already stored</i> — and "Retry failed" re-enqueues only those rows.</li>
+		<li><b>Opened column</b> — present but honest: renders "—" until the Resend webhook lands (Phase 4), never
+		a fake number.</li>
+		<li><b>SMS is gone</b> — no channel column, no toggle, no presets. If a provider is ever wired, it returns
+		as a real channel — not before.</li>
+		<li><b>All ink</b> — no green delivered, no red failed. Failed gets the dashed pill; ratios replace raw counts.</li>
+	</ul>
+</div>
+
+<!-- ═══════════════ SCREEN 5 · COMPOSE ═══════════════ -->
+<div class="tag tag--solid" id="s5">5 · Compose — the send button becomes a lifecycle</div>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /marketing/email · new campaign</span><span>proposed</span></div>
+	<div class="compose" style="margin:1rem 1.25rem">
+		<div class="g3">
+			<div><label>Campaign</label><input class="f" value="October Intake Reminder"></div>
+			<div><label>Audience</label><input class="f" value="Applicants — unpaid (118 confirmed)"></div>
+			<div><label>Template</label><input class="f" value="Intake Deadlines &amp; Scholarships"></div>
+		</div>
+		<div><label>Subject</label><input class="f" value="{{name}}, October intake closes in 12 days"></div>
+		<div style="margin-top:.7rem">
+			<label>Body</label>
+			<textarea class="f">Dear {{name}}, your offer is waiting — the October intake closes on the 15th…</textarea>
+			<div class="mergehint">merge fields: <b>{{name}}</b> · <b>{{email}}</b> · <b>{{date}}</b> — anything else is sent literally</div>
+		</div>
+		<div class="foot">
+			<div style="display:flex;align-items:center;gap:.5rem;font-size:.72rem">
+				<span class="eyebrow" style="color:var(--ink)">Send</span>
+				<span class="tabseg"><span>Now</span><span class="on">At</span></span>
+				<input type="datetime-local" value="2026-10-01T09:00" style="border:1px solid var(--ink);padding:.35rem .5rem;font-family:var(--mono);font-size:.68rem">
+			</div>
+			<div style="display:flex;gap:.45rem;align-items:center">
+				<span class="pill pill--hollow">Preview ↗</span>
+				<span class="btn btn--ghost btn--sm">Save draft</span>
+				<span class="btn btn--ghost btn--sm">Send test to me</span>
+				<span class="btn btn--sm">Schedule →</span>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>Now / At toggle</b> hits the <code>scheduleFor</code> field that already exists — the delayed BullMQ job
+		and cancel path are built and waiting.</li>
+		<li><b>Save draft</b> creates without enqueueing (API supports it today); the row lands in the Drafts chip.</li>
+		<li><b>Send test to me</b> — new one-address route through the real personalize+layout path.</li>
+		<li><b>The merge hint tells the truth</b> — <code>{{name}} {{email}} {{date}}</code> only; <code>{{intake}}</code>
+		is gone because there's nothing to merge it from.</li>
+		<li><b>Preview ↗</b> renders screen 6 — the actual <code>emailLayout</code>, not a lookalike.</li>
+	</ul>
+</div>
+
+<!-- ═══════════════ SCREEN 6 · EMAIL PREVIEW ═══════════════ -->
+<div class="tag tag--solid" id="s6">6 · Preview renders the real layout</div>
+<div class="screen">
+	<div class="screen-bar"><span>preview · what the recipient gets</span><span>server-rendered emailLayout</span></div>
+	<div style="padding:1.5rem;background:#f2f2f2">
+		<div class="emailmock">
+			<div class="eh">
+				<div class="br">Century NIT</div>
+				<h4>{{name}}, October intake closes in 12 days</h4>
+			</div>
+			<div class="eb">
+				<p>Dear Ama,</p>
+				<p>Your offer is waiting — the October intake closes on the 15th. Spaces are allocated on a rolling basis, so the earlier your file completes, the better your options.</p>
+				<p style="margin-top:.8rem"><b>Your next step:</b> log in and confirm your document checklist is complete.</p>
+			</div>
+			<div class="ef">
+				You're receiving this because you subscribed to Century NIT updates. <u>Unsubscribe</u>.<br>
+				<b>Century NIT Consult</b> · Accra, Ghana · London, UK · support@centurynit.com
+			</div>
+		</div>
+	</div>
+</div>
+<div class="callout">
+	This is the actual <code>emailLayout</code> shell the worker wraps every send in — the preview route renders
+	it server-side with a sample merge (<code>{{name}} → Ama</code>), so the operator sees the delivered artifact:
+	their HTML body inside the branded frame, unsubscribe footer attached. Not a designer's mock of the email —
+	the email.
+</div>
+
+<!-- ═══════════════ SCREEN 7 · TEMPLATES ═══════════════ -->
+<div class="tag tag--solid" id="s7">7 · Templates — where the bodies come from</div>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /marketing/email · templates</span><span>proposed</span></div>
+	<div class="pagehead" style="display:flex;justify-content:space-between;align-items:flex-end">
+		<div><h2>Templates</h2><p class="lead">Reusable email bodies — presets to start from, customs your team writes.</p></div>
+		<span class="btn">+ New template</span>
+	</div>
+	<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem;padding:1rem 1.25rem;background:#f2f2f2">
+		<div style="border:1px solid var(--ink);border-top:3px solid var(--ink);background:#fff;display:flex;flex-direction:column">
+			<div style="padding:.6rem .9rem;border-bottom:1px solid var(--line-light);display:flex;justify-content:space-between;align-items:center">
+				<b style="font-size:.8rem">Welcome &amp; Onboarding</b><span class="pill pill--hollow">Preset</span>
+			</div>
+			<div style="padding:.55rem .9rem;font-size:.68rem;color:var(--fg-muted);flex:1">
+				“Welcome to Century NIT — Your Global Education Partner”<br>
+				<span class="mono" style="font-size:.58rem">subject + 3-step next-actions body</span>
+			</div>
+			<div style="padding:.5rem .9rem;border-top:1px solid var(--line-light)" class="act">
+				<a href="#">Preview</a><a href="#">Use in campaign</a><a href="#">Duplicate</a>
+			</div>
+		</div>
+		<div style="border:1px solid var(--ink);border-top:3px solid var(--ink);background:#fff;display:flex;flex-direction:column">
+			<div style="padding:.6rem .9rem;border-bottom:1px solid var(--line-light);display:flex;justify-content:space-between;align-items:center">
+				<b style="font-size:.8rem">October Webinar Invite</b><span class="pill pill--solid">Custom</span>
+			</div>
+			<div style="padding:.55rem .9rem;font-size:.68rem;color:var(--fg-muted);flex:1">
+				“You’re invited: UK admissions Q&amp;A — Oct 12”<br>
+				<span class="mono" style="font-size:.58rem">created by you · Sep 28</span>
+			</div>
+			<div style="padding:.5rem .9rem;border-top:1px solid var(--line-light)" class="act">
+				<a href="#">Preview</a><a href="#">Use in campaign</a><a href="#">Edit</a><a href="#">Delete</a>
+			</div>
+		</div>
+		<div style="border:1px solid var(--ink);border-top:3px solid var(--ink);background:#fff;display:flex;flex-direction:column">
+			<div style="padding:.6rem .9rem;border-bottom:1px solid var(--line-light);display:flex;justify-content:space-between;align-items:center">
+				<b style="font-size:.8rem">Document Reminder</b><span class="pill pill--hollow">Preset</span>
+			</div>
+			<div style="padding:.55rem .9rem;font-size:.68rem;color:var(--fg-muted);flex:1">
+				“Reminder: Outstanding Documents for Your Application”<br>
+				<span class="mono" style="font-size:.58rem">vault nudge body</span>
+			</div>
+			<div style="padding:.5rem .9rem;border-top:1px solid var(--line-light)" class="act">
+				<a href="#">Preview</a><a href="#">Use in campaign</a><a href="#">Duplicate</a>
+			</div>
+		</div>
+	</div>
+	<!-- editor with true preview -->
+	<div style="display:grid;grid-template-columns:1fr 1fr;border-top:2px solid var(--ink);background:#fff">
+		<div style="padding:1rem 1.15rem;border-right:1px solid var(--line-light)">
+			<div class="eyebrow" style="margin-bottom:.6rem">Edit — “October Webinar Invite”</div>
+			<div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.6rem">
+				<div><label style="display:block;font-family:var(--mono);font-size:.54rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.2rem">Name</label><input class="input" style="width:100%" value="October Webinar Invite"></div>
+				<div><label style="display:block;font-family:var(--mono);font-size:.54rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.2rem">Subject</label><input class="input" style="width:100%" value="You're invited: UK admissions Q&amp;A"></div>
+			</div>
+			<div style="margin-bottom:.6rem"><label style="display:block;font-family:var(--mono);font-size:.54rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.2rem">Header / headline</label><input class="input" style="width:100%" value="JOIN US — OCTOBER 12, 6PM GMT"></div>
+			<div><label style="display:block;font-family:var(--mono);font-size:.54rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.2rem">Body (HTML)</label>
+			<textarea class="input" style="width:100%;min-height:110px;font-family:var(--mono);font-size:.68rem">&lt;p&gt;Dear {{name}},&lt;/p&gt;&lt;p&gt;Join our admissions team…&lt;/p&gt;</textarea>
+			<div class="mergehint">merge fields: <b>{{name}}</b> · <b>{{email}}</b> · <b>{{date}}</b></div></div>
+			<div style="display:flex;gap:.45rem;margin-top:.7rem;justify-content:flex-end">
+				<span class="btn btn--ghost btn--sm">Cancel</span>
+				<span class="btn btn--sm">Save template</span>
+			</div>
+		</div>
+		<div style="padding:1rem;background:#f7f7f7">
+			<div class="eyebrow" style="margin-bottom:.6rem">Preview — rendered by the real emailLayout</div>
+			<div class="emailmock" style="max-width:100%">
+				<div class="eh"><div class="br">Century NIT</div><h4>You're invited: UK admissions Q&amp;A</h4></div>
+				<div class="eb"><p>Dear Ama,</p><p>Join our admissions team for a live Q&amp;A on October intakes…</p></div>
+				<div class="ef"><b>Century NIT Consult</b> · unsubscribe link attaches at send</div>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>Where templates come from</b> — the 7 presets stay (they ship with the app); customs are created via
+		<b>+ New template</b> or <b>Duplicate</b> on any preset, and live in the DB (full CRUD already exists).</li>
+		<li><b>Use in campaign</b> jumps straight to compose with the body pre-filled — the path that's currently
+		two tabs and a dropdown.</li>
+		<li><b>Preview = screen 6</b> — same server-rendered <code>emailLayout</code>, so a template preview is the
+		delivered artifact. The current lookalike preview box goes away.</li>
+		<li><b>SMS templates are gone with the channel</b> — the All/Email/SMS filter collapses to nothing; if SMS
+		ever lands for real, it returns with a provider.</li>
+	</ul>
+</div>
+
+<!-- ═══════════════ SCREEN 8 · LISTS & CONTACTS ═══════════════ -->
+<div class="tag tag--solid" id="s8">8 · Mailing lists &amp; contacts — where the audience comes from</div>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /marketing/email · lists</span><span>proposed</span></div>
+	<div class="pagehead" style="display:flex;justify-content:space-between;align-items:flex-end">
+		<div><h2>Mailing Lists</h2><p class="lead">Who a campaign can reach — every send goes to a list's confirmed contacts.</p></div>
+		<span class="btn">+ New list</span>
+	</div>
+	<!-- list cards -->
+	<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem;padding:1rem 1.25rem;background:#f2f2f2">
+		<div style="border:1px solid var(--ink);background:#fff;padding:.7rem .9rem">
+			<div style="display:flex;justify-content:space-between;align-items:center">
+				<b style="font-size:.82rem">Website Newsletter</b><span class="pill pill--solid">Newsletter</span>
+			</div>
+			<div class="mono" style="font-size:.6rem;color:var(--fg-muted);margin:.3rem 0">412 confirmed · 18 pending · 6 unsubscribed</div>
+			<div class="act"><a href="#">Open</a><a href="#">Send to list</a></div>
+		</div>
+		<div style="border:1px solid var(--ink);background:#fff;padding:.7rem .9rem">
+			<div style="display:flex;justify-content:space-between;align-items:center">
+				<b style="font-size:.82rem">Applicants — unpaid</b>
+			</div>
+			<div class="mono" style="font-size:.6rem;color:var(--fg-muted);margin:.3rem 0">118 confirmed · imported from applicants</div>
+			<div class="act"><a href="#">Open</a><a href="#">Send to list</a></div>
+		</div>
+		<div style="border:1px solid var(--ink);background:#fff;padding:.7rem .9rem">
+			<div style="display:flex;justify-content:space-between;align-items:center">
+				<b style="font-size:.82rem">Leads — hot</b>
+			</div>
+			<div class="mono" style="font-size:.6rem;color:var(--fg-muted);margin:.3rem 0">64 confirmed · imported from leads</div>
+			<div class="act"><a href="#">Open</a><a href="#">Send to list</a></div>
+		</div>
+	</div>
+	<!-- list editor -->
+	<div style="border-top:2px solid var(--ink);background:#fff;padding:1rem 1.25rem">
+		<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.7rem">
+			<div><b style="font-size:.9rem">Applicants — unpaid</b>
+			<span class="mono muted" style="font-size:.62rem;margin-left:.6rem">118 confirmed · 9 pending · 3 unsubscribed</span></div>
+			<span class="btn btn--ghost btn--sm">✕ Close</span>
+		</div>
+		<!-- import row -->
+		<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;border:1px dashed var(--line);padding:.6rem .8rem;margin-bottom:.8rem">
+			<span class="eyebrow" style="color:var(--ink)">Add contacts</span>
+			<span class="btn btn--ghost btn--sm">+ One by one</span>
+			<span class="btn btn--ghost btn--sm">⇪ Paste a list</span>
+			<span class="btn btn--ghost btn--sm">Import from leads</span>
+			<span class="btn btn--ghost btn--sm">Import from applicants</span>
+			<span class="mono muted" style="font-size:.56rem;margin-left:auto">last import: 84 added · 12 already on list</span>
+		</div>
+		<!-- paste-a-list panel -->
+		<div style="border:1px solid var(--ink);background:var(--muted-bg);padding:.7rem .9rem;margin-bottom:.8rem">
+			<label style="display:block;font-family:var(--mono);font-size:.54rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.3rem">Paste emails — one per line, “name &lt;email&gt;” also works</label>
+			<textarea class="input" style="width:100%;min-height:64px;font-family:var(--mono);font-size:.68rem">Ama Serwaa &lt;ama.s@outlook.com&gt;
+kwame.o@gmail.com
+yaw.a@yahoo.com</textarea>
+			<div style="display:flex;justify-content:space-between;align-items:center;margin-top:.45rem">
+				<span class="mono" style="font-size:.6rem">3 parsed · 0 duplicates · they'll get a confirmation email</span>
+				<div style="display:flex;gap:.45rem"><span class="btn btn--ghost btn--sm">Cancel</span><span class="btn btn--sm">Add 3 contacts</span></div>
+			</div>
+		</div>
+		<!-- contacts table -->
+		<div class="chips" style="padding:0 0 .6rem;border-bottom:0">
+			<button class="chip on">All <span class="n">130</span></button>
+			<button class="chip">Confirmed <span class="n">118</span></button>
+			<button class="chip">Pending <span class="n">9</span></button>
+			<button class="chip">Unsubscribed <span class="n">3</span></button>
+			<input class="input" style="width:190px" placeholder="Search name or email…">
+		</div>
+		<table class="camp">
+			<tr><th>Contact</th><th>Status</th><th>Added</th><th style="text-align:right">Actions</th></tr>
+			<tr>
+				<td><b>Ama Serwaa</b><br><span class="mono muted" style="font-size:.62rem">ama.s@outlook.com</span></td>
+				<td><span class="pill pill--solid">Confirmed</span></td>
+				<td class="mono muted" style="font-size:.64rem">Sep 12 · import</td>
+				<td class="act" style="text-align:right"><a href="#">Unsubscribe</a><a href="#">Remove</a></td>
+			</tr>
+			<tr>
+				<td><b>Kwame Osei</b><br><span class="mono muted" style="font-size:.62rem">kwame.o@gmail.com</span></td>
+				<td><span class="pill pill--dashed">Pending</span></td>
+				<td class="mono muted" style="font-size:.64rem">Sep 28 · pasted</td>
+				<td class="act" style="text-align:right"><a href="#">Resend confirm</a><a href="#">Confirm now</a><a href="#">Remove</a></td>
+			</tr>
+			<tr>
+				<td><span class="mono" style="font-size:.7rem">yaw.a@yahoo.com</span></td>
+				<td><span class="pill pill--hollow">Unsubscribed</span></td>
+				<td class="mono muted" style="font-size:.64rem">Aug 3 · newsletter</td>
+				<td class="act" style="text-align:right"><a href="#">Remove</a></td>
+			</tr>
+		</table>
+	</div>
+</div>
+<div class="callout">
+	<b>How contacts get in — four doors, all mapped to existing or tiny API work:</b>
+	<ul>
+		<li><b>One by one</b> — the current name+email form, tucked behind a button instead of always-on. New contacts
+		default to <span class="pill pill--dashed">pending</span> and get the confirmation email (double opt-in stays).</li>
+		<li><b>Paste a list</b> <b>(new)</b> — textarea accepts one-per-line or <code>Name &lt;email&gt;</code>; the client
+		parses, shows <i>n parsed · m duplicates</i>, then bulk-adds. Needs one bulk route (or a client-side loop over the
+		existing single-add endpoint) — the dedupe-by-email logic already exists server-side.</li>
+		<li><b>Import from leads / applicants</b> — the existing endpoints; the row reports the result honestly
+		(<i>84 added · 12 already on list</i> instead of a bare toast). Snapshot semantics stay — it's a copy,
+		not a live segment.</li>
+		<li><b>The newsletter list fills itself</b> — public <code>/newsletter/subscribe</code> → pending →
+		confirm-link → confirmed. It's flagged, can't be renamed.</li>
+	</ul>
+	<b>Per-status actions match reality:</b> pending → Resend confirm / Confirm now (manual override, already an
+	endpoint) / Remove · confirmed → Unsubscribe / Remove · unsubscribed → Remove only. And <b>Send to list</b>
+	on the card jumps to compose with the audience pre-selected.
+</div>
+
+<div class="tag" style="margin-top:3.5rem">Read next to the plan</div>
+<div class="callout">
+	Each screen maps to the phased proposal: helpdesk = P1–P3 · /chat page = P6 · widget = P7 · campaigns = M1–M6.
+	Full effort breakdown in <a href="chat-marketing-proposal.html" style="color:inherit"><u>the deep review</u></a>.
+	Say the word and Phase 1–3 go in.
+</div>
+
+</div>
+</body>
+</html>

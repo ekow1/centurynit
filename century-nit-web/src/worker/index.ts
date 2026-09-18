@@ -16,14 +16,14 @@ declare global {
  * Edge AI chat for the Century NIT portal.
  *
  * The web Worker already reverse-proxies `/api/*` to the Hono backend on the
- * VPS. This route — `/ai/chat` — stays on the edge and talks to the Workers AI
+ * VPS. This route, `/ai/chat`, stays on the edge and talks to the Workers AI
  * binding directly, so inference happens in Cloudflare's network with no VPS
  * round-trip. It is deliberately outside `/api/*` so the proxy never sees it.
  *
  * The portal's two AI surfaces (FloatingChat and CommunicationCenter) post the
  * conversation history here; the worker prepends a per-surface system prompt and
  * streams LLM tokens back as Server-Sent Events. Auth is the portal's
- * session cookie — the surfaces are behind `RequireAuth` in the SPA, and the
+ * session cookie. The surfaces are behind `RequireAuth` in the SPA, and the
  * assistant only answers general knowledge questions, so no extra verification
  * is needed at the edge.
  */
@@ -51,20 +51,20 @@ const MAX_TOKENS = 512;
 const SYSTEM_PROMPTS: Record<Surface, string> = {
 	"portal-floating": [
 		"You are the AI Assistant for Century NIT Consult, a Ghanaian immigration & education consultancy.",
-		"Concentrate ONLY on Century NIT — its study destinations, programmes, document requirements, IELTS, visa processing and the applicant journey. Every answer must be specific to Century NIT; do not give generic study-abroad advice or mention other agencies.",
+		"Concentrate ONLY on Century NIT. Its study destinations, programmes, document requirements, IELTS, visa processing and the applicant journey. Every answer must be specific to Century NIT; do not give generic study-abroad advice or mention other agencies.",
 		"Answer concisely (2–4 short sentences), in a friendly, professional tone.",
-		"You do NOT have access to this user's account, documents, invoices or booking details — for anything account-specific, tell them to use the Consultant or Support tabs in this chat, or their portal pages.",
+		"You do NOT have access to this user's account, documents, invoices or booking details. For anything account-specific, tell them to use the Consultant or Support tabs in this chat, or their portal pages.",
 		"If you are not certain of a specific Century NIT detail (exact fees, deadlines, university-specific requirements), say so and suggest speaking with a consultant rather than guessing.",
 	].join(" "),
 	"portal-comm": [
 		"You are CENTURY AI, the knowledge assistant for Century NIT Consult in the applicant Communication Hub.",
-		"Concentrate ONLY on Century NIT — university admissions, visa requirements, scholarships, required documents, payments and the application stages as Century NIT handles them. Do not give generic advice or mention other providers.",
-		"Answer concisely and accurately. You are a knowledge assistant only — you cannot see this user's case, route messages, or reach staff. For anything needing a person, tell the user to switch to the SUPPORT or OFFICER channel in this hub.",
+		"Concentrate ONLY on Century NIT. University admissions, visa requirements, scholarships, required documents, payments and the application stages as Century NIT handles them. Do not give generic advice or mention other providers.",
+		"Answer concisely and accurately. You are a knowledge assistant only. You cannot see this user's case, route messages, or reach staff. For anything needing a person, tell the user to switch to the SUPPORT or OFFICER channel in this hub.",
 		"Never invent fees, deadlines or university-specific requirements you are not sure of; if unsure, say so and point them to a consultant.",
 	].join(" "),
 	web: [
 		"You are the website assistant for Century NIT Consult, a Ghanaian immigration & education consultancy, helping prospective students.",
-		"Concentrate ONLY on Century NIT — its study destinations, programmes, document requirements, IELTS, visa processing, scholarships, fees and timelines. Do not give generic study-abroad advice or mention other agencies.",
+		"Concentrate ONLY on Century NIT. Its study destinations, programmes, document requirements, IELTS, visa processing, scholarships, fees and timelines. Do not give generic study-abroad advice or mention other agencies.",
 		"Answer concisely (2–4 short sentences), warm and helpful. You cannot see any account. Encourage the visitor to start their journey (book a consultation / start the journey) or use the WhatsApp / Email tabs for anything specific.",
 		"Never invent fees, deadlines or university-specific requirements you are not sure of; if unsure, say so and invite them to contact Century NIT.",
 	].join(" "),
@@ -136,7 +136,7 @@ async function isVerified(value: string | undefined, secret: string | undefined)
 
 const app = new Hono<{ Bindings: Env }>();
 
-/** Public config for the frontend (sitekey only — the secret stays server-side). */
+/** Public config for the frontend (sitekey only. The secret stays server-side). */
 app.get("/ai/config", (c) => {
 	return Response.json({ turnstileSitekey: c.env.TURNSTILE_SITEKEY ?? "" });
 });
@@ -308,7 +308,7 @@ app.post("/ai/chat", async (c) => {
 			.map(([k, v]) => `- ${k}: ${v}`)
 			.slice(0, 6);
 		if (ctxLines.length) {
-			systemPrompt.push(`Applicant context (for personalisation only — still keep it general):`, ctxLines.join("\n"));
+			systemPrompt.push(`Applicant context (for personalisation only. Still keep it general):`, ctxLines.join("\n"));
 		}
 	}
 
@@ -381,7 +381,7 @@ app.post("/ai/chat", async (c) => {
 			try {
 				await writer.write(encoder.encode(`data: ${JSON.stringify({ error: message })}\n\n`));
 			} catch {
-				// writer already closed — nothing more to do
+				// writer already closed. Nothing more to do
 			}
 		} finally {
 			try {
@@ -402,7 +402,7 @@ app.post("/ai/chat", async (c) => {
 	});
 });
 
-/** Hop-by-hop headers — meaningful to one connection, never to be forwarded. */
+/** Hop-by-hop headers. Meaningful to one connection, never to be forwarded. */
 const HOP_BY_HOP = [
 	"connection",
 	"keep-alive",
@@ -472,7 +472,7 @@ app.all("/api/*", async (c) => {
 				responseHeaders.set("location", resolved.pathname + resolved.search + resolved.hash);
 			}
 		} catch {
-			// Not a URL we can parse — pass it through untouched.
+			// Not a URL we can parse. Pass it through untouched.
 		}
 	}
 

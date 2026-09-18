@@ -29,7 +29,7 @@ function lazyNamed<P extends object>(
 	return lazy(async () => ({ default: (await load())[name] as ComponentType<P> }));
 }
 
-/* ── Marketing content — one chunk, loaded on first content-page visit ── */
+/* Marketing content. One chunk, loaded on first content-page visit */
 const contentPages = () => import("./pages/ContentPages");
 const About = lazyNamed(contentPages, "About");
 const Blog = lazyNamed(contentPages, "Blog");
@@ -50,7 +50,7 @@ const UniversityDetail = lazyNamed(contentPages, "UniversityDetail");
 const VisaServices = lazyNamed(contentPages, "VisaServices");
 const WhyChooseUs = lazyNamed(contentPages, "WhyChooseUs");
 
-/* ── Applicant portal ── */
+/* Applicant portal */
 const portalPages = () => import("./pages/portal/PortalPages");
 const portalSections = () => import("./pages/portal/PortalSections");
 const PortalLayout = lazyNamed(() => import("./pages/portal/PortalLayout"), "PortalLayout");
@@ -78,7 +78,7 @@ const PortalMfaSetup = lazyNamed(() => import("./pages/portal/PortalMfaSetup"), 
 
 
 /**
- * Shown while a route chunk is in flight. Deliberately minimal — chunks are
+ * Shown while a route chunk is in flight. Deliberately minimal. Chunks are
  * small and local, so anything more elaborate flashes.
  */
 function RouteFallback() {
@@ -139,7 +139,7 @@ function AppShell() {
 					<Route path="/faqs" element={<FAQs />} />
 					<Route path="/contact" element={<Navigate to="/" replace />} />
 
-					{/* Newsletter confirm / unsubscribe — the token in the query string
+					{/* Newsletter confirm / unsubscribe. The token in the query string
 					    is the credential, so these must exist or every emailed link
 					    silently falls through to the homepage. */}
 					<Route path="/newsletter/confirm" element={<NewsletterConfirm />} />
@@ -177,7 +177,7 @@ function AppShell() {
 						<Route path="visa" element={<PortalVisa />} />
 						<Route path="visa/tracking" element={<PortalVisaTracking />} />
 						<Route path="pay" element={<PortalPayCallback />} />
-						{/* Retired stages — kept as redirects so old links still resolve */}
+						{/* Retired stages. Kept as redirects so old links still resolve */}
 						<Route path="payment-plan" element={<PortalPaymentPlan />} />
 						<Route path="agency" element={<PortalAgency />} />
 						<Route path="pre-departure" element={<PortalPreDeparture />} />
@@ -186,7 +186,7 @@ function AppShell() {
 						    the API, unlike the simulated journey around them. */}
 						<Route path="appointments" element={<PortalAppointments />} />
 						<Route path="documents" element={<PortalDocumentVault />} />
-						{/* Support page removed — the floating CommunicationCenter chat is the support channel now. */}
+						{/* Support page removed. The floating CommunicationCenter chat is the support channel now. */}
 						<Route path="support" element={<Navigate to="/portal/home" replace />} />
 						<Route path="security" element={<PortalMfaSetup />} />
 						<Route path="messages" element={<Navigate to="/portal/home" replace />} />

@@ -1,10 +1,10 @@
 /**
- * Title-case free text that arrived shouted or mumbled — "UNITED KINGDOM",
- * "computer science" — without touching what was typed with care: a word
+ * Title-case free text that arrived shouted or mumbled. "UNITED KINGDOM",
+ * "computer science". Without touching what was typed with care: a word
  * already in mixed case (MSc, McDonald, iPhone) is left as it is, and a
  * short all-caps word (UK, USA, MBA, IELTS) is read as an acronym.
  *
- * For catalogue-ish text a person typed — countries, programmes, intakes.
+ * For catalogue-ish text a person typed. Countries, programmes, intakes.
  * Never re-case a person's name on the way out; if a name needs fixing it
  * is fixed once, where it is written.
  */

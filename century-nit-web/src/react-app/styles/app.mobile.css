@@ -64,7 +64,7 @@
 		filter: grayscale(60%) brightness(0.82);
 	}
 
-/* Also neutralise the desktop hover rule — :hover sticks after a tap */
+/* Also neutralise the desktop hover rule. :hover sticks after a tap */
 
 .hero-slide--active .hero-slide__media img,
 .hero-carousel:hover .hero-slide--active .hero-slide__media img {
@@ -84,7 +84,7 @@
 	}
 
 /* Copy sits on the image, anchored to the bottom.
-	   `margin-top:auto` on the first child rather than justify-content:flex-end —
+	   `margin-top:auto` on the first child rather than justify-content:flex-end,
 	   the latter makes overflowing content unscrollable in flex containers. */
 
 .hero-slide__copy {
@@ -236,7 +236,7 @@
 	display: none;
 }
 
-/* Bottom-aligned to the icon row and allowed to break upward out of it —
+/* Bottom-aligned to the icon row and allowed to break upward out of it,
    the disc reads as raised without adding height to the item. */
 
 .tabbar__cta-disc {
@@ -252,7 +252,7 @@
 	color: var(--accent-foreground);
 }
 
-/* Profile avatar tab — the top bar's account dropdown, moved into the tab bar */
+/* Profile avatar tab. The top bar's account dropdown, moved into the tab bar */
 
 .tabbar__profile {
 	position: relative;
@@ -302,7 +302,7 @@
 }
 
 @media (max-width: 1023.98px) {
-/* The bottom bar owns mobile navigation — no hamburger duplication */
+/* The bottom bar owns mobile navigation. No hamburger duplication */
 
 .nav__toggle,
 .nav__mobile {
@@ -333,7 +333,7 @@
 	}
 
 /* Anchored dropdowns must never exceed the viewport.
-	   Kept absolute — .nav's backdrop-filter would make `fixed` resolve
+	   Kept absolute. .nav's backdrop-filter would make `fixed` resolve
 	   against the nav box anyway, so clamping the width is the honest fix. */
 
 .nav__dropdown {
@@ -457,7 +457,7 @@
 }
 
 @media (max-width: 599.98px) {
-/* Label above value — a 6rem label column starves the value on a phone */
+/* Label above value. A 6rem label column starves the value on a phone */
 
 .appt__row {
 		grid-template-columns: 1fr;

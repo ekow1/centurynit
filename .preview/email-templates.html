@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Email templates — preview</title>
+<style>
+  body{margin:0;background:#e8e8e8;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#0a0a0a}
+  .wrap{max-width:760px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .tag{font-family:ui-monospace,Consolas,monospace;font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;
+    color:#52525b;margin:2.5rem 0 .75rem;display:flex;justify-content:space-between}
+  .tag b{color:#0a0a0a}
+  .frame{border:1px solid #d4d4d8;background:#f5f5f5;padding:20px 10px}
+  .note{font-size:.72rem;color:#52525b;border-left:3px solid #0a0a0a;padding:.6rem .9rem;
+    margin:.75rem 0 0;line-height:1.6;background:#fff}
+  .lead-in{color:#52525b;font-size:.85rem;max-width:44rem}
+  h1.pagetitle{font-size:1.9rem;font-weight:800;letter-spacing:-.02em;margin:.2rem 0 .4rem}
+  .eyebrow{font-family:ui-monospace,Consolas,monospace;font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:#52525b}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="eyebrow">Century NIT · transactional email</p>
+  <h1 class="pagetitle">The email family</h1>
+  <p class="lead-in">One shared shell — black masthead, 4px border, serif body, mono labels, black CTA, dashed link box. Eight templates already use it; the payment receipt is the one that doesn't. Shown below: it rewritten into the system, plus the three emails a client sees most.</p>
+
+  <!-- ══════════ 1 · PAYMENT RECEIPT (the fix) ══════════ -->
+  <p class="tag"><span><b>1 · Payment receipt</b> — sent on settlement</span><span>REWRITTEN — was a Stripe-style card</span></p>
+  <div class="frame">
+    <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0"><tr><td align="center">
+      <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:580px;background:#fff;border:4px solid #000">
+        <tr><td style="background:#000;padding:28px 36px">
+          <div style="display:inline-block;padding:3px 8px;border:1px solid #fff;margin-bottom:8px">
+            <span style="color:#fff;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;font-family:ui-monospace,Consolas,monospace">Century NIT</span>
+          </div>
+          <h1 style="margin:0;color:#fff;font-size:20px;font-weight:700;font-family:Georgia,serif">Payment received</h1>
+        </td></tr>
+        <tr><td style="padding:36px 36px 28px;font-size:15px;line-height:1.65;font-family:Georgia,serif;color:#000">
+
+          <p style="margin:0 0 18px;font-size:16px">Hello <strong>Kwame</strong>,</p>
+          <p style="margin:0 0 20px">Your payment has been received and settled against the invoice below. This email is your receipt.</p>
+
+          <!-- amount paid — the inverted band, same grammar as the portal -->
+          <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px;background:#000;color:#fff"><tr>
+            <td style="padding:18px 20px">
+              <p style="margin:0;font-family:ui-monospace,Consolas,monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;opacity:.65">Amount paid</p>
+              <p style="margin:6px 0 0;font-size:30px;font-weight:800;letter-spacing:-.5px">GH₵ 5,832.00</p>
+              <p style="margin:4px 0 0;font-size:13px;opacity:.75">≈ $405.00 · 14 Feb 2026, 11:42 GMT</p>
+            </td>
+          </tr></table>
+
+          <!-- the kv box -->
+          <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px;background:#f5f5f5;border:2px solid #000;padding:16px 20px"><tr><td>
+            <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+              <tr><td style="padding:4px 0;font-size:13px;color:#666;width:130px;font-family:ui-monospace,Consolas,monospace;letter-spacing:.3px">Receipt</td>
+                  <td style="padding:4px 0;font-size:14px;font-weight:700">RCT-2026-0339</td></tr>
+              <tr><td style="padding:4px 0;font-size:13px;color:#666;font-family:ui-monospace,Consolas,monospace">Invoice</td>
+                  <td style="padding:4px 0;font-size:14px;font-weight:600">INV-2026-0184</td></tr>
+              <tr><td style="padding:4px 0;font-size:13px;color:#666;font-family:ui-monospace,Consolas,monospace">For</td>
+                  <td style="padding:4px 0;font-size:14px;font-weight:600">Chapter III · application fees — 3 schools</td></tr>
+              <tr><td style="padding:4px 0;font-size:13px;color:#666;font-family:ui-monospace,Consolas,monospace">Method</td>
+                  <td style="padding:4px 0;font-size:14px;font-weight:600">Card · Paystack ref CNIT-PS-9F2K41</td></tr>
+              <tr><td style="padding:4px 0;font-size:13px;color:#666;font-family:ui-monospace,Consolas,monospace">Balance</td>
+                  <td style="padding:4px 0;font-size:14px;font-weight:600">GH₵ 0.00 — settled in full</td></tr>
+            </table>
+          </td></tr></table>
+
+          <p style="margin:0 0 24px">A copy also lives in your Money ledger — Receipts — for download at any time.</p>
+
+          <table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px"><tr>
+            <td align="center" style="background:#000">
+              <a href="#" style="display:inline-block;padding:14px 32px;font-size:14px;font-weight:700;color:#fff;text-decoration:none;font-family:ui-monospace,Consolas,monospace;letter-spacing:.5px;text-transform:uppercase">View in your portal</a>
+            </td></tr>
+          </table>
+
+        </td></tr>
+        <tr><td style="background:#f5f5f5;padding:24px 36px;border-top:2px solid #000;text-align:center;font-size:12px;color:#666;font-family:Georgia,serif">
+          <p style="margin:0;font-weight:600;color:#000;font-family:ui-monospace,Consolas,monospace;font-size:11px;letter-spacing:.5px">Century NIT Consult</p>
+          <p style="margin:4px 0 0;color:#999">Accra, Ghana &bull; London, UK &bull; support@centurynit.com</p>
+        </td></tr>
+      </table>
+    </td></tr></table>
+  </div>
+  <p class="note">REWRITTEN — the current receipt email is a Stripe clone: rounded white cards on blue-gray, shadows, a #635bff blue mailto link. The block above runs the shared shell. <strong>See also:</strong> <a href="/email-receipt.html" style="color:#000">email-receipt.html</a> — the full Stripe-receipt anatomy (summary card, download links, tax lines, PDF attachments) translated into this system.</p>
+
+  <!-- ══════════ 2 · INVOICE RAISED ══════════ -->
+  <p class="tag"><span><b>2 · Invoice raised</b> — sent when ops issues an invoice</span><span>KEPT — already in system</span></p>
+  <div class="frame">
+    <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0"><tr><td align="center">
+      <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:580px;background:#fff;border:4px solid #000">
+        <tr><td style="background:#000;padding:28px 36px">
+          <div style="display:inline-block;padding:3px 8px;border:1px solid #fff;margin-bottom:8px">
+            <span style="color:#fff;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;font-family:ui-monospace,Consolas,monospace">Century NIT</span>
+          </div>
+          <h1 style="margin:0;color:#fff;font-size:20px;font-weight:700;font-family:Georgia,serif">Invoice ready for payment</h1>
+        </td></tr>
+        <tr><td style="padding:36px 36px 28px;font-size:15px;line-height:1.65;font-family:Georgia,serif;color:#000">
+          <p style="margin:0 0 18px;font-size:16px">Hello <strong>Kwame</strong>,</p>
+          <p style="margin:0 0 20px">An invoice is ready for payment in your Century NIT portal.</p>
+          <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px;background:#f5f5f5;border:2px solid #000;padding:16px 20px"><tr><td>
+            <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+              <tr><td style="padding:4px 0;font-size:13px;color:#666;width:110px;font-family:ui-monospace,Consolas,monospace">Invoice</td><td style="padding:4px 0;font-size:14px;font-weight:700">INV-2026-0184</td></tr>
+              <tr><td style="padding:4px 0;font-size:13px;color:#666;font-family:ui-monospace,Consolas,monospace">Type</td><td style="padding:4px 0;font-size:14px;font-weight:600">Application</td></tr>
+              <tr><td style="padding:4px 0;font-size:13px;color:#666;font-family:ui-monospace,Consolas,monospace">Amount</td><td style="padding:4px 0;font-size:14px;font-weight:600">GH₵ 5,832.00 ($405.00)</td></tr>
+              <tr><td style="padding:4px 0;font-size:13px;color:#666;font-family:ui-monospace,Consolas,monospace">Due</td><td style="padding:4px 0;font-size:14px;font-weight:600">18 Feb 2026</td></tr>
+            </table>
+          </td></tr></table>
+          <table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px"><tr>
+            <td align="center" style="background:#000"><a href="#" style="display:inline-block;padding:14px 32px;font-size:14px;font-weight:700;color:#fff;text-decoration:none;font-family:ui-monospace,Consolas,monospace;letter-spacing:.5px;text-transform:uppercase">Pay now</a></td></tr>
+          </table>
+          <div style="padding:14px 18px;background:#f5f5f5;border:1px dashed #999;font-size:12px;color:#666;word-break:break-all">
+            <p style="margin:0 0 6px;font-weight:600;color:#000;font-family:ui-monospace,Consolas,monospace;font-size:11px">Direct link:</p>
+            <a href="#" style="color:#000;text-decoration:underline">https://centurynit.softclicksolutions.com/portal/financial</a>
+          </div>
+        </td></tr>
+        <tr><td style="background:#f5f5f5;padding:24px 36px;border-top:2px solid #000;text-align:center;font-size:12px;color:#666;font-family:Georgia,serif">
+          <p style="margin:0;font-weight:600;color:#000;font-family:ui-monospace,Consolas,monospace;font-size:11px;letter-spacing:.5px">Century NIT Consult</p>
+          <p style="margin:4px 0 0;color:#999">Accra, Ghana &bull; London, UK &bull; support@centurynit.com</p>
+        </td></tr>
+      </table>
+    </td></tr></table>
+  </div>
+  <p class="note">KEPT as-is — already on system. One refinement shown: "Type" now reads as the chapter ("Application" → could read "Chapter III · Applications") so the email teaches the vocabulary the portal uses.</p>
+
+  <!-- ══════════ 3 · DOCUMENT REVIEWED ══════════ -->
+  <p class="tag"><span><b>3 · Document reviewed</b> — sent on consultant verdict</span><span>KEPT — already in system</span></p>
+  <div class="frame">
+    <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0"><tr><td align="center">
+      <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:580px;background:#fff;border:4px solid #000">
+        <tr><td style="background:#000;padding:28px 36px">
+          <div style="display:inline-block;padding:3px 8px;border:1px solid #fff;margin-bottom:8px">
+            <span style="color:#fff;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;font-family:ui-monospace,Consolas,monospace">Century NIT</span>
+          </div>
+          <h1 style="margin:0;color:#fff;font-size:20px;font-weight:700;font-family:Georgia,serif">Document rejected</h1>
+        </td></tr>
+        <tr><td style="padding:36px 36px 28px;font-size:15px;line-height:1.65;font-family:Georgia,serif;color:#000">
+          <p style="margin:0 0 18px;font-size:16px">Hello <strong>Kwame</strong>,</p>
+          <p style="margin:0 0 20px">Your <strong>Tuberculosis certificate</strong> has been <strong>rejected</strong> by our team.</p>
+          <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px;background:#f5f5f5;border:2px solid #000;padding:16px 20px"><tr><td>
+            <p style="margin:0 0 6px;font-size:12px;font-weight:600;font-family:ui-monospace,Consolas,monospace;letter-spacing:.3px">REVIEWER NOTE</p>
+            <p style="margin:0;font-size:14px">The certificate is from an unapproved clinic. Re-issue at an IOM panel clinic and re-upload.</p>
+          </td></tr></table>
+          <p style="margin:0 0 24px">Please log in to your portal to upload a replacement or corrected version.</p>
+          <table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px"><tr>
+            <td align="center" style="background:#000"><a href="#" style="display:inline-block;padding:14px 32px;font-size:14px;font-weight:700;color:#fff;text-decoration:none;font-family:ui-monospace,Consolas,monospace;letter-spacing:.5px;text-transform:uppercase">Upload replacement</a></td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="background:#f5f5f5;padding:24px 36px;border-top:2px solid #000;text-align:center;font-size:12px;color:#666;font-family:Georgia,serif">
+          <p style="margin:0;font-weight:600;color:#000;font-family:ui-monospace,Consolas,monospace;font-size:11px;letter-spacing:.5px">Century NIT Consult</p>
+          <p style="margin:4px 0 0;color:#999">Accra, Ghana &bull; London, UK &bull; support@centurynit.com</p>
+        </td></tr>
+      </table>
+    </td></tr></table>
+  </div>
+  <p class="note">KEPT — already in system, shown for completeness. The reviewer note box is the same bordered KV pattern.</p>
+
+  <!-- ══════════ 4 · BOOKING CONFIRMED ══════════ -->
+  <p class="tag"><span><b>4 · Consultation booked</b> — sent after payment</span><span>KEPT — already in system</span></p>
+  <div class="frame">
+    <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0"><tr><td align="center">
+      <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:580px;background:#fff;border:4px solid #000">
+        <tr><td style="background:#000;padding:28px 36px">
+          <div style="display:inline-block;padding:3px 8px;border:1px solid #fff;margin-bottom:8px">
+            <span style="color:#fff;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;font-family:ui-monospace,Consolas,monospace">Century NIT</span>
+          </div>
+          <h1 style="margin:0;color:#fff;font-size:20px;font-weight:700;font-family:Georgia,serif">Your consultation is booked</h1>
+        </td></tr>
+        <tr><td style="padding:36px 36px 28px;font-size:15px;line-height:1.65;font-family:Georgia,serif;color:#000">
+          <p style="margin:0 0 10px">Your consultation is confirmed for <strong>Tuesday 14 October at 10:30</strong>.</p>
+          <p style="margin:0 0 20px">In person · Accra · Ridge branch · Reference CN-2026-0841.</p>
+          <table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin:20px 0 24px"><tr>
+            <td align="center" style="background:#000"><a href="#" style="display:inline-block;padding:14px 32px;font-size:14px;font-weight:700;color:#fff;text-decoration:none;font-family:ui-monospace,Consolas,monospace;letter-spacing:.5px;text-transform:uppercase">Join consultation meeting</a></td></tr>
+          </table>
+          <div style="padding:12px 16px;background:#f5f5f5;border:1px dashed #999;font-size:12px;color:#666;word-break:break-all">
+            <p style="margin:0 0 4px;font-weight:600;color:#000;font-family:ui-monospace,Consolas,monospace;font-size:11px">Meeting link</p>
+            <a href="#" style="color:#000;text-decoration:underline">https://meet.centurynit.com/…</a>
+          </div>
+        </td></tr>
+        <tr><td style="background:#f5f5f5;padding:24px 36px;border-top:2px solid #000;text-align:center;font-size:12px;color:#666;font-family:Georgia,serif">
+          <p style="margin:0 0 8px;color:#999">Reference: CN-2026-0841</p>
+          <p style="margin:0;font-weight:600;color:#000;font-family:ui-monospace,Consolas,monospace;font-size:11px;letter-spacing:.5px">Century NIT Consult</p>
+          <p style="margin:4px 0 0;color:#999">Accra, Ghana &bull; London, UK &bull; support@centurynit.com</p>
+        </td></tr>
+      </table>
+    </td></tr></table>
+  </div>
+  <p class="note">KEPT — the generic booking renderer; the CTA becomes a meeting link when one exists.</p>
+
+  <p class="note" style="margin-top:2rem">SUMMARY — the email shell stays exactly as built (black masthead, 4px border, serif, KV box, black CTA, dashed link, mono footer). The work: (a) rewrite <code>generateReceiptHtml</code> into <code>emailLayout</code>, (b) build the printable invoice + receipt documents and point the portal's "Receipt/PDF" actions at them instead of the .txt blob.</p>
+
+</div>
+</body>
+</html>

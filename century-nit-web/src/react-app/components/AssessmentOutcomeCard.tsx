@@ -122,7 +122,7 @@ export function AssessmentOutcomeCard({
 				</dl>
 			)}
 
-			{/* The decision itself is the first step of Enrolment — one place,
+			{/* The decision itself is the first step of Enrolment. One place,
 				one triple (Confirmed · On hold · Declined). Here: where it stands
 				and the door to that chapter. */}
 			<div className="mt-4 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
@@ -146,10 +146,10 @@ export function AssessmentOutcomeCard({
 								{decision === "confirmed"
 									? "You're enrolled. Continue with your package, plan and deposit."
 									: decision === "on_hold"
-										? "Your enrolment is on hold — resume whenever you're ready."
+										? "Your enrolment is on hold. Resume whenever you're ready."
 										: decision === "declined"
 											? "You closed your enrolment for this cycle. You can reopen it any time."
-											: "Confirm your enrolment, choose your package and payment plan, and pay the deposit — all on one page."}
+											: "Confirm your enrolment, choose your package and payment plan, and pay the deposit. All on one page."}
 							</p>
 						</div>
 						<Button to="/portal/package" arrow>

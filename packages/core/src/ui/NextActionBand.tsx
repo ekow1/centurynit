@@ -7,7 +7,7 @@ export type NextAction = {
 	title: string;
 	detail?: string | null;
 	tone?: Tone;
-	/** The control that clears it — a button, an AssignControl, a link. */
+	/** The control that clears it. A button, an AssignControl, a link. */
 	action?: ReactNode;
 };
 

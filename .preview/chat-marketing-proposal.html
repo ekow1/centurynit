@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chat &amp; email marketing — the deep review</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1120px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--solid{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	code{font-family:var(--mono);font-size:.74rem;background:var(--muted-bg);padding:.1rem .35rem}
+	table.diff{width:100%;border-collapse:collapse;font-size:.78rem}
+	table.diff th{font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;text-align:left;padding:.45rem .6rem;border-bottom:1.5px solid var(--ink)}
+	table.diff td{padding:.5rem .6rem;border-bottom:1px solid var(--line-light);vertical-align:top}
+	table.diff td.sev{font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+	.sev-bug{background:var(--ink);color:#fff;padding:.15rem .4rem;display:inline-block}
+	.sev-dead{border:1px solid var(--ink);padding:.15rem .4rem;display:inline-block}
+	.sev-pol{border:1px dashed var(--line);color:var(--fg-muted);padding:.15rem .4rem;display:inline-block}
+	h3.sub{font-size:.95rem;margin:1.75rem 0 .4rem}
+	.arch{background:#fff;border:1px solid var(--line-light);padding:1rem 1.25rem;font-family:var(--mono);font-size:.7rem;line-height:1.8;max-width:64rem}
+	.arch b{font-weight:700}
+	.eff{display:inline-block;font-family:var(--mono);font-size:.56rem;letter-spacing:.08em;border:1px solid var(--ink);padding:.1rem .4rem;margin-left:.4rem;vertical-align:1px}
+	.plan{display:grid;gap:0;border:1px solid var(--ink);background:#fff;max-width:64rem}
+	.plan .p{display:grid;grid-template-columns:3.2rem 1fr auto;border-bottom:1px solid var(--line-light);padding:.65rem .9rem;align-items:baseline;gap:.8rem}
+	.plan .p:last-child{border-bottom:0}
+	.plan .n{font-family:var(--mono);font-weight:800;font-size:1rem}
+	.plan .t{font-size:.8rem}
+	.plan .t b{font-weight:700}
+	.plan .d{font-size:.7rem;color:var(--fg-muted);margin-top:.15rem}
+	.plan .e{font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-muted);white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1 class="page">Chat &amp; email marketing — deep review</h1>
+<p class="note">
+	I read the full stack this time — schema, services, routes, hooks, shared chat-ui package, both frontends.
+	The honest summary: <b>the chat system is ~85% built and well-built</b> — batched queries, SSE fan-out,
+	DB-clock read receipts, soft-delete, forwards, mentions, presence. What's missing is mostly the last 15%:
+	columns that exist with no writers, routes that exist with no callers, links that point at pages that don't exist.
+	<b>Marketing is the inverse</b> — a real lifecycle engine (draft → scheduled → sent, per-recipient ledger,
+	delayed BullMQ jobs) behind a UI that only knows how to press "Send" — plus two outright lies: an SMS channel
+	that sends email, and merge fields that are never merged.
+</p>
+<div class="jump mono">
+	<a href="#chat-find">I · Chat — findings</a>
+	<a href="#chat-plan">II · Chat — proposal</a>
+	<a href="#mkt-find">III · Marketing — findings</a>
+	<a href="#mkt-plan">IV · Marketing — proposal</a>
+	<a href="#order">V · Suggested order</a>
+</div>
+
+<!-- ══════════ PART I — CHAT FINDINGS ══════════ -->
+<div class="tag tag--solid" id="chat-find">I · Chat — what's actually true</div>
+
+<h3 class="sub">The architecture, as built</h3>
+<div class="arch">
+	conversations ── type: <b>direct · entity · group · applicant · support · case · stage · internal · escalation</b><br>
+	&nbsp;&nbsp;&nbsp;&nbsp;status: <b>open · closed · archived</b> + closedAt &nbsp;·&nbsp; linkedEntityType/Id &nbsp;·&nbsp; stageKey<br>
+	&nbsp;&nbsp;&nbsp;&nbsp;emailInboxToken (spec §11 inbound reply) &nbsp;·&nbsp; escalatedBy + escalationReason &nbsp;·&nbsp; lastMessageAt<br>
+	conversationParticipants ── role: <b>owner · member · former</b> + lastReadAt<br>
+	messages ── replyTo · forwardedFrom · editedAt · deletedAt (soft) · type: text/system/action<br>
+	+ messageReactions · messageMentions · <b>messageAttachments</b><br>
+	&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;▼<br>
+	SSE fan-out per participant &nbsp;·&nbsp; ephemeral typing &nbsp;·&nbsp; delivered/read ticks per viewer<br>
+	offline → queued email &nbsp;·&nbsp; in-app notifyMany &nbsp;·&nbsp; client gets chat.reply notification
+</div>
+
+<h3 class="sub">Findings — ordered by severity</h3>
+<table class="diff">
+	<tr><th style="width:4.5rem"></th><th>Finding</th><th style="width:34%">Evidence</th></tr>
+	<tr>
+		<td class="sev"><span class="sev-bug">Bug</span></td>
+		<td><b>Every chat notification and offline-reply email links to <code>/chat?conversation=…</code> — a route that does not exist in the ops app.</b>
+		Clicking "Ama sent you a message" in the bell, or the link in the offline email, lands on the catch-all. The single most-clicked chat link goes nowhere.</td>
+		<td><code>chat.ts:716</code> <code>link: "/chat?conversation="</code> · <code>chat.ts:1169</code> same in emails · App.tsx routes: no <code>/chat</code></td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-bug">Bug</span></td>
+		<td><b>"Closed" can never happen.</b> The <code>status</code>/<code>closedAt</code> columns and the enum exist; the helpdesk renders a Closed band and per-row status —
+		and <b>zero code paths write either field.</b> Resolved threads sit in "awaiting" forever; wait-time stats inflate; the queue only ever grows.</td>
+		<td><code>schema.ts:1529</code> columns exist · serializer reads <code>(row as any).status</code> (the cast is the tell) · no route mutates it</td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-bug">Bug</span></td>
+		<td><b>"Mine" is semantically broken.</b> Opening a support thread auto-joins you as a participant (<code>ensureSupportQueueAccess</code>) — so merely <i>reading</i>
+		a conversation makes it "mine". The filter quietly accumulates every thread you've ever opened; there is no real ownership.</td>
+		<td><code>chat.ts:319-351</code> auto-join · helpdesk <code>isMine</code> checks <code>participants</code></td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-dead">Dead pipe</span></td>
+		<td><b>Attachments are plumbed end-to-end except the two ends.</b> Table ✓ · <code>attachmentIds</code> binding with correct ownership scoping ✓ ·
+		<code>MessageBubble</code> renders them ✓ · upload endpoint ✗ · paperclip in Composer ✗. Eighty percent built, unreachable.</td>
+		<td><code>schema.ts:1638</code> · <code>sendMessageInternal:604-615</code> · <code>MessageBubble.tsx:384</code> · no upload route in <code>chat.ts</code></td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-dead">Dead pipe</span></td>
+		<td><b>No staff-only notes.</b> Every message in a client thread goes to the client. "Spoke on the phone, reissued invoice" can't be recorded
+		where it happened — staff will keep notes in WhatsApp instead, and the thread loses the story.</td>
+		<td>messages table has no visibility flag; one composer mode</td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-dead">Dead pipe</span></td>
+		<td><b>Two specced features were seeded and abandoned:</b> <code>emailInboxToken</code> (reply-to-this-thread-by-email, spec §11 — minted, never consumed)
+		and the <code>escalation</code> conversation type + <code>escalatedBy</code>/<code>escalationReason</code> (never written; the AI handoff just posts a text message).</td>
+		<td><code>communication.ts:402</code> mints token · no inbound webhook · escalation fields unreferenced outside schema</td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-dead">Dead pipe</span></td>
+		<td><b><code>lastMessageAt</code> is written by nobody.</b> The denormalised column exists for sort/unread queries; every writer touches
+		<code>updatedAt</code> instead. Harmless today, a trap the first time someone sorts by it.</td>
+		<td>schema vs <code>sendMessageInternal:596</code></td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-pol">Gap</span></td>
+		<td><b>No message search anywhere.</b> Directory search finds people; nothing finds what was said. Routes paginate by cursor only.</td>
+		<td>no <code>?q=</code> in <code>chat.ts</code> routes</td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-pol">Gap</span></td>
+		<td><b>The hub is a 360px floating box.</b> Fine for a reply, wrong for reading a 40-message case thread over the case itself.
+		All components are already shared — a full page is a route, not a build.</td>
+		<td><code>CommunicationHub</code> fixed-position only</td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-pol">Polish</span></td>
+		<td><b>Client widget:</b> green dot <code>#10b981</code> + red badge <code>#dc2626</code> (the only saturated pixels in the portal),
+		round chrome against the square system, no "Seen" state for the client (the serializer already computes it).</td>
+		<td><code>CommunicationCenter.tsx:302,577</code></td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-pol">Polish</span></td>
+		<td><b>Minor:</b> <code>getUnreadCounts</code> is N+1 (one count query per conversation); <code>(row as any).status</code> cast in the serializer.</td>
+		<td><code>chat.ts:1090-1095, 158</code></td>
+	</tr>
+</table>
+
+<!-- ══════════ PART II — CHAT PROPOSAL ══════════ -->
+<div class="tag tag--solid" id="chat-plan">II · Chat — the proposal</div>
+<p class="note">Ordered by leverage. P1–P3 are what make the helpdesk an actual helpdesk; P4–P6 finish pipes that are already laid.</p>
+
+<div class="plan">
+	<div class="p"><span class="n">P1</span><div class="t">
+		<b>Resolve / reopen — one route, both surfaces.</b><br>
+		<div class="d"><code>PATCH /chat/conversations/:id/status {open|closed}</code>, restricted to support-queue roles.
+		Closing writes <code>status</code>+<code>closedAt</code>, posts a <code>type:"system"</code> message ("Resolved by K. Mensah" — the type exists),
+		and publishes SSE. A new client message auto-reopens. Thread header gets Resolve ✓ / Reopen; rows show
+		<span class="mono">resolved · K.Mensah · 2d ago</span>; the Closed band finally fills. Portal renders the system
+		message as a divider.</div>
+	</div><span class="e">route + 2 UI touches<br>~½ day</span></div>
+	<div class="p"><span class="n">P2</span><div class="t">
+		<b>Ownership via the role that already exists.</b> No schema change — <code>conversationParticipants.role</code> already has
+		<code>owner</code>. Claim = set my row to <code>owner</code>, demote any existing owner to <code>member</code>.<br>
+		<div class="d">First staff reply into a client-facing thread auto-claims. Rows get an owner pill; "Mine" filters on
+		ownership instead of "ever opened it"; auto-join stops lying. Reassign = a participant-picker in the thread head
+		reusing <code>POST /participants</code>.</div>
+	</div><span class="e">service fn + list field<br>~½ day</span></div>
+	<div class="p"><span class="n">P3</span><div class="t">
+		<b>Client context rail in the thread.</b> One new aggregate endpoint — <code>GET /chat/conversations/:id/context</code>
+		returning the linked applicant's stage, branch, balance state, and next appointment.<br>
+		<div class="d">Renders as a right-hand column in the helpdesk split. Kills the open-the-case-in-another-tab dance that
+		every reply currently needs.</div>
+	</div><span class="e">aggregate route + rail<br>~½–1 day</span></div>
+	<div class="p"><span class="n">P4</span><div class="t">
+		<b>Internal notes — one column.</b> <code>messages.visibility: public|internal</code>. Composer gains a Reply/Note
+		toggle; internal rows render as dashed mono strips and — the important half — <code>getApplicantMessages</code>
+		and the client SSE payload filter them out.<br>
+		<div class="d">Care point: the broadcast path must never leak internal notes to the client channel. The split is
+		already natural — staff SSE vs the portal's own fetch.</div>
+	</div><span class="e">migration + serializer + UI<br>~1 day</span></div>
+	<div class="p"><span class="n">P5</span><div class="t">
+		<b>Finish the attachment pipe.</b> <code>POST /chat/attachments</code> → presigned R2 put (same storage service as
+		documents) → staged row; send binds via the existing <code>attachmentIds</code> path. Paperclip in Composer; the
+		bubble already renders them. Portal gets it too — "screenshot of your receipt" is half of all support volume.</div>
+	</div><span class="e">route + composer btn<br>~1 day</span></div>
+	<div class="p"><span class="n">P6</span><div class="t">
+		<b><code>/chat</code> full page + search.</b> A route that renders the hub's split at page width (list | thread),
+		reading <code>?conversation=</code> — instantly fixing every dead notification/email link. Add
+		<code>?q=</code> ILIKE on the messages route; search box in helpdesk + the page.</div>
+	</div><span class="e">page + query param<br>~1 day</span></div>
+	<div class="p"><span class="n">P7</span><div class="t">
+		<b>Client widget passes.</b> Square launcher + window, badge to hollow-ink, drop the green dot. "Seen HH:MM" under
+		the client's last bubble — <code>deliveryStatus</code> is already computed per-viewer, just not rendered on this surface.</div>
+	</div><span class="e">restyle only<br>~½ day</span></div>
+	<div class="p"><span class="n">—</span><div class="t">
+		<b>Sweep:</b> write <code>lastMessageAt</code> alongside <code>updatedAt</code> (or drop the column); drop the
+		<code>as any</code>; collapse <code>getUnreadCounts</code> to one grouped query. Also decide honestly on the two
+		seeded features — inbound-email threading and escalation conversations: either wire them or delete the columns'
+		promise from the spec.</div>
+	</div><span class="e">½ day</span></div>
+</div>
+
+<!-- ══════════ PART III — MARKETING FINDINGS ══════════ -->
+<div class="tag tag--solid" id="mkt-find">III · Email marketing — what's actually true</div>
+
+<h3 class="sub">The engine is real; the cockpit is fake</h3>
+<div class="arch">
+	POST /campaigns → draft &nbsp;·&nbsp; POST /:id/send {scheduleFor?} → snapshotRecipients → BullMQ(delay)<br>
+	PATCH /:id (edit draft/scheduled) &nbsp;·&nbsp; cancelQueuedCampaignSend &nbsp;·&nbsp; GET /:id/recipients (per-contact ledger)<br>
+	worker runCampaignSend → per row: personalize → unsubscribe URL → emailLayout → sendEmail → sent/failed+error<br>
+	lists + contacts (pending→confirmed double opt-in) &nbsp;·&nbsp; import leads/applicants &nbsp;·&nbsp; templates CRUD + preview
+</div>
+
+<table class="diff">
+	<tr><th style="width:4.5rem"></th><th>Finding</th><th style="width:34%">Evidence</th></tr>
+	<tr>
+		<td class="sev"><span class="sev-bug">Lie</span></td>
+		<td><b>SMS sends email.</b> <code>runCampaignSend</code> calls Resend's <code>sendEmail</code> for every recipient with no channel
+		branch. A "Deadline Warning · SMS · 96 delivered" campaign either emailed 96 people or failed silently — and there's a whole
+		<code>/marketing/sms</code> route pointing at this page plus three SMS templates selling the fiction.</td>
+		<td><code>marketing.ts:195-259</code> — no <code>channel</code> check anywhere</td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-bug">Lie</span></td>
+		<td><b><code>{{date}}</code> and <code>{{intake}}</code> are advertised and never merged.</b> The compose hint promises them;
+		the worker replaces only <code>{{name}}</code>/<code>{{Name}}</code>. Every campaign using them ships literal
+		<code>{{date}}</code> to applicants.</td>
+		<td><code>marketing.ts:223-228</code> two replaces vs the UI hint "Use {{name}}, {{date}}, {{intake}}"</td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-dead">Unreachable</span></td>
+		<td><b>Scheduling is fully built — and the UI can't reach it.</b> <code>scheduleFor</code> → delayed BullMQ job →
+		<code>scheduled</code> status → <code>cancelQueuedCampaignSend</code>. The page exposes none of it: no datetime, no Scheduled
+		rows, no cancel.</td>
+		<td><code>routes/marketing.ts:280</code> + <code>queues.ts:255-274</code> vs compose form</td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-dead">Unreachable</span></td>
+		<td><b>No draft workflow despite draft status + PATCH existing.</b> The form does <code>POST /campaigns</code> then
+		immediately <code>POST /send</code> — one atomic click. You cannot write a campaign today and send it tomorrow
+		without leaving it half-typed in a tab.</td>
+		<td><code>handleSend</code> — create→send in one confirm</td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-dead">Unreachable</span></td>
+		<td><b>The per-recipient ledger is returned by the API and never displayed.</b> "Failed: 8" is a dead number — can't see
+		who, can't see why (<code>error</code> is stored per row!), can't retry. And re-sending re-snapshots the whole list —
+		there is no path that retries <i>only</i> failures without re-emailing the delivered.</td>
+		<td><code>GET /campaigns/:id/recipients</code> — zero callers in the page</td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-pol">Gap</span></td>
+		<td><b>No test send, and compose has no preview</b> — though the template editor does. First time anyone sees the real
+		email is when 400 contacts do.</td>
+		<td>compose = raw textarea; <code>emailLayout</code> could render a true preview</td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-pol">Gap</span></td>
+		<td><b>No opens/clicks.</b> The webhooks router is Paystack-only; Resend events (delivered/opened/bounced) could feed
+		<code>campaign_recipients</code> — also gives you bounce-suppression for free.</td>
+		<td><code>routes/webhooks.ts</code> — paystack only</td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-pol">Polish</span></td>
+		<td><b>Colour leaks:</b> green delivered/SMS, red failed, blue channel badges and <code>--primary</code> accents —
+		against a console that's otherwise strict mono.</td>
+		<td>stats cards + table cells + compose border</td>
+	</tr>
+	<tr>
+		<td class="sev"><span class="sev-pol">Note</span></td>
+		<td><b>Genuinely good:</b> double opt-in newsletter flow, unsubscribe tokens on every send, snapshot-at-enqueue
+		semantics (list changes after scheduling correctly don't apply), contacts filters/search/import. The bones justify finishing it.</td>
+		<td><code>newsletter.ts</code>, contact management UI</td>
+	</tr>
+</table>
+
+<!-- ══════════ PART IV — MARKETING PROPOSAL ══════════ -->
+<div class="tag tag--solid" id="mkt-plan">IV · Marketing — the proposal</div>
+<p class="note">M1–M2 are honesty fixes — stop the page promising what the backend can't keep. M3–M6 wire up what's already built.</p>
+
+<div class="plan">
+	<div class="p"><span class="n">M1</span><div class="t">
+		<b>SMS: decide, don't pretend.</b> Option A (recommended now): remove the channel — picker, presets,
+		<code>/marketing/sms</code> route, and treat existing "SMS" campaigns as what they were: email. Option B (when there's
+		an actual provider): wire Arkesel/mNotify behind <code>if (channel === "SMS")</code> in <code>runCampaignSend</code> +
+		a settings key. ~30 lines when the day comes — but not before there's an account to send from.</div>
+	</div><span class="e">A: ~1 hour<br>B: when real</span></div>
+	<div class="p"><span class="n">M2</span><div class="t">
+		<b>Merge fields: promise what's replaced.</b> Implement <code>{{date}}</code> (send date — trivial) and add
+		<code>{{email}}</code>; remove <code>{{intake}}</code> — there's no per-recipient intake to merge. Show the
+		available fields beside the editor, live.</div>
+	</div><span class="e">~1 hour</span></div>
+	<div class="p"><span class="n">M3</span><div class="t">
+		<b>The lifecycle UI.</b> Compose footer becomes <span class="mono">Save draft · Send test · Send now / Schedule ▸</span>.
+		Draft rows get Edit/Delete; scheduled rows get Edit/Cancel (calls the existing cancel); sent rows get Report/Duplicate.
+		Status column uses pills — <span class="mono">DRAFT · SCHEDULED Oct 1 09:00 · SENDING · SENT</span> — not a bare word.</div>
+	</div><span class="e">UI only — API exists<br>~1 day</span></div>
+	<div class="p"><span class="n">M4</span><div class="t">
+		<b>Delivery report drill-down.</b> Expand a sent row → the existing <code>/recipients</code> route → per-contact
+		<span class="mono">delivered · opened · failed — {error}</span> + a "Retry failed" action.<br>
+		<div class="d">Retry needs one small addition: re-enqueue must <i>not</i> re-snapshot the list — filter the existing
+		ledger to failed rows instead of deleting and rebuilding it.</div>
+	</div><span class="e">row expand + retry branch<br>~1 day</span></div>
+	<div class="p"><span class="n">M5</span><div class="t">
+		<b>Test send + true preview.</b> <code>POST /campaigns/:id/test {email}</code> — runs the real personalize+layout path
+		for one address. Preview toggle renders <code>emailLayout</code> server-side (a tiny render route), so what you see
+		is what 400 people get — not a lookalike.</div>
+	</div><span class="e">2 small routes + UI<br>~½ day</span></div>
+	<div class="p"><span class="n">M6</span><div class="t">
+		<b>Resend webhook → opens + bounce suppression.</b> <code>/webhooks/resend</code> verifies the svix signature, maps
+		events to <code>campaign_recipients.openedAt</code>/<code>bouncedAt</code> (two new columns), feeds an Opened column
+		in the table — and bounced addresses get skipped by future sends. Phase 2, but it's where the channel becomes measurable.</div>
+	</div><span class="e">webhook + columns<br>~1 day</span></div>
+	<div class="p"><span class="n">—</span><div class="t">
+		<b>Mono pass</b> on the stats/table/badges, and the empty state says "No campaigns yet" only when that's true
+		(drafts aren't "sent yet").</div>
+	</div><span class="e">½ hour</span></div>
+</div>
+
+<!-- ══════════ PART V — ORDER ══════════ -->
+<div class="tag" id="order">V · Suggested order — one coherent push</div>
+<div class="callout">
+	<b>Phase 1 — honesty (½ day):</b> M1 hide SMS · M2 merge-field truth · M6-sweep lastMessageAt/as-any.
+	Everything here is a deletion or a two-line fix that stops the system lying.
+	<br><br>
+	<b>Phase 2 — the helpdesk becomes a helpdesk (~1½ days):</b> P1 resolve/reopen · P2 ownership · P6's /chat page
+	(the dead-link fix alone justifies it) · P3 context rail.
+	<br><br>
+	<b>Phase 3 — marketing cockpit (~2 days):</b> M3 lifecycle UI · M4 ledger + retry · M5 test send.
+	<br><br>
+	<b>Phase 4 — depth (as needed):</b> P4 internal notes · P5 attachments · P7 widget restyle · M6 opens webhook.
+	<br><br>
+	<span class="muted">Everything above Phase 4 needs no new tables — P4's visibility flag and M6's two recipient
+	columns are the only migrations in the whole set. The schema, the queues, and the routes already believed
+	in these features; the work is connecting them.</span>
+</div>
+
+</div>
+</body>
+</html>

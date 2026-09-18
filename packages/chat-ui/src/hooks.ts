@@ -71,7 +71,7 @@ export function useLongPress(
  * Track whether the user is pinned to the bottom of a scroll container.
  *
  * Used to auto-scroll on new messages only when the user is already at the
- * bottom — jumping down while they're reading history would be jarring.
+ * bottom. Jumping down while they're reading history would be jarring.
  */
 export function usePinnedToBottom<T extends HTMLElement>() {
 	const ref = useRef<T | null>(null);

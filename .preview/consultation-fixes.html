@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Consultation flow — proposed fixes</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1120px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.tag--api{border-color:var(--fg-muted);color:var(--fg-muted)}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.5rem clamp(1.25rem,3vw,2.25rem) 2.5rem}
+	.mock--ops{background:#fafafa}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.struck{text-decoration:line-through;opacity:.55}
+	.vs{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start}
+	@media(max-width:900px){.vs{grid-template-columns:1fr}}
+	.vs .h{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.5rem}
+
+	/* shared chrome */
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.title{font-size:1.75rem;font-weight:500;letter-spacing:-.01em;margin-top:.25rem}
+	.lead{color:var(--fg-muted);font-size:.92rem;margin-top:.5rem;max-width:44rem}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap;text-decoration:none}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.card{background:#fff;border:1px solid var(--ink);padding:1.25rem}
+	.card--key{border-width:1.5px}
+	.pill{display:inline-block;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;padding:.28rem .6rem;border:1px solid var(--ink)}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line)}
+	.kv{display:flex;justify-content:space-between;gap:1rem;padding:.42rem 0;border-bottom:1px solid var(--line-light);font-size:.8rem}
+	.kv:last-child{border-bottom:0}
+	.kv .k{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-muted);padding-top:.15rem}
+	.kv .v{text-align:right}
+	.strip{background:var(--muted-bg);border-bottom:1px solid var(--line-light);padding:.5rem 1rem;font-size:.72rem;display:flex;gap:.75rem;flex-wrap:wrap;align-items:center}
+	.strip .sep{opacity:.3}
+	.notif{display:flex;gap:.8rem;border:1px solid var(--ink);background:#fff;padding:.9rem 1rem;align-items:flex-start}
+	.notif .dot{width:8px;height:8px;background:var(--ink);border-radius:50%;margin-top:.35rem;flex-shrink:0}
+	.email{border:1px solid var(--line-light);background:#fff;max-width:34rem}
+	.email .hd{padding:.8rem 1rem;border-bottom:1px solid var(--line-light);font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted)}
+	.email .bd{padding:1.1rem 1rem;font-size:.82rem;line-height:1.6}
+	ul.changes{margin:.75rem 0 0;padding-left:1.1rem;font-size:.8rem;max-width:64rem}
+	ul.changes li{margin:.3rem 0}
+	ul.changes .muted{font-size:.74rem}
+	code{font-family:var(--mono);font-size:.74rem;background:var(--muted-bg);padding:.1rem .35rem}
+	table.diff{width:100%;border-collapse:collapse;font-size:.78rem;max-width:64rem}
+	table.diff th{font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);text-align:left;padding:.4rem .6rem;border-bottom:1.5px solid var(--ink)}
+	table.diff td{padding:.5rem .6rem;border-bottom:1px solid var(--line-light);vertical-align:top}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+	<h1 class="page">Consultation flow — the fix list, for review</h1>
+	<p class="note">
+		From the cross-stack analysis. Four visible changes (ops cancelled card, case lineage, client notification, portal copy) and the mechanics under them.
+		<b>The headline decision is §A — what "reopen" should mean.</b>
+	</p>
+	<div class="jump">
+		<a href="#a">A · the recovery model</a>
+		<a href="#b">B · ops cancelled card</a>
+		<a href="#c">C · case lineage</a>
+		<a href="#d">D · client gets told</a>
+		<a href="#e">E · honest money copy</a>
+		<a href="#f">F · small sweeps</a>
+		<a href="#api">API changes</a>
+	</div>
+
+	<!-- ══════════ A · THE DECISION ══════════ -->
+	<div class="tag" id="a">A · the recovery model — needs your call</div>
+	<div class="mock">
+		<p class="eyebrow">The problem</p>
+		<p style="font-size:.85rem;max-width:60rem;margin-top:.4rem">
+			<b>Reopen as built is a dead end.</b> It flips the case to Under Review but the slot is gone — ops can't attach a new one (reschedule refuses a cancelled booking), and the portal sees an <i>active</i> case, so the client gets the case view with "Unscheduled" and <b>no way to book</b>. Reopened = stuck on both sides.
+		</p>
+		<div class="vs" style="margin-top:1.25rem">
+			<div>
+				<p class="h">Option A — recommended · cancelled is terminal, recovery is a linked new case</p>
+				<div class="card">
+					<p style="font-size:.8rem"><b>"Reopen case" goes away.</b> The one recovery action is <b>Issue free rebooking</b> — or nothing, if the client should simply pay again.</p>
+					<ul style="margin:.6rem 0 0;padding-left:1.1rem;font-size:.78rem;line-height:1.7">
+						<li>Credit issued → client notified → they pick a slot → a <b>new</b> consultation opens, linked back via <code>rebooked_from_id</code>.</li>
+						<li>The cancelled row stays as history — one story, two linked records.</li>
+						<li>Ops-mistake cancel → issue the credit. Client's own cancel → no action; they rebook and pay.</li>
+						<li>No zombie states. Nothing to get stuck on.</li>
+					</ul>
+				</div>
+			</div>
+			<div>
+				<p class="h">Option B — reopen resumes the <i>same</i> case file</p>
+				<div class="card">
+					<p style="font-size:.8rem"><b>Reopen + client picks a new slot into the same consultation row</b> — comments, doc requests and history stay in one file.</p>
+					<ul style="margin:.6rem 0 0;padding-left:1.1rem;font-size:.78rem;line-height:1.7">
+						<li>Checkout detects the reopened case and attaches the new booking (<code>consultations.booking_id</code> is rewritten).</li>
+						<li>Portal needs a "pick a slot" state inside an active case — the case view embeds the picker when there's no booking.</li>
+						<li>Fee still applies unless credited — same credit flag.</li>
+						<li><b>Cost:</b> touches checkout, ensureCaseForBooking, portal case view, and the booking↔case link. 2–3× the work of A.</li>
+					</ul>
+				</div>
+			</div>
+		</div>
+		<div class="callout">
+			<b>Recommendation: A.</b> A cancelled case is a receipt, not a draft — the audit trail is cleaner when the replacement is a new linked record, and nothing in the current ops workflow needs the old row to come back to life. The mock below assumes A; if you want B, say so and the §B card keeps a "Reopen" that means "client picks a slot into this file".
+		</div>
+	</div>
+
+	<!-- ══════════ B · OPS CANCELLED CARD ══════════ -->
+	<div class="tag" id="b">B · ops — cancelled case card</div>
+	<div class="mock mock--ops">
+		<div class="vs">
+			<div>
+				<p class="h">Now</p>
+				<div class="card">
+					<div class="kv"><span class="k">Cancelled</span><span class="v">15 Sep 2026</span></div>
+					<div class="kv"><span class="k">By</span><span class="v">the client</span></div>
+					<div class="kv"><span class="k">Reason</span><span class="v">—</span></div>
+					<div style="display:flex;gap:.5rem;margin-top:.8rem;flex-wrap:wrap;align-items:center">
+						<span class="btn btn--ghost btn--sm">Reopen case</span>
+						<span class="btn btn--sm">Issue free rebooking</span>
+					</div>
+					<p class="muted" style="font-size:.68rem;margin-top:.6rem">Reopen restores Under Review without a slot — assign a time after. <span class="struck">(It can't — dead end.)</span></p>
+				</div>
+			</div>
+			<div>
+				<p class="h">Proposed</p>
+				<div class="card">
+					<div class="kv"><span class="k">Cancelled</span><span class="v">15 Sep 2026</span></div>
+					<div class="kv"><span class="k">By</span><span class="v">the client</span></div>
+					<div class="kv"><span class="k">Reason</span><span class="v">—</span></div>
+					<div class="kv"><span class="k">Replaced by</span><span class="v"><span class="mono" style="text-decoration:underline">CNS-2026-0004 →</span></span></div>
+					<div style="display:flex;gap:.5rem;margin-top:.8rem;flex-wrap:wrap;align-items:center">
+						<span class="pill pill--solid">Free rebooking issued</span>
+						<span class="muted" style="font-size:.68rem">· client notified 15 Sep</span>
+					</div>
+				</div>
+				<p class="muted" style="font-size:.7rem;margin-top:.5rem">
+					Not yet rebooked → the row reads <b>"Replaced by — awaiting the client"</b> and the button stays.
+					Rebooked → the pill + a link to the live case. No Reopen button under Option A.
+				</p>
+			</div>
+		</div>
+	</div>
+
+	<!-- ══════════ C · LINEAGE ══════════ -->
+	<div class="tag" id="c">C · ops — lineage on the live case</div>
+	<div class="mock mock--ops">
+		<p class="h">Case header, on a consultation that replaced a cancelled one</p>
+		<div class="card">
+			<div style="display:flex;gap:.75rem;align-items:baseline;flex-wrap:wrap">
+				<strong>Enoch Enu</strong>
+				<span class="mono muted" style="font-size:.72rem">CNS-2026-0004</span>
+				<span class="pill">Under Review</span>
+				<span class="pill pill--hollow">↩ rebooked from <span style="text-decoration:underline">CNS-2026-0001</span> — cancelled 15 Sep · free credit</span>
+			</div>
+		</div>
+		<p class="muted" style="font-size:.7rem;margin-top:.5rem">
+			<code>rebooked_from_id</code> already lands on the new row — this just surfaces it. Clicking jumps to the cancelled case.
+			The reverse link on the cancelled card (§B "Replaced by") is computed from the loaded list — no new endpoint.
+		</p>
+	</div>
+
+	<!-- ══════════ D · CLIENT GETS TOLD ══════════ -->
+	<div class="tag" id="d">D · portal — the client is told, not left to discover it</div>
+	<div class="mock">
+		<div class="vs">
+			<div>
+				<p class="h">In-app notification</p>
+				<div class="notif">
+					<span class="dot"></span>
+					<div>
+						<p style="font-size:.82rem;font-weight:700">Your rebooking is covered</p>
+						<p class="muted" style="font-size:.76rem;margin-top:.15rem">We issued a free rebooking for your cancelled consultation — pick a new slot, no payment needed.</p>
+						<p class="mono" style="font-size:.66rem;margin-top:.4rem;text-decoration:underline">Open consultation →</p>
+					</div>
+				</div>
+				<p class="muted" style="font-size:.7rem;margin-top:.6rem">
+					<code>consultation.rebook_credit</code> → <code>/portal/consultation</code>. Same notification fires when a case is reopened under Option B.
+				</p>
+			</div>
+			<div>
+				<p class="h">Email</p>
+				<div class="email">
+					<div class="hd">Century NIT · your consultation</div>
+					<div class="bd">
+						<p style="font-weight:700">You can rebook — free.</p>
+						<p class="muted" style="margin-top:.4rem">Your consultation CNS-2026-0001 was cancelled on our side, so we've covered the fee for a new slot. Your assessment and documents carry over — only the appointment is new.</p>
+						<p style="margin-top:.8rem"><span class="btn btn--sm">Pick a new slot →</span></p>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="callout">
+			Mechanics: <code>issueRebookingCredit</code> calls <code>notify()</code> + <code>queueEmails()</code> — same two channels the cancel path already uses. One line of mail copy, one notification type. Ops toasts confirm "issued + client notified".
+		</div>
+	</div>
+
+	<!-- ══════════ E · HONEST COPY ══════════ -->
+	<div class="tag" id="e">E · portal — the promise matches the mechanism</div>
+	<div class="mock">
+		<p class="h">Booking sheet, §5 footnote</p>
+		<table class="diff">
+			<tr><th style="width:34%">Now</th><th>Proposed</th></tr>
+			<tr>
+				<td class="struck">Free reschedule up to 24h before · refunded in full if we can't place you · receipt lands in your Money ledger.</td>
+				<td>Free reschedule up to 24h before · if we cancel on you, the fee carries to a free rebooking — you never pay twice for our cancellation · receipt lands in your Money ledger.</td>
+			</tr>
+		</table>
+		<p class="muted" style="font-size:.7rem;margin-top:.6rem">
+			There is no refund mechanism — the promise becomes the free-rebooking credit, which does exist. If you want actual refunds wired through Paystack instead, that's a bigger piece — say so.
+		</p>
+	</div>
+
+	<!-- ══════════ F · SMALL SWEEPS ══════════ -->
+	<div class="tag" id="f">F · small sweeps (no mock needed)</div>
+	<div class="mock">
+		<table class="diff">
+			<tr><th style="width:30%">Where</th><th>Change</th></tr>
+			<tr>
+				<td class="mono">Ops · status strip</td>
+				<td>Drop the duplicate <b>"Cancelled."</b> alert (the card says it) and the <b>"No coordinator assigned"</b> nag — delegation is optional, so it isn't an alert condition.</td>
+			</tr>
+			<tr>
+				<td class="mono">Portal · Appointments</td>
+				<td><code>NO_SHOW</code> treated as done — no Move/Cancel on a no-show row, same fix shape as COMPLETED.</td>
+			</tr>
+			<tr>
+				<td class="mono">Portal · state</td>
+				<td>Remove the dead <code>consultationPhase: "cancelled"</code> marker — set in the sync, read nowhere.</td>
+			</tr>
+			<tr>
+				<td class="mono">Ops · cancel form</td>
+				<td>Consequence list gains one line: <i>"Issue a free rebooking on the cancelled card to cover the client's next slot."</i> (already implied — now explicit.)</td>
+			</tr>
+		</table>
+	</div>
+
+	<!-- ══════════ API ══════════ -->
+	<div class="tag tag--api" id="api">API · the mechanics under it</div>
+	<div class="mock">
+		<table class="diff">
+			<tr><th style="width:34%">Change</th><th>Detail</th></tr>
+			<tr>
+				<td class="mono">issueRebookingCredit</td>
+				<td>+ <code>notify({ type:"consultation.rebook_credit", link:"/portal/consultation" })</code> + client email via <code>queueEmails</code>. Credit still single-use.</td>
+			</tr>
+			<tr>
+				<td class="mono">reopenConsultation + route</td>
+				<td><b>Option A:</b> removed (button, hook, route, service) — cancelled is terminal. <b>Option B:</b> kept + slot-attach flow + client notification.</td>
+			</tr>
+			<tr>
+				<td class="mono">toConsultation (ops)</td>
+				<td>Map <code>rebookedFromId</code>; the list computes "replaced by" from loaded rows. No schema or endpoint change.</td>
+			</tr>
+			<tr>
+				<td class="mono">credit expiry</td>
+				<td>Not in this pass — flag it if you want one (e.g. credit lapses after 30 days).</td>
+			</tr>
+		</table>
+	</div>
+
+</div>
+</body>
+</html>

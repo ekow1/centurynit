@@ -17,7 +17,7 @@ import {
 	messageReactionSchema,
 	typingSchema,
 } from "century-nit-shared";
-import { requireAuth, requireMfa, requireModule, type AuthVariables } from "../middleware/auth.js";
+import { requireAuth, requireMfa, requireAnyModule, type AuthVariables } from "../middleware/auth.js";
 import {
 	listConversations,
 	getConversation,
@@ -38,6 +38,7 @@ import {
 	getConversationContext,
 	stageChatAttachment,
 } from "../services/chat.js";
+import { startClientConversation } from "../services/communication.js";
 
 const idParams = z.object({ id: z.string().uuid() });
 const messageIdParams = z.object({ messageId: z.string().uuid() });
@@ -60,7 +61,7 @@ chatRouter.openapi(
 		method: "get",
 		path: "/conversations",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		responses: {
 			200: {
 				content: { "application/json": { schema: chatConversationListSchema } },
@@ -82,7 +83,7 @@ chatRouter.openapi(
 		method: "post",
 		path: "/conversations",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		request: {
 			body: {
 				content: { "application/json": { schema: createConversationSchema } },
@@ -99,6 +100,22 @@ chatRouter.openapi(
 	async (c) => {
 		const staff = c.get("staff")!;
 		const body = c.req.valid("json");
+		if (body.clientUserId) {
+			// Staff-initiated client thread — support / case / stage. Idempotent:
+			// an existing thread for the same client+context is joined, not
+			// duplicated, and the creator is made a participant.
+			const conv = await startClientConversation(
+				body.clientUserId,
+				{ id: staff.opsUserId, name: staff.name, email: staff.email },
+				{
+					linkedEntityType: body.linkedEntityType,
+					linkedEntityId: body.linkedEntityId,
+					stageKey: body.stageKey,
+					initialMessage: body.initialMessage,
+				},
+			);
+			return c.json(conv, 201);
+		}
 		const created = await createConversation({ id: staff.opsUserId, name: staff.name, email: staff.email }, body);
 		return c.json(created, 201);
 	},
@@ -111,7 +128,7 @@ chatRouter.openapi(
 		method: "get",
 		path: "/conversations/{id}",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		request: { params: idParams },
 		responses: {
 			200: {
@@ -135,7 +152,7 @@ chatRouter.openapi(
 		method: "get",
 		path: "/conversations/{id}/messages",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		request: {
 			params: idParams,
 			query: z.object({
@@ -168,7 +185,7 @@ chatRouter.openapi(
 		method: "patch",
 		path: "/conversations/{id}/status",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		request: {
 			params: idParams,
 			body: {
@@ -208,7 +225,7 @@ chatRouter.openapi(
 		method: "post",
 		path: "/conversations/{id}/owner",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		request: {
 			params: idParams,
 			body: {
@@ -281,7 +298,7 @@ chatRouter.openapi(
 		method: "get",
 		path: "/conversations/{id}/context",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		request: { params: idParams },
 		responses: {
 			200: {
@@ -305,7 +322,7 @@ chatRouter.openapi(
 		method: "post",
 		path: "/conversations/{id}/attachments",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		request: {
 			params: idParams,
 			body: {
@@ -353,7 +370,7 @@ chatRouter.openapi(
 		method: "post",
 		path: "/conversations/{id}/messages",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		request: {
 			params: idParams,
 			body: {
@@ -384,7 +401,7 @@ chatRouter.openapi(
 		method: "post",
 		path: "/conversations/{id}/read",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		request: { params: idParams },
 		responses: {
 			200: {
@@ -407,7 +424,7 @@ chatRouter.openapi(
 		method: "get",
 		path: "/unread",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		responses: {
 			200: {
 				content: { "application/json": { schema: chatUnreadSchema } },
@@ -429,7 +446,7 @@ chatRouter.openapi(
 		method: "post",
 		path: "/conversations/{id}/participants",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		request: {
 			params: idParams,
 			body: {
@@ -458,7 +475,7 @@ chatRouter.openapi(
 		method: "get",
 		path: "/staff-directory",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		responses: {
 			200: {
 				content: { "application/json": { schema: staffDirectorySchema } },
@@ -479,7 +496,7 @@ chatRouter.openapi(
 		method: "patch",
 		path: "/messages/{messageId}",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		request: {
 			params: messageIdParams,
 			body: { content: { "application/json": { schema: editMessageSchema } }, required: true },
@@ -507,7 +524,7 @@ chatRouter.openapi(
 		method: "delete",
 		path: "/messages/{messageId}",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		request: { params: messageIdParams },
 		responses: { 204: { description: "Message deleted" } },
 	}),
@@ -528,7 +545,7 @@ chatRouter.openapi(
 		method: "post",
 		path: "/messages/{messageId}/reactions",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		request: {
 			params: messageIdParams,
 			body: { content: { "application/json": { schema: reactToMessageSchema } }, required: true },
@@ -560,7 +577,7 @@ chatRouter.openapi(
 		method: "post",
 		path: "/messages/{messageId}/forward",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		request: {
 			params: messageIdParams,
 			body: { content: { "application/json": { schema: forwardMessageSchema } }, required: true },
@@ -592,7 +609,7 @@ chatRouter.openapi(
 		method: "post",
 		path: "/conversations/{id}/typing",
 		tags: ["Chat"],
-		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
 		request: {
 			params: idParams,
 			body: { content: { "application/json": { schema: typingSchema } }, required: true },

@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ops — Consultation detail, improved</title>
+<style>
+:root{--bg:#fff;--fg:#0a0a0a;--muted:#f5f5f5;--muted-fg:#52525b;--b:#0a0a0a;--bl:#d4d4d8;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
+*{box-sizing:border-box;margin:0}
+body{font-family:var(--sans);background:#e8e8e8;color:var(--fg);font-size:.875rem}
+.page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 5rem}
+.eyebrow{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg)}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
+h2{font-size:1.15rem;font-weight:800;margin:2.5rem 0 .4rem}
+h3{font-size:.85rem;font-weight:700;margin:1.4rem 0 .3rem}
+.lead{color:var(--muted-fg);font-size:.85rem;max-width:46rem;line-height:1.6}
+.note{font-size:.72rem;color:var(--muted-fg);border-left:3px solid var(--fg);padding:.6rem .9rem;margin:1rem 0;line-height:1.6;background:#fff}
+.frame{background:var(--bg);border:1px solid var(--bl);margin-top:1.25rem;padding:1.5rem}
+.sev{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;border:1px solid var(--b);padding:.12rem .45rem;white-space:nowrap}
+.sev--bug{background:var(--fg);color:var(--bg)}
+table.review{width:100%;border-collapse:collapse;font-size:.78rem;background:#fff;margin-top:.6rem}
+.review th{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);text-align:left;padding:.45rem .7rem;border-bottom:1px solid var(--b)}
+.review td{padding:.55rem .7rem;border-bottom:1px solid var(--bl);vertical-align:top;line-height:1.5}
+code,pre{font-family:var(--mono);font-size:.72rem}
+code{background:var(--muted);padding:.05rem .3rem}
+pre{background:var(--muted);padding:.9rem 1.1rem;line-height:1.65;overflow-x:auto;margin:.6rem 0}
+pre .a{color:#0a7a3d}pre .c{color:var(--muted-fg)}
+.btn{border:1px solid var(--b);background:var(--bg);padding:.28rem .6rem;font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;cursor:pointer}
+.btn--p{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn:disabled{opacity:.4;cursor:default}
+
+/* ===== the detail, before/after ===== */
+.det{max-width:30rem;border:1px solid var(--bl);background:var(--bg)}
+.det .hd{padding:.8rem 1rem;border-bottom:1px solid var(--bl)}
+.det .nm{font-size:1.05rem;font-weight:800}
+.det .rf{font-family:var(--mono);font-size:.58rem;color:var(--muted-fg)}
+.det .facts{display:flex;gap:1rem;flex-wrap:wrap;margin-top:.4rem;font-size:.7rem;color:var(--muted-fg)}
+.pill{font-family:var(--mono);font-size:.55rem;border:1px solid var(--b);padding:.1rem .4rem;text-transform:uppercase;letter-spacing:.06em}
+.pill--on{background:var(--fg);color:var(--bg)}
+
+/* the call strip */
+.call{padding:.7rem 1rem;border-bottom:1px solid var(--bl)}
+.call--live{background:var(--muted)}
+.call .cap{display:flex;justify-content:space-between;align-items:center}
+.call .row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.45rem}
+.call .lnk{font-family:var(--mono);font-size:.62rem;color:var(--muted-fg);word-break:break-all}
+.call .when{font-family:var(--mono);font-size:.6rem;color:var(--muted-fg)}
+.call .dot{display:inline-block;width:7px;height:7px;background:var(--fg);margin-right:.35rem}
+.call .dot--hollow{background:var(--bg);border:1.5px solid var(--fg)}
+.gone{padding:.7rem 1rem;border-bottom:1px dashed var(--bl);color:var(--muted-fg);font-size:.72rem;font-style:italic}
+.x{border:1px dashed var(--bl);padding:.5rem .8rem;color:var(--muted-fg);font-size:.68rem;margin-top:.4rem}
+.todo{padding:.6rem 1rem;border-bottom:1px solid var(--bl)}
+.todo b{font-size:.78rem}
+.todo p{font-size:.68rem;color:var(--muted-fg);margin-top:.15rem}
+.bar{display:flex;gap:.4rem;padding:.5rem 1rem;border-bottom:1px solid var(--bl);flex-wrap:wrap}
+.tabs{display:flex;border-bottom:1px solid var(--bl)}
+.tab{padding:.45rem .8rem;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid transparent}
+.tab--on{border-bottom-color:var(--fg);font-weight:700}
+.pad{padding:1rem;font-size:.72rem;color:var(--muted-fg)}
+.lbl{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);margin-bottom:.3rem}
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="eyebrow">Ops · Consultation detail</p>
+  <h1>The call strip — and why it hides</h1>
+  <p class="lead">Reported: the "Meeting link · LiveKit · In-app call" strip only appears after
+  <b>Start assessment</b> is clicked. That's not a status gate in the template — it's a stale record
+  plus a <code>null</code> render. Two small fixes make the call surface permanent and honest.</p>
+
+  <h2>1 · Why it disappears</h2>
+  <table class="review">
+    <tr><th>Layer</th><th>What happens</th><th></th></tr>
+    <tr>
+      <td>Render gate<br><code>ConsultationDetail.tsx:543</code></td>
+      <td><code>if (!meetingLink && !canManageMeeting) return null</code> — for anyone who isn't the
+      assignee or a manager, an online consultation with no link renders <em>nothing</em>. No
+      "link mints on confirm", no placeholder — the surface silently isn't there.</td>
+      <td><span class="sev sev--bug">a11y/UX</span></td>
+    </tr>
+    <tr>
+      <td>Stale record<br><code>EnterpriseConsultations.tsx:291</code></td>
+      <td>The detail renders the row from the cached <code>consultations</code> list — it never calls
+      <code>GET /consultations/:id</code> on open (the endpoint exists; the page doesn't use it).
+      A link minted by someone else's <b>Confirm slot</b> stays invisible until <em>you</em> mutate
+      the row — and the first mutation most consultants make is <b>Start assessment</b>, whose
+      <code>replaceConsultation</code> finally returns the fresh row with <code>meetingUrl</code>.</td>
+      <td><span class="sev sev--bug">bug</span></td>
+    </tr>
+    <tr>
+      <td>Join window<br><code>ConsultationCall</code> modal</td>
+      <td>The 10-minute join window only surfaces as a <em>post-click error modal</em>
+      (<code>MEETING_NOT_OPEN</code>). The strip should say "Join opens at 09:20" before anyone clicks.</td>
+      <td><span class="sev">feedback</span></td>
+    </tr>
+    <tr>
+      <td>Position</td>
+      <td>The strip sits under the todo card, mid-pane, sharing a row with Resend/Change. For a
+      confirmed online call, "where do I join" is the first question — it belongs directly under
+      the header.</td>
+      <td><span class="sev">layout</span></td>
+    </tr>
+  </table>
+
+  <h2>2 · The fix — one call block, four honest states</h2>
+  <p class="lead">The strip renders for <em>every</em> online consultation, live or not, and says what
+  is true right now. It never disappears; the action inside changes.</p>
+
+  <div class="frame">
+    <div class="det">
+      <div class="hd">
+        <span class="rf">CN-2026-0417 · Accra</span>
+        <p class="nm">Kwame Mensah</p>
+        <div class="facts"><span>kwame@…</span><span>+233…</span><span class="pill pill--on">Confirmed</span><span>Today 14:00 · Online</span><span>Canada</span></div>
+      </div>
+
+      <div class="call call--live">
+        <div class="cap">
+          <p class="eyebrow" style="margin:0">Call · <span class="dot"></span>joinable in 12 min</p>
+          <span class="pill">LiveKit</span>
+        </div>
+        <div class="row">
+          <button class="btn btn--p">Join →</button>
+          <span class="lnk">In-app call — joined here, nothing to copy or forward</span>
+          <button class="btn" title="Email the link to the client">Resend</button>
+          <button class="btn">Change</button>
+        </div>
+      </div>
+
+      <div class="todo"><b>Start the assessment</b><p>Review the documents and background, then start when ready.</p></div>
+      <div class="bar"><button class="btn">Reschedule</button><button class="btn">+ Delegate</button><button class="btn">Cancel case</button></div>
+      <div class="tabs"><span class="tab tab--on">Background</span><span class="tab">Documents · 2 to review</span><span class="tab">Decision</span></div>
+      <div class="pad">…</div>
+    </div>
+  </div>
+
+  <h3>The four states, side by side</h3>
+  <div class="frame" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(22rem,1fr));gap:1rem">
+    <div class="det">
+      <p class="lbl" style="padding:.7rem 1rem 0">Assigned · no link yet</p>
+      <div class="call">
+        <div class="cap"><p class="eyebrow" style="margin:0">Call</p></div>
+        <div class="row"><span class="lnk">The room is minted when the slot is confirmed — the confirmation email carries it.</span>
+          <button class="btn">Generate now</button></div>
+      </div>
+      <div class="pad">…</div>
+    </div>
+    <div class="det">
+      <p class="lbl" style="padding:.7rem 1rem 0">Confirmed · window not open</p>
+      <div class="call">
+        <div class="cap"><p class="eyebrow" style="margin:0">Call · <span class="dot dot--hollow"></span>opens 13:50</p><span class="pill">LiveKit</span></div>
+        <div class="row"><button class="btn btn--p" disabled>Join →</button>
+          <span class="lnk">Opens 10 min before the slot — 14:00 today.</span></div>
+      </div>
+      <div class="pad">…</div>
+    </div>
+    <div class="det">
+      <p class="lbl" style="padding:.7rem 1rem 0">Confirmed · window open / live</p>
+      <div class="call call--live">
+        <div class="cap"><p class="eyebrow" style="margin:0">Call · <span class="dot"></span>open now</p><span class="pill">LiveKit</span></div>
+        <div class="row"><button class="btn btn--p">Join →</button>
+          <span class="lnk">In-app call — joined here, nothing to copy or forward</span></div>
+      </div>
+      <div class="pad">…</div>
+    </div>
+    <div class="det">
+      <p class="lbl" style="padding:.7rem 1rem 0">In-person · no call surface</p>
+      <div class="call">
+        <div class="cap"><p class="eyebrow" style="margin:0">In person · Accra office</p></div>
+        <div class="row"><button class="btn btn--p">Get directions →</button>
+          <span class="lnk">maps link…</span></div>
+      </div>
+      <div class="pad">…</div>
+    </div>
+  </div>
+
+  <p class="note"><b>vs today:</b> states 1 and 2 render as empty space for a viewer who isn't the
+  assignee — and for everyone while the cached row is stale. The fix makes the block unconditional
+  for online cases and re-fetches the record on open.</p>
+
+  <h2>3 · The code that changes</h2>
+  <pre><span class="c">// ConsultationDetail — fetch the fresh row when the detail opens;
+// GET /consultations/:id already exists server-side.</span>
+<span class="a">useEffect(() =&gt; {
+  consultationsApi.get(consultation.id).then(replaceConsultation).catch(() =&gt; {});
+}, [consultation.id]);</span>
+
+<span class="c">// the strip stops returning null — every online case gets a call block</span>
+<span class="c">// and the join window is computed once, up front:</span>
+const opensAt = startsAt - 10 * 60_000;
+const joinOpen = now &gt;= opensAt;
+<span class="a">if (isOnline) return &lt;CallStrip … /&gt;;   // never null</span>
+<span class="c">// CallStrip states: no link → "mints on confirm" (+ Generate for managers);
+// link + !joinOpen → disabled Join + "opens {hm(opensAt)}";
+// link + joinOpen → Join →. The MeetingWindowModal error path becomes the
+// inline "opens at" line.</span></pre>
+
+  <p class="note">Same treatment already proved out on the Workspace rail (<code>NowPane</code> shows
+  "Join opens at HH:MM" before the window). This brings the detail in line with it.
+  Net effect: the call surface is where the eye lands first, it always answers "where's the link",
+  and the phantom-appearance bug is gone.</p>
+
+  <h2>4 · Also worth fixing while we're here</h2>
+  <table class="review">
+    <tr><th>What</th><th>Why</th></tr>
+    <tr><td><b>Start assessment →</b> also jumps the tab to Decision</td><td>One click doing two things is fine for a confirm, but landing the consultant on the decision form mid-call hides the background they still need. Keep them on the record; the tab carries a dot when it's unlocked.</td></tr>
+    <tr><td>Resend / Change crowd the strip</td><td>Secondary actions fold into a "…" menu or move beside the link text — the strip's one job is Join.</td></tr>
+    <tr><td><code>startsAt</code>/<code>timezone</code> already serialize</td><td>The join-window math needs no API change — everything the strip needs is already on the row.</td></tr>
+  </table>
+</div>
+</body>
+</html>

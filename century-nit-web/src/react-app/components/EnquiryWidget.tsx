@@ -114,7 +114,7 @@ export function EnquiryWidget() {
 	const { open, setOpen, tab, setTab } = useEnquiry();
 	const [input, setInput] = useState("");
 
-	// AI chat — streamed from the Workers AI edge endpoint. The public site is
+	// AI chat. Streamed from the Workers AI edge endpoint. The public site is
 	// gated once by the first-visit Turnstile gate (signed `cnit_v` cookie), so
 	// no per-message challenge is needed here.
 	const aiChat = useAiChat("web");

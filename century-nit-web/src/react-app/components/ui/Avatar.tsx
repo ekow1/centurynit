@@ -5,7 +5,7 @@ import { meApi } from "century-nit-core/api";
  * The signed-in user's photo when one is set, initials otherwise.
  *
  * The photo lives in private storage, so every render needs a fresh signed
- * URL — the API answers `GET /me/avatar` with one, and it is fetched only when
+ * URL. The API answers `GET /me/avatar` with one, and it is fetched only when
  * `image` (the auth flag) says a photo exists. Signed URLs are short-lived, so
  * the fetch happens per-mount and is never cached: an expired URL would be a
  * broken image, not a bug.

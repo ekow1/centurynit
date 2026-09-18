@@ -4,7 +4,7 @@ import { z } from "zod";
  * The fee model.
  *
  * Century's own fee is the package's service fee (see packages) plus the
- * items here of kind `century` — the consultation and a short list of
+ * items here of kind `century`. The consultation and a short list of
  * add-ons. Everything else the client pays through Century is a third-party
  * cost recovered at cost (`pass_through`): the universities' application
  * fees and the destinations' visa and biometrics fees live on the catalogue
@@ -48,7 +48,7 @@ export const updateFeeItemSchema = z.object({
 });
 export type UpdateFeeItem = z.infer<typeof updateFeeItemSchema>;
 
-/** A destination's third-party tariffs — what the client pays the embassy and the visa centre. */
+/** A destination's third-party tariffs. What the client pays the embassy and the visa centre. */
 export const destinationTariffSchema = z.object({
 	id: z.string(),
 	name: z.string(),
@@ -113,7 +113,7 @@ export const DEFAULT_POST_ARRIVAL_CATALOGUE: PostArrivalCatalogue = {
 export const feeCatalogueSchema = z.object({
 	items: z.array(feeItemSchema),
 	destinations: z.array(destinationTariffSchema),
-	/** GHS per USD — the rate the client is charged at and receipts convert at. */
+	/** GHS per USD. The rate the client is charged at and receipts convert at. */
 	exchangeRate: z.number().positive(),
 	serviceFeeSplit: serviceFeeSplitSchema,
 	/** Optional only so older clients keep parsing. */
@@ -149,7 +149,7 @@ export function postArrivalInstalmentCount(months: number, frequency: PostArriva
 /**
  * The instalments for a remainder: equal parts (the last takes the rounding),
  * dated from the anchor plus the grace, then every interval. With no anchor
- * — the client has not arrived yet — the dates are null and the count and
+ *. The client has not arrived yet. The dates are null and the count and
  * amounts still stand.
  */
 export function postArrivalInstalments(input: {
@@ -182,14 +182,14 @@ const joinList = (parts: string[]) => (parts.length <= 1 ? parts.join("") : `${p
 
 /**
  * The plans in the client's words, written from the configured split and
- * catalogue — the one text the portal's plan cards, the block reasons and
+ * catalogue. The one text the portal's plan cards, the block reasons and
  * the settings page all show. Nothing else spells a number.
  */
 export function feePlanSentences(split: ServiceFeeSplit, catalogue: PostArrivalCatalogue = DEFAULT_POST_ARRIVAL_CATALOGUE): { installment: string; full: string; installmentShort: string; fullShort: string } {
 	const durations = joinList(catalogue.durations.map(String));
 	const frequencies = joinList(catalogue.frequencies.map((f) => POST_ARRIVAL_FREQUENCY_LABELS[f].toLowerCase()));
 	return {
-		installment: `${split.depositPercent}% now, ${split.preDeparturePercent}% after your visa is approved and before your travel documents are released, and the remaining ${split.postArrivalPercent}% after you arrive — over ${durations} months, ${frequencies}, starting ${catalogue.graceDays} days after arrival.`,
+		installment: `${split.depositPercent}% now, ${split.preDeparturePercent}% after your visa is approved and before your travel documents are released, and the remaining ${split.postArrivalPercent}% after you arrive. Over ${durations} months, ${frequencies}, starting ${catalogue.graceDays} days after arrival.`,
 		full: `${split.depositPercent}% now and the balance after your visa is approved, before your travel documents are released.`,
 		installmentShort: `${split.depositPercent}% now · ${split.preDeparturePercent}% after your visa · ${split.postArrivalPercent}% after you arrive, on your schedule`,
 		fullShort: `${split.depositPercent}% now · the balance after your visa, before your travel documents`,

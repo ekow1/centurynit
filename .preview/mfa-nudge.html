@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portal MFA nudge — until enrolled (proposed)</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1180px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.tag--bug{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.25rem clamp(1rem,2.5vw,2rem) 2rem}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	code{font-family:var(--mono);font-size:.9em;background:var(--muted-bg);padding:0 .25em}
+	.strike{text-decoration:line-through}
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.pair{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start}
+	.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;align-items:start}
+	@media (max-width:960px){.pair,.trio{grid-template-columns:1fr}}
+
+	/* portal chrome */
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.7rem;font-weight:700;padding:.6rem 1.1rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--sm{padding:.4rem .8rem;font-size:.62rem}
+	.btn--link{background:none;border:none;color:var(--ink);text-decoration:underline;padding:.4rem .5rem;font-weight:400;text-transform:none;letter-spacing:0;font-size:.75rem}
+	.pill{display:inline-flex;align-items:center;gap:.35rem;padding:.2rem .6rem;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line-light)}
+	.src{font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;padding:.2rem .5rem;border:1px solid var(--line);color:var(--fg-muted)}
+	.src--live{border-color:var(--ink);color:var(--ink);background:var(--muted-bg)}
+	.src--bad{border-color:var(--ink);background:var(--ink);color:#fff}
+
+	/* nudge banner */
+	.nudge{display:flex;gap:.9rem;align-items:flex-start;padding:.95rem 1.15rem;border:1px solid var(--line-light);border-left:3px solid var(--ink);background:#fff;max-width:56rem}
+	.nudge__icon{flex:none;width:2rem;height:2rem;display:grid;place-items:center;border:1.5px solid var(--ink);font-family:var(--mono)}
+	.nudge__t{font-weight:650;font-size:.85rem}
+	.nudge__s{color:var(--fg-muted);font-size:.75rem;margin-top:.2rem;max-width:38rem}
+	.nudge__a{display:flex;gap:.5rem;margin-top:.6rem;align-items:center;flex-wrap:wrap}
+	.nudge__count{margin-left:auto;flex:none;font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted);border:1px solid var(--line-light);padding:.3rem .55rem;align-self:center}
+
+	/* signup sheet (modal) */
+	.backdrop{background:repeating-linear-gradient(45deg,#e8e8e8,#e8e8e8 8px,#f0f0f0 8px,#f0f0f0 16px);padding:2rem;display:grid;place-items:center;border:1px solid var(--line-light)}
+	.sheet{width:min(30rem,100%);border:1.5px solid var(--ink);background:#fff}
+	.sheet__head{padding:1rem 1.25rem;border-bottom:1.5px solid var(--ink)}
+	.sheet__body{padding:1.25rem}
+	.sheet__foot{display:flex;gap:.5rem;padding:0 1.25rem 1.25rem;align-items:center;flex-wrap:wrap}
+	.sheet .kv{display:flex;gap:.6rem;align-items:flex-start;padding:.55rem 0;border-bottom:1px solid var(--line-light);font-size:.78rem}
+	.sheet .kv:last-child{border-bottom:none}
+	.sheet .kv .n{width:1.4rem;height:1.4rem;border:1.5px solid var(--ink);display:grid;place-items:center;font-family:var(--mono);font-weight:800;font-size:.68rem;flex:none}
+	.sheet .kv b{display:block}
+	.sheet .kv span{color:var(--fg-muted);font-size:.72rem}
+	.shield{width:2.4rem;height:2.4rem;border:2px solid var(--ink);display:grid;place-items:center;flex:none}
+	.shield svg{width:1.3rem;height:1.3rem}
+
+	/* security dossier card */
+	.card{border:1px solid var(--line-light);background:#fff}
+	.card__head{padding:.85rem 1.15rem;border-bottom:1px solid var(--line-light);display:flex;justify-content:space-between;align-items:center}
+	.card__t{font-weight:650;font-size:.9rem}
+	.card__rows>div{display:flex;justify-content:space-between;gap:1rem;padding:.6rem 1.15rem;border-bottom:1px solid var(--line-light);font-size:.8rem}
+	.card__rows>div:last-child{border-bottom:none}
+	.card__k{color:var(--fg-muted);font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;padding-top:.15rem}
+	.card__v{text-align:right}
+	.card__note{padding:.7rem 1.15rem;font-size:.72rem;color:var(--fg-muted);border-top:1px dashed var(--line-light)}
+
+	/* flow diagram */
+	.flow{display:flex;align-items:stretch;gap:0;margin:.5rem 0 1rem;max-width:64rem;flex-wrap:wrap}
+	.flow .node{flex:1;min-width:11rem;border:1.5px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.72rem}
+	.flow .node .h{font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);display:block;margin-bottom:.3rem}
+	.flow .arr{align-self:center;padding:0 .5rem;font-family:var(--mono);flex:none}
+	.flow .node--gone{border-style:dashed;color:var(--fg-muted)}
+	.acct-toggle{display:flex;gap:.4rem;margin-bottom:.9rem}
+	.acct-toggle button{border:1px solid var(--line);background:#fff;padding:.35rem .7rem;font-family:var(--mono);font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+	.acct-toggle button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1 class="page">MFA nudge — ask until it's on, let them skip</h1>
+<p class="note">The plumbing already exists — <code>MfaPrompt</code> in the portal layout, a full setup wizard at <code>/portal/security</code>, and a status endpoint. What's missing is <b>the ask</b>: a quiet banner nobody reads, and a whole class of users — <b>social-only accounts</b> — for whom every surface literally says <i>"Not applicable"</i>. This mock is the nudge ladder on top of the existing pieces.</p>
+<div class="jump">
+	<a href="#gap">01 · what's actually broken</a>
+	<a href="#ladder">02 · the nudge ladder</a>
+	<a href="#sheet">03 · first sign-in — the sheet</a>
+	<a href="#banner">04 · every sign-in — the banner</a>
+	<a href="#security">05 · security card — all three states</a>
+	<a href="#skip">06 · skip semantics</a>
+</div>
+
+<!-- ══ 01 GAP ══ -->
+<span class="tag tag--bug" id="gap">01 · What's actually broken</span>
+<div class="mock">
+	<div class="pair">
+		<div>
+			<p class="eyebrow" style="margin-bottom:.5rem">Gap A — the silent banner</p>
+			<div class="nudge" style="opacity:.75">
+				<div class="nudge__icon">◌</div>
+				<div>
+					<p class="nudge__t">Protect your account with two-factor authentication</p>
+					<p class="nudge__s">Add a second step at sign-in to keep your application documents and payment history safe. It only takes a minute.</p>
+					<div class="nudge__a"><span class="btn btn--sm">Set up MFA</span><span class="btn btn--ghost btn--sm">Skip for now</span></div>
+				</div>
+			</div>
+			<p class="muted" style="font-size:.72rem;margin-top:.5rem"><code>MfaPrompt</code> renders top-of-page on every visit — a passive strip between the header and the page. Banner-blindness is doing the rest: nothing says <i>when</i> it appears, <i>why now</i>, or that it'll keep coming back.</p>
+		</div>
+		<div>
+			<p class="eyebrow" style="margin-bottom:.5rem">Gap B — social accounts get "Not applicable"</p>
+			<div class="card">
+				<div class="card__head"><span class="card__t">Security</span><span class="src src--bad">GOOGLE ACCOUNT</span></div>
+				<div class="card__rows">
+					<div><span class="card__k">Sign-in method</span><span class="card__v">Google</span></div>
+					<div><span class="card__k">2FA status</span><span class="card__v"><span class="strike">Not applicable</span> <span class="flag" style="font-family:var(--mono);font-size:.55rem;background:var(--ink);color:#fff;padding:.1rem .4rem">DEAD END</span></span></div>
+					<div><span class="card__k">Set up 2FA</span><span class="card__v muted"><span class="strike">button hidden</span></span></div>
+				</div>
+				<p class="card__note"><code>applicable = hasPassword || enrolled</code> — a Google-only user holds no password here, so the banner hides, the button hides, and enrolment (which verifies a password) can't run anyway. Your exact complaint: no way to turn it on.</p>
+			</div>
+		</div>
+	</div>
+	<div class="callout"><b>The honest fix for social accounts:</b> enrol via <b>email code</b> — the second factor is a code to the account inbox at each sign-in, verified without a password (the account itself proves ownership). Authenticator-app stays available if they first set a password — so the Security card offers both: <i>"Secure sign-in with an email code"</i> primary, <i>"add a password to use an authenticator app"</i> secondary.</div>
+</div>
+
+<!-- ══ 02 LADDER ══ -->
+<span class="tag tag--after" id="ladder">02 · The nudge ladder</span>
+<div class="mock">
+	<div class="flow">
+		<div class="node"><span class="h">Sign-up / first portal visit</span><b>The sheet</b> — a proper moment, once, dismissible</div>
+		<span class="arr">→</span>
+		<div class="node"><span class="h">Every sign-in after</span><b>The banner</b> — top of the dashboard, keeps showing while unenrolled</div>
+		<span class="arr">→</span>
+		<div class="node"><span class="h">Skipped?</span><b>Session only</b> — "Not now" hides it until the tab closes; next sign-in it returns</div>
+		<span class="arr">→</span>
+		<div class="node node--gone"><span class="h">Enrolled</span><b>Gone for good</b> — API reports <code>enrolled</code>, nothing renders again</div>
+	</div>
+	<div class="callout">Three surfaces, one state machine: <code>GET /auth-settings/mfa</code> → <code>enrolled · applicable · required</code>. The sheet and the banner are the same component at two weights — the sheet for the first authenticated visit of an account, the banner for every session after. Nothing new to build server-side except the passwordless enrol path.</div>
+</div>
+
+<!-- ══ 03 SHEET ══ -->
+<span class="tag tag--after" id="sheet">03 · First sign-in — the sheet</span>
+<div class="mock">
+	<p class="eyebrow" style="margin-bottom:.8rem">Shown once per account, on the first portal render after sign-up — over the dashboard, dismissible</p>
+	<div class="backdrop">
+		<div class="sheet">
+			<div class="sheet__head">
+				<div style="display:flex;gap:.9rem;align-items:center">
+					<span class="shield"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3z"/><path d="M9 12l2 2 4-4"/></svg></span>
+					<div>
+						<p class="eyebrow" style="margin-bottom:.15rem">Welcome to Century NIT</p>
+						<p style="font-weight:650;font-size:1rem">One thing left — secure your account</p>
+					</div>
+				</div>
+			</div>
+			<div class="sheet__body">
+				<div class="kv"><span class="n">1</span><div><b>Your passport, offers and receipts live here</b><span>One leaked password is all that stands between someone and your file.</span></div></div>
+				<div class="kv"><span class="n">2</span><div><b>Two minutes, once</b><span id="sheet-method">Authenticator app — scan a code, done. <span class="muted">(Google accounts: a code to your inbox at each sign-in.)</span></span></div></div>
+				<div class="kv"><span class="n">3</span><div><b>We'll keep asking</b><span>Skip now and we'll remind you at your next sign-in — until it's on.</span></div></div>
+			</div>
+			<div class="sheet__foot">
+				<span class="btn">Set up 2FA — 2 min</span>
+				<span class="btn btn--ghost">Not now</span>
+				<span class="muted" style="font-size:.62rem;font-family:var(--mono);margin-left:auto">reminds next sign-in</span>
+			</div>
+		</div>
+	</div>
+	<div class="callout"><b>Why a sheet and not the banner:</b> the first visit is the one moment the user expects a step — account setup isn't finished until security is. "Not now" records the dismissal the same way as the banner's skip — next sign-in the banner takes over.</div>
+</div>
+
+<!-- ══ 04 BANNER ══ -->
+<span class="tag tag--after" id="banner">04 · Every sign-in after — the banner</span>
+<div class="mock">
+	<p class="eyebrow" style="margin-bottom:.8rem">Top of the dashboard — persistent while unenrolled, tighter copy, honest about persistence</p>
+	<div class="nudge">
+		<div class="nudge__icon">◍</div>
+		<div>
+			<p class="nudge__t">2FA isn't on — your file is one password away</p>
+			<p class="nudge__s">Application documents, offer letters and receipts are all in this account. Add the second step now — it takes two minutes.</p>
+			<div class="nudge__a"><span class="btn btn--sm">Set up 2FA</span><span class="btn btn--link">Skip for now — remind me next sign-in</span></div>
+		</div>
+		<span class="nudge__count">nudge 3</span>
+	</div>
+	<div class="callout">
+		<li><b>Copy earns its place</b> — states the risk ("one password away") and the cost ("two minutes"), not the generic "protect your account".</li>
+		<li><b>The skip says what it does</b> — "remind me next sign-in" removes the surprise; persistence is a promise, not nagging.</li>
+		<li><b><code>nudge N</code> counter</b> — a small mono chip counting dismissed sessions. Quiet accountability: by the fifth visit the user knows we mean it. Stored server-side (<code>mfa_nudge_count</code> or derived from a dismissals table) so it survives devices — <code>sessionStorage</code> stays only for "hidden this tab".</li>
+		<li><b>Required accounts</b> (<code>portal.mfa_required</code>) — same banner, no skip, amber-free (monochrome): the count chip swaps to <code>required</code>.</li>
+	</div>
+</div>
+
+<!-- ══ 05 SECURITY CARD ══ -->
+<span class="tag tag--after" id="security">05 · Profile → Security — all three states</span>
+<div class="mock">
+	<div class="acct-toggle">
+		<button data-acct="password" class="on">Email + password</button>
+		<button data-acct="google">Google only</button>
+		<button data-acct="enrolled">Enrolled</button>
+	</div>
+	<div class="card" style="max-width:36rem">
+		<div class="card__head"><span class="card__t">Security</span><span class="src src--live" id="acct-src">PASSWORD ACCOUNT</span></div>
+		<div class="card__rows" id="acct-rows"></div>
+		<p class="card__note" id="acct-note"></p>
+	</div>
+	<div class="callout"><b>The Google row is the fix</b> — instead of <i>"Not applicable"</i> the card offers the email-code path (<b>"Secure sign-in with an email code →"</b>) and a quiet secondary (<i>"add a password to use an authenticator app"</i>). The 2FA status reads <b>"Not set — recommended"</b>, never "Not applicable".</div>
+</div>
+
+<!-- ══ 06 SKIP ══ -->
+<span class="tag" id="skip">06 · Skip semantics</span>
+<div class="mock">
+	<div class="card__rows" style="max-width:44rem;border:1px solid var(--line-light)">
+		<div><span class="card__k">Sheet · "Not now"</span><span class="card__v">dismissed for this sign-in — banner next time</span></div>
+		<div><span class="card__k">Banner · "Skip for now"</span><span class="card__v">hidden until the tab closes (<code>sessionStorage</code>)</span></div>
+		<div><span class="card__k">Next sign-in</span><span class="card__v">banner returns, count +1 — forever until enrolled</span></div>
+		<div><span class="card__k">Enrolled</span><span class="card__v">all nudges gone; security card flips to "Active · method"</span></div>
+		<div><span class="card__k">Required policy</span><span class="card__v">no skip rendered — banner + security card only</span></div>
+	</div>
+	<div class="callout"><b>Deliberately no "don't ask again"</b> — the ask is the point, and it's honest about repeating. If nagging ever becomes a complaint, the knob is a longer skip (<code>remind me in 30 days</code> → server timestamp), not silence.</div>
+</div>
+
+<div class="callout" style="margin-top:2rem">
+	<b>Build list:</b>
+	<li><b>Passwordless enrol</b> — <code>POST /auth-settings/mfa/enroll</code> gains an <code>email_otp</code> path that verifies by sending a code (no password); <code>applicable</code> drops the <code>hasPassword</code> gate for that method.</li>
+	<li><b>The sheet</b> — new <code>MfaSheet</code> rendered once per account (server flag: first-seen timestamp on the user, or <code>mfa_sheet_seen_at</code>) on top of the existing <code>MfaPrompt</code>.</li>
+	<li><b>Banner copy + counter</b> — the strings above; <code>nudge N</code> from a server dismissals count.</li>
+	<li><b>Security card</b> — swap "Not applicable" for the email-code row; show the password-secondary path for social accounts.</li>
+</div>
+
+</div>
+<script>
+const states={
+	password:{src:"PASSWORD ACCOUNT",rows:[
+		["Sign-in method","Email + password"],
+		["2FA status","<b>Not set — recommended</b>"],
+		["Set up 2FA","<span class='btn btn--sm'>Choose method →</span>"],
+		["Policy","Optional (recommended)"]],
+		note:"Authenticator app or email code — your pick at setup. The banner above keeps asking until one is on."},
+	google:{src:"GOOGLE ACCOUNT",rows:[
+		["Sign-in method","Google"],
+		["2FA status","<b>Not set — recommended</b>"],
+		["Email code at sign-in","<span class='btn btn--sm'>Turn on →</span>"],
+		["Authenticator app","<span class='muted'>needs a password — <u>set one</u></span>"]],
+		note:"No password on file — email code is the second factor. Setting a password unlocks the authenticator-app option."},
+	enrolled:{src:"ENROLLED",rows:[
+		["Sign-in method","Email + password"],
+		["2FA status","<b>Active</b> · Authenticator app"],
+		["Backup codes","7 remaining · <u>regenerate</u>"],
+		["Manage","<span class='btn btn--ghost btn--sm'>Manage 2FA</span>"]],
+		note:"Nothing nudges an enrolled user — banner, sheet and counter all stop rendering."}
+};
+const rows=document.getElementById("acct-rows"),note=document.getElementById("acct-note"),src=document.getElementById("acct-src");
+function render(k){const s=states[k];src.textContent=s.src;rows.innerHTML=s.rows.map(r=>`<div><span class="card__k">${r[0]}</span><span class="card__v">${r[1]}</span></div>`).join("");note.textContent=s.note;}
+document.querySelectorAll(".acct-toggle button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".acct-toggle button").forEach(x=>x.classList.remove("on"));b.classList.add("on");render(b.dataset.acct);});
+render("password");
+</script>
+</body>
+</html>

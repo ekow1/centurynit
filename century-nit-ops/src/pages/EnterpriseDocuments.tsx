@@ -5,6 +5,8 @@ import { useOpsAuth } from "./OpsAuthContext";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { DocPreviewInline } from "./DocPreviewInline";
 import { CaseScaffold } from "./case/CaseScaffold";
+import { FilterGroup } from "./FilterGroup";
+import { useUrlParam } from "../hooks/useUrlParam";
 import { Link } from "react-router-dom";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -23,8 +25,6 @@ const CATEGORY_ORDER = [
 ];
 const CATEGORY_LABEL: Record<string, string> = { IDENTITY: "Identity", ACADEMIC: "Academic", LANGUAGE: "Language", FINANCIAL: "Financial", PROFESSIONAL: "Professional", OTHER: "Other" };
 type Cut = "all" | "pending" | "verified" | "rejected" | "mine" | (typeof CATEGORY_ORDER)[number];
-/** A file waiting this long is late — the reviewer's queue, not the client's. */
-const LATE_AFTER_DAYS = 3;
 const uploadedAtOf = (d: ApplicantDocument) => d.uploadedAt ?? d.createdAt;
 const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
 function agoLabel(iso: string): string {
@@ -57,18 +57,32 @@ function readableError(err: unknown, fallback: string): string {
 	return fallback;
 }
 
+/** One case's worth of files inside a client directory. Documents with no
+ * caseReference land in "General" — never an invented case. */
+interface CaseFolder {
+	key: string;
+	label: string;
+	documents: ApplicantDocument[];
+	pendingCount: number;
+}
+
 interface ApplicantFolder {
 	key: string;
 	ownerUserId: string;
 	applicantName: string;
 	ownerEmail: string;
-	caseReference: string;
+	caseReferences: string[];
 	branch: string;
 	assignedStaffName: string;
 	documents: ApplicantDocument[];
+	cases: CaseFolder[];
 	pendingCount: number;
 	verifiedCount: number;
 	rejectedCount: number;
+	/** Newest upload in the directory — the sort stamp on the row. */
+	lastUploadAt: string | null;
+	/** Oldest pending age in days — pending-first ordering. */
+	oldestPendingDays: number;
 }
 
 function RejectDialog({
@@ -143,6 +157,27 @@ function RejectDialog({
 	);
 }
 
+/** The triage cuts stay on the row; status + category cuts sit in the drawer. */
+const MAIN_CUTS = [
+	{ id: "all", label: "All" },
+	{ id: "pending", label: "Pending review" },
+	{ id: "mine", label: "Mine" },
+] as const;
+const DRAWER_CUTS = [
+	{ id: "verified", label: "Verified" },
+	{ id: "rejected", label: "Rejected" },
+	...CATEGORY_ORDER.map((c) => ({ id: c, label: CATEGORY_LABEL[c] })),
+] as const;
+const CUT_IDS = [...MAIN_CUTS, ...DRAWER_CUTS].map((c) => c.id);
+
+/** File-icon stamp from the extension — "PDF", "JPG", "DOC". */
+const fileStamp = (d: ApplicantDocument): string => {
+	const ext = d.fileName.split(".").pop()?.toUpperCase() ?? "";
+	if (ext === "JPEG") return "JPG";
+	if (ext === "DOCX") return "DOC";
+	return ext.slice(0, 4) || "FILE";
+};
+
 export function EnterpriseDocuments() {
 	const { hasPermission, canSeeAllBranches } = useOpsAuth();
 	const canReview = hasPermission("documents");
@@ -150,13 +185,20 @@ export function EnterpriseDocuments() {
 	const [documents, setDocuments] = useState<ApplicantDocument[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const { opsUser } = useOpsAuth();
-	const [cut, setCut] = useState<Cut>("all");
-	const [search, setSearch] = useState("");
-	const [showAll, setShowAll] = useState(false);
-	const [selectedBranch, setSelectedBranch] = useState("all");
-	const [selectedDoc, setSelectedDoc] = useState<ApplicantDocument | null>(null);
+	// Everything addressable — a filtered directory or a single file is a
+	// link you can paste into a ticket.
+	const [cut, setCut] = useUrlParam<Cut>("cut", { allowed: CUT_IDS, fallback: "all" });
+	const [search, setSearch] = useUrlParam("q");
+	const [selectedBranch, setSelectedBranch] = useUrlParam<string>("branch", { fallback: "all" });
+	const [openClient, setOpenClient] = useUrlParam("client");
+	const [docId, setDocId] = useUrlParam("doc");
 	const [rejectingDoc, setRejectingDoc] = useState<ApplicantDocument | null>(null);
 	const [busyDocId, setBusyDocId] = useState<string | null>(null);
+	// The drawer auto-opens while one of its cuts is set — a deep link like
+	// ?cut=FINANCIAL shows where the cut came from.
+	const drawerActive = (DRAWER_CUTS as readonly { id: string }[]).some((c) => c.id === cut);
+	const [drawerToggled, setDrawerToggled] = useState<boolean | null>(null);
+	const drawerOpen = drawerToggled ?? drawerActive;
 
 	const load = useCallback(() => {
 		documentsApi
@@ -174,67 +216,79 @@ export function EnterpriseDocuments() {
 	useEffect(load, [load]);
 
 
-	// Calculate folders and statistics
+	// Build the filing cabinet: one directory per client, one folder per
+	// case reference inside it, "General" for anything unattached.
 	const { folders } = useMemo(() => {
-		if (!documents) {
-			return {
-				folders: [],
-				totalApplicants: 0,
-				totalDocs: 0,
-				pendingDocsCount: 0,
-				verifiedDocsCount: 0,
-			};
-		}
+		if (!documents) return { folders: [] as ApplicantFolder[] };
 
-		// Group documents by applicant user ID or email
 		const folderMap = new Map<string, ApplicantFolder>();
-
-		let pendingTotal = 0;
-		let verifiedTotal = 0;
-
 		for (const doc of documents) {
-			if (doc.status === "UPLOADED") pendingTotal++;
-			if (doc.status === "VERIFIED") verifiedTotal++;
-
-			// Branch filter check
-			if (selectedBranch !== "all" && doc.branch && doc.branch !== selectedBranch) {
-				continue;
-			}
+			if (selectedBranch !== "all" && doc.branch && doc.branch !== selectedBranch) continue;
 
 			const folderKey = doc.ownerUserId || doc.ownerEmail || "unknown";
 			let folder = folderMap.get(folderKey);
 			if (!folder) {
-				const newFolder: ApplicantFolder = {
+				folder = {
 					key: folderKey,
 					ownerUserId: doc.ownerUserId || "",
 					applicantName: doc.ownerName || doc.ownerEmail || "Applicant",
 					ownerEmail: doc.ownerEmail || "",
-					caseReference: doc.caseReference || "—",
+					caseReferences: [],
 					branch: doc.branch || "Global",
 					assignedStaffName: doc.assignedStaffName || "Unassigned",
 					documents: [],
+					cases: [],
 					pendingCount: 0,
 					verifiedCount: 0,
 					rejectedCount: 0,
+					lastUploadAt: null,
+					oldestPendingDays: 0,
 				};
-				folderMap.set(folderKey, newFolder);
-				folder = newFolder;
+				folderMap.set(folderKey, folder);
 			}
 
 			folder.documents.push(doc);
+			if (doc.caseReference && !folder.caseReferences.includes(doc.caseReference)) {
+				folder.caseReferences.push(doc.caseReference);
+			}
 			if (doc.status === "UPLOADED") folder.pendingCount++;
 			if (doc.status === "VERIFIED") folder.verifiedCount++;
 			if (doc.status === "REJECTED") folder.rejectedCount++;
+			const up = uploadedAtOf(doc);
+			if (!folder.lastUploadAt || up > folder.lastUploadAt) folder.lastUploadAt = up;
+			if (doc.status === "UPLOADED") folder.oldestPendingDays = Math.max(folder.oldestPendingDays, daysSince(up));
 		}
 
-		const folderList = Array.from(folderMap.values());
-		return {
-			folders: folderList,
-			totalApplicants: folderList.length,
-			totalDocs: folderList.reduce((acc, f) => acc + f.documents.length, 0),
-			pendingDocsCount: pendingTotal,
-			verifiedDocsCount: verifiedTotal,
-		};
+		// Subfolders: pending cases first, then by reference; General last.
+		for (const folder of folderMap.values()) {
+			const caseMap = new Map<string, CaseFolder>();
+			for (const doc of folder.documents) {
+				const ref = doc.caseReference || "";
+				let cf = caseMap.get(ref);
+				if (!cf) {
+					cf = { key: ref || "general", label: ref || "General", documents: [], pendingCount: 0 };
+					caseMap.set(ref, cf);
+				}
+				cf.documents.push(doc);
+				if (doc.status === "UPLOADED") cf.pendingCount++;
+			}
+			folder.cases = Array.from(caseMap.values()).sort((a, b) => {
+				if (a.key === "general") return 1;
+				if (b.key === "general") return -1;
+				if (a.pendingCount !== b.pendingCount) return b.pendingCount - a.pendingCount;
+				return a.label.localeCompare(b.label);
+			});
+		}
+
+		// Index order: pending work first (oldest pending first), then
+		// anything needing a re-upload, then the clean archive A–Z.
+		const folderList = Array.from(folderMap.values()).sort((a, b) => {
+			if (a.pendingCount !== b.pendingCount) return b.pendingCount - a.pendingCount;
+			if (a.pendingCount > 0 && a.oldestPendingDays !== b.oldestPendingDays) return b.oldestPendingDays - a.oldestPendingDays;
+			if (a.rejectedCount !== b.rejectedCount) return b.rejectedCount - a.rejectedCount;
+			return a.applicantName.localeCompare(b.applicantName);
+		});
+		return { folders: folderList };
 	}, [documents, selectedBranch]);
 
 	/** Does a file belong to the cut being looked at? */
@@ -274,39 +328,29 @@ export function EnterpriseDocuments() {
 		};
 	}, [folders]);
 
-	/** The queue: waiting for review (oldest first), reviewed this week, everything else folded. */
-	const bands = useMemo(() => {
+	/** The visible directories — the cut and search narrow which folders
+	 *  surface; a folder with no matching files doesn't render. */
+	const dirs = useMemo(() => {
 		const q = search.trim().toLowerCase();
-		const weekAgo = new Date().getTime() - 7 * 86_400_000;
-		const matchesSearch = (f: ApplicantFolder, d: ApplicantDocument) => !q || `${f.applicantName} ${f.caseReference} ${f.ownerEmail} ${d.fileName} ${d.documentType}`.toLowerCase().includes(q);
-		type Card = { folder: ApplicantFolder; lines: ApplicantDocument[]; oldest: number };
-		const card = (f: ApplicantFolder, lines: ApplicantDocument[]): Card => ({ folder: f, lines, oldest: lines.reduce((m, d) => Math.max(m, daysSince(uploadedAtOf(d))), 0) });
-		if (cut !== "all") {
-			const cards = folders.map((f) => card(f, f.documents.filter((d) => inCut(d, f) && matchesSearch(f, d)))).filter((c) => c.lines.length > 0);
-			return [{ id: "cut", label: "Matching", note: `${cards.reduce((n, c) => n + c.lines.length, 0)} files`, cards, folded: false }];
-		}
-		const waiting = folders
-			.map((f) => card(f, f.documents.filter((d) => d.status === "UPLOADED" && matchesSearch(f, d))))
-			.filter((c) => c.lines.length > 0)
-			.sort((a, b) => b.oldest - a.oldest);
-		const waitingKeys = new Set(waiting.map((c) => c.folder.key));
-		const reviewed = folders
-			.filter((f) => !waitingKeys.has(f.key))
-			.map((f) => card(f, f.documents.filter((d) => d.status !== "UPLOADED" && d.reviewedAt && new Date(d.reviewedAt).getTime() >= weekAgo && matchesSearch(f, d))))
+		const matches = (f: ApplicantFolder, d: ApplicantDocument) =>
+			!q || `${f.applicantName} ${f.caseReferences.join(" ")} ${f.ownerEmail} ${d.fileName} ${d.documentType}`.toLowerCase().includes(q);
+		return folders
+			.map((f) => ({ folder: f, lines: f.documents.filter((d) => inCut(d, f) && matches(f, d)) }))
 			.filter((c) => c.lines.length > 0);
-		const reviewedKeys = new Set(reviewed.map((c) => c.folder.key));
-		const rest = folders
-			.filter((f) => !waitingKeys.has(f.key) && !reviewedKeys.has(f.key))
-			.map((f) => card(f, f.documents.filter((d) => matchesSearch(f, d))))
-			.filter((c) => c.lines.length > 0);
-		return [
-			{ id: "waiting", label: "Waiting for review", note: "oldest first", cards: waiting, folded: false },
-			{ id: "reviewed", label: "Reviewed this week", note: `verified ${reviewed.reduce((n, c) => n + c.lines.filter((d) => d.status === "VERIFIED").length, 0)} · rejected ${reviewed.reduce((n, c) => n + c.lines.filter((d) => d.status === "REJECTED").length, 0)}`, cards: reviewed, folded: false },
-			{ id: "rest", label: "All folders", note: showAll ? "hide" : "show ▸", cards: rest, folded: !showAll },
-		].filter((b) => b.cards.length > 0);
-	}, [folders, cut, search, showAll, inCut]);
+	}, [folders, search, inCut]);
 
+	const selectedDoc = useMemo(
+		() => folders.flatMap((f) => f.documents).find((d) => d.id === docId) ?? null,
+		[folders, docId],
+	);
 	const selectedFolder = selectedDoc ? (folders.find((f) => f.documents.some((d) => d.id === selectedDoc.id)) ?? null) : null;
+	const setSelectedDoc = (d: ApplicantDocument | null) => {
+		setDocId(d?.id ?? null);
+		if (d) {
+			const f = folders.find((x) => x.documents.some((dd) => dd.id === d.id));
+			if (f) setOpenClient(f.key);
+		}
+	};
 
 	function updateDocInList(updated: ApplicantDocument) {
 		setDocuments((current) => (current ?? []).map((d) => (d.id === updated.id ? updated : d)));
@@ -387,144 +431,187 @@ export function EnterpriseDocuments() {
 				list={
 					<>
 						<div className="cn-scaffold__filters">
-							<div className="cn-scaffold__chips" role="tablist" aria-label="Documents">
-								{(
-									[
-										["all", "All"],
-										["pending", "Pending"],
-										["verified", "Verified"],
-										["rejected", "Rejected"],
-										...CATEGORY_ORDER.map((c) => [c, CATEGORY_LABEL[c]] as [Cut, string]),
-										["mine", "Mine"],
-									] as [Cut, string][]
-								).map(([id, label]) => {
-									const n = counts[id] ?? 0;
-									if (n === 0 && id !== "all" && id !== "pending") return null;
-									const on = cut === id;
-									return (
-										<button
-											key={id}
-											type="button"
-											role="tab"
-											aria-selected={on}
-											className="ops-pill"
-											onClick={() => setCut(id)}
-											style={{
-												cursor: "pointer",
-												marginLeft: 0,
-												border: "1px solid var(--border)",
-												background: on ? "var(--foreground)" : "transparent",
-												color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
-												fontWeight: id === "pending" && n > 0 && !on ? 700 : 500,
-											}}
-										>
-											{label}
-											<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
-												{n}
-											</span>
-										</button>
-									);
-								})}
+							{/* One row: the triage cuts, the drawer toggle, search. */}
+							<div className="cn-scaffold__chips">
+								<FilterGroup
+									label="Documents"
+									options={MAIN_CUTS.map((c) => ({
+										id: c.id,
+										label: c.label,
+										count: counts[c.id] ?? 0,
+										hot: c.id === "pending" && (counts.pending ?? 0) > 0,
+									}))}
+									value={cut}
+									onChange={setCut}
+								/>
+								<button
+									type="button"
+									className={`ops-pill ops-pill--chip${drawerActive ? " ops-pill--hot" : ""}`}
+									style={{ borderStyle: "dashed" }}
+									aria-expanded={drawerOpen}
+									aria-controls="doc-filter-drawer"
+									onClick={() => setDrawerToggled(!drawerOpen)}
+								>
+									Filters {drawerOpen ? "▴" : "▾"}
+								</button>
+								<input
+									type="search"
+									className="cn-search"
+									placeholder="Search client, file, case…"
+									value={search}
+									onChange={(e) => setSearch(e.target.value || null)}
+									aria-label="Search documents"
+									style={{ flex: "1 1 14rem", width: "auto", marginLeft: "auto" }}
+								/>
 							</div>
-							<div className="cn-scaffold__filter-row" style={{ flexWrap: "wrap", gap: "1rem" }}>
-								<input type="search" className="cn-search" placeholder="Search client, file, type…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search documents" style={{ flex: "1 1 14rem", width: "auto" }} />
-							</div>
+							{drawerOpen && (
+								<div
+									id="doc-filter-drawer"
+									className="cn-scaffold__filter-row"
+									style={{ flexWrap: "wrap", gap: "0.75rem 1.5rem", background: "var(--muted)" }}
+								>
+									<span style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "wrap" }}>
+										<span className="cn-filter__label">Status · Category</span>
+										<FilterGroup
+											label="Status and category"
+											options={DRAWER_CUTS.map((c) => ({ id: c.id, label: c.label, count: counts[c.id] ?? 0 }))}
+											value={cut}
+											onChange={setCut}
+										/>
+									</span>
+								</div>
+							)}
 						</div>
 						<div className="cn-scaffold__rows">
 							{documents === null ? (
 								<p className="ops-people__empty">Loading documents…</p>
-							) : bands.length === 0 ? (
+							) : dirs.length === 0 ? (
 								<p className="ops-people__empty">{documents.length === 0 ? "No documents uploaded yet." : "Nothing matches."}</p>
 							) : (
-								<div className="ops-bands">
-									{bands.map((band) => (
-										<div key={band.id}>
-											<div
-												className={`ops-band${band.id === "rest" ? " ops-band--toggle" : ""}`}
-												role={band.id === "rest" ? "button" : undefined}
-												tabIndex={band.id === "rest" ? 0 : undefined}
-												onClick={band.id === "rest" ? () => setShowAll((v) => !v) : undefined}
-												onKeyDown={
-													band.id === "rest"
-														? (e) => {
-																if (e.key === "Enter" || e.key === " ") {
-																	e.preventDefault();
-																	setShowAll((v) => !v);
-																}
-															}
-														: undefined
-												}
-											>
-												<span className="ops-band__name">
-													{band.label} · {band.cards.length}
-												</span>
-												<span className="ops-band__note">{band.note}</span>
-											</div>
-											{!band.folded && (
-												<div className="ops-people">
-													{band.cards.map(({ folder, lines, oldest }) => {
-														const late = band.id === "waiting" && oldest >= LATE_AFTER_DAYS;
-														const total = folder.documents.length;
-														return (
-															<div key={folder.key} className={`ops-person${late ? " ops-person--overdue" : ""}`}>
-																<div className="ops-person__head">
-																	<span className="ops-person__name" title={folder.applicantName}>
-																		{folder.applicantName}
-																	</span>
-																	<span className="ops-person__when">{folder.caseReference !== "—" ? folder.caseReference : folder.branch}</span>
-																</div>
-																<ul className="ops-things">
-																	{lines.map((d) => {
-																		const on = selectedDoc?.id === d.id;
-																		const pending = d.status === "UPLOADED";
-																		const stale = pending && daysSince(uploadedAtOf(d)) >= LATE_AFTER_DAYS;
-																		return (
-																			<li
-																				key={d.id}
-																				className={`ops-thing${on ? " ops-thing--selected" : ""}`}
-																				role="button"
-																				tabIndex={0}
-																				aria-pressed={on}
-																				onClick={() => setSelectedDoc(on ? null : d)}
-																				onKeyDown={(e) => {
-																					if (e.key === "Enter" || e.key === " ") {
-																						e.preventDefault();
-																						setSelectedDoc(on ? null : d);
-																					}
-																				}}
-																			>
-																				<span className={`cn-now__dot${stale ? "" : " cn-now__dot--hollow"}`} aria-hidden style={{ marginTop: "0.4rem", flexShrink: 0 }} />
-																				<div className="ops-thing__main">
-																					<div className="ops-thing__top">
-																						<span className="ops-thing__kicker">
-																							{typeLabel(d.documentType)} <span className="ops-thing__kind">· {CATEGORY_LABEL[(d.documentCategory ?? "OTHER").toUpperCase()] ?? d.documentCategory}</span>
-																						</span>
-																						{!pending && <span className={`cn-pill cn-pill--${d.status === "VERIFIED" ? "done" : "blocked"}`}>{STATUS_LABEL[d.status]}</span>}
-																					</div>
-																					<div className="ops-thing__sub" title={d.fileName}>
-																						{d.fileName} · {formatBytes(d.sizeBytes)}
-																						{d.status === "REJECTED" && d.reviewNote ? ` · ${d.reviewNote}` : ""}
-																					</div>
-																				</div>
-																				<span className="ops-person__when">{agoLabel(pending ? uploadedAtOf(d) : (d.reviewedAt ?? uploadedAtOf(d)))}</span>
-																			</li>
-																		);
-																	})}
-																</ul>
-																<div className="ops-person__foot">
-																	<span className="ops-person__meta">
-																		{folder.verifiedCount} of {total} verified{folder.pendingCount > 0 ? ` · ${folder.pendingCount} pending` : ""}
-																		{folder.rejectedCount > 0 ? ` · ${folder.rejectedCount} rejected` : ""}
-																	</span>
-																	<span className="ops-person__meta">{folder.assignedStaffName}</span>
-																</div>
-															</div>
-														);
-													})}
+								<div>
+									{dirs.map(({ folder, lines }) => {
+										const open = openClient === folder.key;
+										return (
+											<div key={folder.key}>
+												{/* The directory row — caret, folder glyph, identity,
+												    state, cases, size, last touch. */}
+												<div
+													className={`doc-dir${open ? " doc-dir--open" : ""}`}
+													role="button"
+													tabIndex={0}
+													aria-expanded={open}
+													onClick={() => setOpenClient(open ? null : folder.key)}
+													onKeyDown={(e) => {
+														if (e.key === "Enter" || e.key === " ") {
+															e.preventDefault();
+															setOpenClient(open ? null : folder.key);
+														}
+													}}
+												>
+													<span className="doc-dir__caret" aria-hidden>{open ? "▾" : "▸"}</span>
+													<span className={`ico-folder${open ? " ico-folder--open" : ""}`} aria-hidden />
+													<span className="doc-dir__who" title={`${folder.applicantName} · ${folder.ownerEmail}`}>
+														<strong>{folder.applicantName}</strong>{" "}
+														<span className="sub">
+															{folder.ownerEmail} · {folder.branch === "Global" ? "" : `${folder.branch} · `}handler: {folder.assignedStaffName}
+														</span>
+													</span>
+													<span>
+														{folder.pendingCount > 0 ? (
+															<span className="ops-pill ops-pill--strong">{folder.pendingCount} pending</span>
+														) : folder.rejectedCount > 0 ? (
+															<span className="ops-pill">{folder.rejectedCount} rejected</span>
+														) : (
+															<span className="ops-pill" style={{ opacity: 0.55 }}>all verified</span>
+														)}
+													</span>
+													<span className="doc-dir__mn">
+														{folder.caseReferences.length > 0
+															? folder.caseReferences.length > 1
+																? `${folder.caseReferences[0]} +${folder.caseReferences.length - 1}`
+																: folder.caseReferences[0]
+															: "— no case yet"}
+													</span>
+													<span className="doc-dir__mn">{folder.documents.length} file{folder.documents.length === 1 ? "" : "s"}</span>
+													<span className="doc-dir__mn">{folder.lastUploadAt ? agoLabel(folder.lastUploadAt) : "—"}</span>
 												</div>
-											)}
-										</div>
-									))}
+												{open && (
+													<div className="doc-tree">
+														{folder.cases.map((cf) => {
+															const linesInCase = cf.documents.filter((d) => lines.includes(d));
+															if (linesInCase.length === 0) return null;
+															return (
+																<div key={cf.key}>
+																	<div className="doc-subf">
+																		<span className="l">
+																			<span className="ico-folder ico-folder--sm" aria-hidden />
+																			{cf.label}
+																		</span>
+																		<span className="n">
+																			{linesInCase.length} file{linesInCase.length === 1 ? "" : "s"}
+																			{cf.pendingCount > 0 ? ` · ${cf.pendingCount} pending` : ""}
+																		</span>
+																	</div>
+																	<div className="doc-tree">
+																		{[...linesInCase]
+																			.sort(
+																				(a, b) =>
+																					CATEGORY_ORDER.indexOf((a.documentCategory ?? "OTHER").toUpperCase()) -
+																						CATEGORY_ORDER.indexOf((b.documentCategory ?? "OTHER").toUpperCase()) ||
+																					uploadedAtOf(b).localeCompare(uploadedAtOf(a)),
+																			)
+																			.map((d) => {
+																				const on = selectedDoc?.id === d.id;
+																				const pending = d.status === "UPLOADED";
+																				return (
+																					<div
+																						key={d.id}
+																						className={`doc-file${on ? " doc-file--on" : ""}`}
+																						role="button"
+																						tabIndex={0}
+																						aria-pressed={on}
+																						onClick={() => setSelectedDoc(on ? null : d)}
+																						onKeyDown={(e) => {
+																							if (e.key === "Enter" || e.key === " ") {
+																								e.preventDefault();
+																								setSelectedDoc(on ? null : d);
+																							}
+																						}}
+																					>
+																						<span className="ico-file" aria-hidden><i>{fileStamp(d)}</i></span>
+																						<span className="doc-file__name" title={d.fileName}>
+																							{d.fileName}
+																							<div className="doc-file__sub">
+																								{typeLabel(d.documentType)} · {CATEGORY_LABEL[(d.documentCategory ?? "OTHER").toUpperCase()] ?? "Other"} ·{" "}
+																								{pending
+																									? `uploaded ${agoLabel(uploadedAtOf(d))} ago`
+																									: `${STATUS_LABEL[d.status]?.toLowerCase()}${d.reviewedAt ? ` ${agoLabel(d.reviewedAt)} ago` : ""}`}
+																								{d.status === "REJECTED" && d.reviewNote ? ` — “${d.reviewNote}”` : ""}
+																							</div>
+																						</span>
+																						<span>
+																							{pending ? (
+																								<span className="ops-pill ops-pill--strong">pending</span>
+																							) : (
+																								<span className={`ops-pill${d.status === "REJECTED" ? "" : " ops-pill--chip"}`} style={d.status === "REJECTED" ? { opacity: 0.7 } : undefined}>
+																									{STATUS_LABEL[d.status]?.toLowerCase()}
+																								</span>
+																							)}
+																						</span>
+																						<span className="doc-file__mn">{formatBytes(d.sizeBytes)}</span>
+																						<span className="doc-file__mn">{agoLabel(pending ? uploadedAtOf(d) : (d.reviewedAt ?? uploadedAtOf(d)))}</span>
+																					</div>
+																				);
+																			})}
+																	</div>
+																</div>
+															);
+														})}
+													</div>
+												)}
+											</div>
+										);
+									})}
 								</div>
 							)}
 						</div>
@@ -572,20 +659,23 @@ export function EnterpriseDocuments() {
 									</div>
 								)}
 							</div>
+							{/* The directory is the file list — the pane keeps only
+							    where in the cabinet this file sits. */}
 							{selectedFolder && (
 								<div className="card cn-now">
-									<p className="cn-detail__eyebrow">
-										This client's documents · {selectedFolder.verifiedCount} of {selectedFolder.documents.length} verified
-									</p>
 									<div className="cn-detail__rows">
-										{[...selectedFolder.documents]
-											.sort((a, b) => CATEGORY_ORDER.indexOf((a.documentCategory ?? "OTHER").toUpperCase()) - CATEGORY_ORDER.indexOf((b.documentCategory ?? "OTHER").toUpperCase()))
-											.map((d) => (
-												<button key={d.id} type="button" className="cn-detail__row cn-now__row" onClick={() => setSelectedDoc(d)}>
-													<span style={{ fontWeight: d.id === selectedDoc.id ? 700 : 400 }}>{typeLabel(d.documentType)}</span>
-													<span className="cn-detail__row-note">{d.id === selectedDoc.id ? "this one" : d.status === "UPLOADED" ? `pending · ${agoLabel(uploadedAtOf(d))}` : `${STATUS_LABEL[d.status].toLowerCase()}${d.reviewedAt ? ` ${new Date(d.reviewedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : ""}`}</span>
-												</button>
-											))}
+										<div className="cn-detail__row" style={{ cursor: "default" }}>
+											<span>
+												Location
+												<br />
+												<span className="cn-detail__row-note">
+													{selectedFolder.applicantName} / {selectedFolder.cases.find((c) => c.documents.some((d) => d.id === selectedDoc.id))?.label ?? "General"}
+												</span>
+											</span>
+											<span className="cn-detail__row-note">
+												{selectedFolder.verifiedCount} of {selectedFolder.documents.length} verified
+											</span>
+										</div>
 									</div>
 								</div>
 							)}

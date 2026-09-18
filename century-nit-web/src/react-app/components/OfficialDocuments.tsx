@@ -5,11 +5,11 @@ import { RELEASE_GATED_DOCUMENT_TYPES, type ApplicantDocument } from "century-ni
 import { Button } from "./ui/Button";
 
 /**
- * The documents Century holds as the client's agent — the admission letter
+ * The documents Century holds as the client's agent. The admission letter
  * from each school, the visa receipt, the visa grant, the flight receipt.
  * Visible from the moment they are filed; the letter and the visa documents
  * open once the pre-departure fee milestone is paid (the API refuses
- * before then — this is what that refusal looks like).
+ * before then. This is what that refusal looks like).
  */
 
 export type OfficialRow =
@@ -23,7 +23,7 @@ export function officialRows(input: {
 	const rows: OfficialRow[] = [];
 	for (const s of input.schools) {
 		if (s.offerLetterStorageKey) {
-			rows.push({ kind: "offer-letter", id: s.id, label: `Admission letter — ${s.universityName ?? "your school"}`, detail: s.programName ?? "", gated: true });
+			rows.push({ kind: "offer-letter", id: s.id, label: `Admission letter · ${s.universityName ?? "your school"}`, detail: s.programName ?? "", gated: true });
 		}
 	}
 	for (const type of ["visa_grant", "visa_receipt", "flight_receipt"]) {
@@ -85,7 +85,7 @@ export function OfficialDocuments({
 			<p className="muted mt-1" style={{ fontSize: "0.9rem" }}>
 				{held.length > 0
 					? `Filed and waiting for you. ${holdReason}`
-					: "Filed by your consultant — open them any time."}
+					: "Filed by your consultant. Open them any time."}
 			</p>
 			<ul style={{ listStyle: "none", margin: "0.75rem 0 0", padding: 0 }}>
 				{rows.map((row) => {

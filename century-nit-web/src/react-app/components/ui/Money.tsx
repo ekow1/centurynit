@@ -47,7 +47,7 @@ export function MoneyInline({ usd }: { usd: number }) {
 	);
 }
 
-/** Stacked variant for rail cards — the cedi figure is the value, the dollar is a footnote. */
+/** Stacked variant for rail cards. The cedi figure is the value, the dollar is a footnote. */
 export function MoneyStack({ usd }: { usd: number }) {
 	const ghs = Math.round(usd * GHS_RATE);
 	return (

@@ -3,11 +3,11 @@
  *
  * Defined once, here, because three places have to agree on it: the server that
  * mounts the routes, and the two front-end clients that call them. A version
- * prefix that drifts between client and server is worse than no prefix at all —
+ * prefix that drifts between client and server is worse than no prefix at all,
  * it fails as a 404 with no hint that a version mismatch is the cause.
  *
  * Scope: this covers the resource routes only. `/api/health` and `/api/auth`
- * are deliberately outside it — see the comments in the API's `app.ts`.
+ * are deliberately outside it. See the comments in the API's `app.ts`.
  */
 
 export const API_VERSION = "v1";

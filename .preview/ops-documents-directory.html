@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Documents — a directory per client</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1180px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3.5rem 0 .6rem}
+	.tag--solid{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.screen{background:#f2f2f2;border:1px solid #999;box-shadow:5px 5px 0 rgba(0,0,0,.12)}
+	.screen-bar{background:var(--ink);color:#fff;font-family:var(--mono);font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;padding:.4rem .8rem;display:flex;justify-content:space-between}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.8rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.callout--warn{border-left-style:dashed}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	code{font-family:var(--mono);font-size:.74rem;background:var(--muted-bg);padding:.1rem .35rem}
+	.pill{display:inline-block;font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;padding:.24rem .55rem;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line)}
+	.pill--dashed{color:var(--fg-muted);border-style:dashed}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.72rem;font-weight:700;padding:.55rem 1rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;white-space:nowrap;font-family:var(--sans);text-decoration:none}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--sm{padding:.35rem .7rem;font-size:.6rem}
+	.chip{font-family:var(--mono);font-size:.6rem;letter-spacing:.06em;padding:.3rem .65rem;border:1px solid var(--ink);background:#fff;cursor:pointer;text-transform:uppercase}
+	.chip.on{background:var(--ink);color:#fff}
+	.chip .n{opacity:.6;margin-left:.3rem}
+	.chip--dashed{border-style:dashed;color:var(--fg-muted)}
+	.chip--dead{opacity:.45;border-color:var(--line);color:var(--fg-muted)}
+	.input{border:1px solid var(--ink);background:#fff;font-size:.74rem;padding:.45rem .6rem;font-family:var(--sans);min-width:0}
+	.pagehead{padding:1rem 1.25rem .6rem;background:#fff;border-bottom:1px solid var(--line-light)}
+	.pagehead h2{font-size:1.15rem;letter-spacing:-0.01em}
+	.pagehead .lead{font-size:.72rem;color:var(--fg-muted);margin-top:.15rem}
+	.statstrip{display:flex;gap:1.4rem;padding:.55rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);font-size:.72rem;align-items:center;flex-wrap:wrap}
+	.statstrip b{font-size:.95rem;margin-right:.2rem}
+	.statstrip .lbl{color:var(--fg-muted);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono)}
+	.statstrip .sep{color:var(--line)}
+	.statstrip .link{margin-left:auto;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em}
+	.chips{display:flex;gap:.4rem;padding:.55rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);flex-wrap:wrap;align-items:center}
+	.chips input{margin-left:auto}
+
+	.tbl{width:100%;border-collapse:collapse;font-size:.76rem;background:#fff}
+	.tbl th{font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);text-align:left;padding:.5rem .8rem;border-bottom:1.5px solid var(--ink);background:var(--muted-bg)}
+	.tbl td{padding:.5rem .8rem;border-bottom:1px solid var(--line-light);vertical-align:top}
+	.tbl tr.on td{background:var(--muted-bg);box-shadow:inset 3px 0 0 var(--ink)}
+	.tbl .r{text-align:right}
+	.tbl .sub{font-size:.66rem;color:var(--fg-muted)}
+	.tbl .nm{font-weight:700}
+	.tbl .mn{font-family:var(--mono);font-size:.66rem;color:var(--fg-muted)}
+
+	/* bands + rows */
+	.band{display:flex;justify-content:space-between;align-items:baseline;padding:.45rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase}
+	.band--hot{background:var(--ink);color:#fff}
+	.band .note{font-size:.56rem;opacity:.7;letter-spacing:.06em;text-transform:none}
+	.tgroup{padding:.3rem 1.25rem .15rem;font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted);background:#fff}
+
+	/* split panes */
+	.split{display:grid;background:#fff}
+	.split--2{grid-template-columns:1fr 300px}
+	.pane{border-left:1px solid var(--line-light);background:#fff}
+	.pane-h{font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);padding:.5rem .8rem;border-bottom:1px solid var(--line-light);background:var(--muted-bg)}
+	.pane .sec{font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);padding:.6rem .8rem .3rem}
+	.kv{display:flex;justify-content:space-between;gap:.6rem;padding:.3rem .8rem;font-size:.72rem;border-bottom:1px dotted var(--line-light)}
+	.kv:last-child{border-bottom:0}
+	.kv .k{color:var(--fg-muted);font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;padding-top:.1rem}
+	.kv .v{text-align:right}
+
+	.legend{display:flex;gap:1.2rem;flex-wrap:wrap;font-size:.68rem;color:var(--fg-muted);padding:.5rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);flex-direction:column;align-items:flex-start;gap:.35rem}
+	.legend b{color:var(--ink);font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em}
+
+	.dead{position:relative;opacity:.45}
+	.dead::after{content:"";position:absolute;left:-2px;right:-2px;top:50%;height:1.5px;background:var(--ink)}
+
+	/* ── real folder iconography ─────────────────────────────────── */
+	/* A folder drawn in borders: the tab sits on the top-left of the body. */
+	.ico-folder{position:relative;width:1.15rem;height:.85rem;border:1.5px solid var(--ink);background:#fff;flex-shrink:0}
+	.ico-folder::before{content:"";position:absolute;top:-.36rem;left:-1.5px;width:.55rem;height:.36rem;border:1.5px solid var(--ink);border-bottom:none;background:#fff}
+	.ico-folder--open{background:var(--ink)}
+	.ico-folder--open::before{background:var(--ink)}
+	.ico-folder--sm{width:.9rem;height:.68rem}
+	.ico-folder--sm::before{top:-.28rem;width:.42rem;height:.28rem}
+	/* A file: a page with the corner folded. */
+	.ico-file{position:relative;width:.8rem;height:1rem;border:1.5px solid var(--ink);background:#fff;flex-shrink:0;display:inline-flex;align-items:flex-end;justify-content:center}
+	.ico-file::before{content:"";position:absolute;top:-1.5px;right:-1.5px;width:.28rem;height:.28rem;background:#fff;border-left:1.5px solid var(--ink);border-bottom:1.5px solid var(--ink)}
+	.ico-file i{font-style:normal;font-family:var(--mono);font-size:.34rem;letter-spacing:.02em;padding-bottom:.1rem;color:var(--ink)}
+	/* Tree guides — the vertical rail each nesting level sits inside. */
+	.tree{border-left:1.5px solid var(--ink);margin-left:2.05rem;background:#fff}
+	.tree .tree{margin-left:1.4rem}
+	.treepad{height:.4rem}
+
+	/* directory rows */
+	.dirrow{display:grid;grid-template-columns:1.1rem 1.3rem 1fr 6.5rem 7rem 6rem 4.5rem;gap:.55rem;align-items:center;padding:.55rem 1.25rem;border-bottom:1px solid var(--line-light);background:#fff;font-size:.76rem;cursor:pointer}
+	.dirrow:hover{background:var(--muted-bg)}
+	.dirrow .caret{font-family:var(--mono);font-size:.7rem;color:var(--fg-muted)}
+	.dirrow .who b{font-size:.8rem}
+	.dirrow .sub{font-size:.66rem;color:var(--fg-muted)}
+	.dirrow .mn2{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted)}
+	.dirrow .files{text-align:right;font-family:var(--mono);font-size:.62rem}
+	.dirrow--open{background:var(--muted-bg)}
+	/* subfolder + file lines inside an open directory */
+	.subf{display:flex;justify-content:space-between;align-items:center;padding:.45rem 1.25rem .45rem .8rem;background:#fff;border-bottom:1px solid var(--line-light);font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+	.subf:hover{background:var(--muted-bg)}
+	.subf .l{display:flex;align-items:center;gap:.5rem}
+	.subf .n{color:var(--fg-muted)}
+	.frow{display:grid;grid-template-columns:1.4rem 1fr 5.5rem 5rem 4.5rem;gap:.55rem;align-items:center;padding:.4rem 1.25rem .4rem .95rem;border-bottom:1px dotted var(--line-light);background:#fff;font-size:.72rem}
+	.frow:hover{background:var(--muted-bg)}
+	.frow .fmime{font-family:var(--mono);font-size:.56rem;color:var(--fg-muted);text-align:right}
+	.frow .fname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+	.frow .fsub{font-size:.6rem;color:var(--fg-muted)}
+	.frow .fmn{font-family:var(--mono);font-size:.6rem;color:var(--fg-muted)}
+	.bread{display:flex;align-items:center;gap:.5rem;padding:.55rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);font-family:var(--mono);font-size:.64rem;letter-spacing:.06em;text-transform:uppercase}
+	.bread a{color:var(--fg-muted);text-decoration:underline;text-underline-offset:2px}
+	.bread .sep{color:var(--line)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1 class="page">Documents — a directory per client</h1>
+<p class="note">
+	<b>The problem:</b> today the page is a <b>review queue wearing a folder costume</b> — the same client
+	can appear twice (once under "Waiting for review", again under "Reviewed this week"), their files are
+	split across those bands, and the rest hide behind an "All folders ▸" toggle. There is no place that
+	answers <i>"show me everything this client has ever uploaded."</i><br>
+	<b>The proposal:</b> the page becomes a <b>filing cabinet</b>. Each client is one directory. Inside the
+	directory, one folder per application (case reference) plus a <code>General</code> tray for anything
+	unattached. Files keep their review actions and the preview pane — only the shape changes.
+</p>
+<div class="jump">
+	<a href="#s1">01 Diagnosis</a>
+	<a href="#s2">02 The directory index</a>
+	<a href="#s3">03 Inside a client directory</a>
+	<a href="#s4">04 The tree — how files file themselves</a>
+	<a href="#s5">05 What changes / what stays</a>
+</div>
+
+<!-- ══════════ 01 DIAGNOSIS ══════════ -->
+<h2 id="s1" class="tag tag--solid">01 · Diagnosis — the queue eats the archive</h2>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /documents · current</span><span>annotated</span></div>
+	<div class="chips">
+		<span class="chip on">All<span class="n">38</span></span>
+		<span class="chip">Pending<span class="n">5</span></span>
+		<span class="chip">Verified<span class="n">29</span></span>
+		<span class="chip chip--dead">Rejected<span class="n">4</span></span>
+		<span class="chip">Identity</span><span class="chip">Academic</span><span class="chip">Language</span>
+		<span class="chip">Financial</span><span class="chip">Professional</span><span class="chip">Other</span>
+		<span class="chip">Mine</span>
+	</div>
+	<div class="band"><span>Waiting for review · 3</span><span class="note">oldest first</span></div>
+	<table class="tbl">
+		<tr><td class="nm">Efua Owusu <span class="sub">APP-0042</span><div class="sub">Passport · Bank statement — pending</div></td></tr>
+		<tr><td class="nm">Kwame Boateng <span class="sub">APP-0051</span><div class="sub">Transcript — pending</div></td></tr>
+	</table>
+	<div class="band"><span>Reviewed this week · 4</span><span class="note">verified 9 · rejected 1</span></div>
+	<table class="tbl">
+		<tr><td class="nm">Efua Owusu <span class="sub">APP-0042</span> <span class="mark">same client, second card</span><div class="sub">Degree certificate — verified</div></td></tr>
+		<tr><td class="nm">Ama Serwaa <span class="sub">APP-0038</span><div class="sub">CV — verified</div></td></tr>
+	</table>
+	<div class="band"><span class="dead">All folders · 12 — hidden behind a click</span></div>
+	<div class="legend">
+		<span><b>One client, many cards</b> — Efua's pending files sit in band 1, her verified ones in band 2. Nobody can see her file set as a whole without holding it in their head.</span>
+		<span><b>The archive is a second-class citizen</b> — "All folders" renders folded; finding a client's old passport means expanding the backlog and reading every card.</span>
+		<span><b>No per-application grouping</b> — a client with two applications (e.g. a school case + a visa case) mixes both sets of files on one card with no divider.</span>
+		<span><b>Eleven chips again</b> — status chips and category chips at equal weight; the six categories are occasional cuts, not triage.</span>
+	</div>
+</div>
+
+<!-- ══════════ 02 DIRECTORY INDEX ══════════ -->
+<h2 id="s2" class="tag tag--solid">02 · The directory index — one row per client, sorted by who needs a reviewer</h2>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /documents · proposed</span><span>index</span></div>
+	<div class="pagehead" style="display:flex;justify-content:space-between;align-items:flex-end">
+		<div><h2>Documents</h2><p class="lead">A directory per client — the ones waiting on a reviewer float to the top.</p></div>
+		<div class="mn" style="font-size:.62rem;text-align:right"><b style="color:var(--ink)">5 pending</b> · 4 clients waiting · oldest 6d</div>
+	</div>
+	<div class="chips">
+		<span class="chip on">All<span class="n">14</span></span>
+		<span class="chip">Pending review<span class="n">4</span></span>
+		<span class="chip">Mine<span class="n">3</span></span>
+		<span class="chip chip--dashed">Filters ▾</span>
+		<input class="input" placeholder="Search client, file, case…">
+	</div>
+
+	<!-- directories needing review first -->
+	<div class="dirrow dirrow--open">
+		<span class="caret">▾</span>
+		<span class="ico-folder ico-folder--open"></span>
+		<span class="who"><b>Efua Owusu</b> <span class="sub">efua@… · Accra · handler: K. Mensah</span></span>
+		<span><span class="pill pill--solid">2 pending</span></span>
+		<span class="mn2">APP-0042 +1</span>
+		<span class="files">12 files</span>
+		<span class="mn2">2h ago</span>
+	</div>
+	<!-- opened directory: subfolders + files sit inside a tree rail -->
+	<div class="tree">
+		<div class="subf"><span class="l"><span class="ico-folder ico-folder--sm"></span>APP-0042 — Visa case</span><span class="n">9 files · 2 pending</span></div>
+		<div class="tree">
+			<div class="frow"><span class="ico-file"><i>PDF</i></span><span class="fname">passport_scan.pdf<div class="fsub">Identity · uploaded 2h ago</div></span><span><span class="pill">pending</span></span><span class="fmn">4.1 MB</span><span class="fmn"><span class="linkish" style="text-decoration:underline;cursor:pointer;font-family:var(--mono);font-size:.6rem">verify · reject</span></span></div>
+			<div class="frow"><span class="ico-file"><i>JPG</i></span><span class="fname">bank_statement_mar.jpg<div class="fsub">Financial · uploaded 1d ago</div></span><span><span class="pill">pending</span></span><span class="fmn">2.8 MB</span><span class="fmn"><span class="linkish" style="text-decoration:underline;cursor:pointer;font-family:var(--mono);font-size:.6rem">verify · reject</span></span></div>
+		</div>
+		<div class="subf"><span class="l"><span class="ico-folder ico-folder--sm"></span>General</span><span class="n">3 files</span></div>
+		<div class="tree">
+			<div class="frow"><span class="ico-file"><i>PDF</i></span><span class="fname">degree_certificate.pdf<div class="fsub">Academic · verified 4d ago</div></span><span><span class="pill pill--hollow">verified</span></span><span class="fmn">1.2 MB</span><span class="fmn"></span></div>
+		</div>
+	</div>
+
+	<div class="dirrow">
+		<span class="caret">▸</span>
+		<span class="ico-folder"></span>
+		<span class="who"><b>Kwame Boateng</b> <span class="sub">kwame@… · Kumasi · handler: A. Darko</span></span>
+		<span><span class="pill pill--solid">1 pending</span></span>
+		<span class="mn2">APP-0051</span>
+		<span class="files">6 files</span>
+		<span class="mn2">1d ago</span>
+	</div>
+	<div class="dirrow">
+		<span class="caret">▸</span>
+		<span class="ico-folder"></span>
+		<span class="who"><b>Ama Serwaa</b> <span class="sub">ama@… · Accra · handler: K. Mensah</span></span>
+		<span><span class="pill pill--hollow">all verified</span></span>
+		<span class="mn2">APP-0038 · APP-0044</span>
+		<span class="files">11 files</span>
+		<span class="mn2">4d ago</span>
+	</div>
+	<div class="dirrow">
+		<span class="caret">▸</span>
+		<span class="ico-folder"></span>
+		<span class="who"><b>Yaw Mensimah</b> <span class="sub">yaw@… · Takoradi · — open</span></span>
+		<span><span class="pill pill--dashed">1 rejected</span></span>
+		<span class="mn2">— no case yet</span>
+		<span class="files">3 files</span>
+		<span class="mn2">6d ago</span>
+	</div>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>One row per client — always.</b> The directory is the unit. Pending count, case refs, file count and last-upload all read on the closed row; nothing about a client is split across bands.</li>
+		<li><b>Sort:</b> directories with pending files first (oldest pending first), then rejected-needs-reshoot, then the clean archive A–Z. The review queue survives as <i>ordering</i>, not as a second layout.</li>
+		<li><b>It reads like a file manager</b> — every directory carries a real folder glyph (drawn in borders, filled when open), a ▸/▾ caret, and its contents sit inside a tree rail so the nesting is visible at a glance.</li>
+		<li><b>Chevron opens inline</b> — or the row drills into a full directory view (03). Either way the state is a URL param: <code>?client=…&amp;doc=…</code> makes a file a deep link.</li>
+		<li><b>Chips shrink to three</b> — All · Pending review · Mine. Status + categories move behind <b>Filters ▾</b>, same drawer pattern as the worklist.</li>
+	</ul>
+</div>
+
+<!-- ══════════ 03 INSIDE A DIRECTORY ══════════ -->
+<h2 id="s3" class="tag tag--solid">03 · Inside a client directory — a folder per application, files grouped by category</h2>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /documents?client=efua-owusu · proposed</span><span>directory</span></div>
+	<div class="bread"><a>Documents</a><span class="sep">/</span><span><b>Efua Owusu</b> · efua@…</span><span style="margin-left:auto" class="muted">12 files · 9 verified · 2 pending · 1 rejected</span></div>
+
+	<div class="split split--2">
+		<div>
+			<!-- each application is a folder; its files sit in a tree rail,
+			     grouped under quiet category headers -->
+			<div class="band" style="display:flex;gap:.55rem;align-items:center">
+				<span class="ico-folder ico-folder--open ico-folder--sm" style="margin-top:.3rem"></span>
+				<span>APP-0042 — Visa case</span><span class="note" style="margin-left:auto">9 files · 2 pending</span>
+			</div>
+			<div class="tree" style="margin-left:1.9rem">
+				<div class="tgroup">Identity</div>
+				<div class="frow"><span class="ico-file"><i>PDF</i></span><span class="fname"><b>passport_scan.pdf</b><div class="fsub">uploaded 2h ago · 4.1 MB</div></span><span><span class="pill pill--solid">pending</span></span><span class="fmn">review →</span><span></span></div>
+				<div class="frow"><span class="ico-file"><i>JPG</i></span><span class="fname">photo.jpg<div class="fsub">uploaded 5d ago</div></span><span><span class="pill pill--hollow">verified</span></span><span class="fmn">0.9 MB</span><span></span></div>
+				<div class="tgroup">Financial</div>
+				<div class="frow"><span class="ico-file"><i>JPG</i></span><span class="fname">bank_statement_mar.jpg<div class="fsub">uploaded 1d ago · 2.8 MB</div></span><span><span class="pill pill--solid">pending</span></span><span class="fmn">review →</span><span></span></div>
+				<div class="frow"><span class="ico-file"><i>PDF</i></span><span class="fname">bank_statement_feb.pdf<div class="fsub">rejected 3d ago — “blurry, re-upload a scan”</div></span><span><span class="pill pill--dashed">rejected</span></span><span class="fmn">3.0 MB</span><span></span></div>
+				<div class="tgroup">Academic</div>
+				<div class="frow"><span class="ico-file"><i>PDF</i></span><span class="fname">transcript.pdf<div class="fsub">uploaded 8d ago</div></span><span><span class="pill pill--hollow">verified</span></span><span class="fmn">1.8 MB</span><span></span></div>
+			</div>
+
+			<div class="band" style="display:flex;gap:.55rem;align-items:center">
+				<span class="ico-folder ico-folder--sm" style="margin-top:.3rem"></span>
+				<span>APP-0039 — School case</span><span class="note" style="margin-left:auto">closed · 0 pending</span>
+			</div>
+			<div class="tree" style="margin-left:1.9rem">
+				<div class="frow"><span class="ico-file"><i>PDF</i></span><span class="fname">offer_letter.pdf<div class="fsub">Academic · verified 2mo ago</div></span><span><span class="pill pill--hollow">verified</span></span><span class="fmn">0.4 MB</span><span></span></div>
+			</div>
+
+			<div class="band" style="display:flex;gap:.55rem;align-items:center">
+				<span class="ico-folder ico-folder--sm" style="margin-top:.3rem"></span>
+				<span>General — not tied to a case</span><span class="note" style="margin-left:auto">2 files</span>
+			</div>
+			<div class="tree" style="margin-left:1.9rem">
+				<div class="frow"><span class="ico-file"><i>PDF</i></span><span class="fname">degree_certificate.pdf<div class="fsub">Academic · verified 4d ago</div></span><span><span class="pill pill--hollow">verified</span></span><span class="fmn">1.2 MB</span><span></span></div>
+			</div>
+		</div>
+
+		<aside class="pane">
+			<div class="pane-h">File · passport_scan.pdf</div>
+			<div class="kv"><span class="k">Client</span><span class="v">Efua Owusu</span></div>
+			<div class="kv"><span class="k">Case</span><span class="v">APP-0042</span></div>
+			<div class="kv"><span class="k">Category</span><span class="v">Identity</span></div>
+			<div class="kv"><span class="k">Uploaded</span><span class="v">today 09:12 · 4.1 MB</span></div>
+			<div class="kv"><span class="k">Status</span><span class="v"><b>Pending review</b></span></div>
+			<div class="sec">Preview</div>
+			<div style="margin:0 .8rem .6rem;border:1px dashed var(--line);height:7rem;display:flex;align-items:center;justify-content:center;color:var(--fg-muted);font-size:.66rem;font-family:var(--mono)">existing DocPreviewInline — unchanged</div>
+			<div style="display:flex;gap:.4rem;padding:0 .8rem .8rem">
+				<span class="btn btn--sm">Verify</span>
+				<span class="btn btn--ghost btn--sm">Reject…</span>
+			</div>
+		</aside>
+	</div>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>Subfolder = case reference, rendered as a folder.</b> The API already returns <code>caseReference</code> on every document — the folders are free. Anything without one lands in <code>General</code> instead of inventing a fake case.</li>
+		<li><b>Files carry the folded-corner page glyph</b> with their type stamped inside (PDF / JPG / DOC) — a reviewer can spot "the passport scan" by shape before reading a name.</li>
+		<li><b>Within a folder, files group by category</b> (Identity → Academic → Language → Financial → Professional → Other — the existing <code>CATEGORY_ORDER</code>), newest first inside each.</li>
+		<li><b>The detail pane is unchanged</b> — same inline preview, same Verify/Reject actions, same review note display. Only the left side gets the directory shape.</li>
+		<li><b>Breadcrumb</b> <code>Documents / Efua Owusu</code> returns to the index; the closed row chevron is the same view inline for a quick peek.</li>
+	</ul>
+</div>
+
+<!-- ══════════ 04 THE TREE ══════════ -->
+<h2 id="s4" class="tag">04 · The tree — how every file files itself</h2>
+<div class="screen">
+	<div class="screen-bar"><span>grouping rules</span><span>no API changes</span></div>
+	<table class="tbl">
+		<thead><tr><th>Level</th><th>Key</th><th>Falls back to</th><th>Reads as</th></tr></thead>
+		<tbody>
+			<tr><td><b>Directory</b> — the client</td><td class="mn">ownerUserId</td><td class="mn">ownerEmail → "unknown"</td><td>Client name · email · branch · handler</td></tr>
+			<tr><td><b>Folder</b> — the application</td><td class="mn">caseReference</td><td class="mn">missing → "General"</td><td>APP-0042 — Visa case · N files · N pending</td></tr>
+			<tr><td><b>Section</b> — inside a folder</td><td class="mn">documentCategory</td><td class="mn">missing → OTHER</td><td>Identity / Academic / Language / Financial / Professional / Other</td></tr>
+			<tr><td><b>File</b> — the row</td><td class="mn">fileName</td><td class="mn">—</td><td>name · uploaded · size · status pill · verify/reject</td></tr>
+		</tbody>
+	</table>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>One client with two cases gets two folders</b> — the ask. A school application and a visa application for the same person never interleave files again.</li>
+		<li><b>Index sort:</b> pending-desc → rejected → A–Z. <b>Folder sort:</b> folders with pending first, then by case ref. <b>File sort:</b> newest first within a category.</li>
+	</ul>
+</div>
+
+<!-- ══════════ 05 CHANGES ══════════ -->
+<h2 id="s5" class="tag">05 · What changes, what stays</h2>
+<div class="screen">
+	<div class="screen-bar"><span>diff summary</span><span>frontend only</span></div>
+	<table class="tbl">
+		<thead><tr><th>Goes</th><th>Arrives</th></tr></thead>
+		<tbody>
+			<tr><td>Person-cards across "Waiting / Reviewed / All folders" bands — one client, up to three cards</td><td>One directory row per client; pending floats to top by sort order</td></tr>
+			<tr><td>11 equal-weight chips (status + 6 categories + mine)</td><td>All · Pending review · Mine + Filters ▾ drawer (status + category), matching the worklist pattern</td></tr>
+			<tr><td>"This client's documents" list inside the detail pane</td><td>The directory <i>is</i> that list — the pane keeps only preview + facts + actions</td></tr>
+			<tr><td><code>?doc=</code> nothing — selection is component state</td><td><code>?client=&doc=</code> deep links — a file URL can be pasted into a chat or ticket</td></tr>
+			<tr><td>Case reference as a corner annotation</td><td>Case reference as the folder — the organizing axis of the directory</td></tr>
+		</tbody>
+	</table>
+</div>
+<div class="callout" style="max-width:none">
+	<ul>
+		<li><b>Stays:</b> <code>documentsApi.list()</code> (already returns everything the tree needs — owner, case ref, category, status), the inline preview, the reject dialog, branch scoping, the day's stat strip.</li>
+		<li><b>Files touched:</b> <code>EnterpriseDocuments.tsx</code> (rebuild the list as the directory tree + URL params), nothing else. No API work — the grouping is pure client-side.</li>
+		<li><b>Open question for you:</b> drill-in (row click → dedicated directory page, breadcrumb back) or inline expand (▸ chevron, index stays visible)? The mock shows both — 02 is inline, 03 is the drilled view. I recommend <b>inline expand</b>: reviewers keep the queue in peripheral vision while they open a file set.</li>
+	</ul>
+</div>
+
+</div>
+</body>
+</html>

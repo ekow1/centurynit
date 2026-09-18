@@ -3,7 +3,7 @@ import type { PreDepartureTask } from "century-nit-core/content";
 import { Button } from "./ui/Button";
 
 /**
- * The client's side of the pre-departure checklist — the same list the
+ * The client's side of the pre-departure checklist. The same list the
  * departure officer works from in the case. The client ticks their own
  * items (uploading proof where an item asks for it); Century's items are
  * shown as progress the officer closes.
@@ -15,7 +15,7 @@ export function PreDepartureChecklist({
 }: {
 	tasks: PreDepartureTask[];
 	onToggle: (id: string) => void;
-	/** The chapter is closed — read-only. */
+	/** The chapter is closed. Read-only. */
 	locked?: boolean;
 }) {
 	if (tasks.length === 0) {
@@ -72,9 +72,9 @@ export function PreDepartureChecklist({
 					{t.evidence && !t.done ? (
 						<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.2rem" }}>
 							{t.proofStatus === "UPLOADED"
-								? `${docName(t.evidence)} uploaded — your consultant is checking it; this closes once it is verified.`
+								? `${docName(t.evidence)} uploaded. Your consultant is checking it; this closes once it is verified.`
 								: t.proofStatus === "REJECTED"
-									? `${docName(t.evidence)} was not accepted — please upload it again.`
+									? `${docName(t.evidence)} was not accepted. Please upload it again.`
 									: `Proof needed: ${docName(t.evidence)}.`}{" "}
 							{t.proofStatus !== "UPLOADED" ? (
 								<Button to="/portal/documents" variant="ghost" className="btn--sm">
@@ -90,7 +90,7 @@ export function PreDepartureChecklist({
 					) : null}
 					{t.waivedReason ? (
 						<p className="muted" style={{ fontSize: "0.8rem" }}>
-							Waived by your consultant — {t.waivedReason}
+							Waived by your consultant · {t.waivedReason}
 						</p>
 					) : null}
 					{t.done && !t.evidence && t.doneBy && t.doneBy !== "client" ? (
@@ -113,7 +113,7 @@ export function PreDepartureChecklist({
 				</span>
 			</div>
 			<p className="muted mt-1" style={{ fontSize: "0.9rem" }}>
-				{requiredDone === required.length ? "Everything Century NIT owes you is done — you can complete your journey below." : "Century NIT closes what it does for you; your own list is a set of reminders for the move — tick them as you go, they never hold you back."}
+				{requiredDone === required.length ? "Everything Century NIT owes you is done. You can complete your journey below." : "Century NIT closes what it does for you; your own list is a set of reminders for the move. Tick them as you go, they never hold you back."}
 			</p>
 
 			{mine.length > 0 ? (

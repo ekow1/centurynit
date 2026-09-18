@@ -19,7 +19,7 @@ type PortalTab = {
 	icon: React.ReactNode;
 };
 
-/** The phone's destinations — Help is the fifth slot, and it opens the chat. */
+/** The phone's destinations. Help is the fifth slot, and it opens the chat. */
 const PORTAL_TABS: PortalTab[] = [
 	{ to: "/portal/home", label: "Home", short: "Home", icon: <IconHome /> },
 	{ to: "/portal/journey", label: "Journey", short: "Journey", icon: <IconRoute /> },
@@ -49,7 +49,7 @@ function openChat() {
 }
 
 /**
- * Compact top app bar for phones — the page's name with its chapter as the
+ * Compact top app bar for phones. The page's name with its chapter as the
  * kicker, a back affordance on stage pages, the bell, the account menu, and
  * the one thing to do next as a strip under the bar.
  */
@@ -143,7 +143,7 @@ export function PortalAppBar({
 										} catch (err) {
 											console.error("Sign out failed on the server", err);
 											toast.error(
-												"Couldn't reach the server to end your session — please try again. Your account is still signed in.",
+												"Couldn't reach the server to end your session. Please try again. Your account is still signed in.",
 											);
 											return;
 										}
@@ -169,7 +169,7 @@ export function PortalAppBar({
 	);
 }
 
-/** Fixed bottom tab bar: Home · Journey · Files · Money · Help — Help opens the chat. */
+/** Fixed bottom tab bar: Home · Journey · Files · Money · Help. Help opens the chat. */
 export function PortalTabBar() {
 	const { pathname } = useLocation();
 	const inStage = isStagePath(pathname);

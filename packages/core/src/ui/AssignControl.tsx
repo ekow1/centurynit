@@ -15,8 +15,8 @@ export type AssignableStaff = {
  * Every assignment surface used to build its own: a modal here, an inline
  * <select> that fired on change there, a form with a button elsewhere, each
  * with different words. This is the single control: who currently has it,
- * who may take it (role must be allowed to own the stage — the same rule the
- * server enforces — same branch preferred), an optional "keep {name}" where
+ * who may take it (role must be allowed to own the stage. The same rule the
+ * server enforces. Same branch preferred), an optional "keep {name}" where
  * continuity is the norm, an optional reason, and one explicit confirm.
  */
 export function AssignControl({
@@ -32,7 +32,7 @@ export function AssignControl({
 	label,
 	permissions,
 }: {
-	/** The stage being staffed — decides which roles are offered. */
+	/** The stage being staffed. Decides which roles are offered. */
 	stage: string;
 	staff: AssignableStaff[];
 	/** The case's branch; matching staff are listed first. */

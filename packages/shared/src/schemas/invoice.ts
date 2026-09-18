@@ -1,14 +1,14 @@
 import { z } from "zod";
 
 /**
- * Invoice schemas — shared by the API (validation + OpenAPI) and both
+ * Invoice schemas. Shared by the API (validation + OpenAPI) and both
  * frontends (types).
  *
  * Money is **integer cents in USD** everywhere (API_MIGRATION_PLAN.md §3).
  * The `"GH₵45,000 / $3,000"` → `450003000` bug is why: never a formatted
  * string, never a float.
  *
- * "overdue" is a *derived* status — the database stores only issued / partial /
+ * "overdue" is a *derived* status. The database stores only issued / partial /
  * paid / void, and the server computes overdue from `dueAt` and the balance at
  * read time, so a paid-late invoice can never get stuck in a stale status.
  */
@@ -25,7 +25,7 @@ export const invoiceTypeSchema = z.enum([
 /** What the database stores. */
 export const invoiceStoredStatusSchema = z.enum(["proforma", "issued", "partial", "paid", "void"]);
 
-/** What responses carry — stored status plus the derived "overdue". */
+/** What responses carry. Stored status plus the derived "overdue". */
 export const invoiceStatusSchema = z.enum(["proforma", "issued", "partial", "paid", "overdue", "void"]);
 
 /** A single invoice line at creation. Amounts are integer cents. */
@@ -50,7 +50,7 @@ export const invoiceDueAtSchema = z
 export const createInvoiceSchema = z.object({
 	applicantName: z.string().min(1).max(200),
 	applicantEmail: z.string().email().optional(),
-	/** The applicant's login id, when known — lets the portal show it later. */
+	/** The applicant's login id, when known. Lets the portal show it later. */
 	clientUserId: z.string().min(1).optional(),
 	applicationId: z.string().uuid().optional(),
 	type: invoiceTypeSchema.default("custom"),
@@ -98,8 +98,8 @@ export const listInvoicesQuerySchema = z.object({
 /**
  * Paystack checkout for an applicant paying one of their own invoices.
  *
- * The server derives the amount from the invoice balance — the client never
- * picks a price — and returns the Paystack hosted checkout URL to redirect to.
+ * The server derives the amount from the invoice balance. The client never
+ * picks a price. And returns the Paystack hosted checkout URL to redirect to.
  */
 export const paystackCheckoutSchema = z.object({
 	authorizationUrl: z.string().url(),
@@ -129,7 +129,7 @@ export const paystackWebhookSchema = z.object({
 		.optional(),
 });
 
-/* ── Responses ─────────────────────────────────────────────────────────── */
+/* Responses */
 
 export const invoiceLineSchema = z.object({
 	id: z.string().uuid(),
@@ -137,7 +137,7 @@ export const invoiceLineSchema = z.object({
 	detail: z.string().nullable(),
 	amountCents: z.number().int(),
 	schoolApplicationId: z.string().uuid().nullable().optional(),
-	/** When this line falls due — set on post-arrival instalments; null otherwise. */
+	/** When this line falls due. Set on post-arrival instalments; null otherwise. */
 	dueAt: z.string().datetime().nullable().optional(),
 });
 
@@ -174,7 +174,7 @@ export const invoiceSchema = z.object({
 	creditedCents: z.number().int(),
 	balanceCents: z.number().int(),
 	note: z.string().nullable(),
-	/** Who raised it — the chapter owner, the client via the portal, or "System". */
+	/** Who raised it. The chapter owner, the client via the portal, or "System". */
 	raisedByName: z.string().nullable(),
 	raisedAt: z.string().datetime(),
 	/** Who issued (approved) it. Equals the raiser until approval. */

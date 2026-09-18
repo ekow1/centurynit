@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Helpdesk, chat &amp; email marketing — the review</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1120px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--solid{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.mock{background:#fafafa;border:1px solid #bbb;overflow:hidden}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.vs{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start}
+	@media(max-width:900px){.vs{grid-template-columns:1fr}}
+	.vs .h{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.5rem}
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap;text-decoration:none}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.card{background:#fff;border:1px solid var(--ink);padding:1.25rem}
+	.pill{display:inline-block;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;padding:.28rem .6rem;border:1px solid var(--ink)}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line)}
+	.pill--dashed{color:var(--fg-muted);border-style:dashed}
+	code{font-family:var(--mono);font-size:.74rem;background:var(--muted-bg);padding:.1rem .35rem}
+	table.diff{width:100%;border-collapse:collapse;font-size:.78rem;max-width:64rem}
+	table.diff th{font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;text-align:left;padding:.45rem .6rem;border-bottom:1.5px solid var(--ink)}
+	table.diff td{padding:.5rem .6rem;border-bottom:1px solid var(--line-light);vertical-align:top}
+	pre{background:#111;color:#eee;font-family:var(--mono);font-size:.72rem;padding:1rem 1.25rem;overflow-x:auto;line-height:1.6}
+	pre .cm{color:#888}
+	h3.sub{font-size:.95rem;margin:1.75rem 0 .4rem}
+	h3.sub:first-of-type{margin-top:.75rem}
+
+	/* ── helpdesk split mock ── */
+	.hd{display:grid;grid-template-columns:300px 1fr 220px;min-height:380px}
+	.hd .queue{border-right:1px solid var(--line-light);background:#fff}
+	.hd .band{font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);padding:.45rem .8rem;border-bottom:1px solid var(--line-light);background:var(--muted-bg);display:flex;justify-content:space-between}
+	.hd .row{display:block;width:100%;text-align:left;padding:.55rem .8rem;border-bottom:1px solid var(--line-light);background:#fff;cursor:pointer}
+	.hd .row.on{background:var(--muted-bg);box-shadow:inset 3px 0 0 var(--ink)}
+	.hd .row .k{font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted)}
+	.hd .row .t{font-weight:700;font-size:.8rem}
+	.hd .row .m{font-size:.72rem;color:var(--fg-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+	.hd .row .side{float:right;text-align:right;font-family:var(--mono);font-size:.6rem;color:var(--fg-muted)}
+	.hd .unread{display:inline-block;background:var(--ink);color:#fff;font-family:var(--mono);font-size:.58rem;padding:0 .35rem;margin-top:.2rem}
+	.hd .wait{display:inline-block;border:1px solid var(--ink);font-family:var(--mono);font-size:.56rem;padding:.1rem .3rem;margin-top:.2rem}
+	.hd .thread{display:flex;flex-direction:column;background:#fff}
+	.hd .thead{padding:.6rem .9rem;border-bottom:1px solid var(--line-light);display:flex;align-items:center;gap:.6rem}
+	.hd .msgs{flex:1;padding:.9rem;display:flex;flex-direction:column;gap:.5rem}
+	.bubble{max-width:70%;border:1px solid var(--line);padding:.5rem .7rem;font-size:.76rem;line-height:1.45}
+	.bubble.me{align-self:flex-end;background:var(--ink);color:#fff;border-color:var(--ink)}
+	.bubble .who{font-family:var(--mono);font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;opacity:.65;margin-bottom:.15rem}
+	.note-bubble{align-self:stretch;border:1px dashed var(--line);background:var(--muted-bg);font-size:.7rem;padding:.45rem .7rem;color:var(--micro)}
+	.note-bubble .who{font-family:var(--mono);font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted)}
+	.divider{display:flex;align-items:center;gap:.6rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted);margin:.3rem 0}
+	.divider::before,.divider::after{content:"";flex:1;border-top:1px solid var(--line-light)}
+	.hd .composer{border-top:1px solid var(--line-light);padding:.6rem .9rem;display:flex;gap:.5rem;align-items:center}
+	.hd .ctx{border-left:1px solid var(--line-light);background:#fff;padding:.8rem;font-size:.72rem}
+	.hd .ctx .blk{border-bottom:1px solid var(--line-light);padding:.55rem 0}
+	.hd .ctx .blk:last-child{border-bottom:0}
+	.hd .ctx dt{font-family:var(--mono);font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted)}
+	.hd .ctx dd{margin:.1rem 0 .3rem;font-size:.74rem}
+	.tabseg{display:flex;border:1px solid var(--ink);font-family:var(--mono);font-size:.58rem}
+	.tabseg span{padding:.25rem .55rem;letter-spacing:.08em;text-transform:uppercase}
+	.tabseg span.on{background:var(--ink);color:#fff}
+	.input{border:1px solid var(--ink);background:#fff;font-size:.76rem;padding:.45rem .65rem;font-family:var(--sans);flex:1;min-width:0}
+
+	/* ── portal chat widget mock ── */
+	.widget-wrap{display:flex;gap:2.5rem;align-items:flex-end;flex-wrap:wrap}
+	.launcher{width:56px;height:56px;border-radius:50%;background:#18181b;color:#fff;display:flex;align-items:center;justify-content:center;position:relative}
+	.launcher .bdg{position:absolute;top:-6px;right:-6px;background:#dc2626;color:#fff;font-size:10px;font-weight:800;font-family:var(--mono);padding:1px 5px;border:1px solid #000}
+	.launcher--sq{width:52px;height:52px;border-radius:0;background:var(--ink);color:#fff;border:1.5px solid var(--ink);display:flex;align-items:center;justify-content:center;position:relative;box-shadow:4px 4px 0 rgba(0,0,0,.18)}
+	.launcher--sq .bdg{position:absolute;top:-7px;right:-7px;background:#fff;color:var(--ink);font-size:10px;font-weight:800;font-family:var(--mono);padding:1px 5px;border:1.5px solid var(--ink)}
+	.win{width:300px;border-radius:16px;border:1px solid #e4e4e7;background:#fff;overflow:hidden;box-shadow:0 10px 40px -10px rgba(0,0,0,.15)}
+	.win--sq{width:300px;border:1.5px solid var(--ink);background:#fff;box-shadow:6px 6px 0 rgba(0,0,0,.15)}
+	.win .whead{padding:.55rem .8rem;border-bottom:1px solid var(--line-light);display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:.62rem;letter-spacing:.12em}
+	.win .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981;margin-right:.4rem}
+	.win .dot--sq{width:7px;height:7px;border-radius:0;background:var(--ink);margin-right:.4rem}
+	.win .tabs{display:flex;border-bottom:1px solid var(--line-light)}
+	.win .tabs span{flex:1;text-align:center;padding:.45rem 0;font-family:var(--mono);font-size:.56rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted)}
+	.win .tabs span.on{color:var(--ink);box-shadow:inset 0 -2px 0 var(--ink);font-weight:700}
+	.win .wbody{padding:.8rem;display:flex;flex-direction:column;gap:.45rem;min-height:150px}
+
+	/* ── campaigns mocks ── */
+	.stat-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:.6rem}
+	@media(max-width:800px){.stat-grid{grid-template-columns:repeat(3,1fr)}}
+	.stat-grid .s{border:1px solid var(--ink);background:#fff;padding:.6rem .8rem}
+	.stat-grid .s .n{font-size:1.3rem;font-weight:800}
+	.stat-grid .s.leak .n.g{color:#10b981}.stat-grid .s.leak .n.r{color:#ef4444}
+	table.camp{width:100%;border-collapse:collapse;font-size:.76rem;background:#fff}
+	table.camp th{font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;text-align:left;padding:.5rem .7rem;border-bottom:1.5px solid var(--ink)}
+	table.camp td{padding:.55rem .7rem;border-bottom:1px solid var(--line-light);vertical-align:top}
+	table.camp tr.sub td{background:var(--muted-bg);font-size:.7rem;padding:.4rem .7rem .4rem 2rem}
+	.larrow{color:var(--fg-muted)}
+	.compose{border:1px solid var(--ink);border-left:4px solid var(--ink);background:#fff;padding:1rem 1.1rem}
+	.compose .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;margin-bottom:.7rem}
+	@media(max-width:800px){.compose .grid{grid-template-columns:1fr}}
+	.compose label{display:block;font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.25rem}
+	.compose .f{width:100%;border:1px solid var(--ink);padding:.45rem .6rem;font-size:.76rem;background:#fff;font-family:var(--sans)}
+	.compose textarea.f{min-height:90px;resize:vertical}
+	.compose .foot{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;margin-top:.7rem}
+	.sched{display:flex;align-items:center;gap:.5rem;font-size:.72rem}
+	.sched input{border:1px solid var(--ink);padding:.4rem .55rem;font-family:var(--mono);font-size:.72rem}
+	.leakbox{border:1.5px dashed var(--line);padding:.8rem 1rem;font-size:.76rem;background:#fff}
+	.sw{display:inline-block;width:.9rem;height:.9rem;vertical-align:-2px;margin-right:.3rem;border:1px solid var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1 class="page">Helpdesk, chat &amp; email marketing — reviewed</h1>
+<p class="note">
+	Three areas, one pass. The verdict up front: <b>the chat substrate is genuinely good</b> — one thread model, shared
+	<code>century-nit-chat-ui</code> components, SSE typing, quotes, reactions. The gaps are at the edges:
+	a helpdesk where <b>nothing can ever be closed</b>, a marketing page offering <b>an SMS channel the backend
+	cannot send</b>, and scheduling + per-recipient delivery routes that exist in the API but are never called
+	from the UI. Sections A–D show each fix as a mock.
+</p>
+<div class="jump mono">
+	<a href="#a">A · Ops helpdesk — resolve, own, see the client</a>
+	<a href="#b">B · Client chat widget — leaks &amp; shape</a>
+	<a href="#c">C · Staff chat — mostly done</a>
+	<a href="#d">D · Email marketing — dead SMS, hidden scheduling, invisible ledger</a>
+</div>
+
+<!-- ══════════════════════ A · HELPDESK ══════════════════════ -->
+<div class="tag tag--solid" id="a">A · Ops helpdesk — the triage surface can't finish a job</div>
+
+<h3 class="sub">What I found in the code</h3>
+<table class="diff">
+	<tr><th style="width:38%">Finding</th><th>Where / evidence</th></tr>
+	<tr>
+		<td><b>"Closed" is a band that can never have rows.</b> The queue renders <code>closed</code>/<code>archived</code>
+		conversations — but no endpoint sets that status, and no button calls it. Resolved threads stay "awaiting" forever
+		and the waiting-time stats inflate.</td>
+		<td><code>chat.ts</code> routes: no status endpoint. <code>EnterpriseHelpdesk</code>: renders <code>isClosed()</code> rows, offers no close action.</td>
+	</tr>
+	<tr>
+		<td><b>"Mine" filters on a thing nobody can set.</b> The chip checks whether I'm in <code>participants</code> — but
+		participants are whoever's posted, not an owner. There's no claim/assign affordance, so two staff can answer the
+		same thread blind.</td>
+		<td><code>isMine()</code> → <code>participants.some(p.opsUserId === me)</code>. <code>POST /conversations/:id/participants</code> exists but helpdesk never calls it.</td>
+	</tr>
+	<tr>
+		<td><b>No client context.</b> The thread header gives a name and a kicker. To know which applicant this is —
+		stage, branch, open balance, next booking — staff leave the page and hunt.</td>
+		<td>Thread head: <code>kickerOf</code> + <code>clientName</code> only. <code>entityLink</code> gives an "Open case →" escape, not context.</td>
+	</tr>
+	<tr>
+		<td><b>No internal notes.</b> Every keystroke goes to the client. Staff can't annotate a thread
+		("spoke on phone, sending revised invoice") without the applicant seeing it.</td>
+		<td>Composer has one mode: send. Messages have no <code>internal</code> flag.</td>
+	</tr>
+	<tr>
+		<td><b>No canned replies.</b> "Your invoice is at /portal/financial" gets typed a hundred times a week.</td>
+		<td>—</td>
+	</tr>
+</table>
+
+<h3 class="sub">Proposed — same split, four additions</h3>
+<div class="mock">
+	<div class="hd">
+		<div class="queue">
+			<div class="band"><span>Awaiting your reply · 2</span><span>longest first</span></div>
+			<div class="row on">
+				<span class="side">14:02<br><span class="unread">3</span><br><span class="wait">waiting 2h</span></span>
+				<div class="k">Case · APP-2026-0142</div>
+				<div class="t">Ama Serwaa</div>
+				<div class="m">Ama: the receipt still isn't showing…</div>
+			</div>
+			<div class="row">
+				<span class="side">11:47<br><span class="wait">waiting 4h</span></span>
+				<div class="k">Support</div>
+				<div class="t">Kwame Osei</div>
+				<div class="m">Kwame: how do I upload the police report?</div>
+			</div>
+			<div class="band"><span>In conversation · 1</span><span>you replied last</span></div>
+			<div class="row">
+				<span class="side">09:15<br><span class="pill pill--hollow" style="font-size:.52rem">K. Mensah</span></span>
+				<div class="k">Stage · Visa</div>
+				<div class="t">Efua Boateng</div>
+				<div class="m">You: interview is confirmed for Friday</div>
+			</div>
+			<div class="band"><span>Resolved · 5</span><span>show ▸</span></div>
+		</div>
+		<div class="thread">
+			<div class="thead">
+				<div style="flex:1;min-width:0">
+					<div class="eyebrow">Case · APP-2026-0142</div>
+					<div style="font-weight:700;font-size:.82rem">Ama Serwaa</div>
+					<div class="muted" style="font-size:.62rem;font-family:var(--mono)">claimed by you · 3 unread</div>
+				</div>
+				<span class="btn btn--ghost btn--sm">Open case →</span>
+				<span class="btn btn--ghost btn--sm">Reassign</span>
+				<span class="btn btn--sm">Resolve ✓</span>
+			</div>
+			<div class="msgs">
+				<div class="divider">Resolved by K. Mensah · Mon 09:40 — reopened by client</div>
+				<div class="bubble"><div class="who">Ama · 13:58</div>Hi, I paid the application fee on Friday but the receipt still isn't showing in my portal.</div>
+				<div class="bubble me"><div class="who">You · 14:02</div>Checking the ledger now — one moment.</div>
+				<div class="note-bubble"><div class="who">Internal note · you · 14:05</div>Paystack shows settled; webhook landed late. Receipt regenerated manually — confirming with client.</div>
+				<div class="bubble me"><div class="who">You · 14:09</div>Found it — the confirmation arrived late on our side. Your receipt is in the vault now under "Payments".</div>
+			</div>
+			<div class="composer">
+				<div class="tabseg"><span class="on">Reply</span><span>Note</span></div>
+				<input class="input" value="" placeholder="Reply to Ama…">
+				<span class="pill pill--hollow" title="Canned replies">⌗ snippets</span>
+				<span class="btn btn--sm">Send</span>
+			</div>
+		</div>
+		<div class="ctx">
+			<div class="blk">
+				<dt>Client</dt>
+				<dd><b>Ama Serwaa</b></dd>
+				<dd class="muted">Accra HQ · applicant since Mar</dd>
+			</div>
+			<div class="blk">
+				<dt>Journey</dt>
+				<dd>III · Applications</dd>
+				<dd class="muted">offer pending — KNUST</dd>
+			</div>
+			<div class="blk">
+				<dt>Money</dt>
+				<dd>App fee — <b>paid</b></dd>
+				<dd>Visa fee — not invoiced</dd>
+			</div>
+			<div class="blk">
+				<dt>Next</dt>
+				<dd>Visa consult · Fri 11:00</dd>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="callout">
+	<b>Four additions, all small:</b>
+	<ul>
+		<li><b>Resolve / Reopen</b> — a <code>PATCH /conversations/:id/status</code> endpoint (schema already carries the
+		status) + a header button. Resolving folds the thread into the Resolved band and drops it out of
+		"awaiting" stats; a new client message re-opens it automatically (the divider marks it in-thread).</li>
+		<li><b>Claim / Reassign</b> — first staff reply auto-claims (adds a real <code>assigneeOpsUserId</code>, distinct from
+		participants). Rows show the owner; "Mine" finally means something. Reassign reuses the participants endpoint.</li>
+		<li><b>Context rail</b> — right column resolves the linked applicant once: stage, branch, balance, next appointment.
+		One extra lookup on open; kills the tab-hopping that triage currently needs.</li>
+		<li><b>Reply ⇄ Note toggle</b> — a <code>visibility: "internal"</code> flag on the message; renders as a dashed
+		mono strip (above), never leaves the staff surface. Snippet chips insert saved replies.</li>
+	</ul>
+</div>
+
+<!-- ══════════════════════ B · CLIENT CHAT WIDGET ══════════════════════ -->
+<div class="tag tag--solid" id="b" style="margin-top:3rem">B · Client chat widget — two leaks, one structural gap</div>
+
+<div class="vs" style="margin-top:.75rem">
+	<div>
+		<div class="h">Today — soft SaaS chrome, hard-coded colour</div>
+		<div class="widget-wrap">
+			<div class="launcher">
+				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+				<span class="bdg">2</span>
+			</div>
+			<div class="win">
+				<div class="whead"><span><span class="dot"></span>CHAT</span><span>✕</span></div>
+				<div class="tabs"><span class="on">Support</span><span>Officer</span><span>AI</span></div>
+				<div class="wbody">
+					<div class="bubble" style="align-self:flex-start"><div class="who">Century Support · 09:12</div>Welcome! How can we help?</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div>
+		<div class="h">Proposed — the portal's own language</div>
+		<div class="widget-wrap">
+			<div class="launcher--sq">
+				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+				<span class="bdg">2</span>
+			</div>
+			<div class="win--sq">
+				<div class="whead"><span><span class="dot--sq"></span>MESSAGES</span><span>✕</span></div>
+				<div class="tabs"><span class="on">Support</span><span>Officer</span><span>Assistant</span></div>
+				<div class="wbody">
+					<div class="divider">Resolved · Mon 09:40 — your receipt question</div>
+					<div class="bubble" style="align-self:flex-start"><div class="who">K. Mensah · Support</div>Welcome back — anything else on the receipt?</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>Colour leaks</b> — the green presence dot (<code>#10b981</code>) and red unread badge (<code>#dc2626</code>)
+		are the only saturated pixels in the entire portal. Badge → hollow-square ink on white; presence dot → ink
+		square (or drop it — the portal has no presence concept anyway).</li>
+		<li><b>Shape</b> — 56px circle + 16px-radius window vs. the square command-center system everywhere else.
+		Square launcher with the hard drop shadow, square window, mono header — matches the modal/pill language.</li>
+		<li><b>Resolution is visible to the client</b> — when ops resolves a thread (§A), the client sees the divider
+		("Resolved · who · when") and the next message starts a fresh segment. One permanent thread stays the model —
+		but it stops reading as an endless unbounded stream.</li>
+		<li><b>Read state</b> — staff already get <code>markRead</code>; echo it client-side as a mono "Seen 14:02" under
+		the last own bubble. One field, ends "did anyone see this?" follow-ups.</li>
+		<li><b>Attachments</b> — applicants constantly need to send a screenshot/receipt. The composer has no attach
+		path; a paperclip that drops the file into the thread (same storage as the vault) closes the loop.</li>
+	</ul>
+</div>
+
+<!-- ══════════════════════ C · STAFF CHAT ══════════════════════ -->
+<div class="tag" id="c" style="margin-top:3rem">C · Staff chat hub — already strong; two small adds</div>
+<div class="callout" style="margin-top:.75rem">
+	The internal hub (presence, DM, groups, forward, reactions, typing) is the most complete of the three surfaces.
+	Two gaps worth the small cost:
+	<ul>
+		<li><b>No full-page view.</b> The floating window is fine for a quick reply but unusable for a long case
+		discussion — it covers the record you're discussing. A <code>/chat</code> route rendering the same hub
+		full-width (like Helpdesk's split) costs almost nothing — the components are already shared.</li>
+		<li><b>No message search.</b> The directory search finds <i>people</i>; nothing finds <i>what was said</i>.
+		The API already paginates messages — a search box over a <code>?q=</code> query is additive.</li>
+	</ul>
+</div>
+
+<!-- ══════════════════════ D · EMAIL MARKETING ══════════════════════ -->
+<div class="tag tag--solid" id="d" style="margin-top:3rem">D · Email marketing — the page promises more than the API keeps</div>
+
+<h3 class="sub">What I found in the code</h3>
+<table class="diff">
+	<tr><th style="width:38%">Finding</th><th>Where / evidence</th></tr>
+	<tr>
+		<td><b>SMS is a dead channel — worse, it's a lie.</b> The channel picker and three SMS templates exist, but
+		<code>runCampaignSend</code> calls Resend's <code>sendEmail</code> unconditionally. An "SMS campaign" would
+		<i>email</i> the contact list — or fail confusingly. Nothing SMS-shaped exists anywhere in the worker.</td>
+		<td><code>marketing.ts:240</code> — <code>sendEmail({…})</code> for every recipient; no provider branch on <code>channel</code>.</td>
+	</tr>
+	<tr>
+		<td><b>Scheduling is built and unreachable.</b> <code>POST /campaigns/:id/send</code> accepts
+		<code>scheduleFor</code>, BullMQ takes a delayed job, <code>cancelQueuedCampaignSend</code> exists —
+		and the UI has exactly one button: "Send". No datetime picker, no Scheduled status, no cancel.</td>
+		<td><code>routes/marketing.ts</code> send route + worker queues vs. <code>EnterpriseCampaigns</code> compose form.</td>
+	</tr>
+	<tr>
+		<td><b>No draft state in practice.</b> Create → send is one atomic click. The API's
+		<code>PATCH /campaigns/:id</code> ("edit a draft/scheduled campaign") is never called — you can't
+		prepare a send and review it later.</td>
+		<td><code>handleSend</code> does <code>POST /campaigns</code> then immediately <code>POST …/send</code>.</td>
+	</tr>
+	<tr>
+		<td><b>The delivery ledger is invisible.</b> <code>GET /campaigns/:id/recipients</code> returns
+		per-contact sent/delivered/failed — the page never calls it. "Failed: 3" is a dead number; you can't see
+		<i>who</i> failed or retry them.</td>
+		<td>Route exists; zero references in the page.</td>
+	</tr>
+	<tr>
+		<td><b>No test send.</b> First time you see the email is when 400 contacts do. No "send to me" — and the
+		body editor is raw HTML in a textarea, no rendered preview.</td>
+		<td>Compose form — no preview toggle, no test action.</td>
+	</tr>
+	<tr>
+		<td><b>Colour leaks</b> — green <code>#10b981</code> delivered/SMS counts, red <code>#ef4444</code> failed,
+		<code>--primary</code> blue accents. The rest of the console is strict mono.</td>
+		<td>Stats cards + status cell + compose card border.</td>
+	</tr>
+</table>
+
+<h3 class="sub">Proposed — honest channels, real lifecycle</h3>
+<div class="vs">
+	<div>
+		<div class="h">Stats today — colour doing the talking</div>
+		<div class="mock" style="padding:.8rem">
+			<div class="stat-grid">
+				<div class="s"><div class="eyebrow">Campaigns</div><div class="n">14</div></div>
+				<div class="s"><div class="eyebrow">Email</div><div class="n" style="color:#4f46e5">9</div></div>
+				<div class="s leak"><div class="eyebrow">SMS</div><div class="n g">5</div></div>
+				<div class="s"><div class="eyebrow">Recipients</div><div class="n">3,240</div></div>
+				<div class="s leak"><div class="eyebrow">Delivered</div><div class="n g">3,108</div></div>
+				<div class="s leak"><div class="eyebrow">Failed</div><div class="n r">132</div></div>
+			</div>
+		</div>
+		<div class="h" style="margin-top:1rem">Campaign row today</div>
+		<div class="mock">
+			<table class="camp">
+				<tr><th>Campaign</th><th>Channel</th><th>Status</th><th>Delivered</th><th>Failed</th><th>Sent</th></tr>
+				<tr><td><b>Fall Intake Newsletter</b><br><span class="muted">All applicants</span></td><td>Email</td>
+				<td><span style="color:#10b981">SENT</span></td><td>412</td><td style="color:#ef4444">8</td><td class="mono">Sep 2</td></tr>
+				<tr><td><b>Deadline Warning</b><br><span class="muted">Leads — hot</span></td><td>SMS</td>
+				<td><span style="color:#10b981">SENT</span></td><td>96</td><td style="color:#ef4444">—</td><td class="mono">Sep 5</td></tr>
+			</table>
+		</div>
+		<div class="leakbox" style="margin-top:.6rem">
+			<b>That "SMS · SENT · 96 delivered" row is fiction</b> — those 96 contacts were emailed, or the job
+			failed silently. There is no SMS provider key, no SMS send path, nothing.
+		</div>
+	</div>
+	<div>
+		<div class="h">Proposed — statuses are real, mono throughout</div>
+		<div class="mock" style="padding:.8rem">
+			<div class="stat-grid">
+				<div class="s"><div class="eyebrow">Campaigns</div><div class="n">14</div></div>
+				<div class="s"><div class="eyebrow">Drafts</div><div class="n">2</div></div>
+				<div class="s"><div class="eyebrow">Scheduled</div><div class="n">1</div></div>
+				<div class="s"><div class="eyebrow">Sent</div><div class="n">11</div></div>
+				<div class="s"><div class="eyebrow">Delivered</div><div class="n">96.1%</div></div>
+				<div class="s"><div class="eyebrow">Failed</div><div class="n">3.9%</div></div>
+			</div>
+		</div>
+		<div class="h" style="margin-top:1rem">Campaign row — lifecycle + drill-down</div>
+		<div class="mock">
+			<table class="camp">
+				<tr><th>Campaign</th><th>Status</th><th>Delivered</th><th>Opened</th><th></th><th></th></tr>
+				<tr>
+					<td><b>Fall Intake Newsletter</b><br><span class="muted">All applicants · Email</span></td>
+					<td><span class="pill pill--solid">Sent</span><br><span class="mono muted" style="font-size:.58rem">Sep 2 · K.Mensah</span></td>
+					<td>412 / 420<br><span class="mono muted" style="font-size:.58rem">8 failed</span></td>
+					<td class="mono">61%</td>
+					<td><span class="larrow">▾ ledger</span></td>
+					<td class="mono" style="font-size:.6rem">DUPLICATE · REPORT</td>
+				</tr>
+				<tr class="sub"><td colspan="6">
+					<span class="mono" style="font-size:.6rem">RECIPIENTS ▸</span>&nbsp;
+					kwame.o@… <span class="pill">delivered</span>&nbsp;
+					ama.s@… <span class="pill">delivered · opened</span>&nbsp;
+					yaw.a@… <span class="pill pill--dashed">failed — bounce</span>&nbsp;
+					<a href="#" class="mono" style="font-size:.6rem">retry 8 failed →</a>
+				</td></tr>
+				<tr>
+					<td><b>October Intake Reminder</b><br><span class="muted">Applicants — unpaid · Email</span></td>
+					<td><span class="pill">Scheduled</span><br><span class="mono muted" style="font-size:.58rem">Oct 1 · 09:00</span></td>
+					<td class="muted">—</td><td class="muted">—</td>
+					<td></td>
+					<td class="mono" style="font-size:.6rem">EDIT · CANCEL</td>
+				</tr>
+				<tr>
+					<td><b>Spring webinar invite</b><br><span class="muted">Leads · Email</span></td>
+					<td><span class="pill pill--hollow">Draft</span></td>
+					<td class="muted">—</td><td class="muted">—</td>
+					<td></td>
+					<td class="mono" style="font-size:.6rem">EDIT · SEND TEST</td>
+				</tr>
+			</table>
+		</div>
+	</div>
+</div>
+
+<h3 class="sub">Compose — the send button becomes a lifecycle</h3>
+<div class="mock">
+	<div class="compose">
+		<div class="grid">
+			<div><label>Campaign</label><input class="f" value="October Intake Reminder"></div>
+			<div><label>Audience</label><input class="f" value="Applicants — unpaid (118 confirmed)"></div>
+			<div><label>Template</label><input class="f" value="Intake Deadlines &amp; Scholarships"></div>
+		</div>
+		<div><label>Subject</label><input class="f" value="October intake closes in 12 days — your offer is waiting"></div>
+		<div style="margin-top:.7rem"><label>Body <span class="muted" style="text-transform:none">· {{name}} personalises per recipient</span></label><textarea class="f">Dear {{name}}, …</textarea></div>
+		<div class="foot">
+			<div class="sched">
+				<span class="eyebrow" style="color:var(--ink)">Send</span>
+				<span class="tabseg"><span class="on">Now</span><span>At —</span></span>
+				<input type="datetime-local" value="2026-10-01T09:00">
+			</div>
+			<div style="display:flex;gap:.5rem">
+				<span class="btn btn--ghost btn--sm">Save draft</span>
+				<span class="btn btn--ghost btn--sm">Send test to me</span>
+				<span class="btn btn--sm">Schedule →</span>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>SMS — be honest about it.</b> Two options: (a) hide the channel until a provider exists (one line —
+		remove it from the picker and the SMS presets), or (b) actually wire one — Arkesel or mNotify are the
+		Ghana-standard REST APIs, ~30 lines in <code>runCampaignSend</code> behind <code>if channel === "SMS"</code>
+		plus a settings key beside the others. Pick (a) now, (b) when there's budget/need.</li>
+		<li><b>Scheduling is free</b> — <code>scheduleFor</code> + delayed BullMQ job + cancel all exist. The UI work
+		is the Now/At toggle, a Scheduled pill, and an Edit/Cancel action on scheduled rows.</li>
+		<li><b>Draft → test → send</b> — "Save draft" creates without enqueueing (the API already supports it);
+		"Send test to me" needs one small route that runs the personalise+layout path for a single address.
+		Rendered preview toggle reuses <code>emailLayout</code> verbatim — it already exists server-side.</li>
+		<li><b>Ledger drill-down</b> — expandable row calls the existing <code>/recipients</code> route; "retry failed"
+		re-enqueues only failed rows (the snapshot already tracks per-row status).</li>
+		<li><b>Opens</b> — Resend can report opens via webhook; a <code>/webhooks/resend</code> consumer flipping
+		recipient <code>openedAt</code> feeds the Opened column. Optional — say the word and it's in.</li>
+		<li><b>Mono pass</b> — delivered/failed become ratios in ink; failed rows get a dashed pill, not red.</li>
+	</ul>
+</div>
+
+<div class="tag" style="margin-top:3rem">Order I'd suggest</div>
+<div class="callout">
+	<b>1.</b> SMS honesty (one-line hide, or provider) &nbsp;→&nbsp; <b>2.</b> Helpdesk resolve + claim (the queue
+	is un-actionable without it) &nbsp;→&nbsp; <b>3.</b> Campaign lifecycle UI (draft/schedule/ledger — all API
+	exists) &nbsp;→&nbsp; <b>4.</b> Context rail + notes &nbsp;→&nbsp; <b>5.</b> Client widget restyle &nbsp;→&nbsp;
+	<b>6.</b> Full-page staff chat + search.
+</div>
+
+</div>
+</body>
+</html>

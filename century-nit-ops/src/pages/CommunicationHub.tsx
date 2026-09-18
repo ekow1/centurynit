@@ -413,11 +413,17 @@ export function CommunicationHub() {
 							<button
 								type="button"
 								onClick={() => {
-									setOpen(false);
-									navigate(activeConvId ? `/chat?conversation=${activeConvId}` : "/chat");
+									// Client threads get the full Helpdesk page; staff DMs
+									// just expand the hub — the /chat page is retired.
+									if (mode === "external" && activeConvId) {
+										setOpen(false);
+										navigate(`/helpdesk?id=${activeConvId}`);
+									} else {
+										setExpanded(true);
+									}
 								}}
 								style={controlBtnStyle}
-								title="Open full chat page"
+								title={mode === "external" ? "Open in Helpdesk" : "Expand"}
 							>
 								↗
 							</button>

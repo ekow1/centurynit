@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ops — Cases list, redesigned</title>
+<style>
+:root{--bg:#fff;--fg:#0a0a0a;--muted:#f5f5f5;--muted-fg:#52525b;--b:#0a0a0a;--bl:#d4d4d8;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--serif:Georgia,serif;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
+*{box-sizing:border-box;margin:0}
+body{font-family:var(--sans);background:#e8e8e8;color:var(--fg);font-size:.875rem}
+.page{max-width:1240px;margin:0 auto;padding:2rem 1.5rem 4rem}
+.eyebrow{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg)}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
+.lead{color:var(--muted-fg);font-size:.85rem}
+.note{font-size:.72rem;color:var(--muted-fg);border-left:3px solid var(--fg);padding:.6rem .9rem;margin:1.5rem 0;line-height:1.6;background:#fff}
+.frame{background:var(--bg);border:1px solid var(--bl);margin-top:1.25rem;padding:1.25rem}
+.hdr{display:flex;justify-content:space-between;align-items:flex-end;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem}
+.btn{border:1px solid var(--b);background:var(--bg);padding:.4rem .85rem;font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;cursor:pointer}
+.btn--primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn--sm{padding:.28rem .6rem;font-size:.62rem}
+.band{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1.5px solid var(--b);margin-bottom:1rem}
+.band>div{padding:.7rem 1rem;border-right:1px solid var(--bl)}
+.band>div:last-child{border-right:0}
+.band .n{font-family:var(--mono);font-weight:800;font-size:1.1rem}
+.band .k{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg)}
+.band>div.inv{background:var(--fg);color:var(--bg)}.band>div.inv .k{color:#bbb}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem}
+.pill{border:1px solid var(--b);padding:.28rem .7rem;font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.05em;background:var(--bg);cursor:pointer}
+.pill.on{background:var(--fg);color:var(--bg)}
+.pill .c{opacity:.6;margin-left:.35rem}
+.pill.dim{color:var(--muted-fg);border-color:var(--bl)}
+.search{width:100%;border:1px solid var(--bl);padding:.5rem .75rem;font:inherit;font-size:.8rem;margin-bottom:.6rem}
+.split{display:flex;gap:1rem;align-items:flex-start}
+.list{flex:0 0 38%;min-width:20rem;border:1px solid var(--bl);background:var(--bg)}
+.detail{flex:1;min-width:0;border:1px solid var(--bl);background:var(--bg);padding:1.25rem}
+.row{border-bottom:1px solid var(--bl);padding:.7rem 1rem;cursor:pointer;display:flex;justify-content:space-between;gap:.75rem}
+.row:hover{background:var(--muted)}
+.row.on{border-left:4px solid var(--fg);background:var(--muted)}
+.row .ref{font-family:var(--mono);font-size:.62rem;color:var(--muted-fg)}
+.row .name{font-weight:650;font-size:.85rem}
+.row .sub{font-size:.72rem;color:var(--muted-fg);margin-top:.15rem}
+.row .meta{font-size:.68rem;margin-top:.3rem;display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+.spill{display:inline-block;border:1px solid var(--b);padding:.1rem .45rem;font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.06em}
+.spill--solid{background:var(--fg);color:var(--bg)}
+.spill--hollow{color:var(--muted-fg);border-color:var(--bl)}
+.spill--act{text-decoration:underline;text-decoration-thickness:2px;font-weight:700}
+.jlink{font-family:var(--mono);font-size:.62rem;text-decoration:underline;text-underline-offset:2px;color:var(--fg);background:none;border:0;cursor:pointer}
+.todo{font-weight:700}
+.empty{border:1px dashed var(--bl);padding:2.5rem;text-align:center;color:var(--muted-fg);font-size:.8rem}
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="eyebrow">Ops · cases</p>
+  <h1>Cases — the list earns its frame</h1>
+  <p class="lead">Same scaffold (list left, detail right), same rows — but the scope banner becomes a count band, chapter filters stop being two different controls in list vs board, and "to do" stops hiding at the end of a meta line.</p>
+
+  <div class="frame">
+    <div class="hdr">
+      <div>
+        <h1 style="font-size:1.3rem">Cases</h1>
+        <p class="lead">Every client's journey — one list, by chapter.</p>
+      </div>
+      <div style="display:flex;gap:.5rem">
+        <span class="pill on">List</span><span class="pill">Board</span>
+        <button class="btn btn--primary btn--sm">+ Add school application</button>
+      </div>
+    </div>
+
+    <!-- the scope banner becomes the count band -->
+    <div class="band">
+      <div><p class="n">14</p><p class="k">In view · of 38 in scope</p></div>
+      <div><p class="n">III</p><p class="k">Chapter · Applications</p></div>
+      <div><p class="n">9</p><p class="k">With work waiting</p></div>
+      <div class="inv"><p class="n">3</p><p class="k">Need an owner</p></div>
+      <div><p class="n">⌄</p><p class="k">My cases · off</p></div>
+    </div>
+
+    <!-- chapter pills now match the board's — counted, monochrome -->
+    <div class="pills">
+      <span class="pill">All <span class="c">38</span></span>
+      <span class="pill">II Enrolment <span class="c">6</span></span>
+      <span class="pill on">III Applications <span class="c">14</span></span>
+      <span class="pill">IV Visa <span class="c">11</span></span>
+      <span class="pill">V Departure <span class="c">5</span></span>
+      <span class="pill dim">VI Complete <span class="c">2</span></span>
+      <span style="margin-left:auto"></span>
+      <span class="pill">Status · any</span>
+    </div>
+
+    <div class="split">
+      <div class="list">
+        <input class="search" placeholder="Search case ID, client, university…" style="border:none;border-bottom:1px solid var(--bl);margin:0">
+        <div class="row on">
+          <div>
+            <span class="ref">APP-2026-0041</span> <span class="spill spill--solid">Under review</span>
+            <p class="name">Kwame Mensah</p>
+            <p class="sub">Leeds Beckett · BA (Hons) Business Mgmt</p>
+            <p class="meta"><span>A. Osei</span> · <span>3 schools submitted</span> · <span class="todo">2 to do</span></p>
+          </div>
+          <span>→</span>
+        </div>
+        <div class="row">
+          <div>
+            <span class="ref">APP-2026-0038</span> <span class="spill">Under review</span>
+            <p class="name">Ama Serwaa</p>
+            <p class="sub">Portsmouth · MSc International Business</p>
+            <p class="meta"><span>A. Osei</span> · <span>Invoice INV-2026-0184 issued</span></p>
+          </div>
+          <span>→</span>
+        </div>
+        <div class="row">
+          <div>
+            <span class="ref">APP-2026-0035</span> <span class="spill spill--act">Action required</span>
+            <p class="name">Yaw Boateng</p>
+            <p class="sub">Coventry · MSc Global Business</p>
+            <p class="meta"><span class="spill spill--act">Needs owner</span> · <span class="jlink">Assign →</span></p>
+          </div>
+          <span>→</span>
+        </div>
+        <div class="row">
+          <div>
+            <span class="ref">APP-2026-0029</span> <span class="spill">Under review</span>
+            <p class="name">Efua Asante</p>
+            <p class="sub">Greenwich · BA Accounting</p>
+            <p class="meta"><span>D. Larkai</span> · <span>Offer in — awaiting decision</span></p>
+          </div>
+          <span>→</span>
+        </div>
+        <div class="row">
+          <div>
+            <span class="ref">APP-2026-0022</span> <span class="spill spill--hollow">Accepted</span>
+            <p class="name">Kofi Owusu</p>
+            <p class="sub">Hertfordshire · MSc Data Science</p>
+            <p class="meta"><span>A. Osei</span> · <span>All 3 decisions in</span></p>
+          </div>
+          <span>→</span>
+        </div>
+      </div>
+
+      <div class="detail">
+        <div class="empty">← The case detail — see <strong>ops-case-detail.html</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note">
+    <strong>WHAT CHANGES.</strong> (1) The inline-styled scope banner — inverted for managers, grey for officers — becomes one <strong>count band</strong>: in-view count, current chapter, work-waiting count, the inverted needs-an-owner cell, and the "My cases" toggle as a band cell instead of a floating button. (2) The chapter filter is a <code>&lt;select&gt;</code> in list view but counted pills in board view — it becomes the <strong>board's counted pills everywhere</strong>, so the same control does the same thing in both views and the old /visa /travel redirects still land right. (3) Rows tighten: status pill joins the ref line, "n to do" is bold (it's why you're here), "Needs owner" becomes the underlined action pill + Assign link. (4) Board view unchanged — same filters now, same columns.
+  </p>
+</div>
+</body>
+</html>

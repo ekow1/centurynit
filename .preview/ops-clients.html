@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ops — Client directory, redesigned</title>
+<style>
+:root{--bg:#fff;--fg:#0a0a0a;--muted:#f5f5f5;--muted-fg:#52525b;--b:#0a0a0a;--bl:#d4d4d8;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--serif:Georgia,serif;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
+*{box-sizing:border-box;margin:0}
+body{font-family:var(--sans);background:#e8e8e8;color:var(--fg);font-size:.875rem}
+.page{max-width:1240px;margin:0 auto;padding:2rem 1.5rem 4rem}
+.eyebrow{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg)}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
+.lead{color:var(--muted-fg);font-size:.85rem}
+.note{font-size:.72rem;color:var(--muted-fg);border-left:3px solid var(--fg);padding:.6rem .9rem;margin:1.5rem 0;line-height:1.6;background:#fff}
+.frame{background:var(--bg);border:1px solid var(--bl);margin-top:1.25rem;padding:1.25rem}
+.hdr{display:flex;justify-content:space-between;align-items:flex-end;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem}
+.band{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1.5px solid var(--b);margin-bottom:1rem}
+.band>div{padding:.7rem 1rem;border-right:1px solid var(--bl)}
+.band>div:last-child{border-right:0}
+.band .n{font-family:var(--mono);font-weight:800;font-size:1.1rem}
+.band .k{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg)}
+.band>div.inv{background:var(--fg);color:var(--bg)}.band>div.inv .k{color:#bbb}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem;align-items:center}
+.pill{border:1px solid var(--b);padding:.28rem .7rem;font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.05em;background:var(--bg);cursor:pointer}
+.pill.on{background:var(--fg);color:var(--bg)}
+.pill .c{opacity:.6;margin-left:.35rem}
+.search{border:1px solid var(--bl);padding:.45rem .75rem;font:inherit;font-size:.8rem;min-width:16rem}
+.spill{display:inline-block;border:1px solid var(--b);padding:.1rem .45rem;font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.06em}
+.spill--solid{background:var(--fg);color:var(--bg)}
+.spill--hollow{color:var(--muted-fg);border-color:var(--bl)}
+.spill--act{text-decoration:underline;text-decoration-thickness:2px;font-weight:700}
+.jlink{font-family:var(--mono);font-size:.62rem;text-decoration:underline;text-underline-offset:2px;color:var(--fg);background:none;border:0;cursor:pointer;white-space:nowrap}
+.jlink--danger{text-decoration-style:wavy}
+.split{display:flex;gap:1rem;align-items:flex-start}
+.listwrap{flex:1;min-width:0;border:1px solid var(--bl);background:var(--bg)}
+.detail{flex:0 0 22rem;border:1.5px solid var(--b);background:var(--bg);padding:1.25rem}
+table.sheet{width:100%;border-collapse:collapse;font-size:.8rem}
+.sheet th{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);text-align:left;padding:.55rem .9rem;border-bottom:1.5px solid var(--b)}
+.sheet td{padding:.65rem .9rem;border-bottom:1px solid var(--bl);vertical-align:top}
+.sheet td:last-child,.sheet th:last-child{text-align:right;white-space:nowrap}
+.sheet tr:hover td{background:var(--muted)}
+.sheet tr.on td{background:var(--muted);box-shadow:inset 3px 0 0 var(--fg)}
+.sheet tr.susp td{box-shadow:inset 3px 0 0 var(--fg)}
+.sheet .who b{display:block;font-weight:650}
+.sheet .who small{color:var(--muted-fg);font-size:.68rem}
+.mono{font-family:var(--mono);font-size:.68rem;color:var(--muted-fg)}
+.dkv{display:flex;justify-content:space-between;padding:.45rem 0;border-bottom:1px solid var(--bl);font-size:.75rem}
+.dkv .k{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-fg)}
+.dhead h3{font-size:1rem;font-weight:800;margin:.25rem 0}
+.dhead .sub{font-size:.7rem;color:var(--muted-fg)}
+.dsec{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg);margin:1.1rem 0 .3rem;padding-bottom:.25rem;border-bottom:1px solid var(--b)}
+.danger{border:1px dashed var(--b);padding:.75rem .9rem;margin-top:1.1rem;font-size:.72rem}
+.danger .h{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:.4rem}
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="eyebrow">Ops · clients</p>
+  <h1>Client directory — the account ledger, and a record to open</h1>
+  <p class="lead">Today: four colored metric cards (green Active, red Banned), a legacy admin table, red-tinted rows, and colored buttons — the only ops page still wearing 2021 admin colors. And no detail: ban/delete/revoke modals fire straight off a row. The redesign makes it a ledger with a record pane.</p>
+
+  <div class="frame">
+    <div class="hdr">
+      <div>
+        <h1 style="font-size:1.3rem">Clients</h1>
+        <p class="lead">Every portal account — who can sign in, who has a case, who needs access managed.</p>
+      </div>
+      <button class="pill">↻ Refresh</button>
+    </div>
+
+    <div class="band">
+      <div><p class="n">214</p><p class="k">Registered</p></div>
+      <div><p class="n">61</p><p class="k">Active sessions</p></div>
+      <div><p class="n">88</p><p class="k">Dormant · 30d+</p></div>
+      <div><p class="n">47</p><p class="k">With a case</p></div>
+      <div class="inv"><p class="n">3</p><p class="k">Suspended</p></div>
+    </div>
+
+    <div class="pills">
+      <input class="search" placeholder="Search name, email, phone…">
+      <span class="pill on">All <span class="c">214</span></span>
+      <span class="pill">Active <span class="c">61</span></span>
+      <span class="pill">Dormant <span class="c">88</span></span>
+      <span class="pill">Suspended <span class="c">3</span></span>
+    </div>
+
+    <div class="split">
+      <div class="listwrap">
+        <table class="sheet">
+          <thead><tr><th>Client</th><th>Access</th><th>Sessions</th><th>Last seen</th><th>Stage</th><th></th></tr></thead>
+          <tbody>
+            <tr class="on">
+              <td class="who"><b>Kwame Mensah <span style="font-family:var(--mono);font-size:.6rem">✓</span></b><small>kwame@example.com · +233 24 555 0192</small></td>
+              <td><span class="spill spill--solid">Active</span></td>
+              <td class="mono">2 devices</td>
+              <td class="mono">14 Feb 11:42</td>
+              <td><span class="spill spill--hollow">Client · Ch III</span></td>
+              <td><button class="jlink">record →</button></td>
+            </tr>
+            <tr>
+              <td class="who"><b>Ama Serwaa</b><small>ama@example.com</small></td>
+              <td><span class="spill spill--solid">Active</span></td>
+              <td class="mono">1 device</td>
+              <td class="mono">13 Feb 09:10</td>
+              <td><span class="spill spill--hollow">Client · Ch III</span></td>
+              <td><button class="jlink">record →</button></td>
+            </tr>
+            <tr>
+              <td class="who"><b>Efua Asante <span style="font-family:var(--mono);font-size:.6rem">✓</span></b><small>efua@example.com</small></td>
+              <td><span class="spill">Dormant</span></td>
+              <td class="mono">—</td>
+              <td class="mono">28 Jan</td>
+              <td><span class="spill spill--hollow">Lead</span></td>
+              <td><button class="jlink">record →</button></td>
+            </tr>
+            <tr class="susp">
+              <td class="who"><b>Yaw Boateng</b><small>yaw@example.com</small></td>
+              <td><span class="spill spill--act">Suspended</span><small style="display:block;color:var(--muted-fg);font-size:.62rem;margin-top:.2rem">Payment dispute — 2 Feb</small></td>
+              <td class="mono">—</td>
+              <td class="mono">2 Feb</td>
+              <td><span class="spill spill--hollow">Client</span></td>
+              <td><button class="jlink">record →</button></td>
+            </tr>
+            <tr>
+              <td class="who"><b>Kofi Owusu</b><small>kofi@example.com</small></td>
+              <td><span class="spill spill--hollow">Registered</span></td>
+              <td class="mono">—</td>
+              <td class="mono">never</td>
+              <td><span class="spill spill--hollow">Lead</span></td>
+              <td><button class="jlink">record →</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- the record — new: today there's no client detail at all -->
+      <div class="detail">
+        <div class="dhead">
+          <span class="eyebrow">Client record</span>
+          <h3>Kwame Mensah</h3>
+          <p class="sub">kwame@example.com · +233 24 555 0192</p>
+        </div>
+        <p class="dsec">Access</p>
+        <div class="dkv"><span class="k">Status</span><span><span class="spill spill--solid">Active</span></span></div>
+        <div class="dkv"><span class="k">Email verified</span><span>✓ 4 Feb</span></div>
+        <div class="dkv"><span class="k">Sessions</span><span>2 devices <button class="jlink">revoke all</button></span></div>
+        <div class="dkv"><span class="k">Member since</span><span class="mono">12 Jan 2026</span></div>
+        <p class="dsec">File</p>
+        <div class="dkv"><span class="k">Case</span><span><a class="jlink" href="#">APP-2026-0041 →</a></span></div>
+        <div class="dkv"><span class="k">Consultant</span><span>A. Osei</span></div>
+        <div class="dkv"><span class="k">Invoices</span><span class="mono">3 · 1 open</span></div>
+        <div class="danger">
+          <p class="h">Access control</p>
+          <p class="muted" style="margin-bottom:.5rem">Suspending signs them out everywhere and blocks login. Deleting offers disconnect / archive / purge — unchanged choices, moved here.</p>
+          <button class="jlink jlink--danger">suspend account</button> &nbsp;·&nbsp; <button class="jlink jlink--danger">delete…</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note">
+    <strong>WHAT CHANGES.</strong> (1) <strong>Color out</strong> — the green/red metric cards become one count band (the suspended cell inverts instead of going red); ACTIVE green pill → solid monochrome; the banned row's red wash → the inset ink bar + underlined pill; colored buttons (amber Revoke, dark-red Delete, green Unban) → underlined text links. (2) <strong>The table becomes a ledger</strong> — hairline rows, mono dates, stage as a hollow pill that says the chapter ("Client · Ch III") instead of bare "Lead". (3) <strong>A record pane</strong> — today there is nowhere to look at one client: ban/revoke/delete fire from a row's buttons. Selecting a row opens the record: access facts, the case link, sessions with revoke, and the danger zone at the bottom with the same three delete choices. (4) "CRM Stage" column merges into the stage pill — lead stage vs applicant status stop competing.
+  </p>
+</div>
+</body>
+</html>

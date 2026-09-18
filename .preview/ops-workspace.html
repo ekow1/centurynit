@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ops — Workspace, improved</title>
+<style>
+:root{--bg:#fff;--fg:#0a0a0a;--muted:#f5f5f5;--muted-fg:#52525b;--b:#0a0a0a;--bl:#d4d4d8;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
+*{box-sizing:border-box;margin:0}
+body{font-family:var(--sans);background:#e8e8e8;color:var(--fg);font-size:.875rem}
+.page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 5rem}
+.eyebrow{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg)}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
+h2{font-size:1.15rem;font-weight:800;margin:2.5rem 0 .4rem}
+h3{font-size:.85rem;font-weight:700;margin:1.4rem 0 .3rem}
+.lead{color:var(--muted-fg);font-size:.85rem;max-width:46rem;line-height:1.6}
+.note{font-size:.72rem;color:var(--muted-fg);border-left:3px solid var(--fg);padding:.6rem .9rem;margin:1rem 0;line-height:1.6;background:#fff}
+.frame{background:var(--bg);border:1px solid var(--bl);margin-top:1.25rem;padding:1.5rem}
+.sev{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;border:1px solid var(--b);padding:.12rem .45rem;white-space:nowrap}
+.sev--bug{background:var(--fg);color:var(--bg)}
+table.review{width:100%;border-collapse:collapse;font-size:.78rem;background:#fff;margin-top:.6rem}
+.review th{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);text-align:left;padding:.45rem .7rem;border-bottom:1px solid var(--b)}
+.review td{padding:.55rem .7rem;border-bottom:1px solid var(--bl);vertical-align:top;line-height:1.5}
+.review td:first-child{white-space:nowrap}
+code,pre{font-family:var(--mono);font-size:.72rem}
+code{background:var(--muted);padding:.05rem .3rem}
+pre{background:var(--muted);padding:.9rem 1.1rem;line-height:1.65;overflow-x:auto;margin:.6rem 0}
+pre .a{color:#0a7a3d}pre .c{color:var(--muted-fg)}
+
+/* ===== mock: the page ===== */
+.wk-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:.75rem;border-bottom:1.5px solid var(--b);padding-bottom:.9rem}
+.wk-head h1{font-size:1.5rem}
+.wk-sum{font-family:var(--mono);font-size:.65rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-fg);text-align:right;line-height:1.9}
+.wk-sum b{color:var(--fg)}
+
+/* tabs with counts */
+.wtabs{display:flex;border-bottom:1px solid var(--bl);margin-top:1rem}
+.wtab{padding:.5rem .9rem;font-family:var(--mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid transparent;cursor:pointer;background:none;border-top:0;border-left:0;border-right:0;color:var(--fg)}
+.wtab--on{border-bottom-color:var(--fg);font-weight:700}
+.wtab .n{color:var(--muted-fg);font-weight:400}
+.wtab--on .n{color:var(--fg)}
+
+/* the queue filter as one radiogroup */
+.qbar{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin-top:1rem}
+.seg{display:inline-flex;border:1px solid var(--b)}
+.seg button{border:0;border-right:1px solid var(--bl);background:var(--bg);padding:.3rem .6rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.05em;text-transform:uppercase;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-checked="true"]{background:var(--fg);color:var(--bg)}
+.seg .n{opacity:.6;margin-left:.35rem}
+.seg--warn button.hot{color:var(--fg);font-weight:700}
+.seg--warn button.hot::before{content:"● ";font-size:.5rem;vertical-align:middle}
+
+.frow{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-top:.7rem}
+.frow input[type="search"]{flex:1 1 12rem;border:1px solid var(--bl);padding:.35rem .6rem;font:inherit;font-size:.78rem}
+.fsel{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-fg)}
+.fsel select{border:1px solid var(--bl);background:var(--bg);padding:.28rem .4rem;font:inherit;font-size:.68rem;color:var(--fg)}
+
+.split{display:grid;grid-template-columns:minmax(0,1fr) 19rem;gap:1.25rem;margin-top:1.1rem}
+@media(max-width:900px){.split{grid-template-columns:1fr}}
+table.q{width:100%;border-collapse:collapse;font-size:.78rem}
+.q th{font-family:var(--mono);font-size:.54rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);text-align:left;padding:.4rem .6rem;border-bottom:1px solid var(--b)}
+.q td{padding:.55rem .6rem;border-bottom:1px solid var(--bl);vertical-align:top}
+.q tbody tr{cursor:pointer}
+.q tbody tr:hover{background:var(--muted)}
+.q tr.sel{box-shadow:inset 3px 0 0 var(--fg);background:var(--muted)}
+.q tr.over td:first-child{box-shadow:inset 3px 0 0 var(--fg)}
+.q tr.over.sel td:first-child{box-shadow:inset 3px 0 0 var(--fg),inset 0 0 0 1px var(--fg)}
+.q .sub{font-size:.68rem;color:var(--muted-fg);margin-top:.15rem}
+.q .kind{font-family:var(--mono);font-size:.56rem;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--bl);padding:.1rem .35rem;white-space:nowrap}
+.q .you{font-family:var(--mono);font-size:.56rem;border:1px solid var(--b);padding:.08rem .3rem}
+.q .dots{letter-spacing:.06em;white-space:nowrap;font-size:.62rem}
+.q .dots .off{opacity:.25}
+.btn{border:1px solid var(--b);background:var(--bg);padding:.28rem .6rem;font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;cursor:pointer}
+.btn--p{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+
+/* the rail */
+.rail-card{border:1px solid var(--bl);padding:.9rem 1rem;margin-bottom:.8rem}
+.rail-card.live{border-color:var(--b);border-width:1.5px}
+.rk{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg)}
+.rk .dot{display:inline-block;width:7px;height:7px;background:var(--fg);margin-right:.4rem}
+.rail-card h4{font-size:1rem;font-weight:800;margin:.25rem 0 .1rem}
+.rail-card .sub{font-size:.72rem;color:var(--muted-fg)}
+.rail-card .meta{font-family:var(--mono);font-size:.6rem;color:var(--muted-fg);margin-top:.3rem}
+.rail-card .acts{display:flex;gap:.4rem;margin-top:.6rem}
+.health{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--bl);border:1px solid var(--bl);margin-bottom:.8rem}
+.health div{background:var(--bg);padding:.6rem .7rem}
+.health .num{font-size:1.05rem;font-weight:800}
+.health .lb{font-family:var(--mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted-fg)}
+.upnext li{display:flex;justify-content:space-between;gap:.6rem;list-style:none;padding:.35rem 0;border-bottom:1px solid var(--bl);font-size:.72rem}
+.upnext li:last-child{border-bottom:0}
+.upnext .t{font-family:var(--mono);font-size:.62rem;color:var(--muted-fg)}
+
+/* ===== caseload mock ===== */
+.ostrip{display:flex;gap:.5rem;overflow-x:auto;scroll-snap-type:x proximity;padding-bottom:.3rem}
+.ocard{min-width:9.5rem;border:1px solid var(--bl);background:var(--bg);padding:.55rem .7rem;text-align:left;cursor:pointer;font:inherit;scroll-snap-align:start}
+.ocard b{display:block;font-size:.78rem}
+.ocard .oc-meta{font-family:var(--mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-fg);margin-top:.1rem}
+.ocard .oc-load{font-size:1.15rem;font-weight:800;float:right;line-height:1}
+.ocard.on{border-color:var(--fg);box-shadow:inset 0 0 0 1px var(--fg)}
+.ocard .warn{color:var(--fg);font-weight:700}
+.strip{display:flex;gap:1px;height:4px;background:var(--muted);margin-top:.45rem}
+.strip i{display:block;background:var(--bl)}
+.strip i.d1{background:#d4d4d8}.strip i.d2{background:#a1a1aa}.strip i.d3{background:#71717a}.strip i.d4{background:#3f3f46}.strip i.d5{background:#18181b}.strip i.d6{background:#000}
+.band{margin-top:1.1rem}
+.band__h{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5px solid var(--b);padding-bottom:.3rem;margin-bottom:.6rem}
+.band__h b{font-size:.82rem;letter-spacing:.02em}
+.band__h span{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted-fg)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:.7rem}
+.cc{border:1px solid var(--bl);background:var(--bg);padding:.65rem .8rem;font-size:.75rem}
+.cc--stalled{border-color:var(--fg);box-shadow:inset 3px 0 0 var(--fg)}
+.cc .hd{display:flex;justify-content:space-between;gap:.6rem}
+.cc .nm{font-weight:700}
+.cc .rf{font-family:var(--mono);font-size:.58rem;color:var(--muted-fg);display:block}
+.cc .wh{font-family:var(--mono);font-size:.56rem;color:var(--muted-fg);white-space:nowrap}
+.cc .ln{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-top:.4rem;font-family:var(--mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-fg)}
+.cc .sub2{color:var(--muted-fg);font-size:.68rem;margin-top:.35rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc .ft{display:flex;justify-content:space-between;align-items:center;margin-top:.5rem;font-size:.68rem;color:var(--muted-fg)}
+.steps{display:inline-flex;gap:2px}
+.steps i{width:9px;height:3px;background:var(--bl)}
+.steps i.on{background:var(--fg)}
+.sbadge{font-family:var(--mono);font-size:.52rem;font-weight:700;border:1px solid var(--b);padding:.06rem .3rem;color:var(--fg)}
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="eyebrow">Ops · Workspace page</p>
+  <h1>The Workspace — what I'd change</h1>
+  <p class="lead">The bones are right: greeting, two tabs (Worklist / Caseload), a queue table, and the Now
+  rail that surfaces the live consultation. What needs work is the wiring — URL state that goes stale,
+  chips wearing the wrong ARIA role, rows a keyboard can't select — and a few pieces of information that
+  exist in the code but never reach the screen.</p>
+
+  <h2>1 · Defects in the current page</h2>
+  <table class="review">
+    <tr><th>Where</th><th>What</th><th></th><th>Fix</th></tr>
+    <tr>
+      <td><code>useCaseTab</code> (CaseTabs.tsx:26)</td>
+      <td>The <code>?tab=</code> mirror only re-derives on <code>[recordKey, preset]</code> — a deep link that changes the tab while the page is mounted does nothing. <code>filter</code> has the same bug: it reads <code>searchParams</code> once in <code>useState</code>.</td>
+      <td><span class="sev sev--bug">bug</span></td>
+      <td>Derive from the URL at render; no state, no effect. Same pattern for <code>filter</code>.</td>
+    </tr>
+    <tr>
+      <td>Queue chips (Workspace.tsx:322)</td>
+      <td>Filter chips are marked up <code>role="tablist"</code>/<code>role="tab"</code>. They don't switch panels — they narrow a list. A screen reader announces "5 tabs" and selects one that does nothing of the sort.</td>
+      <td><span class="sev sev--bug">a11y</span></td>
+      <td>One <code>role="radiogroup"</code> + <code>role="radio" aria-checked</code> (single-select), arrow-key navigation comes free in the pattern.</td>
+    </tr>
+    <tr>
+      <td>Queue rows (PendingTasks.tsx:199)</td>
+      <td><code>&lt;tr onClick&gt;</code> with no <code>tabIndex</code>, no key handler — the preview pane is unreachable by keyboard. Selection and overdue are inline <code>style</code>, so no theming and no <code>:focus-visible</code> ring.</td>
+      <td><span class="sev sev--bug">a11y</span></td>
+      <td><code>tabIndex={0}</code> + Enter/Space, or a real button in the title cell. Classes <code>q--sel</code>/<code>q--over</code> instead of inline styles.</td>
+    </tr>
+    <tr>
+      <td><code>stats.counts</code> (Workspace.tsx:236)</td>
+      <td><code>"today"</code> and <code>"overdue"</code> counts are computed every render and never rendered — the two most useful filters don't exist as chips.</td>
+      <td><span class="sev">dead work</span></td>
+      <td>Either render them (proposed below) or delete the computation. Don't compute what the UI can't show.</td>
+    </tr>
+    <tr>
+      <td>URL state</td>
+      <td><code>?filter=</code> is in the URL; <code>typeFilter</code>, <code>branchFilter</code>, <code>dateSort</code> and the <em>selected task</em> are not. Refresh loses three of four filters and the open pane; a notification can't deep-link a task.</td>
+      <td><span class="sev">consistency</span></td>
+      <td>All of it in the URL: <code>?tab=&filter=&type=&branch=&sort=&open=</code> — the app already deep-links invoices this way (<code>?open=inv-…</code>).</td>
+    </tr>
+    <tr>
+      <td>Header (Workspace.tsx:297)</td>
+      <td>An empty flex <code>&lt;div&gt;</code> with a comment — the filters moved, the div stayed. The overdue-invoice stat is meanwhile buried at the far right of the filter row.</td>
+      <td><span class="sev">dead UI</span></td>
+      <td>Delete the div; promote the stat into the header summary (mock below).</td>
+    </tr>
+    <tr>
+      <td>Assign dispatch</td>
+      <td><code>doAssign</code> (list) and <code>placeHandler</code> (preview pane) implement the same kind-switch twice — they can drift, and already differ in error handling.</td>
+      <td><span class="sev">drift</span></td>
+      <td>One <code>assignTask(task, to, placement)</code> in <code>lib/pendingTasks.ts</code> that both call.</td>
+    </tr>
+    <tr>
+      <td><code>*Details</code> blocks</td>
+      <td>Nine components of <code>&lt;p&gt;&lt;strong&gt;Key:&lt;/strong&gt; value&lt;/p&gt;</code> — a definition list wearing paragraphs.</td>
+      <td><span class="sev">markup</span></td>
+      <td>A shared <code>&lt;FactGrid&gt;</code> rendering a real <code>&lt;dl&gt;</code>: less code, better semantics, consistent rhythm.</td>
+    </tr>
+  </table>
+
+  <h2>2 · The proposed page</h2>
+  <p class="lead">Same F-shape, same data. Changes: the header carries the day's summary (computed today,
+  thrown away today); the tabs carry counts; the queue filter gains the two time chips the code already
+  computes; the rail gains a queue-health block so "how is my day" doesn't require reading the whole table.</p>
+
+  <div class="frame">
+    <!-- header -->
+    <div class="wk-head">
+      <div>
+        <p class="eyebrow">Workspace</p>
+        <h1 style="margin-top:.15rem">Good day, Adjoa.</h1>
+        <p class="lead" style="margin-top:.15rem">Here is what needs attention.</p>
+      </div>
+      <p class="wk-sum">
+        Wed 16 Sep · 09:41<br>
+        <b>14 open</b> · 6 today · <b>3 overdue</b><br>
+        GH₵ 18,400 outstanding
+      </p>
+    </div>
+
+    <!-- tabs -->
+    <div class="wtabs" role="tablist">
+      <button class="wtab wtab--on" role="tab" aria-selected="true">Worklist <span class="n">14</span></button>
+      <button class="wtab" role="tab" aria-selected="false">Caseload</button>
+    </div>
+
+    <!-- queue filter: one radiogroup, incl. the two counts that exist but aren't shown -->
+    <div class="qbar">
+      <div class="seg" role="radiogroup" aria-label="Queue">
+        <button role="radio" aria-checked="true">All<span class="n">14</span></button>
+        <button role="radio" aria-checked="false">Mine<span class="n">5</span></button>
+        <button role="radio" aria-checked="false">No handler<span class="n">3</span></button>
+        <button role="radio" aria-checked="false">Invoicing<span class="n">4</span></button>
+        <button role="radio" aria-checked="false">Follow-up<span class="n">2</span></button>
+      </div>
+      <div class="seg seg--warn" role="radiogroup" aria-label="Time" style="margin-left:auto">
+        <button role="radio" aria-checked="false">Today<span class="n">6</span></button>
+        <button role="radio" aria-checked="false" class="hot">Overdue<span class="n">3</span></button>
+      </div>
+    </div>
+    <div class="frow">
+      <input type="search" placeholder="Search queue…" aria-label="Search queue">
+      <label class="fsel">Type <select><option>All types</option><option>Consultation</option><option>Application</option><option>Travel</option><option>Invoice</option><option>Lead</option></select></label>
+      <label class="fsel">Branch <select><option>All branches</option><option>Accra</option><option>Kumasi</option></select></label>
+      <label class="fsel">Sort <select><option>Priority</option><option>Newest first</option><option>Oldest first</option></select></label>
+    </div>
+
+    <!-- split -->
+    <div class="split">
+      <table class="q">
+        <thead>
+          <tr><th style="width:3rem">Pri</th><th>Task</th><th>Type</th><th>When</th><th>Handler</th><th></th></tr>
+        </thead>
+        <tbody>
+          <tr class="over" tabindex="0" aria-selected="false">
+            <td class="dots">●●●</td>
+            <td><strong>Assign a visa handler</strong><div class="sub">APP-2026-0041 · Kwame Mensah — visa invoice paid, seat open</div></td>
+            <td><span class="kind">Handoff</span></td>
+            <td>2 h ago</td>
+            <td>— open</td>
+            <td style="text-align:right"><button class="btn btn--p">Handler…</button></td>
+          </tr>
+          <tr class="sel" tabindex="0" aria-selected="true">
+            <td class="dots">●●<span class="off">●</span></td>
+            <td><strong>Review deposit handoff</strong><div class="sub">APP-2026-0038 · Efua Asante — deposit paid, needs a consultant</div></td>
+            <td><span class="kind">Application</span></td>
+            <td>Today</td>
+            <td>— open</td>
+            <td style="text-align:right"><button class="btn btn--p">Handler…</button></td>
+          </tr>
+          <tr tabindex="0" aria-selected="false">
+            <td class="dots">●<span class="off">●●</span></td>
+            <td><strong>Follow up on documents</strong><div class="sub">Yaw Boateng — passport scan unverified 5 days</div></td>
+            <td><span class="kind">Follow-up</span></td>
+            <td>Yesterday</td>
+            <td><span class="you">You</span></td>
+            <td style="text-align:right"><button class="btn">Open →</button></td>
+          </tr>
+          <tr tabindex="0" aria-selected="false">
+            <td class="dots">●<span class="off">●●</span></td>
+            <td><strong>Approve visa invoice</strong><div class="sub">INV-2026-0117 · Ama Serwaa — GH₵ 4,200 awaiting approval</div></td>
+            <td><span class="kind">Invoice</span></td>
+            <td>Mon</td>
+            <td>K. Owusu</td>
+            <td style="text-align:right"><button class="btn">Open →</button></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <aside aria-label="Now">
+        <div class="health">
+          <div><div class="num">5</div><div class="lb">Mine open</div></div>
+          <div><div class="num">3</div><div class="lb">Overdue</div></div>
+          <div><div class="num">2</div><div class="lb">Unassigned</div></div>
+          <div><div class="num">1</div><div class="lb">Awaiting approval</div></div>
+        </div>
+        <div class="rail-card live">
+          <p class="rk"><span class="dot"></span>Live · Consultation</p>
+          <h4>Efua Asante</h4>
+          <p class="sub">Initial consultation · Canada</p>
+          <p class="meta">09:30 – 10:00 · started 11 min ago · 2 in the room</p>
+          <div class="acts"><button class="btn btn--p">Join meeting</button><button class="btn">Open</button></div>
+        </div>
+        <div class="rail-card">
+          <p class="rk">Up next</p>
+          <ul class="upnext">
+            <li><span><span class="t">10:30</span> Kofi Owusu</span><span class="sub">review · UK</span></li>
+            <li><span><span class="t">14:00</span> Ama Serwaa</span><span class="sub">initial · Canada</span></li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <h3>What changed, top to bottom</h3>
+  <table class="review">
+    <tr><th>Change</th><th>Why</th></tr>
+    <tr><td>Header carries date, open/today/overdue counts and outstanding total</td><td><code>stats</code> already computes all of it — today it renders one buried sentence. The summary is the page's answer to "how is my day".</td></tr>
+    <tr><td>Tab labels carry counts (<code>Worklist 14</code>)</td><td>The two views compete; the count tells you which one needs you before you switch.</td></tr>
+    <tr><td>Queue chips become a <code>radiogroup</code>, joined by <b>Today</b> and <b>Overdue</b></td><td>Correct role for a single-select filter, and the two counts that are computed-but-hidden become the most useful cuts of the day.</td></tr>
+    <tr><td>Rows are <code>tabindex="0"</code> + <code>aria-selected</code>; selected = inset bar + muted fill, overdue = left bar</td><td>Keyboard can finally open the preview pane; classes replace the inline-style inversion so focus and theme work.</td></tr>
+    <tr><td>"You" chip in the Handler column instead of a bare name</td><td>Scanning for your own work is the most common scan; make it a marker, not a string match.</td></tr>
+    <tr><td>Rail gains a 2×2 queue-health block above the Now card</td><td>Mine / overdue / unassigned / awaiting approval — the four numbers a manager checks first, above the fold.</td></tr>
+    <tr><td>All filters + selected task in the URL (<code>?open=</code>)</td><td>Refresh-safe, shareable, and notifications can deep-link a task into the pane — same convention as <code>?open=inv-…</code> on invoices.</td></tr>
+  </table>
+
+  <h2>3 · The code that changes</h2>
+  <pre><span class="c">// useCaseTab — the URL is the state; deep links work while mounted</span>
+const urlTab = searchParams.get("tab");
+<span class="a">const tab = isId(urlTab) ? urlTab : (preset ?? fallback());</span>
+const setTab = (next: T) =&gt; setSearchParams(prev =&gt; {
+  const p = new URLSearchParams(prev); p.set("tab", next); return p;
+}, { replace: true });
+
+<span class="c">// the same pattern fixes ?filter= — and setFilter stops capturing stale params</span>
+<span class="a">const filter = searchParams.get("filter") ?? "all";</span>
+const setFilter = (next: string) =&gt; setSearchParams(prev =&gt; {
+  const p = new URLSearchParams(prev);
+  next === "all" ? p.delete("filter") : p.set("filter", next);
+  return p;
+}, { replace: true });
+
+<span class="c">// selectable rows the keyboard can reach</span>
+&lt;tr tabIndex={0} aria-selected={selected}
+    onClick={() =&gt; onSelect?.(t)}
+    onKeyDown={(e) =&gt; { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect?.(t); } }}
+    className={`q-row${selected ? " q-row--sel" : ""}${overdue ? " q-row--over" : ""}`}&gt;</pre>
+
+  <p class="note">Nothing above needs new dependencies or API changes — it's wiring and semantics inside
+  <code>Workspace.tsx</code>, <code>PendingTasks.tsx</code>, <code>CaseTabs.tsx</code> and a few lines of CSS.
+  The one structural piece is lifting <code>assignTask</code> into <code>lib/pendingTasks.ts</code> so the
+  list and the pane stop diverging.</p>
+
+  <h2>4 · The Caseload tab</h2>
+  <p class="lead">Same data, different question — "who is carrying what" instead of "what needs doing".
+  The view is good at answering it, but it carries the same ARIA and URL problems as Worklist plus a few
+  of its own.</p>
+  <table class="review">
+    <tr><th>Where</th><th>What</th><th></th><th>Fix</th></tr>
+    <tr>
+      <td>View toggle (WorkspaceCaseload.tsx:265)</td>
+      <td>"By officer / By stage" doesn't change any grouping — it only hides the officer panel. The bands below are identical either way, and a manager in "By stage" has <em>no</em> way to filter by officer.</td>
+      <td><span class="sev sev--bug">mislabeled</span></td>
+      <td>Delete the toggle. The officer strip stays always on and <em>is</em> the by-officer view; an Officer select joins the filter row so both views can narrow by person.</td>
+    </tr>
+    <tr>
+      <td>Chips (line 448)</td>
+      <td>Same <code>role="tablist"</code>/<code>role="tab"</code> misuse as the Worklist chips — these filter, they don't switch panels.</td>
+      <td><span class="sev sev--bug">a11y</span></td>
+      <td><code>radiogroup</code>/<code>radio</code>, same component as the queue filter.</td>
+    </tr>
+    <tr>
+      <td>URL state</td>
+      <td>Nothing persists: <code>chip</code>, <code>staff</code>, <code>branch</code>, <code>view</code>, <code>showCompleted</code> are all local. Refresh loses the officer you were inspecting.</td>
+      <td><span class="sev">consistency</span></td>
+      <td><code>?chip=&officer=&branch=</code> in the URL — and now "Kofi's stalled cases" is a linkable view.</td>
+    </tr>
+    <tr>
+      <td>Officer pane</td>
+      <td>The officer record (load, week hours, carrying, handoffs) lives in a cramped ~19&nbsp;rem aside that squeezes the list it's supposed to filter.</td>
+      <td><span class="sev">layout</span></td>
+      <td>Officers become a horizontal strip of load cards; the record opens in the <code>Sheet</code> the app already has — full detail, no squeeze.</td>
+    </tr>
+    <tr>
+      <td>Stats shown twice</td>
+      <td>The <code>dash-day</code> row (top) and the filter-row footer both say "N cases · N consultations · N officers · N stalled".</td>
+      <td><span class="sev">noise</span></td>
+      <td>Keep one — the top line. The footer line goes.</td>
+    </tr>
+    <tr>
+      <td><code>ops-steps</code> dots</td>
+      <td><code>aria-label</code> on a plain <code>&lt;span&gt;</code> is ignored by AT — the progress reads as nothing. And a consultation's 3/4 dots look identical to a case's 5/7 though they mean different scales.</td>
+      <td><span class="sev sev--bug">a11y</span></td>
+      <td><code>role="img" aria-label="Step 3 of 4"</code> — or print "3/4" next to the stage label, which sighted users benefit from too.</td>
+    </tr>
+    <tr>
+      <td><code>UnassignedQueue</code></td>
+      <td>Triage sits <em>between</em> the officer panel and the bands — the one thing demanding a decision is mid-page.</td>
+      <td><span class="sev">order</span></td>
+      <td>It goes first, under the stats line. Nothing is more urgent than a record nobody owns.</td>
+    </tr>
+    <tr>
+      <td>Client cards</td>
+      <td>Not selectable — only "Open →" navigates away, while the Worklist's rows preview in place. Two queue cards, two behaviours.</td>
+      <td><span class="sev">consistency</span></td>
+      <td>Card click selects → the same <code>PreviewPane</code> detail the Worklist uses. The task is already built; caseload just doesn't select it.</td>
+    </tr>
+    <tr>
+      <td><code>staffHours</code> fetch</td>
+      <td>Fetched on mount even when no officer is ever selected.</td>
+      <td><span class="sev">perf</span></td>
+      <td>Lazy: fetch on first officer select.</td>
+    </tr>
+  </table>
+
+  <h3>Proposed — one column, officers as a strip, record in a sheet</h3>
+  <div class="frame">
+    <div class="wk-head">
+      <div>
+        <p class="eyebrow">Workspace · Caseload</p>
+        <h1 style="margin-top:.15rem;font-size:1.25rem">Who carries what.</h1>
+      </div>
+      <p class="wk-sum"><b>4 officers</b> · 17 open · <b>3 stalled 7d+</b> · 2 unassigned</p>
+    </div>
+
+    <!-- officers as a strip — each card is the filter; the record opens as a Sheet -->
+    <p class="eyebrow" style="margin-top:1rem">Officers — select to narrow the records below</p>
+    <div class="ostrip" role="radiogroup" aria-label="Officer" style="margin-top:.45rem">
+      <button class="ocard on" role="radio" aria-checked="true">
+        <span class="oc-load">17</span><b>All officers</b>
+        <span class="oc-meta">everyone</span>
+        <span class="strip" aria-hidden="true"><i class="d1" style="flex:3"></i><i class="d3" style="flex:5"></i><i class="d4" style="flex:4"></i><i class="d6" style="flex:5"></i></span>
+      </button>
+      <button class="ocard" role="radio" aria-checked="false">
+        <span class="oc-load">6</span><b>A. Osei <span class="oc-meta">(you)</span></b>
+        <span class="oc-meta">consultant · Accra · <span class="warn">2 stalled</span></span>
+        <span class="strip" aria-hidden="true"><i class="d2" style="flex:2"></i><i class="d4" style="flex:3"></i><i class="d6" style="flex:1"></i></span>
+      </button>
+      <button class="ocard" role="radio" aria-checked="false">
+        <span class="oc-load">4</span><b>K. Owusu</b>
+        <span class="oc-meta">visa officer · Accra</span>
+        <span class="strip" aria-hidden="true"><i class="d4" style="flex:1"></i><i class="d5" style="flex:3"></i></span>
+      </button>
+      <button class="ocard" role="radio" aria-checked="false">
+        <span class="oc-load">3</span><b>M. Frimpong</b>
+        <span class="oc-meta">consultant · Kumasi · <span class="warn">1 stalled</span></span>
+        <span class="strip" aria-hidden="true"><i class="d1" style="flex:1"></i><i class="d3" style="flex:2"></i></span>
+      </button>
+      <button class="ocard" role="radio" aria-checked="false">
+        <span class="oc-load">2</span><b>E. Darko</b>
+        <span class="oc-meta">coordinator · Accra</span>
+        <span class="strip" aria-hidden="true"><i class="d5" style="flex:2"></i></span>
+      </button>
+    </div>
+
+    <!-- triage first — nothing is more urgent than a record nobody owns -->
+    <div class="band">
+      <div class="band__h"><b>● Unassigned · 2</b><span>needs a handler before anything moves</span></div>
+      <div class="cards">
+        <div class="cc cc--stalled">
+          <div class="hd"><span><span class="nm">Lisa Darko</span><span class="rf">APP-2026-0044</span></span><span class="wh">6 d ago</span></div>
+          <div class="ln"><span>Docs → School · Case</span><span class="sbadge">No handler</span></div>
+          <p class="sub2">Deposit paid 6 days ago — school selection is waiting on a consultant.</p>
+          <div class="ft"><span>No handler</span><button class="btn btn--p">Handler…</button></div>
+        </div>
+        <div class="cc">
+          <div class="hd"><span><span class="nm">Peter Adjei</span><span class="rf">CON-2026-0512</span></span><span class="wh">3 h ago</span></div>
+          <div class="ln"><span>Under Review · Consultation</span><span class="steps" role="img" aria-label="Step 1 of 4"><i class="on"></i><i></i><i></i><i></i></span></div>
+          <p class="sub2">Initial · Canada · Thu 10:00</p>
+          <div class="ft"><span>No handler</span><button class="btn btn--p">Handler…</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- filters: same radiogroup family as the queue, all in the URL -->
+    <div class="qbar" style="margin-top:1.25rem">
+      <div class="seg" role="radiogroup" aria-label="Caseload">
+        <button role="radio" aria-checked="true">All<span class="n">17</span></button>
+        <button role="radio" aria-checked="false">Cases<span class="n">12</span></button>
+        <button role="radio" aria-checked="false">Consultations<span class="n">5</span></button>
+        <button role="radio" aria-checked="false" class="hot">Stalled<span class="n">3</span></button>
+        <button role="radio" aria-checked="false">Done<span class="n">8</span></button>
+      </div>
+    </div>
+    <div class="frow">
+      <input type="search" placeholder="Search reference, client, staff…" aria-label="Search caseload">
+      <label class="fsel">Branch <select><option>All branches</option><option>Accra</option><option>Kumasi</option></select></label>
+      <label class="fsel">Officer <select><option>All officers</option><option>A. Osei</option><option>K. Owusu</option><option>M. Frimpong</option></select></label>
+      <span class="fsel" style="margin-left:auto">3 stalled · click a card to preview</span>
+    </div>
+
+    <!-- bands -->
+    <div class="band">
+      <div class="band__h"><b>Consultations · 5</b><span>before a case opens</span></div>
+      <div class="cards">
+        <div class="cc">
+          <div class="hd"><span><span class="nm">Efua Asante</span><span class="rf">CON-2026-0498</span></span><span class="wh">2 h ago</span></div>
+          <div class="ln"><span>Confirmed · Consultation</span><span class="steps" role="img" aria-label="Step 2 of 4"><i class="on"></i><i class="on"></i><i></i><i></i></span></div>
+          <p class="sub2">Initial · Canada · today 10:30</p>
+          <div class="ft"><span>K. Owusu</span><button class="btn">Open →</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="band">
+      <div class="band__h"><b>Visa processing · 4</b><span>1 stalled</span></div>
+      <div class="cards">
+        <div class="cc cc--stalled">
+          <div class="hd"><span><span class="nm">Kwame Mensah</span><span class="rf">APP-2026-0041</span></span><span class="wh">9 d ago</span></div>
+          <div class="ln"><span>Visa processing · Case · 4/7</span><span class="steps" role="img" aria-label="Step 4 of 7"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span></div>
+          <p class="sub2">Biometrics booked · invoice paid</p>
+          <div class="ft"><span>A. Osei · Message</span><button class="btn">Open →</button></div>
+        </div>
+        <div class="cc">
+          <div class="hd"><span><span class="nm">Ama Serwaa</span><span class="rf">APP-2026-0038</span></span><span class="wh">1 d ago</span></div>
+          <div class="ln"><span>Visa processing · Case · 4/7</span><span class="steps" role="img" aria-label="Step 4 of 7"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span></div>
+          <p class="sub2">Awaiting VFS appointment</p>
+          <div class="ft"><span>K. Owusu · Message</span><button class="btn">Open →</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note">Net effect: the "By officer / By stage" toggle disappears — the officer strip <em>is</em> the
+  by-officer view and the bands <em>are</em> the by-stage view. One state fewer, one mislabeled control gone,
+  and the officer record moves into a Sheet where it has room for the hours grid and the carrying list.
+  Card clicks reuse the Worklist's <code>PreviewPane</code>, so both tabs select-and-preview the same way.</p>
+
+  <h2>5 · Order of work — both tabs</h2>
+  <table class="review">
+    <tr><th>#</th><th>Change</th><th>Files</th></tr>
+    <tr><td>1</td><td>Derive tab + filter state from the URL; add <code>?type=&branch=&sort=&open=&officer=&chip=</code></td><td><code>CaseTabs.tsx</code>, <code>Workspace.tsx</code>, <code>WorkspaceCaseload.tsx</code></td></tr>
+    <tr><td>2</td><td>One <code>&lt;FilterGroup&gt;</code> radiogroup component replaces every ad-hoc pill tablist</td><td>new in <code>core/ui</code> or ops <code>lib</code>; ~15 call sites</td></tr>
+    <tr><td>3</td><td>Keyboard-selectable queue rows + class-based selected/overdue states</td><td><code>PendingTasks.tsx</code>, <code>scheduling.css</code></td></tr>
+    <tr><td>4</td><td>Caseload: drop the view toggle, officer strip + Sheet, unassigned first, merge the two stats lines</td><td><code>WorkspaceCaseload.tsx</code></td></tr>
+    <tr><td>5</td><td>Cards select into <code>PreviewPane</code>; <code>ops-steps</code> gets <code>role="img"</code> + printed step</td><td><code>WorkspaceCaseload.tsx</code>, <code>Workspace.tsx</code></td></tr>
+    <tr><td>6</td><td>Extract <code>assignTask</code> + <code>FactGrid</code>; lazy-load <code>staffHours</code></td><td><code>lib/pendingTasks.ts</code>, <code>Workspace.tsx</code></td></tr>
+  </table>
+</div>
+</body>
+</html>

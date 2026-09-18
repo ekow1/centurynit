@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portal — contrast &amp; hierarchy fixes (preview)</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b;          /* current token */
+		--fg-faint:#a3a3a3;          /* border-light, misused as text */
+		--line:#a3a3a3; --line-strong:#000;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+		/* proposed */
+		--micro:#3f3f46;             /* small-caps label color */
+		--micro-size:0.68rem;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;}
+	.wrap{max-width:1080px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;
+		display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin-bottom:.5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	h2.sec{font-size:1.05rem;margin:3.5rem 0 .4rem}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:60rem;margin-bottom:1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.25rem}
+	.pair{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start}
+	@media(max-width:900px){.pair{grid-template-columns:1fr}}
+
+	/* ---- shared chrome ---- */
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.card{border:1.5px solid var(--line-strong);background:#fff;padding:1rem 1.1rem}
+	.darkcard{background:var(--ink);color:#fff;border:1.5px solid var(--ink);padding:1rem 1.1rem}
+	.darkcard .eyebrow{color:rgba(255,255,255,.6)}
+	.jlink{font-size:.78rem;text-decoration:underline;text-underline-offset:3px;color:inherit;font-weight:600}
+	.split{display:grid;grid-template-columns:1fr 15rem;gap:1.5rem;align-items:start}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.8rem;font-weight:700;
+		padding:.7rem 1.4rem;text-transform:uppercase;letter-spacing:.08em;font-family:var(--sans)}
+	.btn--ghost{background:#fff;color:var(--ink);border:1.5px solid var(--ink)}
+
+	/* ============ BEFORE styles (as-shipped) ============ */
+	.b-jmini{display:grid;grid-template-columns:repeat(6,1fr);border:1px solid var(--line)}
+	.b-jmini>a{display:block;padding:.9rem .8rem;border-right:1px solid var(--line);text-decoration:none;color:inherit}
+	.b-jmini>a:last-child{border-right:none}
+	.jn{font-family:var(--mono);font-size:.68rem;font-weight:700;display:inline-flex;width:1.5rem;height:1.5rem;
+		border:1.5px solid var(--ink);align-items:center;justify-content:center}
+	.jname{font-size:.72rem;font-weight:600;margin-top:.5rem}
+	.jst{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--fg-muted);margin-top:.15rem}
+	.b-done .jn{background:var(--ink);color:#fff}
+	.b-now{background:var(--muted-bg)} .b-now .jn{border-width:2px}
+	.b-locked .jn{border-style:dashed;border-color:var(--line);color:var(--fg-muted)}
+	.b-locked .jname{color:var(--fg-muted)}
+
+	.b-pkv{display:flex;justify-content:space-between;padding:.45rem 0;border-bottom:1px solid var(--line);font-size:.75rem}
+	.b-pkv:last-child{border-bottom:none}
+	.b-pkv .k{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--fg-muted);font-size:.62rem;padding-top:.1rem}
+	.darkcard .b-pkv{border-color:rgba(255,255,255,.25)}
+	.darkcard .b-pkv .k{color:rgba(255,255,255,.55)}
+	.b-money{font-size:.8rem}
+	.b-money .alt{opacity:.55;font-size:.7em}
+
+	.b-nowlist{border:1.5px solid var(--ink);box-shadow:inset 4px 0 0 var(--ink);padding:.5rem 1.1rem}
+	.b-nowlist .row{display:flex;justify-content:space-between;padding:.6rem 0;font-size:.8rem}
+	.b-nowlist .foot{font-size:.68rem;color:var(--fg-muted)}
+
+	.b-pnext{border:1.5px solid var(--ink);display:flex;gap:1.25rem;padding:1.1rem 1.25rem;align-items:flex-start}
+	.b-pdate{text-align:center;border:1.5px solid var(--ink);padding:.55rem .7rem;line-height:1}
+	.b-pdate b{display:block;font-size:1.7rem}
+	.b-pdate span{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.12em}
+	.b-ptitle{font-size:1.25rem;font-weight:800;margin-top:.25rem}
+	.b-pmeta{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;
+		color:var(--fg-muted);margin-top:.4rem;line-height:1.8}
+	.b-pacts{margin-left:auto;display:flex;flex-direction:column;gap:.5rem;align-items:flex-end}
+	.b-pacts .jlink{font-size:.72rem}
+
+	.b-table{width:100%;border-collapse:collapse;font-size:.85rem}
+	.b-table th{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;
+		color:var(--fg-muted);text-align:left;padding:.5rem .6rem;border-bottom:1.5px solid var(--ink)}
+	.b-table td{padding:.7rem .6rem;border-bottom:1px solid var(--line);vertical-align:top}
+	.b-mark{font-family:var(--mono);font-size:.68rem;color:var(--fg-muted);font-weight:700}
+	.b-sub{display:block;font-size:.72rem;color:var(--fg-muted);margin-top:.15rem}
+	.pill{display:inline-block;border:1.5px solid var(--ink);padding:.25rem .6rem;font-family:var(--mono);
+		font-size:.6rem;text-transform:uppercase;letter-spacing:.1em}
+	.pill--on{background:var(--ink);color:#fff}
+
+	/* ============ AFTER styles (proposed) ============ */
+	.a-jmini{display:grid;grid-template-columns:repeat(6,1fr);border:1px solid var(--line)}
+	.a-jmini>a{display:block;padding:.9rem .8rem;border-right:1px solid var(--line);text-decoration:none;color:inherit}
+	.a-jmini>a:last-child{border-right:none}
+	.a-done .jn{background:var(--ink);color:#fff}
+	.a-now{background:var(--muted-bg)} .a-now .jn{border-width:2px}
+	/* locked: still quiet, but legible — solid thin border, readable ink */
+	.a-locked .jn{border:1px solid #737373;color:#52525b}
+	.a-locked .jname{color:#52525b}
+	.a-locked .jst{color:#737373}
+	.jst--up{font-size:.64rem;letter-spacing:.08em}
+
+	.a-pkv{display:flex;justify-content:space-between;padding:.5rem 0;border-bottom:1px solid var(--line);font-size:.8rem}
+	.a-pkv:last-child{border-bottom:none}
+	.a-pkv .k{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--micro);font-size:var(--micro-size);padding-top:.1rem}
+	.darkcard .a-pkv{border-color:rgba(255,255,255,.3)}
+	.darkcard .a-pkv .k{color:rgba(255,255,255,.72);font-size:.66rem}
+	.a-money .big{font-size:1.05rem;font-weight:800;font-variant-numeric:tabular-nums}
+	.a-money .alt{display:block;font-size:.62rem;opacity:.6;margin-top:.1rem;font-family:var(--mono)}
+
+	/* Now section: a real card with a live edge */
+	.a-nowlist{border:1.5px solid var(--ink);box-shadow:inset 4px 0 0 var(--ink);padding:.9rem 1.1rem}
+	.a-nowlist .lead{font-size:.9rem;font-weight:600}
+	.a-nowlist .row{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;padding:.5rem 0}
+	.a-nowlist .foot{font-size:.74rem;color:var(--micro);border-top:1px solid var(--line);padding-top:.7rem;margin-top:.3rem}
+
+	/* Hero: meta split into a fact row, not one caps run-on */
+	.a-pnext{border:1.5px solid var(--ink);display:flex;gap:1.5rem;padding:1.1rem 1.25rem;align-items:center}
+	.a-pdate{text-align:center;border:1.5px solid var(--ink);padding:.6rem .8rem;line-height:1;background:var(--ink);color:#fff}
+	.a-pdate b{display:block;font-size:1.7rem}
+	.a-pdate span{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em}
+	.a-facts{display:flex;flex-wrap:wrap;gap:.3rem 1.1rem;margin-top:.55rem}
+	.a-facts span{font-size:.78rem;color:#333}
+	.a-facts b{font-weight:700}
+	.a-ref{font-family:var(--mono);font-size:.64rem;color:var(--micro);margin-top:.5rem;letter-spacing:.06em}
+	.a-pacts{margin-left:auto;display:flex;flex-direction:column;gap:.5rem}
+	.a-pacts .btn{font-size:.68rem;padding:.6rem 1rem;min-width:9.5rem;text-align:center}
+
+	.a-table{width:100%;border-collapse:collapse;font-size:.85rem}
+	.a-table th{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;
+		color:var(--micro);text-align:left;padding:.55rem .6rem;border-bottom:1.5px solid var(--ink)}
+	.a-table td{padding:.75rem .6rem;border-bottom:1px solid var(--line);vertical-align:top}
+	.a-mark{font-family:var(--mono);font-size:.72rem;color:var(--ink);font-weight:700}
+	.a-sub{display:block;font-size:.74rem;color:var(--micro);margin-top:.15rem}
+
+	/* sidebar journey rows */
+	.side{background:var(--ink);color:#fff;padding:1rem}
+	.side .lab{font-family:var(--mono);font-size:.6rem;letter-spacing:.16em;color:rgba(255,255,255,.5);text-transform:uppercase}
+	.srow{display:flex;gap:.7rem;padding:.6rem 0;align-items:flex-start}
+	.snum{font-family:var(--mono);font-size:.62rem;border:1.4px solid #fff;width:1.4rem;height:1.4rem;
+		display:inline-flex;align-items:center;justify-content:center;flex:none}
+	.sname{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+	.ssub{font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;margin-top:.15rem}
+	.b-ghost{opacity:.38}
+	.a-ghost .snum{border-color:rgba(255,255,255,.55);border-style:dashed}
+	.a-ghost .sname{color:rgba(255,255,255,.75)}
+	.a-ghost .ssub{color:rgba(255,255,255,.45)}
+	.b-ghost .ssub{color:rgba(255,255,255,.5)}
+
+	.diff{font-size:.72rem;color:var(--fg-muted);margin-top:.6rem;line-height:1.55}
+	.diff b{color:var(--ink)}
+	code{font-family:var(--mono);font-size:.92em;background:var(--muted-bg);padding:0 .25em}
+	ol.order{margin:0 0 0 1.2rem;font-size:.82rem;line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1 class="page">Portal contrast &amp; hierarchy — proposed fixes</h1>
+<p class="note">Home (<code>DashboardHome</code>) + Appointments (<code>PortalAppointments</code>), rendered as the Enoch
+screenshots show them. Root cause of the wash-out: nearly every label is <code>--muted-foreground</code> (#52525b)
+at 0.56–0.68rem in mono caps — a mid-gray that's fine at body size but dissolves at micro sizes.
+The fix isn't one global darker gray; it's a <b>tiered micro-label style</b> (darker ink + slightly larger size)
+plus real presence for the live surfaces.</p>
+
+<!-- ═══ 1 · chapter strip ═══ -->
+<h2 class="sec">1 · Chapter strip — locked chapters shouldn't be ghosts</h2>
+<p class="note">"Departure" and "Complete" are dashed-border + #a3a3a3-adjacent ink: they read as disabled to the point of
+invisibility. Locked should mean <b>quiet but legible</b> — a thin solid border, readable label.</p>
+<div class="pair">
+	<div>
+		<span class="tag">Before</span>
+		<div class="mock">
+			<div class="b-jmini">
+				<a class="b-done"><span class="jn">✓</span><p class="jname">Consultation</p><p class="jst">Done</p></a>
+				<a class="b-done"><span class="jn">✓</span><p class="jname">Enrolment</p><p class="jst">Done</p></a>
+				<a class="b-done"><span class="jn">✓</span><p class="jname">Applications</p><p class="jst">Done</p></a>
+				<a class="b-now"><span class="jn">IV</span><p class="jname">Visa</p><p class="jst">You are here</p></a>
+				<a class="b-locked"><span class="jn">V</span><p class="jname">Departure</p><p class="jst">Locked</p></a>
+				<a class="b-locked"><span class="jn">VI</span><p class="jname">Complete</p><p class="jst">Locked</p></a>
+			</div>
+			<p class="diff">Same problem in the sidebar: "V · DEPARTURE / ONCE YOUR VISA IS APPROVED" at ~38% opacity.</p>
+		</div>
+	</div>
+	<div>
+		<span class="tag tag--after">After</span>
+		<div class="mock">
+			<div class="a-jmini">
+				<a class="a-done"><span class="jn">✓</span><p class="jname">Consultation</p><p class="jst">Done</p></a>
+				<a class="a-done"><span class="jn">✓</span><p class="jname">Enrolment</p><p class="jst">Done</p></a>
+				<a class="a-done"><span class="jn">✓</span><p class="jname">Applications</p><p class="jst">Done</p></a>
+				<a class="a-now"><span class="jn">IV</span><p class="jname">Visa</p><p class="jst">You are here</p></a>
+				<a class="a-locked"><span class="jn">V</span><p class="jname">Departure</p><p class="jst">Locked</p></a>
+				<a class="a-locked"><span class="jn">VI</span><p class="jname">Complete</p><p class="jst">Locked</p></a>
+			</div>
+			<p class="diff"><b>Solid 1px #737373 numeral border</b>, name at #52525b, status at #737373 —
+			and the status label bumps 0.58 → 0.64rem. Still clearly inactive; now actually readable.</p>
+		</div>
+	</div>
+</div>
+
+<!-- ═══ 2 · sidebar journey ═══ -->
+<h2 class="sec">2 · Sidebar journey — locked rows at 38% opacity</h2>
+<div class="pair">
+	<div>
+		<span class="tag">Before</span>
+		<div class="mock"><div class="side">
+			<p class="lab">Your journey</p>
+			<div class="srow"><span class="snum">IV</span><div><p class="sname">Visa</p></div></div>
+			<div class="srow b-ghost"><span class="snum">V</span><div><p class="sname">Departure</p><p class="ssub">Once your visa is approved</p></div></div>
+			<div class="srow b-ghost"><span class="snum">VI</span><div><p class="sname">Complete</p><p class="ssub">When everything is settled</p></div></div>
+		</div></div>
+	</div>
+	<div>
+		<span class="tag tag--after">After</span>
+		<div class="mock"><div class="side">
+			<p class="lab">Your journey</p>
+			<div class="srow"><span class="snum">IV</span><div><p class="sname">Visa</p></div></div>
+			<div class="srow a-ghost"><span class="snum">V</span><div><p class="sname">Departure</p><p class="ssub">Once your visa is approved</p></div></div>
+			<div class="srow a-ghost"><span class="snum">VI</span><div><p class="sname">Complete</p><p class="ssub">When everything is settled</p></div></div>
+		</div></div>
+	</div>
+</div>
+<p class="diff"><b>Opacity → per-element alpha.</b> Whole-row <code>opacity:.38</code> makes the sub-line vanish.
+Instead: name 75% white, sub-label 45% white, dashed numeral at 55% — hierarchy preserved, both lines readable.</p>
+
+<!-- ═══ 3 · money card ═══ -->
+<h2 class="sec">3 · Money rail card — "GH₵1 (58.07)" garble</h2>
+<p class="note"><code>MoneyInline</code> prints both currencies inline — on the black card at 55% white they merge
+into "GH₵1 (58.07)". Same fix as the invoice card: one figure, the other as a footnote.</p>
+<div class="pair">
+	<div>
+		<span class="tag">Before</span>
+		<div class="mock"><div class="darkcard">
+			<p class="eyebrow">Money</p>
+			<div class="b-pkv"><span class="k">Paid to date</span><span class="b-money"><b>GH₵870</b><span class="alt"> ($58)</span></span></div>
+			<div class="b-pkv"><span class="k">Due now</span><span class="b-money">GH₵1,365<span class="alt"> ($91)</span></span></div>
+		</div></div>
+	</div>
+	<div>
+		<span class="tag tag--after">After</span>
+		<div class="mock"><div class="darkcard">
+			<p class="eyebrow">Money</p>
+			<div class="a-pkv"><span class="k">Paid to date</span><span class="a-money"><span class="big">GH₵870</span><span class="alt">≈ $58</span></span></div>
+			<div class="a-pkv"><span class="k">Due now</span><span class="a-money"><span class="big">GH₵1,365</span><span class="alt">≈ $91</span></span></div>
+		</div></div>
+	</div>
+</div>
+<p class="diff"><b>GHS figure at 1.05rem/800, USD as a mono footnote beneath.</b> Keys go 0.62→0.66rem at 72% white.
+Matches the invoice-card treatment shipped last round.</p>
+
+<!-- ═══ 4 · now section ═══ -->
+<h2 class="sec">4 · "Now · Visa" — the live section reads weaker than the rail</h2>
+<p class="note">The chapter you're in is a single tiny muted line under a hairline. On the screenshot it's the
+faintest thing in the left column — yet it's the thing the page exists to show.</p>
+<div class="pair">
+	<div>
+		<span class="tag">Before</span>
+		<div class="mock">
+			<p class="eyebrow" style="margin-bottom:.5rem">Now · Visa <span style="float:right">visa fee</span></p>
+			<div class="b-nowlist"><div class="row foot">
+				<span>On admission, settle the visa fee to open your visa case.</span>
+				<span class="jlink">Pay visa invoice →</span>
+			</div></div>
+		</div>
+	</div>
+	<div>
+		<span class="tag tag--after">After</span>
+		<div class="mock">
+			<p class="eyebrow" style="margin-bottom:.5rem">Now · Visa <span style="float:right">visa fee</span></p>
+			<div class="a-nowlist">
+				<div class="row"><span class="lead">Settle the visa fee to open your visa case.</span></div>
+				<div class="row foot"><span>Due on admission · INV-2026-0042</span><span class="jlink">Pay visa invoice →</span></div>
+			</div>
+		</div>
+	</div>
+</div>
+<p class="diff"><b>Lead line at 0.9rem/600 ink</b> (the actual ask), foot row keeps the context + link at readable
+0.74rem. The left-rule card already exists — it just needs the content inside to have weight.</p>
+
+<!-- ═══ 5 · appointment hero ═══ -->
+<h2 class="sec">5 · Appointment hero — one unreadable caps run-on</h2>
+<p class="note">"FRIDAY, SEPTEMBER 18, 2026 AT 11:00 AM · 45 MIN · IN PERSON · WITH ENOCH ENU · REF CNS-2026-0001"
+is five facts squeezed into a 0.62rem mono line. And RESCHEDULE/CANCEL float as faint underlined text far right.</p>
+<div class="pair">
+	<div>
+		<span class="tag">Before</span>
+		<div class="mock"><div class="b-pnext">
+			<div class="b-pdate"><b>18</b><span>Sep</span></div>
+			<div style="flex:1">
+				<p class="eyebrow">Next appointment</p>
+				<p class="b-ptitle">consultation</p>
+				<p class="b-pmeta">Friday, September 18, 2026 at 11:00 AM · 45 min · In person · with Enoch Enu · ref CNS-2026-0001</p>
+			</div>
+			<div class="b-pacts"><span class="jlink">Reschedule</span><span class="jlink">Cancel</span></div>
+		</div></div>
+	</div>
+	<div>
+		<span class="tag tag--after">After</span>
+		<div class="mock"><div class="a-pnext">
+			<div class="a-pdate"><b>18</b><span>Sep</span></div>
+			<div style="flex:1">
+				<p class="eyebrow">Next appointment</p>
+				<p class="b-ptitle">Consultation</p>
+				<div class="a-facts">
+					<span><b>Fri 18 Sep 2026</b> · 11:00 AM</span>
+					<span>45 min</span><span>In person</span><span>with <b>Enoch Enu</b></span>
+				</div>
+				<p class="a-ref">REF CNS-2026-0001</p>
+			</div>
+			<div class="a-pacts"><span class="btn btn--ghost">Reschedule</span><span class="btn btn--ghost">Cancel</span></div>
+		</div></div>
+	</div>
+</div>
+<p class="diff"><b>Facts become a wrapped inline row at 0.78rem</b> — day/time bold, ref demoted to its own mono
+line. Date tile inverts to black (it's the hero). Reschedule/Cancel become ghost buttons — they were
+indistinguishable from body links before.</p>
+
+<!-- ═══ 6 · the book table ═══ -->
+<h2 class="sec">6 · The appointment book — micro-gray headers</h2>
+<div class="pair">
+	<div>
+		<span class="tag">Before</span>
+		<div class="mock"><table class="b-table">
+			<thead><tr><th>Date</th><th>Appointment</th><th>With</th><th>Status</th><th></th></tr></thead>
+			<tbody><tr>
+				<td><span class="b-mark">SEP 18</span><span class="b-sub">Fri</span></td>
+				<td><b>consultation</b><span class="b-sub">11:00 AM · 45 min · In person</span></td>
+				<td style="font-family:var(--mono);font-size:.7rem">ENOCH ENU</td>
+				<td><span class="pill pill--on">Confirmed</span></td>
+				<td style="text-align:right"><span class="jlink" style="font-size:.72rem">Move · Cancel</span></td>
+			</tr></tbody>
+		</table></div>
+	</div>
+	<div>
+		<span class="tag tag--after">After</span>
+		<div class="mock"><table class="a-table">
+			<thead><tr><th>Date</th><th>Appointment</th><th>With</th><th>Status</th><th></th></tr></thead>
+			<tbody><tr>
+				<td><span class="a-mark">SEP 18</span><span class="a-sub">Fri</span></td>
+				<td><b>Consultation</b><span class="a-sub">11:00 AM · 45 min · In person</span></td>
+				<td style="font-family:var(--mono);font-size:.72rem">ENOCH ENU</td>
+				<td><span class="pill pill--on">Confirmed</span></td>
+				<td style="text-align:right"><span class="jlink">Move · Cancel</span></td>
+			</tr></tbody>
+		</table></div>
+	</div>
+</div>
+<p class="diff"><b>The micro-label tier, applied:</b> headers 0.62→0.68rem at <code>#3f3f46</code> instead of
+#52525b; date marks to full ink; row sub-lines 0.72→0.74rem at the same darker micro gray. Small numbers,
+big legibility difference at these sizes.</p>
+
+<!-- ═══ 7 · layout ═══ -->
+<h2 class="sec">7 · Structure — dead space &amp; rail weight</h2>
+<p class="note">Both pages end the left column early while the rail runs long. Two cheap fixes, no re-architecture:
+the "From your file" updates card moves <b>into the rail</b> under Documents on Home (it's reference material,
+not the page's job), and on Appointments the "How rescheduling works" + "Cancelling" cards merge into one
+"Good to know" card. Left column then owns the live content; the rail owns reference.</p>
+<p class="note">Also: "consultation" service names render <b>sentence-cased</b> ("Consultation") in the hero and
+table — lowercase read as a styling accident next to every other bold label.</p>
+
+<h2 class="sec">Proposed order</h2>
+<ol class="order">
+	<li>Micro-label tier: <code>.pkv__k</code>, <code>.ptable th</code>, <code>.jmini__st</code>, <code>.ptable__sub</code>, <code>.pnext__meta</code> → 0.66–0.68rem, <code>#3f3f46</code></li>
+	<li>Locked states: jmini + sidebar — solid thin borders, per-element alpha instead of whole-row opacity</li>
+	<li>Money rail card: <code>MoneyInline</code> → stacked GHS-primary treatment</li>
+	<li>Now section: lead-line weight + foot separation</li>
+	<li>Appointment hero: fact row + ghost buttons + inverted date tile</li>
+	<li>Rail consolidation (moves, no restyle)</li>
+</ol>
+<p class="note" style="margin-top:1.5rem">Nothing here changes the token system itself — <code>--muted-foreground</code>
+stays for body-size secondary text. The new tier only applies to sub-0.7rem labels, which is where #52525b fails.
+All monochrome; no new colors introduced.</p>
+</div>
+</body>
+</html>

@@ -3,9 +3,9 @@ import { z } from "zod";
 /**
  * Profile-picture contracts.
  *
- * The photo follows the same shape as applicant documents — a signed URL the
+ * The photo follows the same shape as applicant documents. A signed URL the
  * browser PUTs the bytes straight to, with the server deciding who may do what
- * before any URL is issued — but it is one image per account, so there is no
+ * before any URL is issued. But it is one image per account, so there is no
  * document row: the storage key lives in `users.image` and the server is told
  * which key to commit on `complete`.
  *
@@ -13,10 +13,10 @@ import { z } from "zod";
  * consultants see), so the ceiling is far lower than a passport scan's.
  */
 
-/** Square-crop-friendly formats only — no HEIC, no WebP. */
+/** Square-crop-friendly formats only. No HEIC, no WebP. */
 export const ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/png"] as const;
 
-/** 5 MB — a phone photo after client-side compression, never a raw RAW file. */
+/** 5 MB. A phone photo after client-side compression, never a raw RAW file. */
 export const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
 export const requestAvatarUploadSchema = z.object({

@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ops — Delegation, rehomed</title>
+<style>
+:root{--bg:#fff;--fg:#0a0a0a;--muted:#f5f5f5;--muted-fg:#52525b;--b:#0a0a0a;--bl:#d4d4d8;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
+*{box-sizing:border-box;margin:0}
+body{font-family:var(--sans);background:#e8e8e8;color:var(--fg);font-size:.875rem}
+.page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 5rem}
+.eyebrow{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg)}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
+h2{font-size:1.15rem;font-weight:800;margin:2.5rem 0 .4rem}
+h3{font-size:.85rem;font-weight:700;margin:1.4rem 0 .3rem}
+.lead{color:var(--muted-fg);font-size:.85rem;max-width:46rem;line-height:1.6}
+.note{font-size:.72rem;color:var(--muted-fg);border-left:3px solid var(--fg);padding:.6rem .9rem;margin:1rem 0;line-height:1.6;background:#fff}
+.frame{background:var(--bg);border:1px solid var(--bl);margin-top:1.25rem;padding:1.5rem}
+.sev{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;border:1px solid var(--b);padding:.12rem .45rem;white-space:nowrap}
+.sev--bug{background:var(--fg);color:var(--bg)}
+.sev--new{background:var(--fg);color:var(--bg)}
+table.review{width:100%;border-collapse:collapse;font-size:.78rem;background:#fff;margin-top:.6rem}
+.review th{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);text-align:left;padding:.45rem .7rem;border-bottom:1px solid var(--b)}
+.review td{padding:.55rem .7rem;border-bottom:1px solid var(--bl);vertical-align:top;line-height:1.5}
+.review td:first-child{white-space:nowrap}
+code,pre{font-family:var(--mono);font-size:.72rem}
+code{background:var(--muted);padding:.05rem .3rem}
+
+/* ===== shared mock chrome ===== */
+.wk-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:.75rem;border-bottom:1.5px solid var(--b);padding-bottom:.9rem}
+.wk-head h1{font-size:1.5rem}
+.wk-sum{font-family:var(--mono);font-size:.65rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-fg);text-align:right;line-height:1.9}
+.wk-sum b{color:var(--fg)}
+.wtabs{display:flex;border-bottom:1px solid var(--bl);margin-top:1rem}
+.wtab{padding:.5rem .9rem;font-family:var(--mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid transparent;background:none;border-top:0;border-left:0;border-right:0;color:var(--fg)}
+.wtab--on{border-bottom-color:var(--fg);font-weight:700}
+.wtab .n{color:var(--muted-fg);font-weight:400}
+.wtab--on .n{color:var(--fg)}
+.qbar{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin-top:1rem}
+.seg{display:inline-flex;border:1px solid var(--b)}
+.seg button{border:0;border-right:1px solid var(--bl);background:var(--bg);padding:.3rem .6rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.05em;text-transform:uppercase;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-checked="true"]{background:var(--fg);color:var(--bg)}
+.seg .n{opacity:.6;margin-left:.35rem}
+.seg--warn button.hot::before{content:"● ";font-size:.5rem;vertical-align:middle}
+.frow{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-top:.7rem}
+.btn{border:1px solid var(--b);background:var(--bg);padding:.32rem .7rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.05em;text-transform:uppercase;cursor:pointer}
+.btn--pri{background:var(--fg);color:var(--bg)}
+.btn[disabled]{opacity:.35;cursor:default}
+.pill{font-family:var(--mono);font-size:.56rem;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--b);padding:.1rem .4rem;white-space:nowrap}
+.pill--inv{background:var(--fg);color:var(--bg)}
+.split{display:grid;grid-template-columns:minmax(0,1fr) 19rem;gap:1.25rem;margin-top:1.1rem}
+@media(max-width:900px){.split{grid-template-columns:1fr}}
+
+/* queue table */
+.qt{width:100%;border-collapse:collapse;font-size:.78rem}
+.qt th{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);text-align:left;padding:.45rem .6rem;border-bottom:1px solid var(--b)}
+.qt td{padding:.5rem .6rem;border-bottom:1px solid var(--bl);vertical-align:middle}
+.qt tr.sel td{background:var(--muted);box-shadow:inset 2px 0 0 var(--fg)}
+.qt .ref{font-family:var(--mono);font-size:.68rem}
+.tag{font-family:var(--mono);font-size:.56rem;letter-spacing:.05em;text-transform:uppercase;border:1px solid var(--bl);padding:.05rem .3rem;color:var(--muted-fg)}
+.tag--coord{border-color:var(--fg);color:var(--fg)}
+
+/* Now rail cards */
+.card{border:1px solid var(--bl);padding:.8rem .9rem;margin-bottom:.8rem;background:var(--bg)}
+.card .k{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);margin-bottom:.5rem}
+.health{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--bl);border:1px solid var(--bl)}
+.health div{background:var(--bg);padding:.55rem .7rem}
+.health b{display:block;font-size:1.05rem}
+.health span{font-family:var(--mono);font-size:.54rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-fg)}
+.nrow{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--muted);font-size:.75rem}
+.nrow:last-child{border-bottom:0}
+.nrow .w{font-family:var(--mono);font-size:.62rem;color:var(--muted-fg)}
+.muted{color:var(--muted-fg)}
+.xs{font-size:.68rem}
+
+/* Coverage card rows */
+.covrow{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.45rem 0;border-bottom:1px solid var(--muted);font-size:.75rem}
+.covrow:last-child{border-bottom:0}
+.covrow .who{font-weight:600}
+.covrow .scope{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-fg)}
+
+/* caseload officer strip */
+.ostrip{display:flex;gap:.5rem;overflow-x:auto;padding:.2rem 0 .6rem}
+.ocard{min-width:11rem;border:1px solid var(--bl);padding:.6rem .7rem;background:var(--bg);cursor:pointer;flex:0 0 auto;text-align:left}
+.ocard--on{border-color:var(--fg);box-shadow:inset 0 0 0 1px var(--fg)}
+.ocard .nm{font-weight:700;font-size:.8rem}
+.ocard .st{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-fg);margin-top:.15rem}
+.ocard .bar{display:flex;height:.35rem;margin-top:.45rem;background:var(--muted)}
+.ocard .bar i{display:block;height:100%}
+.ocard .bar i:nth-child(1){background:#0a0a0a}
+.ocard .bar i:nth-child(2){background:#71717a}
+.ocard .bar i:nth-child(3){background:#d4d4d8}
+.ocard .coord{display:inline-block;margin-top:.4rem;font-family:var(--mono);font-size:.54rem;text-transform:uppercase;letter-spacing:.07em;border:1px solid var(--b);padding:.08rem .35rem}
+
+/* sheet */
+.sheetchrome{background:rgba(0,0,0,.18);padding:1.5rem 0;display:flex;justify-content:flex-end}
+.sheet{width:min(26rem,92%);background:var(--bg);border-left:1.5px solid var(--b);padding:1.1rem 1.25rem;min-height:26rem;display:flex;flex-direction:column}
+.sheet h4{font-size:.95rem;margin:.2rem 0 .1rem}
+.sheet .sub{font-size:.72rem;color:var(--muted-fg);margin-bottom:.9rem}
+.scoperow{display:flex;gap:.9rem;font-size:.72rem;margin:.2rem 0 .9rem}
+.scoperow label{display:flex;gap:.35rem;align-items:flex-start;line-height:1.45}
+.scoperow .t{font-weight:700}
+.scoperow .d{color:var(--muted-fg);font-size:.66rem}
+.staffpick{display:flex;flex-direction:column;gap:.4rem;margin-bottom:.8rem}
+.staffpick button{display:flex;justify-content:space-between;align-items:center;gap:.6rem;border:1px solid var(--bl);background:var(--bg);padding:.55rem .7rem;cursor:pointer;text-align:left;font:inherit;font-size:.75rem}
+.staffpick button.on{border-color:var(--fg);box-shadow:inset 0 0 0 1px var(--fg)}
+.staffpick .cap{font-family:var(--mono);font-size:.58rem;color:var(--muted-fg)}
+.staffpick .capb{width:4.5rem;height:.3rem;background:var(--muted);position:relative}
+.staffpick .capb i{position:absolute;inset:0 auto 0 0;background:var(--fg)}
+.staffpick .over{color:#0a0a0a;font-weight:700}
+.note-in{width:100%;border:1px solid var(--bl);padding:.4rem .5rem;font:inherit;font-size:.72rem;margin-bottom:.8rem}
+.sheet-foot{margin-top:auto;display:flex;gap:.5rem;border-top:1px solid var(--bl);padding-top:.8rem}
+
+/* client card preview sheet */
+.facts dl{display:grid;grid-template-columns:auto 1fr;gap:.2rem .8rem;font-size:.75rem;margin:.6rem 0}
+.facts dt{color:var(--muted-fg);font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.07em}
+.facts dd{margin:0}
+
+.anno{position:relative}
+.anno::after{content:attr(data-n);position:absolute;top:-.55rem;left:-.55rem;width:1.1rem;height:1.1rem;border-radius:50%;background:var(--fg);color:var(--bg);font-family:var(--mono);font-size:.6rem;display:grid;place-items:center}
+.legend{display:flex;flex-wrap:wrap;gap:1rem;font-size:.72rem;margin-top:.8rem}
+.legend b{display:inline-grid;place-items:center;width:1.1rem;height:1.1rem;border-radius:50%;background:var(--fg);color:var(--bg);font-family:var(--mono);font-size:.6rem;margin-right:.3rem}
+</style>
+</head>
+<body>
+<div class="page">
+
+<p class="eyebrow">Ops · Workspace — proposal</p>
+<h1>Delegation, rehomed</h1>
+<p class="lead">
+Delegation was pulled off the case and consultation detail pages — right call: the detail page is where you
+<b>do</b> the work (call, assess, documents), and delegating is a <b>routing</b> decision a manager makes
+across cases, not inside one. This proposal gives it three proper homes — the Now rail, the Worklist
+filter, and the Caseload — plus one shared <code>DelegateSheet</code>. Every scope below already exists in
+the API; nothing new is needed server-side.
+</p>
+
+<div class="note">
+<b>The three scopes the backend already speaks</b> —
+<code>delegateCoordinator(id, who, note, "case")</code> hands one case over ·
+<code>scope: "journey"</code> / <code>delegateJourney(applicantId, who)</code> hands the applicant's whole
+journey to a staff member — <i>every case they open inherits them</i> — and <code>releaseJourney</code> takes
+it back · <code>setDuty(branch, who)</code> routes all of a branch's new cases today. The picker's data comes
+from <code>getWorkload()</code>: name, role, active cases, overdue, capacity %.
+</div>
+
+<h2>1 · Which page should own coverage?</h2>
+<p class="lead">Duty isn't a consultations-list concern — it's the routing rule for <b>every case that arrives
+today</b>. The right home is wherever a manager notices "cases are landing with nobody steering."</p>
+<table class="review">
+<tr><th>Candidate</th><th>For</th><th>Against</th><th>Verdict</th></tr>
+<tr>
+  <td>Consultations <span class="muted">(current)</span></td>
+  <td>Bookings are the intake — this is where they physically arrive.</td>
+  <td>It's a list page for working consultations one at a time. A manager triaging the day's queue never opens it; a consultant working their cases sees a manager control they can't use. Duty affects <i>routing</i>, not this list.</td>
+  <td><span class="sev">Move out</span></td>
+</tr>
+<tr>
+  <td>Dashboard</td>
+  <td>Manager lands here; it already has a <code>TeamLoad</code> panel — "who's carrying what." Duty is the same kind of fact: "who's catching what."</td>
+  <td>The page's own contract is read-only — "the numbers; the work is in the Workspace." Nothing on it mutates state. Putting the only Set/Clear control here breaks that, and the gap it warns about is fixed in the Workspace anyway.</td>
+  <td><span class="sev">Read-only line only</span></td>
+</tr>
+<tr>
+  <td>Workspace → Now rail</td>
+  <td>The queue lives here. "Kumasi: nobody on duty" is precisely why the Unassigned count is climbing — the explanation and the fix sit next to the numbers they explain. Managers already watch this rail; consultants never see the card (it renders for <code>canAssignWork</code> only).</td>
+  <td>Adds a card to a rail that's already busy — mitigated by collapsing to one line when every branch is covered.</td>
+  <td><span class="sev sev--new">Actionable home</span></td>
+</tr>
+</table>
+<div class="note">
+<b>Verdict:</b> the <b>actionable Coverage card lives in the Workspace Now rail</b> — set, change, clear duty;
+delegate a case; review what's delegated. The <b>Dashboard gets one read-only line inside TeamLoad</b>
+("Duty · Accra: Efua · Kumasi: nobody →") that links to the Workspace. The Consultations strip is removed —
+one home for the control, one place that merely reports it.
+</div>
+
+<h2>2 · Where each piece lives</h2>
+<table class="review">
+<tr><th>Scope</th><th>Home</th><th>Surface</th><th>API (exists)</th></tr>
+<tr><td><span class="sev sev--new">Duty</span></td><td>Workspace → Now rail <span class="muted">+ Dashboard TeamLoad (read-only)</span></td><td><b>Coverage card</b>: per-branch duty line — who's routing today's intake, Change / Clear. Replaces the strip currently buried on the Consultations page.</td><td><code>getDuty</code> · <code>setDuty</code></td></tr>
+<tr><td><span class="sev sev--new">Case</span></td><td>Workspace → Worklist</td><td><b>"Coordinated" chip</b> in the Queue radiogroup + a <b>Delegate…</b> button in the toolbar. Manager selects a task → sheet opens scoped to that case.</td><td><code>delegateCoordinator</code> · <code>reclaimCoordination</code></td></tr>
+<tr><td><span class="sev sev--new">Journey</span></td><td>Workspace → Caseload</td><td>Client card (the applicant) gets <b>Delegate journey…</b> in its preview sheet; officer cards show a <b>Coordinating</b> badge; release lives in the same place.</td><td><code>delegateJourney</code> · <code>releaseJourney</code></td></tr>
+<tr><td>Visibility</td><td>Everywhere</td><td>List rows keep the existing <code>Coord: name</code> marker; worklist rows get a <code>→ who</code> tag. Detail pages stay silent — if you can see the case you can work it; who steered it is a list concern.</td><td>—</td></tr>
+</table>
+
+<h2>3 · Two levels of manager — the role upgrade</h2>
+<p class="lead">You don't need a new role record — the capability model already splits the two jobs.
+A <b>branch manager</b> is a manager whose role lacks <code>see_all_branches</code> and whose staff record
+carries a branch. Everything they can reach — duty, delegation, caseload — is already clamped to that
+branch by <code>scopeRecords</code>; the only thing missing is enforcing the same clamp on the write routes.</p>
+
+<table class="review">
+<tr><th></th><th>General manager</th><th>Branch manager</th><th>Coordinator / staff</th></tr>
+<tr><td>Role recipe</td><td><code>manager</code> as-is — <code>assign_work</code> + <code>see_all_cases</code> + <code>see_all_branches</code></td><td><code>manager</code> <b>minus</b> <code>see_all_branches</code> (toggle off in Administration → Roles, or a custom role) + <code>branch: "kumasi"</code> on the staff record</td><td><code>coordinator</code>/<code>consultant</code> — can <i>be delegated to</i>, can't delegate</td></tr>
+<tr><td>Coverage card shows</td><td>All three branches + "Set coverage…" sheet</td><td>Their branch only — one row, Set / Change / Clear inline</td><td>Nothing — card doesn't render</td></tr>
+<tr><td>Set duty for</td><td>Any branch</td><td>Their branch only — the route 403s otherwise <span class="sev sev--bug">new check</span></td><td>403 — already enforced</td></tr>
+<tr><td>Delegate cases in</td><td>Any branch</td><td>Their branch only <span class="sev sev--bug">new check</span></td><td>—</td></tr>
+<tr><td>Delegate journeys</td><td>Any applicant</td><td>Applicants in their branch</td><td>—</td></tr>
+<tr><td>"Coordinated" chip shows</td><td>Every delegated case</td><td>Delegated cases in their branch</td><td>Cases they steer</td></tr>
+</table>
+
+<div class="note">
+<b>The one server change this needs:</b> the duty, delegate, reassign and release routes currently gate on
+<code>canSeeAllCases</code> alone — so any manager-level actor can touch <i>any</i> branch. Add the branch
+clamp: <code>see_all_branches</code> → any branch; otherwise <code>body.branch</code> (or the case's branch)
+must equal the actor's staff branch. That is the entire "branch manager vs general manager" boundary —
+one condition, same rule everywhere. The role editor and rank system (<code>invite_staff</code> only hands
+out lower ranks) already do the rest.
+</div>
+
+<h3>The GM's coverage sheet — all branches, one pass</h3>
+<div class="frame sheetchrome">
+  <div class="sheet">
+    <p class="eyebrow">Coverage · today</p>
+    <h4>Who catches new cases, per branch</h4>
+    <p class="sub">Unset branches route new cases to nobody — they pile in Unassigned.</p>
+
+    <div class="covrow" style="border-bottom:1px solid var(--bl);padding-bottom:.6rem">
+      <span style="flex:1"><b>Accra</b><br><span class="muted xs">4 cases arrived today</span></span>
+      <select style="border:1px solid var(--b);padding:.3rem .4rem;font:inherit;font-size:.72rem">
+        <option>Efua Owusu · 9/15</option><option>Kwame Boateng · 5/15</option><option>— nobody —</option>
+      </select>
+    </div>
+    <div class="covrow" style="border-bottom:1px solid var(--bl);padding-bottom:.6rem">
+      <span style="flex:1"><b>Kumasi</b> <span class="pill pill--inv">uncovered</span><br><span class="muted xs">2 cases waiting — nobody steering</span></span>
+      <select style="border:1px solid var(--b);padding:.3rem .4rem;font:inherit;font-size:.72rem">
+        <option>— nobody —</option><option>Akosua Frimpong · 14/15</option><option>Kwame Boateng · 5/15</option>
+      </select>
+    </div>
+    <div class="covrow" style="padding-bottom:.6rem">
+      <span style="flex:1"><b>Takoradi</b><br><span class="muted xs">quiet — no arrivals</span></span>
+      <select style="border:1px solid var(--b);padding:.3rem .4rem;font:inherit;font-size:.72rem">
+        <option>Akosua Frimpong · 14/15</option><option>Efua Owusu · 9/15</option><option>— nobody —</option>
+      </select>
+    </div>
+
+    <div class="sheet-foot">
+      <button class="btn btn--pri" style="flex:1">Apply coverage</button>
+      <button class="btn">Cancel</button>
+    </div>
+    <p class="xs muted" style="margin-top:.5rem">One submit → one <code>setDuty</code> call per changed branch.
+    For a branch manager this sheet shows exactly one row — their own branch, pre-selected.</p>
+  </div>
+</div>
+
+<h2>4 · The Workspace with delegation in place</h2>
+<div class="frame">
+  <div class="wk-head">
+    <div>
+      <h1>Workspace</h1>
+      <p class="lead" style="margin-top:.2rem">Tuesday · Week's queue and the day's desk.</p>
+    </div>
+    <div class="wk-sum"><b>14</b> open · <b>6</b> today · <b>3</b> overdue<br><b>GH₵ 18,400</b> outstanding</div>
+  </div>
+  <div class="wtabs">
+    <button class="wtab wtab--on">Worklist <span class="n">14</span></button>
+    <button class="wtab">Caseload <span class="n">9</span></button>
+    <button class="wtab">Directory</button>
+  </div>
+  <div class="qbar">
+    <span class="seg">
+      <button aria-checked="true">All<span class="n">14</span></button>
+      <button aria-checked="false">Mine<span class="n">4</span></button>
+      <button aria-checked="false">No handler<span class="n">3</span></button>
+      <button aria-checked="false" class="anno" data-n="1">Coordinated<span class="n">5</span></button>
+      <button aria-checked="false">Follow-up<span class="n">2</span></button>
+    </span>
+    <span class="seg seg--warn" style="margin-left:auto">
+      <button aria-checked="true">Any time</button>
+      <button aria-checked="false" class="hot">Today<span class="n">6</span></button>
+      <button aria-checked="false" class="hot">Overdue<span class="n">3</span></button>
+    </span>
+  </div>
+  <div class="frow">
+    <input type="search" placeholder="Search name, ref, country…">
+    <button class="btn anno" data-n="2">Delegate…</button>
+  </div>
+  <div class="split">
+    <div>
+      <table class="qt">
+        <tr><th></th><th>Ref</th><th>Client</th><th>Waiting on</th><th>Handler</th><th>Due</th></tr>
+        <tr class="sel"><td>1</td><td class="ref">C-1042</td><td>Ama Serwaa</td><td>Confirm slot</td><td><span class="tag tag--coord">→ Efua</span></td><td>Today 14:00</td></tr>
+        <tr><td>2</td><td class="ref">C-1039</td><td>Kojo Asante</td><td>Start assessment</td><td><span class="tag tag--coord">→ Efua</span></td><td>Today 15:30</td></tr>
+        <tr><td>3</td><td class="ref">C-1031</td><td>Esi Mensah</td><td>Place handler</td><td><span class="tag">No handler</span></td><td>Overdue</td></tr>
+        <tr><td>4</td><td class="ref">INV-2210</td><td>Yaw Darko</td><td>Invoice approval</td><td>You</td><td>Today</td></tr>
+        <tr><td>5</td><td class="ref">A-0918</td><td>Ama Serwaa</td><td>Visa documents</td><td><span class="tag tag--coord">→ Efua</span></td><td>Thu</td></tr>
+      </table>
+      <p class="xs muted" style="margin-top:.5rem">Rows carry <code>→ Efua</code> when a coordinator steers the case — the same "Coord:" marker the Consultations list already prints.</p>
+    </div>
+    <div>
+      <div class="card"><div class="health">
+        <div><b>4</b><span>Mine open</span></div>
+        <div><b>3</b><span>Overdue</span></div>
+        <div><b>3</b><span>Unassigned</span></div>
+        <div><b>1</b><span>Awaiting approval</span></div>
+      </div></div>
+
+      <div class="card anno" data-n="3">
+        <p class="k">Coverage · today</p>
+        <div class="covrow">
+          <span><span class="scope">Accra</span><br><span class="who">Efua Owusu</span> <span class="muted xs">· 4 arrived</span></span>
+          <span class="pill">on duty</span>
+        </div>
+        <div class="covrow">
+          <span><span class="scope">Kumasi</span><br><span class="muted">Nobody — 2 cases waiting</span></span>
+          <span class="pill pill--inv">uncovered</span>
+        </div>
+        <div class="covrow">
+          <span><span class="scope">Takoradi</span><br><span class="who">Akosua Frimpong</span></span>
+          <span class="pill">on duty</span>
+        </div>
+        <div class="covrow">
+          <span><span class="scope">Delegated</span><br><span class="who">5 cases · 2 journeys</span></span>
+          <button class="btn">Review…</button>
+        </div>
+        <div style="margin-top:.6rem"><button class="btn btn--pri" style="width:100%">Set coverage…</button></div>
+      </div>
+
+      <div class="card">
+        <p class="k">Next · 14:00 · in 42 min</p>
+        <b>Ama Serwaa</b>
+        <p class="xs muted">Online · Canada · steered by Efua</p>
+        <div style="display:flex;gap:.4rem;margin-top:.5rem">
+          <button class="btn btn--pri" disabled>Join meeting</button>
+          <button class="btn">Open</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="legend">
+    <span><b>1</b>New "Coordinated" chip — every case someone else steers, in one filter. This is where a manager sees delegated work and takes it back.</span>
+    <span><b>2</b>"Delegate…" opens the sheet below, pre-scoped to the selected task's case. Gone from the detail page; reachable from where the queue lives.</span>
+    <span><b>3</b>Coverage card — duty roster + delegation counts move from the Consultations page strip into the rail managers already watch.</span>
+  </div>
+</div>
+
+<h2>5 · The DelegateSheet — one sheet, both scopes</h2>
+<div class="frame sheetchrome">
+  <div class="sheet">
+    <p class="eyebrow">Delegate</p>
+    <h4>C-1042 · Ama Serwaa</h4>
+    <p class="sub">She keeps working the case; you keep oversight. They get it in their queue and their notifications.</p>
+
+    <p class="eyebrow" style="margin-bottom:.35rem">Scope</p>
+    <div class="scoperow">
+      <label><input type="radio" checked><span><span class="t">This case</span><br><span class="d">C-1042 only — the consultation she's waiting on.</span></span></label>
+      <label><input type="radio"><span><span class="t">Whole journey</span><br><span class="d">Every case Ama opens — this one, the application it spawns, future rebooks — until released.</span></span></label>
+    </div>
+
+    <p class="eyebrow" style="margin-bottom:.35rem">Coordinator</p>
+    <div class="staffpick">
+      <button class="on"><span><b>Efua Owusu</b><br><span class="cap">coordinator · Accra</span></span><span style="text-align:right"><span class="capb"><i style="width:60%"></i></span><br><span class="cap">9 / 15 cases</span></span></button>
+      <button><span><b>Kwame Boateng</b><br><span class="cap">consultant · delegable</span></span><span style="text-align:right"><span class="capb"><i style="width:33%"></i></span><br><span class="cap">5 / 15 cases</span></span></button>
+      <button><span><b>Akosua Frimpong</b><br><span class="cap">coordinator · Kumasi</span></span><span style="text-align:right"><span class="capb"><i style="width:93%"></i></span><br><span class="cap over">14 / 15 · 3 overdue</span></span></button>
+    </div>
+
+    <input class="note-in" placeholder="Note for the handover (optional)">
+    <div class="sheet-foot">
+      <button class="btn btn--pri" style="flex:1">Delegate to Efua</button>
+      <button class="btn">Cancel</button>
+    </div>
+  </div>
+</div>
+<p class="xs muted" style="margin-top:.5rem">
+Same sheet serves both entry points: from the Worklist it arrives scoped to a case (both radios);
+from a Caseload client card it arrives scoped to the applicant (journey radio pre-checked, case option
+hidden when there is no pending case).
+</p>
+
+<h2>6 · Journey delegation on the Caseload</h2>
+<p class="lead">A journey belongs to an applicant, so this is where whole-journey delegation lives — a manager
+hands "everything Ama opens" to a staff member without touching any single case.</p>
+<div class="frame">
+  <p class="eyebrow">Officers</p>
+  <div class="ostrip">
+    <button class="ocard ocard--on"><span class="nm">All officers</span><span class="st">9 carrying · 14 open</span><span class="bar"><i style="width:45%"></i><i style="width:30%"></i><i style="width:25%"></i></span></button>
+    <button class="ocard"><span class="nm">Efua Owusu</span><span class="st">coordinator · 9 open</span><span class="bar"><i style="width:50%"></i><i style="width:30%"></i><i style="width:20%"></i></span><span class="coord anno" data-n="4">Coordinating 5</span></button>
+    <button class="ocard"><span class="nm">Kwame Boateng</span><span class="st">consultant · 5 open</span><span class="bar"><i style="width:60%"></i><i style="width:40%"></i></span><span class="coord">Journey: Ama S.</span></button>
+    <button class="ocard"><span class="nm">Akosua Frimpong</span><span class="st">coordinator · 14 open</span><span class="bar"><i style="width:70%"></i><i style="width:30%"></i></span></button>
+  </div>
+
+  <div class="split" style="grid-template-columns:minmax(0,1fr) 22rem">
+    <div>
+      <table class="qt">
+        <tr><th>Client</th><th>Stage</th><th>Officer</th><th></th></tr>
+        <tr class="sel"><td><b>Ama Serwaa</b><br><span class="tag tag--coord">journey → Kwame</span></td><td>Case · 4/7</td><td>Efua</td><td>→</td></tr>
+        <tr><td><b>Esi Mensah</b></td><td>Consultation · 2/4</td><td><span class="tag">Unassigned</span></td><td>→</td></tr>
+        <tr><td><b>Yaw Darko</b></td><td>Case · 6/7</td><td>You</td><td>→</td></tr>
+      </table>
+    </div>
+    <div class="sheet anno" data-n="5" style="border-left:1.5px solid var(--b);min-height:0">
+      <p class="eyebrow">Client</p>
+      <h4>Ama Serwaa</h4>
+      <div class="facts"><dl>
+        <dt>Journey</dt><dd>Coordinated by <b>Kwame Boateng</b> — every case routes to him</dd>
+        <dt>Open cases</dt><dd>C-1042 consultation · A-0918 application</dd>
+        <dt>Branch</dt><dd>Accra</dd>
+      </dl></div>
+      <div class="sheet-foot" style="border-top:1px solid var(--bl)">
+        <button class="btn">Release journey</button>
+        <button class="btn">Open →</button>
+      </div>
+    </div>
+  </div>
+  <div class="legend">
+    <span><b>4</b>Officer cards carry a <code>Coordinating n</code> / <code>Journey: name</code> badge — the strip already aggregates per-officer load, delegated work just becomes visible in it.</span>
+    <span><b>5</b>The client preview sheet (the one card-click already opens) gains the journey line + <b>Delegate journey… / Release journey</b>. When no journey is delegated the button reads "Delegate journey…" and opens the sheet pre-scoped.</span>
+  </div>
+</div>
+
+<h2>7 · What the non-manager journey delegation means</h2>
+<table class="review">
+<tr><th>Question</th><th>Answer (all existing behaviour)</th></tr>
+<tr><td>Who can a manager delegate to?</td><td>Anyone <i>coordinator-capable</i>: the <code>coordinator</code> role, or staff with a delegation grant (<code>assertCanCoordinate</code> server-side). Kwame in the mock is a consultant marked delegable — that's your "non-manager staff".</td></tr>
+<tr><td>What do they get?</td><td>The case lands in their queue as <code>coordinatorId</code>, they get the steering notifications, and on the detail page they act as its owner. For a journey delegation, <code>applicants.coordinatorId</code> is set — every future case stamps <code>coordinatedVia = "applicant"</code> automatically.</td></tr>
+<tr><td>What can they not do?</td><td>They can't delegate further or set duty — delegation stays a manager verb. The API already enforces this (<code>Only managers or coordinators…</code> checks on the delegate/duty routes).</td></tr>
+<tr><td>Taking it back</td><td>"Coordinated" chip → select the case → <b>Take back</b> in the sheet (calls <code>reclaimCoordination</code>). Journeys release from the client card via <code>releaseJourney</code> — in-flight cases keep their coordinator, new cases stop routing.</td></tr>
+</table>
+
+<h2>8 · The Dashboard's read-only line</h2>
+<p class="lead">The Dashboard keeps its "numbers only" contract — coverage appears as one line inside the
+existing <b>Team load</b> panel, linked to the Workspace where the fix happens.</p>
+<div class="frame">
+  <div class="card" style="max-width:26rem">
+    <p class="k">Team load</p>
+    <div class="covrow anno" data-n="6">
+      <span><span class="scope">Duty · today</span><br>
+      <span class="who">Accra: Efua</span> <span class="muted xs">·</span> <span style="text-decoration:underline">Kumasi: nobody →</span></span>
+    </div>
+    <div class="nrow"><span>Efua Owusu</span><span class="w">9 cases · 3 overdue</span></div>
+    <div class="nrow"><span>Kwame Boateng</span><span class="w">5 cases</span></div>
+    <div class="nrow"><span>Akosua Frimpong</span><span class="w">14 cases · 1 overdue</span></div>
+  </div>
+  <div class="legend">
+    <span><b>6</b>One line, read-only: today's duty per branch. An uncovered branch underlines and links to <code>/workspace</code> — the card there is where duty is set. No controls on the Dashboard; it reports, it doesn't mutate.</span>
+  </div>
+</div>
+
+<h2>9 · Build list</h2>
+<table class="review">
+<tr><th>Piece</th><th>File(s)</th><th>Effort</th></tr>
+<tr><td><b>Branch clamp on write routes</b> — duty / delegate / reassign / release: <code>see_all_branches</code> → any branch, else actor's own branch only</td><td>API <code>routes/consultations.ts</code>, <code>routes/applicants.ts</code></td><td>Small — one condition per route; this is what makes "branch manager" real</td></tr>
+<tr><td><code>DelegateSheet.tsx</code> — scope radios, workload list, note, delegate/release</td><td>new, <code>pages/case/</code></td><td>Medium — reuses <code>Sheet</code>, <code>getWorkload</code></td></tr>
+<tr><td>Coverage card (all branches for GM, own branch for BM) + all-branches coverage sheet</td><td><code>NowPane.tsx</code></td><td>Small–Medium — <code>DutyToday</code> logic moves here from <code>EnterpriseConsultations.tsx</code>, batched per branch</td></tr>
+<tr><td>Read-only duty line in Team load</td><td><code>EnterpriseDashboard.tsx</code></td><td>Small — <code>getDuty</code> per branch, link to <code>/workspace</code></td></tr>
+<tr><td>"Coordinated" chip + <code>→ name</code> row tag + Delegate… button</td><td><code>Workspace.tsx</code>, <code>PendingTasks.tsx</code></td><td>Small — coordinatorName is already on the consultation rows</td></tr>
+<tr><td>Client-card journey line + Delegate/Release buttons; officer badges</td><td><code>WorkspaceCaseload.tsx</code></td><td>Small</td></tr>
+<tr><td>Remove <code>DutyToday</code> from the Consultations page</td><td><code>EnterpriseConsultations.tsx</code></td><td>Small</td></tr>
+<tr><td>Optional: week roster — <code>setCoordinatorDuty</code> accepts <code>dutyDate</code>/<code>dates[]</code>, coverage sheet gains a day row</td><td>API + <code>NowPane.tsx</code></td><td>Medium — table already keys on <code>(branch, date)</code></td></tr>
+</table>
+
+<div class="note">
+<b>Why not put a "Delegated" page in the sidebar?</b> Delegation is state on work that already lives in the
+queue — a separate page duplicates the worklist. The chip + Coverage card surface the same information where
+managers already look, and the Sheet keeps the write path in one component. If volume ever justifies it, the
+"Coordinated" filter becomes a saved view, not a new page.
+</div>
+
+</div>
+</body>
+</html>

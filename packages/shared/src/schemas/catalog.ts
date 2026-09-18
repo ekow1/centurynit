@@ -4,7 +4,7 @@ export const CatalogDestinationSchema = z.object({
 	id: z.string(),
 	name: z.string(),
 	region: z.string(),
-	/** The embassy's visa fee and the visa centre's biometrics fee — paid on the client's behalf, at cost. */
+	/** The embassy's visa fee and the visa centre's biometrics fee. Paid on the client's behalf, at cost. */
 	visaFeeCents: z.number().int().min(0).optional(),
 	biometricsFeeCents: z.number().int().min(0).optional(),
 	tagline: z.string().nullable().optional(),
@@ -28,7 +28,7 @@ export const CatalogUniversitySchema = z.object({
 	id: z.string(),
 	name: z.string(),
 	destinationId: z.string().nullable().optional(),
-	/** The university's own application fee — paid on the client's behalf, at cost. */
+	/** The university's own application fee. Paid on the client's behalf, at cost. */
 	applicationFeeCents: z.number().int().min(0).optional(),
 	city: z.string().nullable().optional(),
 	ranking: z.string().nullable().optional(),

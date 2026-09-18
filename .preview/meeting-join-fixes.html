@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Meeting join — the four fixes</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1120px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.tag--bug{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.mock{background:#fafafa;border:1px solid #bbb;padding:0;overflow:hidden}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.vs{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start}
+	@media(max-width:900px){.vs{grid-template-columns:1fr}}
+	.vs .h{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.5rem}
+	.vs .mock{padding:0}
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap;text-decoration:none}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.card{background:#fff;border:1px solid var(--ink);padding:1.25rem}
+	.pill{display:inline-block;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;padding:.28rem .6rem;border:1px solid var(--ink)}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line)}
+	code{font-family:var(--mono);font-size:.74rem;background:var(--muted-bg);padding:.1rem .35rem}
+	table.diff{width:100%;border-collapse:collapse;font-size:.78rem;max-width:64rem}
+	table.diff th{font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;text-align:left;padding:.45rem .6rem;border-bottom:1.5px solid var(--ink)}
+	table.diff td{padding:.5rem .6rem;border-bottom:1px solid var(--line-light);vertical-align:top}
+	pre{background:#111;color:#eee;font-family:var(--mono);font-size:.72rem;padding:1rem 1.25rem;overflow-x:auto;line-height:1.6}
+	pre .cm{color:#888}
+	pre .k{color:#9ecbff}
+
+	/* meeting block mock (ops detail strip) */
+	.meetblock{background:var(--muted-bg);border-bottom:1px solid var(--line-light);padding:.75rem 1.25rem}
+	.meetblock .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem}
+	.meetblock .row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.3rem}
+	.meetblock .raw{font-family:var(--mono);font-size:.68rem;color:var(--fg-muted);word-break:break-all}
+	.input{border:1px solid var(--ink);background:#fff;font-size:.78rem;padding:.5rem .7rem;font-family:var(--sans);min-width:240px;flex:1}
+
+	/* modal mock */
+	.scrim{background:rgba(0,0,0,.45);padding:3rem 1rem;display:flex;justify-content:center}
+	.modal{background:#fff;border:1.5px solid var(--ink);max-width:26rem;width:100%;box-shadow:6px 6px 0 rgba(0,0,0,.25)}
+	.modal .m-head{border-bottom:1.5px solid var(--ink);padding:.7rem 1.1rem;display:flex;justify-content:space-between;align-items:center}
+	.modal .m-body{padding:1.1rem;text-align:center}
+	.modal .clock{font-family:var(--mono);font-size:2.6rem;letter-spacing:-0.02em;margin:.4rem 0 .1rem}
+	.modal .m-sub{font-size:.78rem;color:var(--fg-muted);line-height:1.55}
+	.modal .m-foot{border-top:1px solid var(--line-light);padding:.8rem 1.1rem;display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap}
+	.countchip{display:inline-block;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);padding:.25rem .55rem;margin-top:.55rem}
+
+	/* page header mock */
+	.phead{background:#fff;border:1px solid #bbb;padding:1.25rem;display:flex;justify-content:space-between;align-items:flex-start;gap:1rem}
+	.phead h1{font-size:1.4rem;letter-spacing:-0.01em}
+	.ptable{width:100%;border-collapse:collapse;font-size:.78rem;background:#fff}
+	.ptable td{padding:.6rem .8rem;border-bottom:1px solid var(--line-light)}
+	.ptable .mark{font-weight:700}
+	.jlink{background:none;border:0;font:inherit;text-decoration:underline;cursor:pointer;padding:0}
+	.struck{text-decoration:line-through;opacity:.55}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<h1 class="page">Meeting join — the four fixes</h1>
+	<p class="note">
+		Four issues from your pass. Two are outright bugs in the code, two are rough edges.
+		Diagnosis first, then the shape of each fix — nothing here is built yet.
+	</p>
+	<div class="jump">
+		<a href="#diag">A · Diagnosis</a>
+		<a href="#modal">B · "Opens at" modal</a>
+		<a href="#opsblock">C · Ops meeting block</a>
+		<a href="#customlink">D · Bring-your-own link</a>
+		<a href="#bookcta">E · Portal Book CTAs</a>
+		<a href="#map">F · Change map</a>
+	</div>
+
+	<!-- ── A · DIAGNOSIS ─────────────────────────────────────────────── -->
+	<span class="tag" id="diag">A · What I found</span>
+	<table class="diff">
+		<tr><th style="width:22rem">Your report</th><th>Root cause</th><th style="width:9rem">Status</th></tr>
+		<tr>
+			<td>"The meeting room opens at 08:45" shows as a stray line of text</td>
+			<td>The window check works — the <code>MEETING_NOT_OPEN</code> 409 lands correctly. It just renders as inline <code>joinError</code> text wherever the button sits — easy to miss, no context.</td>
+			<td><span class="pill pill--hollow">Polish</span></td>
+		</tr>
+		<tr>
+			<td>Join doesn't show on the ops consultation detail</td>
+			<td><b>Bug.</b> The ops case mapper renders the consultation type as <code>"Online"</code> (capitalized — <code>useCasesApi.ts:62</code>), but the detail page's meeting block only mounts when <code>consultation.type === "online"</code> (lowercase — <code>ConsultationDetail.tsx:537</code>, and the same check at <code>:256</code>). The entire meeting block — Join, resend, change — is dead code for <b>every</b> online consultation.</td>
+			<td><span class="pill pill--solid">Bug</span></td>
+		</tr>
+		<tr>
+			<td>No way to paste our own Zoom/Meet link instead of LiveKit</td>
+			<td>The "Change / + Add Custom Link" editor exists but was hidden by the same bug. <b>And a second bug behind it:</b> <code>setBookingMeetingUrl</code> writes <code>meetingUrl</code> but leaves <code>meetingProvider</code> — paste a Zoom link on a LiveKit booking and <code>/join</code> still mints a LiveKit token, ignoring your link entirely. Also the editor pre-fills the input with <code>livekit://…</code>, which then fails the <code>https://</code> validation.</td>
+			<td><span class="pill pill--solid">Bug</span></td>
+		</tr>
+		<tr>
+			<td>Portal still says "Book appointment" when a consultation is booked</td>
+			<td>Three leftover CTAs: the <code>/portal/appointments</code> header always shows a primary <b>+ Book appointment</b>; the consultant card on the booked consultation page has a <b>Book call</b> ghost that links back to appointments; the nav blurb reads "Book, reschedule, join". Nothing on those pages checks whether a booking already exists.</td>
+			<td><span class="pill pill--hollow">UX</span></td>
+		</tr>
+	</table>
+
+	<!-- ── B · THE MODAL ─────────────────────────────────────────────── -->
+	<span class="tag tag--after" id="modal">B · The "opens at" moment → a modal</span>
+	<p class="note">
+		Instead of a stray line under the button, joining outside the window opens a small dialog.
+		The API's 409 already says when; we add the timestamp to the error body so the UI can show
+		a live countdown instead of a frozen string. Same modal on portal and ops — it ships inside
+		the shared <code>useJoinMeeting</code> hook, so every Join surface gets it free.
+	</p>
+	<div class="mock">
+		<div class="scrim">
+			<div class="modal">
+				<div class="m-head">
+					<span class="eyebrow">Consultation · CNS-2026-0003</span>
+					<span class="mono" style="font-size:.7rem;cursor:pointer">✕</span>
+				</div>
+				<div class="m-body">
+					<p class="eyebrow" style="color:var(--ink)">The room isn't open yet</p>
+					<p class="clock">08:45</p>
+					<p class="m-sub">
+						Online consultation · Thu 18 Sep · 09:00 – 09:45<br>
+						Clients join from 15 minutes before the slot.<br>
+						Your consultant can get in earlier to prepare.
+					</p>
+					<span class="countchip">Opens in 1 h 12 min</span>
+				</div>
+				<div class="m-foot">
+					<span class="btn btn--sm">Got it</span>
+					<span class="btn btn--sm btn--ghost">Add to calendar</span>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="callout">
+		<ul>
+			<li><b>Machine-readable:</b> the 409 body gains <code>opensAt</code> (ISO) so the modal renders a real countdown, not a parsed string.</li>
+			<li><b>Same shape for "ended":</b> <code>MEETING_ENDED</code> reuses the modal — "This meeting window has passed" + reschedule CTA.</li>
+			<li><b>Zero per-surface wiring:</b> it renders inside the hook's <code>overlay</code>, next to the call UI.</li>
+		</ul>
+	</div>
+
+	<!-- ── C · OPS MEETING BLOCK ─────────────────────────────────────── -->
+	<span class="tag tag--after" id="opsblock">C · Ops detail — the block that never rendered</span>
+	<p class="note">
+		One character of casing hid this whole strip. With <code>isOnline</code> fixed it renders
+		for every online consultation — Join for anyone authorized, Resend + Change for whoever
+		manages the case.
+	</p>
+	<div class="vs">
+		<div>
+			<p class="h">Before — what you see now (nothing)</p>
+			<div class="mock">
+				<div class="meetblock" style="border:1px dashed #999">
+					<p class="eyebrow">Meeting link</p>
+					<p class="muted" style="font-size:.72rem;margin-top:.3rem">
+						<code>type === "online"</code> is never true — the mapper emits <code>"Online"</code>.<br>
+						This whole block evaluates to <code>null</code>.
+					</p>
+				</div>
+			</div>
+		</div>
+		<div>
+			<p class="h">After — LiveKit booking, manager's view</p>
+			<div class="mock">
+				<div class="meetblock">
+					<div class="head">
+						<p class="eyebrow">Meeting link</p>
+						<span class="pill">LiveKit · in-app</span>
+					</div>
+					<div class="row">
+						<span class="btn btn--primary btn--sm">Join →</span>
+						<span class="raw">In-app call — joined here, nothing to copy or forward</span>
+						<span class="btn btn--ghost btn--sm">✉ Resend link to client</span>
+						<span class="btn btn--ghost btn--sm">Change</span>
+					</div>
+				</div>
+			</div>
+			<p class="note" style="margin-top:.6rem">Join goes through <code>/bookings/:id/join</code> → mounts the in-app call. The assignee/coordinator is the host; oversight joins as a participant.</p>
+		</div>
+	</div>
+
+	<!-- ── D · BRING YOUR OWN LINK ───────────────────────────────────── -->
+	<span class="tag tag--after" id="customlink">D · Change → paste any provider's link</span>
+	<p class="note">
+		The editor already exists — two bugs keep it broken. Fixed, "Change" becomes the escape
+		hatch: paste a Zoom or Meet link and that booking runs on it, no LiveKit involved.
+	</p>
+	<div class="mock">
+		<div class="meetblock">
+			<div class="head">
+				<p class="eyebrow">Meeting link</p>
+				<span class="pill">LiveKit · in-app</span>
+			</div>
+			<div class="row">
+				<input class="input" value="https://zoom.us/j/81234567890?pwd=…" readonly>
+				<span class="btn btn--primary btn--sm">Save &amp; email client</span>
+				<span class="btn btn--ghost btn--sm">Cancel</span>
+			</div>
+			<p class="muted" style="font-size:.68rem;margin-top:.5rem">
+				Pasting a link replaces the LiveKit room for this booking — the client gets the new link
+				by email, and Join opens it directly. Clearing the field removes the meeting.
+			</p>
+		</div>
+	</div>
+	<div class="callout">
+		<ul>
+			<li><b>The actual fix</b> is in <code>setBookingMeetingUrl</code>: setting a manual URL also writes <code>meetingProvider: "manual"</code>, clears <code>meetingSpace</code>, and best-effort deletes the provider room. Without it your Zoom link is stored but <code>/join</code> keeps minting LiveKit tokens.</li>
+			<li><b>Draft pre-fill</b> starts empty for token'd providers (a <code>livekit://</code> handle isn't a link and would fail validation anyway).</li>
+			<li><b>Round trip:</b> clearing the link doesn't resurrect a provider room — "Generate" stays the way back to an auto room.</li>
+		</ul>
+	</div>
+
+	<!-- ── E · PORTAL BOOK CTAs ──────────────────────────────────────── -->
+	<span class="tag tag--after" id="bookcta">E · Portal — stop offering a booking that exists</span>
+	<p class="note">
+		When an upcoming booking exists, the header button demotes and the stray "Book call"
+		goes away. Booking a <i>second</i> slot stays possible — it's just no longer a shout.
+	</p>
+	<div class="vs">
+		<div>
+			<p class="h">Before — always primary</p>
+			<div class="mock">
+				<div class="phead">
+					<div>
+						<p class="eyebrow">Appointments</p>
+						<h1>Your calendar</h1>
+						<p class="muted" style="font-size:.78rem;margin-top:.3rem">Consultations and check-ins with your Century NIT team.</p>
+					</div>
+					<span class="btn">+ Book appointment</span>
+				</div>
+				<table class="ptable">
+					<tr><td class="mark">18 SEP<br><span class="muted" style="font-size:.65rem">THU</span></td><td><b>Consultation</b><br><span class="muted" style="font-size:.7rem">9:00 AM · 45 min · Online</span></td><td class="muted">E. ASANTE</td><td><span class="pill">CONFIRMED</span></td><td style="text-align:right"><span class="jlink">Join</span> · <span class="jlink">Move</span> · <span class="jlink">Cancel</span></td></tr>
+				</table>
+				<p class="note" style="padding:.8rem 1.25rem">…and on the consultation page, a "Book call" button sits inside the consultant card — a second door to a booking you already have.</p>
+			</div>
+		</div>
+		<div>
+			<p class="h">After — booked state reads as booked</p>
+			<div class="mock">
+				<div class="phead">
+					<div>
+						<p class="eyebrow">Appointments</p>
+						<h1>Your calendar</h1>
+						<p class="muted" style="font-size:.78rem;margin-top:.3rem">Next: <b>Thu 18 Sep, 9:00 AM</b> · Consultation · Online</p>
+					</div>
+					<span class="btn btn--ghost">+ Book another</span>
+				</div>
+				<table class="ptable">
+					<tr><td class="mark">18 SEP<br><span class="muted" style="font-size:.65rem">THU</span></td><td><b>Consultation</b><br><span class="muted" style="font-size:.7rem">9:00 AM · 45 min · Online</span></td><td class="muted">E. ASANTE</td><td><span class="pill">CONFIRMED</span></td><td style="text-align:right"><span class="jlink">Join</span> · <span class="jlink">Move</span> · <span class="jlink">Cancel</span></td></tr>
+				</table>
+				<p class="note" style="padding:.8rem 1.25rem">The consultant card's "Book call" becomes "Appointments →" (manage, not book). With no upcoming booking, the header CTA returns to primary "+ Book appointment".</p>
+			</div>
+		</div>
+	</div>
+
+	<!-- ── F · CHANGE MAP ────────────────────────────────────────────── -->
+	<span class="tag" id="map">F · Change map</span>
+	<table class="diff">
+		<tr><th>File</th><th>Change</th></tr>
+		<tr><td class="mono">api · services/booking.ts</td><td>409 body carries <code>opensAt</code>/<code>expiresAt</code> ISO for the modal countdown; <code>setBookingMeetingUrl</code> writes <code>meetingProvider:"manual"</code>, clears <code>meetingSpace</code>, deletes the provider room best-effort</td></tr>
+		<tr><td class="mono">api · middleware/error.ts</td><td>Let <code>HttpError</code> carry an optional <code>details</code> payload into the JSON body</td></tr>
+		<tr><td class="mono">ops · case/ConsultationDetail.tsx</td><td><code>"online" → "Online"</code> (2 places) — revives the whole meeting block; draft pre-fill blank for token'd providers</td></tr>
+		<tr><td class="mono">web+ops · ConsultationCall.tsx</td><td><code>useJoinMeeting</code> catches <code>MEETING_NOT_OPEN</code>/<code>MEETING_ENDED</code> → renders the window modal with countdown instead of inline text</td></tr>
+		<tr><td class="mono">web · PortalAppointments.tsx</td><td>Header CTA demotes to ghost "Book another" when an upcoming booking exists; sub-line names the next slot</td></tr>
+		<tr><td class="mono">web · PortalPages.tsx</td><td>Consultant card "Book call" → "Appointments →"</td></tr>
+	</table>
+	<p class="note" style="margin-top:1rem">
+		<b>Not changing:</b> the join window itself (staff −30 / client −15), the authz rules, or
+		provider precedence. The "opens at" gate stays server-side — the modal is just a better
+		rendering of the same 409.
+	</p>
+</div>
+</body>
+</html>

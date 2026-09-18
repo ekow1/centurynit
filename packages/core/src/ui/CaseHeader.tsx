@@ -4,7 +4,7 @@ import { StatusPill } from "./StatusPill.js";
 
 /**
  * The top of every case view, in ops and in the portal: who, which case,
- * where they are (the applicant's own step — the same `deriveJourney`
+ * where they are (the applicant's own step. The same `deriveJourney`
  * answer the portal shows, so support and applicant use the same words),
  * and who is handling it. Pages add their stage-specific body under it.
  */
@@ -32,20 +32,20 @@ export function CaseHeader({
 	portalStage?: string | null;
 	handlerName?: string | null;
 	/**
-	 * The one control that changes the handler — an "Assign" / "Change"
+	 * The one control that changes the handler. An "Assign" / "Change"
 	 * button beside the name. Assignment lives here and nowhere else in the
 	 * detail, so staff always look in the same place for it.
 	 */
 	handlerAction?: React.ReactNode;
 	/** Chapter officers on the case (visa officer, travel officer…), each with their title. */
 	stageHandlers?: { stage: string; name: string }[];
-	/** Applicant contact — shown as mailto / tel links. */
+	/** Applicant contact. Shown as mailto / tel links. */
 	contact?: { email?: string | null; phone?: string | null };
 	/** Small facts to append (country, programme…). */
 	extra?: { label: string; value: React.ReactNode }[];
-	/** Top-right slot — case-level buttons (History, links) that are not stage work. */
+	/** Top-right slot. Case-level buttons (History, links) that are not stage work. */
 	actions?: React.ReactNode;
-	/** Below the facts — a stage-specific body. */
+	/** Below the facts. A stage-specific body. */
 	children?: React.ReactNode;
 }) {
 	return (

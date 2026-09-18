@@ -85,7 +85,7 @@ export function NotificationBell() {
 	}, [open]);
 
 	function normalizeLink(link: string): string {
-		// /portal/support was removed — support is now the floating chat on /portal/home.
+		// /portal/support was removed. Support is now the floating chat on /portal/home.
 		if (link === "/portal/chat" || link === "/portal/support") return "/portal/home";
 		return link;
 	}

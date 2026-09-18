@@ -35,7 +35,7 @@ function ensureOpen() {
 					}
 				}
 			} catch {
-				// malformed payload — ignore
+				// malformed payload. Ignore
 			}
 		});
 		es.onerror = () => {

@@ -3,7 +3,7 @@ import { ensureChatUiStyles } from "./tokens.js";
 
 /**
  * The quick-react emoji set. WhatsApp surfaces six; we mirror that so the
- * interaction is familiar without being a visual clone. Order matters — the
+ * interaction is familiar without being a visual clone. Order matters. The
  * first emoji is the default when the picker is opened via keyboard.
  */
 export const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"] as const;

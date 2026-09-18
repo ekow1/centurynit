@@ -17,9 +17,9 @@ import { ChapterGate } from "./PortalLayout";
 
 /**
  * Chapter V · Fees before you go. The service fee as the ledger carries it:
- * the deposit (paid at enrolment), the pre-departure milestone — unlocked
+ * the deposit (paid at enrolment), the pre-departure milestone. Unlocked
  * once the flight is booked (or the client books their own), it releases
- * the travel documents — and the
+ * the travel documents. And the
  * post-arrival remainder, spread over a duration and frequency the client
  * picks here and paid as dated instalments. The flight never waits on any
  * of it.
@@ -106,7 +106,7 @@ function FeesChapterInner() {
 	const total = invoice?.subtotalCents ?? 0;
 	const paidPct = total > 0 && invoice ? Math.round((invoice.paidCents / total) * 100) : 0;
 
-	// The schedule preview from the catalogue's maths — dates only once arrival is known.
+	// The schedule preview from the catalogue's maths. Dates only once arrival is known.
 	const preview = useMemo(() => {
 		if (!months || !frequency || postCents <= 0) return [];
 		return postArrivalInstalments({ amountCents: postCents, months, frequency, anchor: null, graceDays: catalogue.graceDays });
@@ -249,7 +249,7 @@ function FeesChapterInner() {
 							<p className="psec__later">{loading ? "Reading your ledger…" : `Your service-fee invoice is raised by ${handlerFirst} once your plan is on file.`}</p>
 						) : milestoneDone ? (
 							<p className="psec__later">
-								Paid{milestone.paidAt ? ` ${day(milestone.paidAt)}` : ""} — your admission letter, visa documents and e-ticket are released. <Link to="/portal/documents" className="plnk">Documents →</Link>
+								Paid{milestone.paidAt ? ` ${day(milestone.paidAt)}` : ""}. Your admission letter, visa documents and e-ticket are released. <Link to="/portal/documents" className="plnk">Documents →</Link>
 							</p>
 						) : !unlocked ? (
 							<div className="sharp-card">
@@ -307,7 +307,7 @@ function FeesChapterInner() {
 									<Button type="button" onClick={() => void pay()} disabled={paying || !deposit?.covered} arrow>
 										{paying ? "Connecting to Paystack…" : `Pay ${ghs(milestone.remaining)}`}
 									</Button>
-									<span className="pfoot__note">{deposit?.covered ? "Paystack · card or mobile money · exactly this milestone, nothing more." : "Your deposit comes first — pay it from your enrolment page."}</span>
+									<span className="pfoot__note">{deposit?.covered ? "Paystack · card or mobile money · exactly this milestone, nothing more." : "Your deposit comes first. Pay it from your enrolment page."}</span>
 								</div>
 							</div>
 						)}
@@ -407,7 +407,7 @@ function FeesChapterInner() {
 				<div className="prail">
 					<div className="prail__ink">
 						<p className="prail__ink-k">Your position</p>
-						<p className="prail__ink-big">{dueNow ? `${ghs(dueNow.remaining)} due` : invoice ? "Settled" : "—"}</p>
+						<p className="prail__ink-big">{dueNow ? `${ghs(dueNow.remaining)} due` : invoice ? "Settled" : "N/A"}</p>
 						<p className="prail__ink-s">
 							{split.depositPercent}% {deposit?.covered ? "paid" : "due"} · {isInstalments ? `${split.preDeparturePercent}% ${milestoneDone ? "paid" : "due"} · ${split.postArrivalPercent}% after arrival` : `${100 - split.depositPercent}% ${milestoneDone ? "paid" : "due"}`}
 						</p>
@@ -427,7 +427,7 @@ function FeesChapterInner() {
 										{paying ? "Connecting…" : `Pay ${ghs(dueNow.remaining)}`}
 									</Button>
 									<p className="prail__note">
-										{dueNow.i === 1 ? "Releases your admission letter, visa documents and e-ticket." : dueNow.l.dueAt ? `Instalment ${dueNow.i - 1} of ${postRows.length} · due ${day(dueNow.l.dueAt)}.` : "Your next instalment — dated once you arrive."}
+										{dueNow.i === 1 ? "Releases your admission letter, visa documents and e-ticket." : dueNow.l.dueAt ? `Instalment ${dueNow.i - 1} of ${postRows.length} · due ${day(dueNow.l.dueAt)}.` : "Your next instalment. Dated once you arrive."}
 									</p>
 								</>
 							)}
@@ -470,7 +470,7 @@ function FeesChapterInner() {
 					<div className="sharp-card sharp-card--soft">
 						<p className="eyebrow">Meanwhile</p>
 						<p className="prail__note" style={{ marginTop: "0.3rem" }}>
-							Your departure officer is booking your flight — the ticket invoice lands in Money when it is ready, before this milestone. <Link to="/portal/pre-departure" className="plnk">Departure →</Link>
+							Your departure officer is booking your flight. The ticket invoice lands in Money when it is ready, before this milestone. <Link to="/portal/pre-departure" className="plnk">Departure →</Link>
 						</p>
 					</div>
 				</div>

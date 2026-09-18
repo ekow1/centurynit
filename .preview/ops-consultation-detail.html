@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ops consultation detail — proposed fixes</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1120px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.tag--api{border-color:var(--fg-muted);color:var(--fg-muted)}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.mock{background:#fafafa;border:1px solid #bbb;padding:0;overflow:hidden}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.struck{text-decoration:line-through;opacity:.55}
+	.vs{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start}
+	@media(max-width:900px){.vs{grid-template-columns:1fr}}
+	.vs .h{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.5rem}
+	.vs .mock{padding:0}
+
+	/* shared chrome */
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap;text-decoration:none}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.card{background:#fff;border:1px solid var(--ink);padding:1.25rem}
+	.pill{display:inline-block;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;padding:.28rem .6rem;border:1px solid var(--ink)}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line)}
+	.kv{display:flex;justify-content:space-between;gap:1rem;padding:.42rem 0;border-bottom:1px solid var(--line-light);font-size:.8rem}
+	.kv:last-child{border-bottom:0}
+	.kv .k{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-muted);padding-top:.15rem}
+	.kv .v{text-align:right}
+	.strip{background:var(--muted-bg);border-bottom:1px solid var(--line-light);padding:.55rem 1.25rem;font-size:.72rem;display:flex;gap:.75rem;flex-wrap:wrap;align-items:center}
+	.strip .sep{opacity:.3}
+	.toolbar{display:flex;gap:.5rem;padding:.5rem 1.25rem;border-bottom:1px solid var(--line-light);background:#fff;flex-wrap:wrap;align-items:center}
+	.zone{position:relative}
+	.zone .ztag{position:absolute;top:-.6rem;left:.75rem;font-family:var(--mono);font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;background:#fff;border:1px solid var(--ink);padding:.1rem .4rem;z-index:2}
+	.zone--dead{opacity:.45}
+	.zone--dead .ztag{background:#fff;border-color:#999;color:var(--fg-muted)}
+	.x{color:#b91c1c;font-weight:700}
+	.ok{color:#15803d;font-weight:700}
+	ul.changes{margin:.75rem 0 0;padding-left:1.1rem;font-size:.8rem;max-width:64rem}
+	ul.changes li{margin:.3rem 0}
+	ul.changes .muted{font-size:.74rem}
+	code{font-family:var(--mono);font-size:.74rem;background:var(--muted-bg);padding:.1rem .35rem}
+	table.diff{width:100%;border-collapse:collapse;font-size:.78rem;max-width:64rem}
+	table.diff th{font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);text-align:left;padding:.4rem .6rem;border-bottom:1.5px solid var(--ink)}
+	table.diff td{padding:.5rem .6rem;border-bottom:1px solid var(--line-light);vertical-align:top}
+
+	/* ops-detail skeleton pieces */
+	.hdr{background:#fff;border:1px solid #bbb;margin:1.25rem;padding:.75rem 1rem}
+	.hdr .name{font-size:1.05rem;font-weight:600}
+	.hdr .meta{font-size:.72rem;color:var(--fg-muted);margin-top:.2rem}
+	.todo{margin:0 1.25rem 0;border:1px solid var(--ink);background:#fff;padding:.75rem 1rem}
+	.todo .t{font-weight:600;font-size:.8rem}
+	.todo .d{font-size:.72rem;color:var(--fg-muted)}
+	.meet{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;background:var(--muted-bg);border-bottom:1px solid var(--line-light);padding:.75rem 1.25rem}
+	.meet .murl{font-family:var(--mono);font-size:.68rem;color:var(--fg-muted);word-break:break-all}
+	.linkarrow{background:none;border:0;font:inherit;color:var(--ink);text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:0}
+	.tabsrow{display:flex;gap:0;border-bottom:1.5px solid var(--ink);background:#fff;padding:0 1.25rem}
+	.tabsrow .t{font-family:var(--mono);font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;padding:.7rem .9rem;border:0;border-right:1px solid var(--line-light);color:var(--fg-muted)}
+	.tabsrow .t.on{color:var(--ink);box-shadow:inset 0 -2px 0 var(--ink)}
+	.tabsrow .t.lock{opacity:.45}
+	.panel{padding:1.25rem;background:#fafafa}
+	.lockbox{background:#fff;border:1px solid var(--line-light);padding:1.5rem;text-align:center}
+	.mark{outline:2px dashed #b91c1c;outline-offset:2px}
+	.mark-ok{outline:2px solid #15803d;outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+	<h1 class="page">Ops consultation detail — the fix list, for review</h1>
+	<p class="note">
+		From the detail-page read-through. Four structural fixes and a sweep of small ones.
+		<b>None change what the page can do — they change where things live and when they appear.</b>
+		Each section shows the current state (marked <span class="x">✕</span>) against the proposed (marked <span class="ok">✓</span>).
+	</p>
+	<div class="jump">
+		<a href="#a">A · one meeting block</a>
+		<a href="#b">B · stay on the case after cancel</a>
+		<a href="#c">C · reschedule is a toolbar action</a>
+		<a href="#d">D · decision tab locks until started</a>
+		<a href="#e">E · confirm · start · delegate</a>
+		<a href="#f">F · small sweeps</a>
+		<a href="#g">G · what it costs</a>
+	</div>
+
+	<!-- ═══════════════ A ═══════════════ -->
+	<div class="tag" id="a">A · the meeting link, one home — currently three</div>
+	<p class="note">
+		Today an online case with a link renders it <b>twice, ~30 lines apart</b>: a display card with "Join Meeting →" and a management strip
+		with "Join →", the URL, Resend, and Change. A third entry point ("+ Online Meeting") sits in the toolbar. One block should own the link entirely.
+	</p>
+	<div class="vs">
+		<div>
+			<p class="h"><span class="x">✕</span> now — two Join buttons, same link</p>
+			<div class="mock">
+				<div class="zone zone--dead meet mark">
+					<span class="ztag">display card — delete</span>
+					<div>
+						<p style="font-weight:600;font-size:.8rem">Video meeting link</p>
+						<p class="murl">https://meet.google.com/abc-defg-hij</p>
+					</div>
+					<span class="btn btn--sm">Join Meeting →</span>
+				</div>
+				<div class="zone meet mark-ok" style="background:#fff">
+					<span class="ztag">management strip — keep</span>
+					<div style="width:100%">
+						<div style="display:flex;justify-content:space-between;margin-bottom:.3rem">
+							<span class="eyebrow">Meeting link</span>
+							<span class="pill pill--hollow">Google Meet</span>
+						</div>
+						<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+							<span class="btn btn--sm">Join →</span>
+							<span class="murl">https://meet.google.com/abc-defg-hij</span>
+							<span class="btn btn--sm btn--ghost">✉ Resend</span>
+							<span class="btn btn--sm btn--ghost">Change</span>
+						</div>
+					</div>
+				</div>
+				<div class="toolbar zone zone--dead mark">
+					<span class="ztag">toolbar duplicate — remove</span>
+					<span class="btn btn--sm btn--ghost struck">+ Online Meeting</span>
+					<span class="btn btn--sm btn--ghost">+ Delegate</span>
+					<span class="btn btn--sm btn--ghost" style="margin-left:auto">Cancel Case</span>
+				</div>
+			</div>
+		</div>
+		<div>
+			<p class="h"><span class="ok">✓</span> proposed — the strip is the only block</p>
+			<div class="mock">
+				<div class="meet" style="background:#fff">
+					<div style="width:100%">
+						<div style="display:flex;justify-content:space-between;margin-bottom:.3rem">
+							<span class="eyebrow">Meeting link</span>
+							<span class="pill pill--hollow">Google Meet</span>
+						</div>
+						<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+							<span class="btn btn--sm">Join →</span>
+							<span class="murl">https://meet.google.com/abc-defg-hij</span>
+							<span class="btn btn--sm btn--ghost">✉ Resend</span>
+							<span class="btn btn--sm btn--ghost">Change</span>
+						</div>
+					</div>
+				</div>
+				<div class="toolbar">
+					<span class="btn btn--sm btn--ghost">↻ Reschedule</span>
+					<span class="btn btn--sm btn--ghost">+ Delegate</span>
+					<span class="btn btn--sm btn--ghost" style="margin-left:auto">Cancel Case</span>
+				</div>
+			</div>
+			<p class="note" style="margin-top:.6rem">
+				No link yet → the strip shows "⚡ Generate Google Meet" / "+ Add Custom Link" as it does today.
+				In-person case → the strip shows the office address + "Get Directions", no link controls.
+				Viewers who can't manage it (not assigned, not a manager) see the link read-only.
+			</p>
+		</div>
+	</div>
+	<ul class="changes">
+		<li>Delete the <code>cn-next--waiting</code> display card (its Join/Get-Directions move into the strip).</li>
+		<li>Delete the toolbar's "+ Online Meeting" — the strip's own "+ Add Custom Link" covers it.</li>
+		<li>Fold the in-person branch's address + directions into the strip so online and in-person share one block.</li>
+	</ul>
+
+	<!-- ═══════════════ B ═══════════════ -->
+	<div class="tag" id="b">B · after cancelling, stay on the case</div>
+	<p class="note">
+		Today <code>Confirm Cancel</code> calls <code>onClosed()</code> — the detail unmounts. But the cancel form's own
+		consequence list says <i>"unless you issue a free rebooking on the cancelled case"</i> — and that action lives
+		on the card we just closed. Ops has to find the case again in the Cancelled tab.
+	</p>
+	<div class="vs">
+		<div>
+			<p class="h"><span class="x">✕</span> now — cancel ejects you from the case</p>
+			<div class="mock">
+				<div class="panel" style="text-align:center;padding:2.5rem 1rem">
+					<p class="eyebrow">consultations · cancelled</p>
+					<p style="font-size:.8rem;color:var(--fg-muted);margin-top:.5rem">
+						Detail closed. The case is back in the queue's<br>Cancelled tab — one click away from the<br>action the form just told you about.
+					</p>
+				</div>
+			</div>
+		</div>
+		<div>
+			<p class="h"><span class="ok">✓</span> proposed — the detail becomes the cancelled card</p>
+			<div class="mock">
+				<div class="hdr">
+					<div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem">
+						<span class="name">Enoch Enu <span class="mono muted" style="font-size:.7rem">CNS-2026-0009</span></span>
+						<span class="pill">Cancelled</span>
+					</div>
+					<p class="meta">Accra HQ · consultation</p>
+				</div>
+				<div class="panel">
+					<div class="card" style="padding:.85rem 1rem">
+						<div class="kv"><span class="k">Cancelled</span><span class="v">just now</span></div>
+						<div class="kv"><span class="k">By</span><span class="v">you (ops)</span></div>
+						<div class="kv"><span class="k">Reason</span><span class="v">Double-booked slot</span></div>
+						<div class="kv"><span class="k">Replaced by</span><span class="v">Not yet — awaiting the client</span></div>
+						<div style="display:flex;gap:.5rem;align-items:center;margin-top:.7rem;flex-wrap:wrap">
+							<span class="btn btn--sm mark-ok">Issue free rebooking</span>
+							<span class="muted" style="font-size:.68rem">The recovery action is right where you left it.</span>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<ul class="changes">
+		<li><code>cancelConsultation().then()</code> → drop <code>onClosed()</code>; <code>refresh()</code> swaps the row to Cancelled and the card renders in place.</li>
+		<li>Toast confirms: "Case cancelled — the client was emailed. Issue a free rebooking below if we cancelled on them."</li>
+		<li>Cancelled by the <b>client</b> → the same card, minus the credit nudge.</li>
+	</ul>
+
+	<!-- ═══════════════ C ═══════════════ -->
+	<div class="tag" id="c">C · reschedule is a toolbar action, not a next-action extra</div>
+	<p class="note">
+		"↻ Reschedule" currently exists only <i>inside</i> three next-action cards (assign / confirm / start).
+		On In Assessment — or any state with no pending action — it vanishes, even for the assigned consultant.
+		It belongs with the other case verbs in the toolbar.
+	</p>
+	<div class="vs">
+		<div>
+			<p class="h"><span class="x">✕</span> now — In Assessment, assigned consultant's view</p>
+			<div class="mock">
+				<div class="todo">
+					<p class="t">Record the assessment outcome</p>
+					<p class="d">The applicant sees the outcome once it is locked.</p>
+					<div style="margin-top:.5rem"><span class="btn btn--sm">Open decision →</span></div>
+				</div>
+				<div class="toolbar mark">
+					<span class="muted" style="font-size:.7rem;padding:.3rem 0">no reschedule here — it was inside earlier action cards only</span>
+					<span class="btn btn--sm btn--ghost">+ Delegate</span>
+					<span class="btn btn--sm btn--ghost" style="margin-left:auto">Cancel Case</span>
+				</div>
+			</div>
+			<p class="note" style="margin-top:.6rem">Meeting moved? The consultant leaves the page or asks a manager.</p>
+		</div>
+		<div>
+			<p class="h"><span class="ok">✓</span> proposed — toolbar, permission-gated</p>
+			<div class="mock">
+				<div class="todo">
+					<p class="t">Record the assessment outcome</p>
+					<p class="d">The applicant sees the outcome once it is locked.</p>
+					<div style="margin-top:.5rem"><span class="btn btn--sm">Open decision →</span></div>
+				</div>
+				<div class="toolbar">
+					<span class="btn btn--sm btn--ghost mark-ok">↻ Reschedule</span>
+					<span class="btn btn--sm btn--ghost">+ Delegate</span>
+					<span class="btn btn--sm btn--ghost" style="margin-left:auto">Cancel Case</span>
+				</div>
+			</div>
+			<p class="note" style="margin-top:.6rem">
+				Visible to the assigned consultant and <code>canAssignWork</code>, on live statuses only
+				(not Completed / Cancelled). The next-action cards lose their embedded copy.
+			</p>
+		</div>
+	</div>
+	<ul class="changes">
+		<li>One <code>rescheduleButton</code> in the toolbar, gated <code>(isMine || canAssignWork) && status not Completed/Cancelled</code>.</li>
+		<li>While the reschedule panel is open, the toolbar hides — same treatment as the cancel/coordinator forms get today.</li>
+		<li>The approve/reject card for a <i>client-requested</i> move stays in nextActions — that's a decision, not the verb.</li>
+	</ul>
+
+	<!-- ═══════════════ D ═══════════════ -->
+	<div class="tag" id="d">D · the Decision tab locks until the assessment starts</div>
+	<p class="note">
+		The tab lock covers only <code>Under Review</code>. On Assigned/Confirmed a permitted viewer sees the full
+		<b>submittable</b> form — and the API 409s on submit ("Start the assessment before completing it").
+		The form should not invite input the server will refuse.
+	</p>
+	<div class="vs">
+		<div>
+			<p class="h"><span class="x">✕</span> now — Assigned case, Decision tab open</p>
+			<div class="mock">
+				<div class="tabsrow"><span class="t">Background</span><span class="t">Documents</span><span class="t on">Decision</span></div>
+				<div class="panel">
+					<div class="card mark">
+						<p class="eyebrow mb-2">Consultation Assessment Form</p>
+						<div style="font-size:.75rem;color:var(--fg-muted);margin:.6rem 0">
+							Outcome: <span class="pill pill--hollow">Eligible ▾</span>
+							&nbsp;Notes: <span class="pill pill--hollow">[ 6-row textarea ]</span>
+							&nbsp;Country / University / Program / Package
+						</div>
+						<span class="btn" style="display:block;text-align:center">Complete Consultation &amp; Lock Assessment</span>
+						<p class="muted" style="font-size:.68rem;margin-top:.5rem;text-align:center">→ click → API 409: "Start the assessment before completing it"</p>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div>
+			<p class="h"><span class="ok">✓</span> proposed — locked with a real hint</p>
+			<div class="mock">
+				<div class="tabsrow"><span class="t">Background</span><span class="t">Documents</span><span class="t lock">Decision 🔒</span></div>
+				<div class="panel">
+					<div class="lockbox">
+						<p class="eyebrow">Decision · locked</p>
+						<p style="font-size:.8rem;margin-top:.5rem">Unlocks when the assessment starts — confirm the slot, then "Start assessment".</p>
+					</div>
+				</div>
+			</div>
+			<p class="note" style="margin-top:.6rem">
+				Lock condition becomes <code>status !== "In Assessment" &amp;&amp; status !== "Completed"</code>.
+				Non-permitted viewers keep the existing read-only card.
+			</p>
+		</div>
+	</div>
+	<ul class="changes">
+		<li>Tab <code>locked</code> flag: Under Review → <code>Assigned || Confirmed || Under Review</code> (anything before In Assessment).</li>
+		<li>Hint text per state: "Unlocks once assigned" / "Unlocks once the slot is confirmed" / "Unlocks when the assessment starts".</li>
+		<li>Belt-and-braces: the form render guard adds <code>status === "In Assessment"</code> so a stale tab can't show it.</li>
+	</ul>
+
+	<!-- ═══════════════ E ═══════════════ -->
+	<div class="tag" id="e">E · the three verbs — confirm, start, delegate</div>
+	<p class="note">
+		Each maps to one real state change and the concept is right. The gaps are at the edges:
+		a client-facing email that can fire with nothing to join, a button that will always 409,
+		and a "reassign" that loses its audit trail.
+	</p>
+
+	<!-- ── E1 · confirm slot ── -->
+	<p class="eyebrow" style="margin:1.5rem 0 .4rem">E1 · Confirm slot — the client handshake</p>
+	<p class="note">
+		<b>What it does:</b> booking + case → <code>CONFIRMED</code>, timeline comment ("Slot confirmed — booking locked"),
+		client email carrying the meeting link, in-app notification. Requires a consultant assigned, refuses past slots, idempotent.
+		It's the only step that <b>emails the client</b> — which makes its two edges client-facing.
+	</p>
+	<div class="vs">
+		<div>
+			<p class="h"><span class="x">✕</span> edge 1 — online case, no link set</p>
+			<div class="mock">
+				<div class="todo">
+					<p class="t">Confirm the slot</p>
+					<p class="d">Accept the booking time, or reschedule if needed.</p>
+					<div style="margin-top:.5rem;display:flex;gap:.5rem">
+						<span class="btn btn--sm btn--ghost">↻ Reschedule</span>
+						<span class="btn btn--sm mark">Confirm slot</span>
+					</div>
+				</div>
+				<div class="panel">
+					<p class="muted" style="font-size:.72rem">→ click → client email "your slot is locked" — <b>with nothing to join</b>. The link can be added after, but the email already went.</p>
+				</div>
+			</div>
+		</div>
+		<div>
+			<p class="h"><span class="ok">✓</span> proposed — link first, then confirm</p>
+			<div class="mock">
+				<div class="todo">
+					<p class="t">Add a meeting link to confirm</p>
+					<p class="d">Online case — the confirmation email carries the join link.</p>
+					<div style="margin-top:.5rem;display:flex;gap:.5rem">
+						<span class="btn btn--sm btn--ghost">↻ Reschedule</span>
+						<span class="btn btn--sm mark-ok">⚡ Generate Meet</span>
+						<span class="btn btn--sm btn--ghost">Add link…</span>
+					</div>
+				</div>
+				<div class="panel">
+					<p class="muted" style="font-size:.72rem">API guard: <code>type=online &amp;&amp; !meetingUrl</code> → 409 "Add a meeting link before confirming". In-person cases confirm as today.</p>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="vs" style="margin-top:1rem">
+		<div>
+			<p class="h"><span class="x">✕</span> edge 2 — the slot already passed</p>
+			<div class="mock">
+				<div class="todo">
+					<p class="t">Confirm the slot</p>
+					<p class="d">Slot was 14 Sep · 11:00 — <b>3 days ago</b>.</p>
+					<div style="margin-top:.5rem"><span class="btn btn--sm mark">Confirm slot</span></div>
+				</div>
+				<div class="panel">
+					<p class="muted" style="font-size:.72rem">→ always 409 "That slot is already in the past". The case is stuck here until someone reschedules — but the button offered is the dead one.</p>
+				</div>
+			</div>
+		</div>
+		<div>
+			<p class="h"><span class="ok">✓</span> proposed — the card tells the truth</p>
+			<div class="mock">
+				<div class="todo">
+					<p class="t">The slot has passed unconfirmed</p>
+					<p class="d">Confirming is no longer possible — move it or close the case.</p>
+					<div style="margin-top:.5rem;display:flex;gap:.5rem">
+						<span class="btn btn--sm mark-ok">↻ Reschedule</span>
+						<span class="btn btn--sm btn--ghost">Cancel Case</span>
+					</div>
+				</div>
+				<div class="panel">
+					<p class="muted" style="font-size:.72rem"><code>startsAt &lt; now</code> on an Assigned case → the next-action becomes reschedule-or-cancel. Same for a Confirmed case whose slot slipped past.</p>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- ── E2 · start assessment ── -->
+	<p class="eyebrow" style="margin:1.75rem 0 .4rem">E2 · Start assessment — the working state</p>
+	<p class="note">
+		<b>What it does:</b> Confirmed → <code>IN_ASSESSMENT</code>, timeline comment, unlocks the Decision form; the button already
+		jumps the view to that tab. Idempotent. This one is <b>mostly right</b> — two soft edges.
+	</p>
+	<table class="diff">
+		<tr><th style="width:16rem">Edge</th><th>Now</th><th>Recommendation</th></tr>
+		<tr>
+			<td>Early start</td>
+			<td>Can be started days before the meeting — no <code>startsAt</code> check</td>
+			<td><b>Leave it.</b> Pre-meeting prep (reviewing docs, drafting notes) is legitimate work; the timeline records who started it. Gating it buys nothing.</td>
+		</tr>
+		<tr>
+			<td>No way back</td>
+			<td>A misclick puts the case In Assessment permanently — no return to Confirmed, and it unlocks the Decision form</td>
+			<td>Add a low-key <b>"Back to confirmed"</b> ghost action on In Assessment (assigned consultant / manager only). New API verb: <code>IN_ASSESSMENT → CONFIRMED</code>, timeline comment. Small, rarely used, saves a stuck case.</td>
+		</tr>
+	</table>
+
+	<!-- ── E3 · delegate ── -->
+	<p class="eyebrow" style="margin:1.75rem 0 .4rem">E3 · Delegate — the intended model is a handover, not a label</p>
+	<p class="note">
+		<b>The intent</b> (per your description): the manager hands case coordination to a coordinator, who then
+		<b>does the assigning</b> and drives the journey stage → finish. The manager keeps watch but
+		<b>cannot assign until they take the case back</b>.
+		<b>What the code does today is weaker:</b> delegation attaches a name — the manager keeps every power,
+		the coordinator gains only queue visibility + a chat thread, there is no take-back, and the field
+		doesn't follow the case onto the spawned application.
+	</p>
+	<table class="diff">
+		<tr><th style="width:15rem">Intent</th><th>Code today</th></tr>
+		<tr><td>Coordinator steers — assigns handlers, drives the case</td><td>Assign still needs the role-level permission; a consultant-role coordinator can't assign anything</td></tr>
+		<tr><td>Manager watches, can't assign until reclaim</td><td>Nothing is exclusive — two people can steer at once</td></tr>
+		<tr><td>"Regain access" — a take-back</td><td>Doesn't exist — you can swap a coordinator, never remove one</td></tr>
+		<tr><td>Coordination spans the journey, stage → finish</td><td><code>coordinatorId</code> lives only on consultations; the application it spawns doesn't inherit it</td></tr>
+	</table>
+
+	<p class="eyebrow" style="margin:1.5rem 0 .4rem">Under your model — the same case, two views</p>
+	<div class="vs">
+		<div>
+			<p class="h">coordinator's view — steering</p>
+			<div class="mock">
+				<div class="hdr">
+					<div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem">
+						<span class="name">Enoch Enu <span class="mono muted" style="font-size:.7rem">CNS-2026-0009</span></span>
+						<span class="pill">Assigned</span>
+					</div>
+					<p class="meta">Accra HQ · <b>coordinating</b> — delegated by Ama (manager) · 12 Sep</p>
+				</div>
+				<div class="todo">
+					<p class="t">Confirm the slot</p>
+					<p class="d">Accept the booking time, or reschedule if needed.</p>
+					<div style="margin-top:.5rem;display:flex;gap:.5rem">
+						<span class="btn btn--sm btn--ghost">↻ Reschedule</span>
+						<span class="btn btn--sm">Confirm slot</span>
+					</div>
+				</div>
+				<div class="toolbar">
+					<span class="btn btn--sm btn--ghost">↻ Reschedule</span>
+					<span class="btn btn--sm btn--ghost">Handler…</span>
+					<span class="btn btn--sm btn--ghost">Reassign coordination</span>
+					<span class="btn btn--sm btn--ghost" style="margin-left:auto">Cancel Case</span>
+				</div>
+				<div class="panel"><p class="muted" style="font-size:.72rem">Full action set — the coordinator runs the case: assigns the handler, confirms, reschedules, requests docs.</p></div>
+			</div>
+		</div>
+		<div>
+			<p class="h">manager's view — watching, not steering</p>
+			<div class="mock">
+				<div class="hdr">
+					<div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem">
+						<span class="name">Enoch Enu <span class="mono muted" style="font-size:.7rem">CNS-2026-0009</span></span>
+						<span class="pill">Assigned</span>
+					</div>
+					<p class="meta">Accra HQ · coordinated by <b>Kwame</b> — delegated by you · 12 Sep</p>
+				</div>
+				<div class="todo" style="border-color:var(--line);border-style:dashed">
+					<p class="t">Kwame is driving this case</p>
+					<p class="d">Confirm the slot · next — you see progress and history, but steering actions are theirs until you take it back.</p>
+					<div style="margin-top:.5rem"><span class="btn btn--sm btn--ghost mark-ok">Take back coordination</span></div>
+				</div>
+				<div class="toolbar" style="opacity:.55">
+					<span class="btn btn--sm btn--ghost" style="text-decoration:line-through">↻ Reschedule</span>
+					<span class="btn btn--sm btn--ghost" style="text-decoration:line-through">Handler…</span>
+					<span class="btn btn--sm btn--ghost" style="text-decoration:line-through">Cancel Case</span>
+				</div>
+				<div class="panel"><p class="muted" style="font-size:.72rem">Server-enforced: the assign/refer/delegate routes 409 for a non-coordinator while <code>coordinatorId</code> is set. History, documents, and progress stay fully readable.</p></div>
+			</div>
+		</div>
+	</div>
+
+	<p class="eyebrow" style="margin:1.5rem 0 .4rem">The verbs it needs</p>
+	<table class="diff">
+		<tr><th style="width:15rem">Verb</th><th>Behaviour</th></tr>
+		<tr>
+			<td><code>delegate</code> <span class="muted">(exists)</span></td>
+			<td>Sets <code>coordinatorId</code>, seeds the linked chat, timeline entry. <b>New:</b> the steering verbs now check "am I the case's coordinator?" server-side — managers keep read access only.</td>
+		</tr>
+		<tr>
+			<td><code>reassign</code> <span class="muted">(exists)</span></td>
+			<td>Coordinator or manager hands the wheel to another coordinator — "A → B · reason" on the timeline, existing chat thread kept.</td>
+		</tr>
+		<tr>
+			<td><code>reclaim</code> <span class="muted">(new — the take-back)</span></td>
+			<td><code>POST /consultations/:id/reclaim-coordination</code> — clears <code>coordinatorId</code>, audits "Ama resumed coordination from Kwame". Any manager can pull a case back — the break-glass is built in, never a dead case.</td>
+		</tr>
+		<tr>
+			<td><code>auto-escalate</code> <span class="muted">(exists, finally earns its keep)</span></td>
+			<td>4h of coordinator silence on a live case → re-delegates to the least-busy coordinator, timeline + manager notified. Under the label model this covered almost nobody; under handover it's the stall recovery.</td>
+		</tr>
+	</table>
+
+	<p class="eyebrow" style="margin:1.5rem 0 .4rem">Three decisions before this is real</p>
+	<table class="diff">
+		<tr><th style="width:15rem">Decision</th><th>Options</th><th>My read</th></tr>
+		<tr>
+			<td><b>D1 · what the lock covers</b></td>
+			<td>(a) steering only — assign / refer / delegate-further; cancel + reschedule-approve stay with managers · (b) everything — manager is pure watcher until reclaim</td>
+			<td><b>(a).</b> Break-glass shouldn't need a reclaim first; a coordinator gone silent shouldn't block a cancellation.</td>
+		</tr>
+		<tr>
+			<td><b>D2 · does coordination ride into the application?</b></td>
+			<td>(a) per-case — consultation only, ends at spawn · (b) carries — the spawned application inherits the coordinator, stage → finish as intended · (c) person-level — coordinator on the <code>applicant</code> (schema already calls <code>applicants.assignedOfficerId</code> "the primary coordinator / case manager")</td>
+			<td><b>(b) or (c).</b> "Stage to finish" dies if coordination stops at the consultation boundary. (c) is cleaner long-term but touches more.</td>
+		</tr>
+		<tr>
+			<td><b>D3 · who can be delegated to?</b></td>
+			<td>(a) coordinator/manager-role staff only — they already hold assign permission; the lock only restricts managers · (b) any staff incl. consultants — needs case-scoped permission checks everywhere</td>
+			<td><b>(a)</b> to start. (b) is a real expansion — do it only if consultants genuinely coordinate cases.</td>
+		</tr>
+	</table>
+	<ul class="changes">
+		<li>Fixed regardless of D1–D3: route the picker to <code>reassignCoordinator</code> when a coordinator exists (from→to audit, no duplicate chat), and never spawn a second thread.</li>
+		<li>Capacity stays advisory — but under the real model the picker's workload numbers actually matter, since a delegate takes the whole wheel.</li>
+	</ul>
+
+	<!-- ── E4 · scopes ── -->
+	<p class="eyebrow" style="margin:1.75rem 0 .4rem">E4 · how delegation gets applied — three scopes that nest</p>
+	<p class="note">
+		Per your scenarios: delegate one case, delegate a person's whole journey, or put someone on duty for the day's intake.
+		They're not alternatives — they nest, and the case resolves them in a fixed order.
+	</p>
+	<table class="diff">
+		<tr><th style="width:11rem">Scope</th><th>Rule</th><th>Where it lives</th></tr>
+		<tr>
+			<td><b>Case</b> — "Kwame runs this case"</td>
+			<td>Explicit handover of one case. Overrides anything below it.</td>
+			<td><code>consultations.coordinatorId</code> — exists today</td>
+		</tr>
+		<tr>
+			<td><b>Applicant</b> — "Kwame runs Enoch's journey"</td>
+			<td>Every case this person ever opens — consultation, a free rebook's <i>new</i> case, the application — inherits him. This is what "stage to finish" actually requires.</td>
+			<td><code>applicants.coordinatorId</code> — new field; cases inherit it at creation</td>
+		</tr>
+		<tr>
+			<td><b>Duty</b> — "Kwame runs today's intake"</td>
+			<td>Coverage, not supervision: cases created at a branch on a date route to the duty coordinator automatically. End of duty routes only <i>new</i> cases — in-flight cases stay with whoever holds them.</td>
+			<td><code>coordinator_duty</code> — new table: branch · date · coordinator · setBy</td>
+		</tr>
+	</table>
+
+	<p class="eyebrow" style="margin:1.5rem 0 .4rem">Resolution order — stamped on the case at creation</p>
+	<div class="mock">
+		<div class="panel" style="font-size:.8rem;line-height:2">
+			<div><span class="pill pill--solid">1</span>&nbsp; case delegated by hand &nbsp;<span class="muted">→ wins, always</span></div>
+			<div><span class="pill">2</span>&nbsp; applicant has a coordinator &nbsp;<span class="muted">→ journey stays coordinated across rebooks &amp; the application</span></div>
+			<div><span class="pill">3</span>&nbsp; branch has a duty coordinator today &nbsp;<span class="muted">→ coverage for walk-ins &amp; new bookings</span></div>
+			<div><span class="pill pill--hollow">4</span>&nbsp; none &nbsp;<span class="muted">→ the case is uncoordinated; managers steer as today</span></div>
+		</div>
+	</div>
+	<p class="note" style="margin-top:.6rem">
+		The case stores <i>who</i> coordinates it and <i>how they got it</i> (<code>coordinatedVia: case | applicant | duty</code>) —
+		so the detail page can say "Coordinated by Kwame · via today's duty" and a reclaim knows what it falls back to.
+	</p>
+
+	<p class="eyebrow" style="margin:1.5rem 0 .4rem">S4 · standing grant — authority, not routing</p>
+	<p class="note">
+		The fourth scenario is a different layer: <b>"grant a staff member access to manage cases until I retract it."</b>
+		S1–S3 decide <i>which cases</i> a person coordinates; S4 decides <i>who may coordinate at all</i>. It isn't a new
+		mechanism — <code>ops_users.permissions</code> + dynamic roles already express it. What it lacks is a proper
+		control surface and an audit trail.
+	</p>
+	<div class="vs">
+		<div>
+			<p class="h">on the staff record — manager / super admin</p>
+			<div class="mock">
+				<div class="panel">
+					<div class="kv"><span class="k">Kwame Mensah</span><span class="v">consultant · Accra HQ</span></div>
+					<div class="kv"><span class="k">Case management</span><span class="v"><b>Granted</b> · by Ama · 12 Sep &nbsp;<button class="linkarrow">Retract</button></span></div>
+					<div class="kv"><span class="k">While granted</span><span class="v">sees all cases · can steer uncoordinated ones</span></div>
+				</div>
+				<div class="panel">
+					<p class="muted" style="font-size:.72rem">Ungranted state shows <b>Grant case management</b> — with an optional "until" date, because open-ended grants are how access drifts.</p>
+				</div>
+			</div>
+		</div>
+		<div>
+			<p class="h">how it sits under the lock</p>
+			<div class="mock">
+				<div class="panel" style="font-size:.78rem;line-height:1.9">
+					<div>— Grantee is treated <b>as a manager for case work</b>: watches coordinated cases, steers uncoordinated ones.</div>
+					<div>— A case's named coordinator still outranks them — the single-steerer rule holds.</div>
+					<div>— Only a manager/admin can <b>reclaim</b> a case; the grantee can't pull coordinated cases to themselves.</div>
+					<div>— Grant + retract both write audit entries (who / when / optional until-date). Retract never rips cases they're actively coordinating — those get reclaimed or re-delegated explicitly.</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<ul class="changes">
+		<li><b>Two layers, cleanly separated:</b> authority (S4 — <i>may</i> this person steer anything?) then routing (S1–S3 — which case is theirs?). The single-steerer lock is unchanged.</li>
+		<li>Implementation is small: grant/retract toggles the case-work permission on the user record + audit log entries. A branch-scoped variant ("manage Accra's cases only") is possible later if full access is too broad.</li>
+		<li>Recommend an <b>optional expiry</b> on the grant — "until Friday" beats "until someone remembers to retract."</li>
+	</ul>
+
+	<p class="eyebrow" style="margin:1.5rem 0 .4rem">Where the controls live</p>
+	<div class="vs">
+		<div>
+			<p class="h">duty — on the consultations queue, manager only</p>
+			<div class="mock">
+				<div class="strip" style="border:1px solid var(--line-light);border-bottom:0;justify-content:space-between">
+					<span class="eyebrow">Today's coordination · Accra HQ</span>
+					<span style="font-size:.72rem"><b>Kwame</b> · set by Ama 08:14 &nbsp;<button class="linkarrow">Change</button> · <button class="linkarrow">End duty</button></span>
+				</div>
+				<div class="panel">
+					<p class="muted" style="font-size:.72rem">New cases today stamp <code>coordinatorId = Kwame, via duty</code>. Tomorrow's cases don't inherit it — duty is per-day, set each morning or scheduled ahead.</p>
+				</div>
+			</div>
+		</div>
+		<div>
+			<p class="h">applicant — on the case &amp; the person record</p>
+			<div class="mock">
+				<div class="panel">
+					<div class="kv"><span class="k">This case</span><span class="v">Delegate coordination… <span class="muted">(override)</span></span></div>
+					<div class="kv"><span class="k">Enoch's journey</span><span class="v">Kwame coordinates all his cases · <button class="linkarrow">Release</button></span></div>
+				</div>
+				<div class="panel">
+					<p class="muted" style="font-size:.72rem">Releasing the applicant doesn't touch in-flight case overrides; new cases fall back to duty or none.</p>
+				</div>
+			</div>
+		</div>
+	</div>
+	<ul class="changes">
+		<li><b>Applicant scope settles D2</b> — "stage to finish" is inherited, not copied; no per-case carry logic needed.</li>
+		<li>The lock &amp; reclaim semantics are identical at every scope — one rule: <i>the coordinator steers, managers watch, any manager can take it back.</i></li>
+		<li>Shippable in slices: case-lock + reclaim → applicant field + inheritance → duty table + queue control → standing-grant control on the staff record.</li>
+	</ul>
+
+	<!-- ═══════════════ F ═══════════════ -->
+	<div class="tag" id="f">F · small sweeps</div>
+	<table class="diff">
+		<tr><th style="width:16rem">Where</th><th>Now</th><th>Fix</th></tr>
+		<tr>
+			<td><code>isKnown()</code> line 21</td>
+			<td><code>s !== "-" &amp;&amp; s !== "-"</code> — same check twice; an em-dash "—" passes as a known value</td>
+			<td>Second check becomes <code>s !== "—"</code></td>
+		</tr>
+		<tr>
+			<td>Toolbar visibility</td>
+			<td>Hides for cancel/coordinator/meeting-edit — <b>not</b> while the reschedule panel is open</td>
+			<td>Add <code>!showReschedule</code> to the same condition</td>
+		</tr>
+		<tr>
+			<td><code>waitingOn</code> copy</td>
+			<td>"A manager assigns this booking; it appears here once it is yours." — you're already here</td>
+			<td>"Awaiting assignment — a manager places this with a consultant."</td>
+		</tr>
+		<tr>
+			<td>Documents tab badge</td>
+			<td><code>Documents (7)</code> counts raw uploads incl. rejected; header fact counts verified/total</td>
+			<td>Badge shows actionable count: <code>Documents · 2 to review</code> (pending), else no number</td>
+		</tr>
+		<tr>
+			<td>Contact repetition</td>
+			<td>Email + phone in the header <i>and</i> the Background tab's first card</td>
+			<td>Keep in header; Background card drops the two fields it duplicates</td>
+		</tr>
+		<tr>
+			<td><code>nowId</code> marker</td>
+			<td>Points at "Decision" on Assigned/Confirmed — but the now is the appointment</td>
+			<td><code>nowId</code> only on Completed → Decision; live states point at Background</td>
+		</tr>
+	</table>
+
+	<!-- ═══════════════ G ═══════════════ -->
+	<div class="tag tag--api" id="g">G · what it costs</div>
+	<p class="note">
+		A–D plus the sweeps are <b>one file</b> — <code>ConsultationDetail.tsx</code>. E1 adds a guard in
+		<code>confirmConsultationSlot</code>; E2's "back to confirmed" is the only optional new verb.
+		<b>E3 is the bigger piece</b> — a real handover means server-side lock checks on the steering routes,
+		a <code>reclaim</code> endpoint, and (per D2) possibly the coordinator field on applications. It can ship
+		in two slices: <i>slice 1</i> = the lock + reclaim on consultations (the core of your model);
+		<i>slice 2</i> = the journey carry onto applications.
+	</p>
+	<ul class="changes">
+		<li><b>A</b> — merge three meeting-link render paths into the management strip; in-person gets address+directions in the same block.</li>
+		<li><b>B</b> — drop <code>onClosed()</code> after cancel; the cancelled card renders in place.</li>
+		<li><b>C</b> — <code>↻ Reschedule</code> to the toolbar, permission-gated; removed from the next-action cards.</li>
+		<li><b>D</b> — Decision tab locked until In Assessment, with per-state hints.</li>
+		<li><b>E</b> — six one-line sweeps listed above.</li>
+	</ul>
+	<p class="note" style="margin-top:1rem">
+		<b>Not in scope, flagging anyway:</b> the <code>completedResult</code> local-override after recording an outcome —
+		it fakes the row to "Completed" until refresh lands. Works today; if we ever derive more fields from status
+		it will lie. Can fold into this pass or leave it.
+	</p>
+
+</div>
+</body>
+</html>

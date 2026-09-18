@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portal — Chapter V · Departure (proposed)</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1120px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem}
+	.jump a{color:inherit}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.5rem clamp(1.25rem,3vw,2.25rem) 2.5rem}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+
+	/* ---- portal chrome ---- */
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.title{font-size:1.75rem;font-weight:500;letter-spacing:-.01em;margin-top:.25rem}
+	.meta{font-family:var(--mono);font-size:.72rem;color:var(--fg-muted);margin-top:.35rem}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--inv{background:#fff;color:var(--ink);border-color:#fff}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.pill{display:inline-flex;align-items:center;padding:.25rem .65rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line-light)}
+	.pill--done{background:var(--muted-bg);border-color:var(--line-light);color:var(--fg-muted)}
+
+	/* band */
+	.now{background:var(--ink);color:#fff;padding:1.6rem clamp(1.25rem,3vw,2.5rem);display:flex;flex-wrap:wrap;gap:1.25rem;justify-content:space-between;align-items:flex-start;margin-top:1.5rem}
+	.now .eyebrow{color:rgba(255,255,255,.6)}
+	.now h2{font-size:1.3rem;font-weight:500;margin-top:.35rem}
+	.now p.d{margin-top:.45rem;max-width:38rem;font-size:.9rem;color:#fff}
+
+	/* step strip */
+	.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem;margin-top:1.25rem}
+	.step{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border:1px solid var(--line-light);font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-muted);min-width:0}
+	.step .m{width:1.4rem;height:1.4rem;border:1px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;flex-shrink:0}
+	.step .l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+	.step .s{margin-left:auto;font-size:.58rem;opacity:.8;white-space:nowrap}
+	.step--done{background:var(--muted-bg)}
+	.step--on{border:1.5px solid var(--ink);color:var(--ink);font-weight:700}
+	.step--done .m,.step--on .m{background:var(--ink);color:#fff}
+
+	/* split + rail */
+	.split{display:grid;grid-template-columns:minmax(0,1fr) 21rem;gap:2rem;align-items:start;margin-top:1.75rem}
+	@media(max-width:900px){.split{grid-template-columns:1fr}.steps{grid-template-columns:1fr 1fr}}
+	.rail{display:flex;flex-direction:column;gap:.8rem}
+	.card{background:#fff;border:1px solid var(--ink);padding:1.25rem}
+	.rail .card{padding:1.1rem}
+	.card--key{border-width:1.5px}
+	.card--inv{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.card--inv .eyebrow{color:rgba(255,255,255,.6)}
+	.card--inv .muted{color:rgba(255,255,255,.7)}
+	.card--next{border-width:2px;background:var(--muted-bg)}
+	.pkv{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--line-light);font-size:.78rem}
+	.pkv:last-child{border-bottom:none}
+	.pkv .k{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--micro);font-size:.64rem;padding-top:.1rem}
+	.pkv .v{text-align:right;min-width:0}
+	.pkv--due .k{color:var(--ink)} .pkv--due .v{font-family:var(--mono);font-weight:700;font-size:.9rem}
+	.card--inv .pkv{border-color:rgba(255,255,255,.25)} .card--inv .pkv .k{color:rgba(255,255,255,.6)}
+
+	/* sections */
+	.sec{margin-bottom:1.75rem}
+	.sh{display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem;flex-wrap:wrap}
+	.no{display:inline-flex;align-items:center;justify-content:center;width:1.4rem;height:1.4rem;border:1px solid var(--line);font-family:var(--mono);font-size:.65rem;font-weight:700}
+	.no--done{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.st{font-weight:700;font-size:.95rem}
+	.hint{font-family:var(--mono);font-size:.66rem;color:var(--fg-muted);letter-spacing:.04em;margin-left:.35rem}
+	.between{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.5rem}
+	.picks{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem}
+	@media(max-width:700px){.picks{grid-template-columns:1fr}}
+	.pick{border:1px solid var(--line-light);background:#fff;padding:1.1rem 1.15rem;text-align:left;font:inherit;cursor:pointer;display:flex;flex-direction:column;gap:.4rem}
+	.pick b{font-size:.92rem} .pick span{font-size:.78rem;color:var(--fg-muted);line-height:1.5}
+	.pick--on{background:var(--ink);color:#fff;border-color:var(--ink)} .pick--on span{color:rgba(255,255,255,.65)}
+	.row{display:flex;justify-content:space-between;gap:1rem;padding:.55rem 0;border-bottom:1px solid var(--line-light);font-size:.88rem;align-items:center}
+	.row:last-child{border-bottom:none}
+	.row .k{color:var(--fg-muted)} .row .v{font-weight:500;text-align:right}
+	ul.list{list-style:none;padding:0;margin:.5rem 0 0}
+	.tick{width:20px;height:20px;border:2px solid var(--line);flex-shrink:0;margin-top:.15rem;display:inline-flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#fff}
+	.tick--on{background:var(--ink);border-color:var(--ink)}
+	.tick--waived{border-color:var(--ink);color:var(--ink)}
+	.li{display:flex;gap:.75rem;align-items:flex-start;padding:.6rem 0;border-bottom:1px solid var(--line-light);font-size:.9rem}
+	.li:last-child{border-bottom:none}
+	.li .d{font-size:.8rem;color:var(--fg-muted)}
+	.li.done p:first-child{opacity:.7;text-decoration:line-through;font-weight:400}
+	.li p:first-child{font-weight:600}
+	.inv{border:1px solid var(--line-light);padding:1rem 1.1rem;margin-top:.9rem}
+	.inv .tot{font-family:var(--mono);font-weight:700;font-size:1.1rem}
+	.sub{font-size:.85rem;color:var(--fg-muted);margin-top:.35rem}
+	.big{font-size:1.6rem;font-weight:700;margin-top:.3rem}
+	.mt1{margin-top:.5rem}.mt2{margin-top:.8rem}.mt3{margin-top:1rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<h1 class="page">Chapter V · Departure — proposed layout</h1>
+	<p class="note">Same server data, same actions. What changes: <b>one card system</b> (sharp cards everywhere, checklist and documents included), <b>a 4-step strip in real dependency order</b> (milestone → decision → ticket → before you fly), <b>numbered sections that follow the strip</b> (documents keep their own section, no duplicate pay button), <b>one CTA per action</b>, the Countdown card inverted properly, and client-facing words in the money rail (no <i>proforma</i>). Three states below.</p>
+	<div class="jump"><a href="#a">A · milestone due</a><a href="#b">B · ticket invoice due</a><a href="#c">C · booked · closing</a></div>
+
+	<!-- ================= STATE A ================= -->
+	<span class="tag tag--after" id="a">State A — visa approved · milestone due · no flight decision yet</span>
+	<div class="mock">
+		<div class="between">
+			<div>
+				<p class="eyebrow">Chapter V · Departure</p>
+				<h1 class="title">Departure · University of Debrecen</h1>
+				<p class="meta">BSc Computer Science · Sep 2026 intake · Visa valid 12 Aug 2026 → 30 Sep 2027</p>
+			</div>
+		</div>
+
+		<div class="now">
+			<div>
+				<p class="eyebrow">You are here</p>
+				<h2>Settle the fee milestone to release your documents</h2>
+				<p class="d">Your admission letter and visa documents release on payment. Your ticket is issued after it — the flight is being found meanwhile.</p>
+			</div>
+			<span class="btn btn--inv">Pay the milestone →</span>
+		</div>
+
+		<div class="steps">
+			<div class="step step--on"><span class="m">1</span><span class="l">Milestone</span><span class="s">GH₵ 12,000 due</span></div>
+			<div class="step"><span class="m">2</span><span class="l">Flight decision</span><span class="s">your call</span></div>
+			<div class="step"><span class="m">3</span><span class="l">Ticket</span><span class="s">after 1 &amp; 2</span></div>
+			<div class="step"><span class="m">4</span><span class="l">Before you fly</span><span class="s">0 / 6</span></div>
+		</div>
+
+		<div class="split">
+			<div>
+				<section class="sec">
+					<div class="sh"><span class="no">1</span><span class="st">Fee milestone</span><span class="hint">pre-departure instalment · releases your documents</span></div>
+					<div class="card card--key">
+						<div class="between">
+							<div>
+								<p style="font-weight:700">Pre-departure milestone</p>
+								<p class="meta" style="margin-top:.2rem">SERVICE FEE · INSTALMENT PLAN · AGREED AT PACKAGE SELECTION</p>
+							</div>
+							<span class="mono" style="font-weight:700;font-size:1.05rem">GH₵ 12,000 <span class="muted" style="font-weight:400;font-size:.8rem">· $800</span></span>
+						</div>
+						<p class="sub">Due before your ticket is issued. Any post-arrival remainder follows on your schedule.</p>
+						<div class="mt3"><span class="btn">Pay the fee milestone →</span></div>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">2</span><span class="st">Your documents</span><span class="hint">filed by Century NIT · 3 held</span></div>
+					<div class="card">
+						<p class="sub" style="margin-top:0">Filed and waiting for you. They open once the milestone above is settled.</p>
+						<ul class="list">
+							<li class="row"><div><p style="font-weight:600">Admission letter — University of Debrecen</p><p class="d muted" style="font-size:.8rem">BSc Computer Science</p></div><span class="pill pill--hollow">held</span></li>
+							<li class="row"><div><p style="font-weight:600">Visa grant</p><p class="d muted" style="font-size:.8rem">visa_grant_enoch.pdf</p></div><span class="pill pill--hollow">held</span></li>
+							<li class="row"><div><p style="font-weight:600">Visa application receipt</p><p class="d muted" style="font-size:.8rem">VFS-2026-88213.pdf</p></div><span class="btn btn--ghost btn--sm">Open</span></li>
+						</ul>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">3</span><span class="st">How you're flying</span><span class="hint">your call — the booking service is in your package; only the ticket is invoiced</span></div>
+					<div class="picks">
+						<div class="pick"><b>Book with us</b><span>We find the flight, you pay the ticket invoice here, we book it.</span></div>
+						<div class="pick"><b>Not now</b><span>Put travel assistance on hold. Nothing is raised until you come back.</span></div>
+						<div class="pick"><b>I'll book myself</b><span>Arrange your own flight. Your journey moves straight on.</span></div>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">4</span><span class="st">Your flight</span><span class="hint">not started</span></div>
+					<p class="meta" style="margin-top:0">Choose how you'd like to fly above — this section fills in from there.</p>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">5</span><span class="st">Before you fly</span><span class="hint">yours + your officer's · 0 / 6</span></div>
+					<div class="card">
+						<div class="between"><p class="eyebrow">Pre-departure checklist</p><span class="mono muted" style="font-size:.75rem">0/4 from Century NIT done</span></div>
+						<p class="sub">Century NIT closes what it does for you; your own list is a set of reminders — tick them as you go, they never hold you back.</p>
+						<p class="eyebrow mt3" style="font-size:.58rem">Your own reminders</p>
+						<ul class="list">
+							<li class="li"><span class="tick"></span><div><p>Book accommodation for the first month</p></div></li>
+							<li class="li"><span class="tick"></span><div><p>Buy travel insurance</p><p class="d">Proof needed: Travel insurance certificate. <u>Upload to your vault</u></p></div></li>
+						</ul>
+						<p class="eyebrow mt3" style="font-size:.58rem">What Century NIT does for you</p>
+						<ul class="list">
+							<li class="li"><span class="tick"></span><div><p>Pre-departure briefing</p></div></li>
+							<li class="li"><span class="tick"></span><div><p>Airport pickup arranged</p></div></li>
+							<li class="li"><span class="tick"></span><div><p>School notified of arrival date</p></div></li>
+							<li class="li"><span class="tick"></span><div><p>Flight receipt filed</p></div></li>
+						</ul>
+					</div>
+				</section>
+			</div>
+
+			<aside class="rail">
+				<div class="card card--key card--inv">
+					<p class="eyebrow">Countdown</p>
+					<p class="big">Not booked</p>
+					<p class="mono muted" style="font-size:.64rem;margin-top:.15rem">FLIGHT DATE SHOWS HERE ONCE TICKETED</p>
+				</div>
+				<div class="card">
+					<p class="eyebrow">Money · Chapter V</p>
+					<div class="mt1">
+						<div class="pkv pkv--due"><span class="k">Fee milestone</span><span class="v">GH₵ 12,000 due</span></div>
+						<div class="pkv"><span class="k">Ticket</span><span class="v muted">not yet raised</span></div>
+						<div class="pkv"><span class="k">Plan</span><span class="v">Instalments · 10 / 50 / 40</span></div>
+						<div class="pkv"><span class="k">After arrival</span><span class="v muted">GH₵ 9,600 on your schedule</span></div>
+					</div>
+				</div>
+				<div class="card">
+					<p class="eyebrow">Your travel officer</p>
+					<p class="muted mt1" style="font-size:.8rem">Assigned when you choose “Book with us” — usually same day.</p>
+				</div>
+				<div class="card">
+					<p class="eyebrow">After landing</p>
+					<p class="muted mt1" style="font-size:.8rem;line-height:1.6">Post-arrival support continues — check in when you land, enrolment week, and any issues in your first month. Completing this chapter closes your file.</p>
+				</div>
+			</aside>
+		</div>
+	</div>
+	<div class="callout"><b>A — what changed</b><ul>
+		<li>Band eyebrow is “You are here” (chapter label no longer twice in three lines); CTA has one arrow.</li>
+		<li>Step strip added; milestone is step 1 because everything else says the ticket waits on it.</li>
+		<li>One “Pay the fee milestone” button on the page (band + section 1). Documents section has none — its “held” pills point at section 1.</li>
+		<li>Documents: no 🔒, no red — hollow “held” pill, “Open” ghost button.</li>
+		<li>Countdown rail card inverted (was white-on-white).</li>
+		<li>Money rail is a ledger: what's due in bold mono, what's not raised in muted; the post-arrival remainder is stated so “the last invoice” isn't implied.</li>
+	</ul></div>
+
+	<!-- ================= STATE B ================= -->
+	<span class="tag tag--after" id="b">State B — milestone paid · chose “Book with us” · ticket invoice issued</span>
+	<div class="mock">
+		<div class="between">
+			<div>
+				<p class="eyebrow">Chapter V · Departure</p>
+				<h1 class="title">Departure · University of Debrecen</h1>
+				<p class="meta">BSc Computer Science · Sep 2026 intake · Visa valid 12 Aug 2026 → 30 Sep 2027</p>
+			</div>
+		</div>
+
+		<div class="now">
+			<div>
+				<p class="eyebrow">You are here</p>
+				<h2>Pay the ticket invoice — GH₵ 9,800 due</h2>
+				<p class="d">The airline fare, at cost. Ama books the seat as soon as it's paid and posts the confirmation here.</p>
+			</div>
+			<span class="btn btn--inv">Pay now →</span>
+		</div>
+
+		<div class="steps">
+			<div class="step step--done"><span class="m">✓</span><span class="l">Milestone</span><span class="s">settled 3 Sep</span></div>
+			<div class="step step--done"><span class="m">✓</span><span class="l">Flight decision</span><span class="s">book with us</span></div>
+			<div class="step step--on"><span class="m">3</span><span class="l">Ticket</span><span class="s">GH₵ 9,800 due</span></div>
+			<div class="step"><span class="m">4</span><span class="l">Before you fly</span><span class="s">2 / 6</span></div>
+		</div>
+
+		<div class="split">
+			<div>
+				<section class="sec">
+					<div class="sh"><span class="no no--done">✓</span><span class="st">Fee milestone</span><span class="hint">settled · 3 Sep 2026</span></div>
+					<p class="meta" style="margin-top:0">SERVICE FEE MILESTONE PAID — YOUR DOCUMENTS ARE RELEASED BELOW. GH₵ 9,600 FOLLOWS AFTER ARRIVAL ON YOUR SCHEDULE.</p>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no no--done">✓</span><span class="st">Your documents</span><span class="hint">filed by Century NIT · released</span></div>
+					<div class="card">
+						<ul class="list" style="margin-top:0">
+							<li class="row"><div><p style="font-weight:600">Admission letter — University of Debrecen</p><p class="d muted" style="font-size:.8rem">BSc Computer Science</p></div><span class="btn btn--ghost btn--sm">Open</span></li>
+							<li class="row"><div><p style="font-weight:600">Visa grant</p><p class="d muted" style="font-size:.8rem">visa_grant_enoch.pdf</p></div><span class="btn btn--ghost btn--sm">Open</span></li>
+							<li class="row"><div><p style="font-weight:600">Visa application receipt</p><p class="d muted" style="font-size:.8rem">VFS-2026-88213.pdf</p></div><span class="btn btn--ghost btn--sm">Open</span></li>
+						</ul>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no no--done">✓</span><span class="st">How you're flying</span><span class="hint">book with us · chosen 4 Sep</span></div>
+					<p class="meta" style="margin-top:0">BOOKING WITH CENTURY NIT — AMA OWUSU IS YOUR TRAVEL OFFICER.</p>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">4</span><span class="st">Your flight</span><span class="hint">ticket invoice due</span></div>
+					<div class="card card--key">
+						<p class="eyebrow">Flight found</p>
+						<div class="mt1">
+							<div class="row"><span class="k">Flight</span><span class="v">Turkish Airlines TK 594 · TK 1037</span></div>
+							<div class="row"><span class="k">Route</span><span class="v">Accra → Istanbul → Budapest</span></div>
+							<div class="row"><span class="k">Departs</span><span class="v">14 Sep 2026, 22:35</span></div>
+							<div class="row"><span class="k">Arrives</span><span class="v">15 Sep 2026, 12:10</span></div>
+						</div>
+						<div class="inv">
+							<div class="between">
+								<div><p class="eyebrow">Ticket invoice · INV-2026-0152</p><p class="sub" style="margin-top:.15rem">Airline fare at cost · due 10 Sep</p></div>
+								<span class="tot">GH₵ 9,800 <span class="muted" style="font-weight:400;font-size:.8rem">· $653</span></span>
+							</div>
+							<div class="mt3"><span class="btn">Pay GH₵ 9,800 →</span></div>
+						</div>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">5</span><span class="st">Before you fly</span><span class="hint">yours + your officer's · 2 / 6</span></div>
+					<div class="card">
+						<div class="between"><p class="eyebrow">Pre-departure checklist</p><span class="mono muted" style="font-size:.75rem">1/4 from Century NIT done</span></div>
+						<p class="eyebrow mt3" style="font-size:.58rem">Your own reminders</p>
+						<ul class="list">
+							<li class="li done"><span class="tick tick--on">✓</span><div><p>Book accommodation for the first month</p></div></li>
+							<li class="li"><span class="tick"></span><div><p>Buy travel insurance</p><p class="d">Travel insurance certificate uploaded — your consultant is checking it.</p></div></li>
+						</ul>
+						<p class="eyebrow mt3" style="font-size:.58rem">What Century NIT does for you</p>
+						<ul class="list">
+							<li class="li done"><span class="tick tick--on">✓</span><div><p>Pre-departure briefing</p><p class="d">Done by Ama Owusu · 6 Sep 2026</p></div></li>
+							<li class="li"><span class="tick"></span><div><p>Airport pickup arranged</p></div></li>
+							<li class="li"><span class="tick"></span><div><p>School notified of arrival date</p></div></li>
+							<li class="li"><span class="tick"></span><div><p>Flight receipt filed</p></div></li>
+						</ul>
+					</div>
+				</section>
+			</div>
+
+			<aside class="rail">
+				<div class="card card--key card--inv">
+					<p class="eyebrow">Countdown</p>
+					<p class="big">9 days</p>
+					<p class="mono muted" style="font-size:.64rem;margin-top:.15rem">TO 14 SEP 2026, 22:35 · ONCE TICKETED</p>
+				</div>
+				<div class="card">
+					<p class="eyebrow">Money · Chapter V</p>
+					<div class="mt1">
+						<div class="pkv"><span class="k">Fee milestone</span><span class="v">settled ✓</span></div>
+						<div class="pkv pkv--due"><span class="k">Ticket</span><span class="v">GH₵ 9,800 due</span></div>
+						<div class="pkv"><span class="k">Plan</span><span class="v">Instalments · 10 / 50 / 40</span></div>
+						<div class="pkv"><span class="k">After arrival</span><span class="v muted">GH₵ 9,600 on your schedule</span></div>
+					</div>
+				</div>
+				<div class="card">
+					<p class="eyebrow">Your travel officer</p>
+					<p style="font-weight:700;margin-top:.5rem">Ama Owusu</p>
+					<p class="muted" style="font-size:.74rem;margin-top:.15rem">Travel · Accra branch</p>
+					<div style="display:flex;gap:.5rem;margin-top:.8rem"><span class="btn btn--ghost btn--sm">Message</span><span class="btn btn--ghost btn--sm">Book call</span></div>
+				</div>
+				<div class="card">
+					<p class="eyebrow">After landing</p>
+					<p class="muted mt1" style="font-size:.8rem;line-height:1.6">Post-arrival support continues — check in when you land, enrolment week, and any issues in your first month.</p>
+				</div>
+			</aside>
+		</div>
+	</div>
+	<div class="callout"><b>B — what changed</b><ul>
+		<li>Done sections collapse to a ✓ head + one mono line — the page gets shorter as you progress instead of keeping every card open.</li>
+		<li>Flight facts and the ticket invoice live in <b>one</b> key card; amount in GH₵ with USD alongside; officer named in the band.</li>
+		<li>Decision done-text is honest: “Booking with Century NIT” — not “Booked” before it's booked.</li>
+		<li>Officer rail card matches the Visa chapter (Message / Book call), header no longer repeats the officer.</li>
+	</ul></div>
+
+	<!-- ================= STATE C ================= -->
+	<span class="tag tag--after" id="c">State C — ticket paid · booked · checklist finishing · file can close</span>
+	<div class="mock">
+		<div class="between">
+			<div>
+				<p class="eyebrow">Chapter V · Departure</p>
+				<h1 class="title">Departure · University of Debrecen</h1>
+				<p class="meta">BSc Computer Science · Sep 2026 intake · Visa valid 12 Aug 2026 → 30 Sep 2027</p>
+			</div>
+		</div>
+
+		<div class="now">
+			<div>
+				<p class="eyebrow">You are here</p>
+				<h2>Everything is settled — close your file</h2>
+				<p class="d">Milestone paid, flight booked, checklist done. Completing hands you to post-arrival support.</p>
+			</div>
+			<span class="btn btn--inv">Complete my journey →</span>
+		</div>
+
+		<div class="steps">
+			<div class="step step--done"><span class="m">✓</span><span class="l">Milestone</span><span class="s">settled 3 Sep</span></div>
+			<div class="step step--done"><span class="m">✓</span><span class="l">Flight decision</span><span class="s">book with us</span></div>
+			<div class="step step--done"><span class="m">✓</span><span class="l">Ticket</span><span class="s">booked · 7QK2LD</span></div>
+			<div class="step step--done"><span class="m">✓</span><span class="l">Before you fly</span><span class="s">6 / 6</span></div>
+		</div>
+
+		<div class="split">
+			<div>
+				<section class="sec">
+					<div class="sh"><span class="no no--done">✓</span><span class="st">Fee milestone</span><span class="hint">settled · 3 Sep 2026</span></div>
+					<p class="meta" style="margin-top:0">SERVICE FEE MILESTONE PAID. GH₵ 9,600 FOLLOWS AFTER ARRIVAL ON YOUR SCHEDULE.</p>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no no--done">✓</span><span class="st">Your documents</span><span class="hint">filed by Century NIT · released</span></div>
+					<div class="card">
+						<ul class="list" style="margin-top:0">
+							<li class="row"><div><p style="font-weight:600">Admission letter — University of Debrecen</p></div><span class="btn btn--ghost btn--sm">Open</span></li>
+							<li class="row"><div><p style="font-weight:600">Visa grant</p></div><span class="btn btn--ghost btn--sm">Open</span></li>
+							<li class="row"><div><p style="font-weight:600">Visa application receipt</p></div><span class="btn btn--ghost btn--sm">Open</span></li>
+							<li class="row"><div><p style="font-weight:600">Flight receipt</p><p class="d muted" style="font-size:.8rem">TK-7QK2LD.pdf</p></div><span class="btn btn--ghost btn--sm">Open</span></li>
+						</ul>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no no--done">✓</span><span class="st">How you're flying</span><span class="hint">book with us · chosen 4 Sep</span></div>
+					<p class="meta" style="margin-top:0">BOOKED WITH CENTURY NIT — AMA OWUSU IS YOUR TRAVEL OFFICER.</p>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no no--done">✓</span><span class="st">Your flight</span><span class="hint">booked · ticketed</span></div>
+					<div class="card card--key">
+						<div class="between"><p class="eyebrow">Booked · confirmed</p><span class="pill pill--solid">Ticketed</span></div>
+						<div class="mt1">
+							<div class="row"><span class="k">Confirmation code</span><span class="v mono" style="font-weight:700">7QK2LD</span></div>
+							<div class="row"><span class="k">Flight</span><span class="v">Turkish Airlines TK 594 · TK 1037</span></div>
+							<div class="row"><span class="k">Route</span><span class="v">Accra → Istanbul → Budapest</span></div>
+							<div class="row"><span class="k">Departs</span><span class="v">14 Sep 2026, 22:35</span></div>
+							<div class="row"><span class="k">Arrives</span><span class="v">15 Sep 2026, 12:10</span></div>
+						</div>
+						<p class="eyebrow mt3">On arrival · recorded by your officer</p>
+						<div class="mt1">
+							<div class="row"><span class="k">Report to your school by</span><span class="v">18 Sep 2026 · 3 days after landing</span></div>
+							<div class="row"><span class="k">Airport pickup</span><span class="v">Century NIT partner · look for the sign at arrivals</span></div>
+							<div class="row"><span class="k">Accommodation</span><span class="v">Kassai út 26, Debrecen · from 15 Sep</span></div>
+							<div class="row"><span class="k">Emergency contact</span><span class="v">Kwame Enu (father) · +233 24 000 0000</span></div>
+						</div>
+						<div class="between mt3"><p class="muted" style="font-size:.8rem">Keep the confirmation code for check-in.</p><span class="btn btn--ghost btn--sm">Download receipt</span></div>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no no--done">✓</span><span class="st">Before you fly</span><span class="hint">yours + your officer's · 6 / 6</span></div>
+					<div class="card">
+						<div class="between"><p class="eyebrow">Pre-departure checklist</p><span class="mono muted" style="font-size:.75rem">4/4 from Century NIT done</span></div>
+						<p class="sub">Everything Century NIT owes you is done — you can complete your journey.</p>
+						<ul class="list mt2">
+							<li class="li done"><span class="tick tick--on">✓</span><div><p>Book accommodation for the first month</p></div></li>
+							<li class="li done"><span class="tick tick--on">✓</span><div><p>Buy travel insurance</p><p class="d">Travel insurance certificate verified by Ama Owusu</p></div></li>
+							<li class="li done"><span class="tick tick--on">✓</span><div><p>Pre-departure briefing</p><p class="d">Done by Ama Owusu · 6 Sep 2026</p></div></li>
+							<li class="li done"><span class="tick tick--on">✓</span><div><p>Airport pickup arranged</p></div></li>
+							<li class="li done"><span class="tick tick--waived">–</span><div><p>School notified of arrival date</p><p class="d">Waived by your consultant — school confirmed directly</p></div></li>
+							<li class="li done"><span class="tick tick--on">✓</span><div><p>Flight receipt filed</p></div></li>
+						</ul>
+					</div>
+					<div class="card card--next" style="margin-top:.8rem">
+						<p class="eyebrow">Close the chapter</p>
+						<p style="font-size:1.2rem;font-weight:500;margin-top:.4rem">You're set to fly</p>
+						<p class="muted" style="font-size:.88rem;margin-top:.25rem">Completing moves you to Chapter VI · post-arrival support. Your documents and receipts stay in your vault.</p>
+						<div class="mt3"><span class="btn">Complete my journey →</span></div>
+					</div>
+				</section>
+			</div>
+
+			<aside class="rail">
+				<div class="card card--key card--inv">
+					<p class="eyebrow">Countdown</p>
+					<p class="big">6 days</p>
+					<p class="mono muted" style="font-size:.64rem;margin-top:.15rem">TO 14 SEP 2026, 22:35 · TK 594</p>
+				</div>
+				<div class="card">
+					<p class="eyebrow">Money · Chapter V</p>
+					<div class="mt1">
+						<div class="pkv"><span class="k">Fee milestone</span><span class="v">settled ✓</span></div>
+						<div class="pkv"><span class="k">Ticket</span><span class="v">GH₵ 9,800 paid ✓</span></div>
+						<div class="pkv"><span class="k">Plan</span><span class="v">Instalments · 10 / 50 / 40</span></div>
+						<div class="pkv"><span class="k">After arrival</span><span class="v muted">GH₵ 9,600 on your schedule</span></div>
+					</div>
+				</div>
+				<div class="card">
+					<p class="eyebrow">Your travel officer</p>
+					<p style="font-weight:700;margin-top:.5rem">Ama Owusu</p>
+					<p class="muted" style="font-size:.74rem;margin-top:.15rem">Travel · Accra branch</p>
+					<div style="display:flex;gap:.5rem;margin-top:.8rem"><span class="btn btn--ghost btn--sm">Message</span><span class="btn btn--ghost btn--sm">Book call</span></div>
+				</div>
+				<div class="card">
+					<p class="eyebrow">After landing</p>
+					<p class="muted mt1" style="font-size:.8rem;line-height:1.6">Check in when you land, enrolment week, and any issues in your first month. Completing this chapter closes your file.</p>
+				</div>
+			</aside>
+		</div>
+	</div>
+	<div class="callout"><b>C — what changed</b><ul>
+		<li>“On arrival” is no longer a 6th numbered section that can't be completed — it's the lower half of the booked flight card, where those facts belong.</li>
+		<li>One close-out card (replaces the separate “Next step” card + band duplicate); the band and the card both say “Complete my journey”, nothing else.</li>
+		<li>Waived items show as “–” with the reason, still monochrome.</li>
+		<li>Receipt download sits on the booked card, not inside a nested invoice card.</li>
+	</ul></div>
+</div>
+</body>
+</html>

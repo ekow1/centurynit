@@ -3,12 +3,12 @@ import { z } from "zod";
 import { STAGE_LABELS } from "../labels.js";
 
 /**
- * Applicant journey — consultations (cases), applications, and the applicant
+ * Applicant journey. Consultations (cases), applications, and the applicant
  * profile they hang off. Commands, not CRUD, for every state change.
  */
 
 /**
- * Unified journey stage enum — the single source of truth for the application
+ * Unified journey stage enum. The single source of truth for the application
  * pipeline. Both the ops console and the portal import this; the API validates
  * against it. The portal derives its finer-grained `ProcessStageId` display
  * stages from this value + invoice/payment signals.
@@ -41,11 +41,11 @@ export const JOURNEY_STAGES: JourneyStage[] = [
 	"completed",
 ];
 
-/** The stored stage, named by its chapter — the vocabulary lives in ../labels.ts. */
+/** The stored stage, named by its chapter. The vocabulary lives in ../labels.ts. */
 export const JOURNEY_STAGE_LABELS: Record<JourneyStage, string> = STAGE_LABELS as Record<JourneyStage, string>;
 
 /**
- * Guard a stage transition. Adjacency is enforced — a case can only move
+ * Guard a stage transition. Adjacency is enforced. A case can only move
  * forward one column at a time. A few later stages require sub-step
  * completion, matching the current ops UI buttons, so the server and the
  * Workflow board share the same rule set.
@@ -53,8 +53,8 @@ export const JOURNEY_STAGE_LABELS: Record<JourneyStage, string> = STAGE_LABELS a
 /**
  * The pre-departure service fee milestone: on a full plan the balance, on
  * instalments the second milestone (the deposit is the first). Due after
- * the visa is approved; it holds the travel documents — the admission
- * letter, the visa papers, the e-ticket handover — never the booking. The
+ * the visa is approved; it holds the travel documents. The admission
+ * letter, the visa papers, the e-ticket handover. Never the booking. The
  * post-arrival remainder follows on the client's schedule.
  */
 export function preDepartureFeePaid(checks: {
@@ -106,7 +106,7 @@ export function documentReleaseHoldReason(checks: {
 	departureDetails?: { releaseOverrideAt?: string | null } | null;
 }): string | null {
 	if (documentsReleased(checks)) return null;
-	if (!checks.paymentPlanId) return "Released once the pre-departure fee milestone is paid — choose a payment plan and settle it.";
+	if (!checks.paymentPlanId) return "Released once the pre-departure fee milestone is paid. Choose a payment plan and settle it.";
 	return checks.paymentPlanId === "installment"
 		? "Released once the pre-departure instalment of the service fee is paid."
 		: "Released once the service fee balance is paid.";
@@ -145,7 +145,7 @@ export function canAdvanceToStage(
 		paymentPlanId?: string | null;
 		proceedStatus?: string;
 		/**
-		 * The travel assistance request's status — the one travel signal.
+		 * The travel assistance request's status. The one travel signal.
 		 * Travel is resolved when the flight is booked, or the applicant is
 		 * booking their own, or has put it on hold. Absent means the applicant
 		 * has not decided yet.
@@ -220,19 +220,19 @@ export function canAdvanceToStage(
 }
 
 /**
- * Canonical portal stage labels — the single source of truth for the
+ * Canonical portal stage labels. The single source of truth for the
  * fine-grained `ProcessStageId` display text. The ops UI uses
  * `JOURNEY_STAGE_LABELS` (coarse); the portal and the /me/journey route
  * use this (fine). Delete the duplicate label maps that used to live in
  * AppState.tsx (getJourneyPhase) and the /me/journey route.
  */
-// PORTAL_STAGE_LABELS now lives in ../labels.ts — the one vocabulary both
-// apps read — and is re-exported from the package index.
+// PORTAL_STAGE_LABELS now lives in ../labels.ts. The one vocabulary both
+// apps read. And is re-exported from the package index.
 
-/** Canonical portal stage order — matches PROCESS_STAGES[].index. */
+/** Canonical portal stage order. Matches PROCESS_STAGES[].index. */
 // The flight comes before the fee milestone: Departure opens on the visa,
 // the flight is booked first, and the milestone unlocks once travel is
-// settled (booked or own booking) — it releases the papers, not the seat.
+// settled (booked or own booking). It releases the papers, not the seat.
 export const PORTAL_STAGE_ORDER: string[] = [
 	"new",
 	"consultation",
@@ -304,7 +304,7 @@ export type VisaStage = z.infer<typeof visaStageSchema>;
 export const visaDetailsSchema = z.object({
 	/** "UK Student visa", "Canada study permit", "US F-1"… */
 	visaType: z.string().max(120).nullable().optional(),
-	/** The authority's reference — GWF, UCI, SEVIS, application number. */
+	/** The authority's reference. GWF, UCI, SEVIS, application number. */
 	reference: z.string().max(120).nullable().optional(),
 	/** Application lodged online. */
 	submittedAt: z.string().datetime().nullable().optional(),
@@ -332,9 +332,9 @@ export const departureDetailsSchema = z.object({
 	/** The school's arrive-by / reporting date. */
 	reportBy: z.string().datetime().nullable().optional(),
 	orientationAt: z.string().datetime().nullable().optional(),
-	/** The pre-departure briefing with the consultant — recording it closes that item. */
+	/** The pre-departure briefing with the consultant. Recording it closes that item. */
 	briefingAt: z.string().datetime().nullable().optional(),
-	/** Airport pickup — recording who closes that item. */
+	/** Airport pickup. Recording who closes that item. */
 	pickupBy: z.string().max(120).nullable().optional(),
 	pickupNote: z.string().max(500).nullable().optional(),
 	accommodationAddress: z.string().max(300).nullable().optional(),
@@ -343,9 +343,9 @@ export const departureDetailsSchema = z.object({
 	emergencyContactName: z.string().max(120).nullable().optional(),
 	emergencyContactPhone: z.string().max(40).nullable().optional(),
 	emergencyContactRelation: z.string().max(60).nullable().optional(),
-	/** The day they landed — the Done chapter starts here. */
+	/** The day they landed. The Done chapter starts here. */
 	arrivedAt: z.string().datetime().nullable().optional(),
-	/** A manager released the held documents ahead of the milestone — when, who, and why. */
+	/** A manager released the held documents ahead of the milestone. When, who, and why. */
 	releaseOverrideAt: z.string().datetime().nullable().optional(),
 	releaseOverrideBy: z.string().max(120).nullable().optional(),
 	releaseOverrideReason: z.string().max(500).nullable().optional(),
@@ -402,7 +402,7 @@ export const assessmentResultSchema = z.object({
 export type AssessmentResult = z.infer<typeof assessmentResultSchema>;
 
 /**
- * One study choice — country, school, programme, field and intake picked
+ * One study choice. Country, school, programme, field and intake picked
  * together. An applicant lists up to three in order of preference; the
  * scalar `preferredCountries` / `major` / `intake` fields below are the
  * first choice flattened, kept so older readers keep working.
@@ -482,11 +482,11 @@ export const preDepartureTaskSchema = z.object({
 	done: z.boolean(),
 	doneBy: z.string().nullable().optional(),
 	doneAt: z.string().datetime().nullable().optional(),
-	/** Set by the officer when a required item is waived — the reason is the record. */
+	/** Set by the officer when a required item is waived. The reason is the record. */
 	waivedReason: z.string().nullable().optional(),
 	/**
 	 * For items asking for proof: where the client's upload of that document
-	 * stands. The item is done when it is verified — the officer's decision,
+	 * stands. The item is done when it is verified. The officer's decision,
 	 * made on the Documents tab, not a tick.
 	 */
 	proofStatus: z.enum(["PENDING_UPLOAD", "UPLOADED", "VERIFIED", "REJECTED"]).nullable().optional(),
@@ -494,7 +494,7 @@ export const preDepartureTaskSchema = z.object({
 });
 export type PreDepartureTask = z.infer<typeof preDepartureTaskSchema>;
 
-/** One template item — what a case is seeded with. `id` is stable across cases (e.g. "pd-briefing", "uk-brp"). */
+/** One template item. What a case is seeded with. `id` is stable across cases (e.g. "pd-briefing", "uk-brp"). */
 export const preDepartureTemplateItemSchema = z.object({
 	id: z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/, "lower-case letters, digits and dashes"),
 	category: z.enum(["travel", "accommodation", "documents", "health", "finance", "orientation"]).optional(),
@@ -522,7 +522,7 @@ export function preDepartureChecklistDone(tasks: readonly { required?: boolean; 
  * Ops edits to an application. Payment state (`appFeePaid`, `depositPaid`,
  * `agencyStageIndex`, `agencySettled`, …) is deliberately absent: it is
  * derived from the invoice ledger by a database trigger and cannot be set
- * by hand — record a payment against the invoice instead.
+ * by hand. Record a payment against the invoice instead.
  */
 export const patchApplicationSchema = z.object({
 	visaCounselorNote: z.string().optional(),
@@ -530,7 +530,7 @@ export const patchApplicationSchema = z.object({
 	notes: z.string().optional(),
 	/**
 	 * Correction of the school allowance only. The package itself
-	 * (`fundingTrack`/`packageId`) is deliberately absent — changing it
+	 * (`fundingTrack`/`packageId`) is deliberately absent. Changing it
 	 * re-prices and re-links invoices, so it goes through
 	 * `POST /{id}/package`, never a bare patch.
 	 */
@@ -584,7 +584,7 @@ export const consultationSchema = z.object({
 	assignedOfficerName: z.string().nullable(),
 	assignedOfficerEmail: z.string().email().nullable(),
 	/**
-	 * Coverage chosen at placement — when true the assigned officer carries
+	 * Coverage chosen at placement. When true the assigned officer carries
 	 * the application this consultation opens (it starts with them as
 	 * `assignedStaffId` rather than parking on a handoff).
 	 */
@@ -616,7 +616,7 @@ export const consultationSchema = z.object({
 	applicationId: z.string().uuid().nullable().optional(),
 	applicationNumber: z.string().nullable().optional(),
 	applicationStage: z.string().nullable().optional(),
-	/** Cancellation stamp — set when the booking behind this case is cancelled. */
+	/** Cancellation stamp. Set when the booking behind this case is cancelled. */
 	cancelledAt: z.string().datetime().nullable().optional(),
 	cancelledBy: z.string().nullable().optional(),
 	cancellationReason: z.string().nullable().optional(),
@@ -647,7 +647,7 @@ export const stageHandoffPreviewSchema = z.object({
 });
 export type StageHandoffPreview = z.infer<typeof stageHandoffPreviewSchema>;
 
-/* ── Stage consent ─────────────────────────────────────────────────────── */
+/* Stage consent */
 /**
  * The applicant's explicit decision to start, hold, or opt out of a major
  * journey stage (application, visa, travel). The consent card appears on
@@ -679,7 +679,7 @@ export const stageConsentInputSchema = z.object({
 });
 export type StageConsentInput = z.infer<typeof stageConsentInputSchema>;
 
-/* ── Travel Assistance (direct-invoice flow) ─────────────────────────────── */
+/* Travel Assistance (direct-invoice flow) */
 
 export const travelDecisionSchema = z.enum(["yes", "hold", "no"]);
 export type TravelDecision = z.infer<typeof travelDecisionSchema>;
@@ -713,12 +713,12 @@ export const applicationSchema = z.object({
 	program: z.string(),
 	country: z.string(),
 	degreeLevel: z.string(),
-	/** The applicant's login id — documents and chat are keyed on it. */
+	/** The applicant's login id. Documents and chat are keyed on it. */
 	applicantUserId: z.string().nullable().optional(),
 	assignedStaffId: z.string().uuid().nullable(),
 	assignedStaffName: z.string().nullable(),
 	assignedStaffEmail: z.string().email().nullable(),
-	/** The applicant's journey coordinator — stage-to-finish oversight carried from consultation. */
+	/** The applicant's journey coordinator. Stage-to-finish oversight carried from consultation. */
 	journeyCoordinatorName: z.string().nullable().optional(),
 	journeyCoordinatorEmail: z.string().email().nullable().optional(),
 	stage: journeyStageSchema,
@@ -728,7 +728,7 @@ export const applicationSchema = z.object({
 	declinedReason: z.string().nullable(),
 	fundingTrack: z.string().nullable(),
 	targetSchoolCount: z.number().int().nullable().optional(),
-	/** The admitted school the client accepted — visa, deposit and departure hang off it. */
+	/** The admitted school the client accepted. Visa, deposit and departure hang off it. */
 	acceptedSchoolId: z.string().uuid().nullable().optional(),
 	offerAcceptedAt: z.string().datetime().nullable().optional(),
 	notes: z.string().nullable(),
@@ -742,7 +742,7 @@ export const applicationSchema = z.object({
 	/** The visa-stage documents and where the client's upload of each stands. */
 	visaDocumentChecklist: z.array(documentChecklistItemSchema).default([]),
 	paymentPlanId: z.string().nullable(),
-	/** The post-arrival schedule the client chose — months and frequency; null until chosen. */
+	/** The post-arrival schedule the client chose. Months and frequency; null until chosen. */
 	postArrivalMonths: z.number().int().nullable().optional(),
 	postArrivalFrequency: z.string().nullable().optional(),
 	packageId: z.string().uuid().nullable(),
@@ -765,12 +765,12 @@ export const applicationSchema = z.object({
 	consultationNumber: z.string().nullable().optional(),
 	/** The actual schools the applicant selected, with their per-school statuses. */
 	schoolApplications: z.array(schoolApplicationSchema).default([]),
-	/** Stage consent status for each major stage — null when no consent record exists. */
+	/** Stage consent status for each major stage. Null when no consent record exists. */
 	applicationConsent: stageConsentSchema.nullable(),
 	visaConsent: stageConsentSchema.nullable(),
 	travelConsent: stageConsentSchema.nullable(),
 	/**
-	 * Active per-stage specialists (visa, travel, finance) — from
+	 * Active per-stage specialists (visa, travel, finance). From
 	 * stage_assignments. The whole-case owner is `assignedStaffId`; a case is
 	 * "mine" for staff when either points at them.
 	 */
@@ -786,7 +786,7 @@ export const applicationSchema = z.object({
 		)
 		.default([]),
 	/**
-	 * The applicant's journey as the portal shows it — the same derivation
+	 * The applicant's journey as the portal shows it. The same derivation
 	 * (`deriveJourney`) the portal reads, so ops and the client name the same
 	 * step. Optional only so older clients keep parsing.
 	 */
@@ -825,17 +825,17 @@ export const applicationListSchema = z.object({
 export const assignCaseSchema = z.object({
 	employeeId: z.string().uuid(),
 	/**
-	 * Coverage — how far the handler carries the file. `stage` staffs the
+	 * Coverage. How far the handler carries the file. `stage` staffs the
 	 * current stage only (the seat re-opens when the chapter closes);
 	 * `all` makes them the case's handler end-to-end.
 	 */
 	scope: z.enum(["stage", "all"]).optional(),
-	/** Referral — the office that owns the file, when it moves with this placement. */
+	/** Referral. The office that owns the file, when it moves with this placement. */
 	branch: z.string().min(1).max(64).optional(),
 });
 /**
  * Refer a case or consultation to another handling branch without placing a
- * handler — the receiving desk's manager staffs it from their own queue.
+ * handler. The receiving desk's manager staffs it from their own queue.
  */
 export const referCaseSchema = z.object({
 	branch: z.string().min(1).max(64),
@@ -856,7 +856,7 @@ export const addCommentSchema = z.object({
 	visibility: commentVisibilitySchema.default("internal"),
 });
 export type AddComment = z.infer<typeof addCommentSchema>;
-/** What a caller sends — `visibility` may be left out and defaults to staff-only. */
+/** What a caller sends. `visibility` may be left out and defaults to staff-only. */
 export type AddCommentInput = z.input<typeof addCommentSchema>;
 export const requestDocumentsSchema = z.object({
 	documents: z.array(z.string().min(1).max(200)).min(1).max(20),
@@ -877,14 +877,14 @@ export const setVisaStageSchema = z.object({
 	 * `approved`; moving back to `pending` clears it (reapplication).
 	 */
 	outcome: visaOutcomeSchema.optional(),
-	/** Facts recorded with the move — the biometrics date, the decision date, validity. */
+	/** Facts recorded with the move. The biometrics date, the decision date, validity. */
 	details: visaDetailsSchema.optional(),
 });
 export const updateVisaDetailsSchema = visaDetailsSchema;
 
 /**
  * Applicant acceptance of the post-consultation "start your application?"
- * gate. Country + at least one school pair are required — the selection is
+ * gate. Country + at least one school pair are required. The selection is
  * what drives the quotation. `acceptQuotation` distinguishes a preview
  * (`false`/omitted = draft, nothing is persisted as final) from the actual
  * opt-in (`true`), so the applicant can review pricing before committing.
@@ -910,7 +910,7 @@ export type PauseProceed = z.infer<typeof pauseProceedSchema>;
 
 /**
  * The pre-commit advisory quotation for this applicant. Computed on read from
- * the current draft school selection + funding track — never cached on the
+ * the current draft school selection + funding track. Never cached on the
  * application row. `advisory` reminds the client the amount is an estimate
  * until the consultant issues the proforma.
  */
@@ -984,19 +984,19 @@ export const CASE_ERROR_CODES = {
 	CASE_CLOSED: "CASE_CLOSED",
 } as const;
 
-/* ── Coordinator Delegation ────────────────────────────────────────────── */
+/* Coordinator Delegation */
 
 export const delegateConsultationSchema = z.object({
 	coordinatorOpsUserId: z.string().uuid(),
 	delegationNote: z.string().max(2000).optional(),
-	/** "case" coordinates this consultation; "journey" also makes them the applicant's coordinator — future cases inherit. */
+	/** "case" coordinates this consultation; "journey" also makes them the applicant's coordinator. Future cases inherit. */
 	scope: z.enum(["case", "journey"]).optional(),
 });
 export type DelegateConsultation = z.infer<typeof delegateConsultationSchema>;
 
 export const setCoordinatorDutySchema = z.object({
 	branch: z.string().min(1),
-	/** Null ends today's duty — in-flight cases keep their coordinator. */
+	/** Null ends today's duty. In-flight cases keep their coordinator. */
 	coordinatorOpsUserId: z.string().uuid().nullable(),
 });
 export type SetCoordinatorDuty = z.infer<typeof setCoordinatorDutySchema>;
@@ -1007,7 +1007,7 @@ export const reassignCoordinatorSchema = z.object({
 });
 export type ReassignCoordinator = z.infer<typeof reassignCoordinatorSchema>;
 
-/* ── Workload ──────────────────────────────────────────────────────────── */
+/* Workload */
 
 export const workloadEntrySchema = z.object({
 	opsUserId: z.string().uuid(),
@@ -1027,7 +1027,7 @@ export const workloadSchema = z.object({
 });
 export type Workload = z.infer<typeof workloadSchema>;
 
-/* ── Activity Timeline ─────────────────────────────────────────────────── */
+/* Activity Timeline */
 
 export const consultationActivitySchema = z.object({
 	id: z.string().uuid(),
@@ -1045,7 +1045,7 @@ export const consultationActivityListSchema = z.object({
 });
 export type ConsultationActivityList = z.infer<typeof consultationActivityListSchema>;
 
-/* ── Escalation Config ─────────────────────────────────────────────────── */
+/* Escalation Config */
 
 export const escalationConfigSchema = z.object({
 	hoursBeforeEscalation: z.number().int().min(1).max(72).default(4),
@@ -1053,7 +1053,7 @@ export const escalationConfigSchema = z.object({
 });
 export type EscalationConfig = z.infer<typeof escalationConfigSchema>;
 
-/** The flight on the ticket invoice — and, once booked, the flight that was booked. */
+/** The flight on the ticket invoice. And, once booked, the flight that was booked. */
 export const travelFlightSchema = z.object({
 	carrier: z.string().max(120).optional(),
 	flightNumber: z.string().max(32).optional(),
@@ -1089,7 +1089,7 @@ export const travelAssistanceRequestSchema = z.object({
 	assignedOpsUserName: z.string().optional(),
 	createdAt: z.string().datetime(),
 	updatedAt: z.string().datetime(),
-	/** Ops-facing display fields — only populated by the ops list endpoint. */
+	/** Ops-facing display fields. Only populated by the ops list endpoint. */
 	applicantName: z.string().optional(),
 	applicantEmail: z.string().optional(),
 	applicationReference: z.string().optional(),
@@ -1113,12 +1113,12 @@ export type TravelAssistanceInvoiceInput = z.infer<typeof travelAssistanceInvoic
 export const travelAssistanceBookingInputSchema = travelBookingSchema;
 export type TravelAssistanceBookingInput = z.infer<typeof travelAssistanceBookingInputSchema>;
 
-/* ── Application activity ────────────────────────────────────────────────── */
+/* Application activity */
 
 /**
  * One event on an application's timeline. Assembled from the tables that
  * already record history (comments, ownership, stage assignments, handoffs,
- * consents, invoices and payments, school outcomes, travel requests) — there
+ * consents, invoices and payments, school outcomes, travel requests). There
  * is no separate activity table for applications.
  */
 export const applicationActivityEventSchema = z.object({

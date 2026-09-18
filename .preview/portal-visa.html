@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Visa — preview</title>
+<style>
+  :root{
+    --background:#ffffff; --foreground:#0a0a0a;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#0a0a0a; --border-light:#d4d4d8;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --text-xs:.72rem; --text-sm:.875rem;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:#fafafa;color:var(--foreground);font-size:var(--text-sm)}
+  .page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .page-title{font-size:1.9rem;font-weight:700;letter-spacing:-.02em}
+  .lead{color:var(--muted-foreground)}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--muted-foreground)}
+  .sharp-card{background:var(--background);border:1px solid var(--border-light);padding:1.25rem}
+  .btn{border:1px solid var(--border);background:var(--background);color:var(--foreground);font:inherit;
+    font-size:var(--text-xs);font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+    padding:.55rem .9rem;cursor:pointer;text-decoration:none;display:inline-block}
+  .btn--primary{background:var(--foreground);color:var(--background)}
+  .btn--ghost{border-color:var(--border-light)}
+  .btn--sm{padding:.4rem .7rem;font-size:.68rem}
+  .portal-pill{display:inline-block;border:1px solid var(--border);padding:.2rem .6rem;
+    font-family:var(--font-mono);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em}
+  .portal-pill--solid{background:var(--foreground);color:var(--background)}
+  .portal-pill--hollow{color:var(--muted-foreground);border-color:var(--border-light)}
+
+  .head{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem}
+
+  /* the live state band — same grammar as the journey's "you are here" */
+  .here{background:var(--foreground);color:var(--background);padding:1.1rem 1.25rem;margin-bottom:1.5rem;
+    display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
+  .here .eyebrow{color:rgba(255,255,255,.6)}
+  .here h2{font-size:1.15rem;margin:.2rem 0 .15rem}
+  .here p{color:rgba(255,255,255,.7);font-size:var(--text-sm)}
+
+  /* appointment — the one date not to miss gets the heavy frame */
+  .appt{border:2px solid var(--border);background:var(--background);padding:1.1rem 1.25rem;margin-bottom:1.5rem;
+    display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
+  .appt .when{font-size:1.2rem;font-weight:700;margin:.2rem 0}
+
+  .split{display:grid;grid-template-columns:1fr 19.5rem;gap:1.5rem;align-items:start}
+
+  /* the visa spine — vertical, detail lines honest */
+  .spine{list-style:none;padding:0;margin:0}
+  .spine li{display:flex;gap:.9rem;padding:.9rem 0;border-bottom:1px solid var(--border-light)}
+  .spine li:last-child{border-bottom:none}
+  .dot{width:1.5rem;height:1.5rem;flex-shrink:0;border:1px solid var(--border-light);border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:.62rem;margin-top:.1rem}
+  li.done .dot{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+  li.now .dot{background:var(--foreground);color:var(--background);border-color:var(--foreground);box-shadow:0 0 0 3px var(--muted)}
+  li.now strong::after{content:" · now";font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);font-weight:400}
+  li.later{color:var(--muted-foreground)}
+  li.later .dot{color:var(--border-light)}
+  .spine p{font-size:var(--text-xs);margin-top:.2rem}
+
+  /* documents list */
+  .docs{list-style:none;padding:0;margin:.6rem 0 0}
+  .docs li{display:flex;justify-content:space-between;gap:1rem;padding:.55rem 0;border-bottom:1px solid var(--border-light);font-size:var(--text-sm)}
+  .docs li:last-child{border-bottom:none}
+  .docs .st{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+  .docs .st.ok{color:var(--foreground);font-weight:700}
+  .docs .st.wait{color:var(--muted-foreground)}
+  .docs .st.fix{text-decoration:underline}
+
+  /* consultant timeline */
+  .tl{list-style:none;padding:0;margin:.6rem 0 0}
+  .tl li{padding:.6rem 0;border-bottom:1px solid var(--border-light);font-size:var(--text-sm)}
+  .tl li:last-child{border-bottom:none}
+  .tl .meta{font-family:var(--font-mono);font-size:.62rem;color:var(--muted-foreground);letter-spacing:.05em;margin-bottom:.2rem}
+  .tl p{line-height:1.55}
+
+  .rail{display:flex;flex-direction:column;gap:.8rem;position:sticky;top:1rem}
+  .kv{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--border-light);font-size:var(--text-xs)}
+  .kv:last-child{border-bottom:none}
+  .kv .k{font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground);font-size:.62rem;padding-top:.1rem}
+  .kv .v{text-align:right}
+
+  @media (max-width:900px){.split{grid-template-columns:1fr}.rail{position:static}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="head">
+    <div>
+      <p class="eyebrow">Chapter IV · Visa</p>
+      <h1 class="page-title">Visa</h1>
+      <p class="lead" style="margin-top:.35rem">University of Toronto · MSc Data Science · Sept '26</p>
+    </div>
+    <span class="portal-pill">Case CNS-2026-0042</span>
+  </div>
+
+  <!-- the live state -->
+  <div class="here">
+    <div>
+      <p class="eyebrow">Current update</p>
+      <h2>Awaiting the authority's decision</h2>
+      <p>Application lodged 4 Mar · biometrics given 18 Mar · decisions run 4–8 weeks</p>
+    </div>
+    <a class="btn" href="#" style="background:var(--background);color:var(--foreground);border-color:var(--background)">Message your visa officer →</a>
+  </div>
+
+  <div class="split">
+    <div>
+      <!-- the spine -->
+      <div class="sharp-card" style="margin-bottom:1.5rem">
+        <p class="eyebrow" style="margin-bottom:.5rem">Your visa case</p>
+        <ol class="spine">
+          <li class="done">
+            <span class="dot">✓</span>
+            <div><strong>Application lodged</strong><p class="muted">Study permit · Ref VFS-884102 · submitted 4 Mar</p></div>
+          </li>
+          <li class="done">
+            <span class="dot">✓</span>
+            <div><strong>Appointment &amp; biometrics</strong><p class="muted">Biometrics given 18 Mar · VFS Accra</p></div>
+          </li>
+          <li class="now">
+            <span class="dot">3</span>
+            <div><strong>Authority decision</strong><p class="muted">With IRCC — nothing needed from you right now</p></div>
+          </li>
+          <li class="later">
+            <span class="dot">4</span>
+            <div><strong>Visa granted</strong><p>Passport back with the visa — then Departure opens</p></div>
+          </li>
+        </ol>
+      </div>
+
+      <!-- the checklist -->
+      <div class="sharp-card" style="margin-bottom:1.5rem">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <p class="eyebrow">Your visa documents</p>
+          <span class="mono muted" style="font-size:.68rem">7 of 9 verified</span>
+        </div>
+        <ul class="docs">
+          <li><span>Passport (bio page)</span><span class="st ok">Verified</span></li>
+          <li><span>Admission letter</span><span class="st ok">Verified</span></li>
+          <li><span>Bank statement · 6 months</span><span class="st ok">Verified</span></li>
+          <li><span>Sponsor letter</span><span class="st ok">Verified</span></li>
+          <li><span>Police clearance</span><span class="st wait">Under review</span></li>
+          <li><span>Medical report</span><span class="st fix">Re-upload needed</span></li>
+          <li><span>Passport photos ×2</span><span class="st ok">Verified</span></li>
+          <li><span>Statement of purpose</span><span class="st ok">Verified</span></li>
+          <li><span>Previous visa history</span><span class="st wait">Under review</span></li>
+        </ul>
+        <div style="margin-top:.9rem"><a class="btn btn--ghost btn--sm" href="#">Open the vault →</a></div>
+      </div>
+
+      <!-- the trail -->
+      <div class="sharp-card">
+        <p class="eyebrow">Your visa case, as recorded</p>
+        <ul class="tl">
+          <li>
+            <p class="meta">18 Mar · Daniel O. — Visa officer</p>
+            <p>Biometrics confirmed. File is complete with IRCC — the wait is theirs now. The medical report scan you sent is faint on page 2; I've marked it for re-upload when you have a clearer copy.</p>
+          </li>
+          <li>
+            <p class="meta">4 Mar · Daniel O. — Visa officer</p>
+            <p>Application lodged. Reference VFS-884102 is on your record — biometrics letter follows within the week.</p>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- rail -->
+    <div class="rail">
+      <div class="sharp-card" style="border-color:var(--border);border-width:1.5px">
+        <p class="eyebrow">Your visa officer</p>
+        <p style="font-weight:700;margin-top:.5rem">Daniel Osei</p>
+        <p class="muted" style="font-size:var(--text-xs);margin-top:.15rem">Visa processing · Accra</p>
+        <div style="display:flex;gap:.5rem;margin-top:.8rem">
+          <a class="btn btn--ghost btn--sm" href="#">Message</a>
+          <a class="btn btn--ghost btn--sm" href="#">Book call</a>
+        </div>
+      </div>
+
+      <div class="sharp-card">
+        <p class="eyebrow">The case file</p>
+        <div class="kv" style="margin-top:.4rem"><span class="k">Visa fee</span><span class="v">Paid ✓ · $380</span></div>
+        <div class="kv"><span class="k">Lodged</span><span class="v">4 Mar · Ref VFS-884102</span></div>
+        <div class="kv"><span class="k">Biometrics</span><span class="v">18 Mar · VFS Accra</span></div>
+        <div class="kv"><span class="k">Decision</span><span class="v muted">Pending — est. 4–8 wks</span></div>
+      </div>
+
+      <div class="sharp-card">
+        <p class="eyebrow">After the visa</p>
+        <p class="muted" style="font-size:var(--text-xs);margin-top:.4rem;line-height:1.6">
+          Once approved, <strong style="color:var(--foreground)">Chapter V · Departure</strong> opens: the
+          pre-departure milestone, then your ticket. Your letter and visa documents release with the milestone.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

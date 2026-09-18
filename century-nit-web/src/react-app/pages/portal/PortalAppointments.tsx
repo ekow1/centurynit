@@ -16,10 +16,10 @@ import type { AvailabilitySlot, Booking } from "century-nit-shared";
  * from double-booking. The surrounding simulated journey is untouched.
  *
  * Availability shown here is advisory. The server re-checks on submit, so a slot
- * can still be refused — that outcome is handled rather than assumed away.
+ * can still be refused. That outcome is handled rather than assumed away.
  */
 
-/** The next N days a client may pick. Today is never offered — too short notice. */
+/** The next N days a client may pick. Today is never offered. Too short notice. */
 function upcomingDates(count = 21): { value: string; label: string }[] {
 	const out: { value: string; label: string }[] = [];
 	const cursor = new Date();
@@ -42,7 +42,7 @@ function upcomingDates(count = 21): { value: string; label: string }[] {
 	return out;
 }
 
-/** Service names arrive lowercase — display them like the other bold labels. */
+/** Service names arrive lowercase. Display them like the other bold labels. */
 function cap(s: string): string {
 	return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
@@ -50,7 +50,7 @@ function cap(s: string): string {
 const STATUS_COPY: Record<string, { label: string; note: string }> = {
 	UNASSIGNED: {
 		label: "Awaiting assignment",
-		// §1 — never imply someone has been assigned when nobody has.
+		// §1. Never imply someone has been assigned when nobody has.
 		note: "A team member will be assigned to your appointment and you will receive confirmation once it is assigned.",
 	},
 	ASSIGNED: { label: "Confirmed", note: "Your consultant has been assigned." },
@@ -61,7 +61,7 @@ const STATUS_COPY: Record<string, { label: string; note: string }> = {
 	NO_SHOW: { label: "Missed", note: "This appointment was not attended." },
 };
 
-/** Monochrome pill variant per status — ink marks the live ones. */
+/** Monochrome pill variant per status. Ink marks the live ones. */
 function statusPill(status: string): string {
 	if (status === "CONFIRMED" || status === "ASSIGNED") return "portal-pill portal-pill--solid";
 	if (status === "COMPLETED" || status === "CANCELLED" || status === "NO_SHOW") return "portal-pill portal-pill--done";
@@ -69,13 +69,13 @@ function statusPill(status: string): string {
 	return "portal-pill";
 }
 
-/** A booking's effective display state — COMPLETED/NO_SHOW are done even if the slot date is still ahead. */
+/** A booking's effective display state. COMPLETED/NO_SHOW are done even if the slot date is still ahead. */
 function displayState(booking: Booking): { displayStatus: string; isOver: boolean } {
 	const isOver = booking.status === "CANCELLED" || booking.status === "COMPLETED" || booking.status === "NO_SHOW";
 	return { displayStatus: booking.status, isOver };
 }
 
-/* ── Slot picker, shared by booking and rescheduling ─────────────────────── */
+/* Slot picker, shared by booking and rescheduling */
 
 function SlotPicker({
 	branchId,
@@ -101,7 +101,7 @@ function SlotPicker({
 	 *
 	 * Deriving "loading" from a key mismatch rather than clearing state inside
 	 * the effect avoids a synchronous setState there, and it also discards a slow
-	 * response for a date the user has already moved away from — which would
+	 * response for a date the user has already moved away from. Which would
 	 * otherwise paint the wrong day's availability.
 	 */
 	const requestKey = `${branchId}|${date}|${durationMinutes}`;
@@ -179,7 +179,7 @@ function SlotPicker({
 	);
 }
 
-/* ── Reschedule ──────────────────────────────────────────────────────────── */
+/* Reschedule */
 
 function RescheduleForm({
 	booking,
@@ -268,14 +268,14 @@ function RescheduleForm({
 	);
 }
 
-/* ── Cancel — shared by the hero and the rows ─────────────────────────────── */
+/* Cancel. Shared by the hero and the rows */
 
 function useCancelBooking(onChanged: () => void) {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const { confirm, toast } = useNotifier();
 	const { fees } = useAppState();
-	// Stated up front — a new booking means a new fee, so say the figure.
+	// Stated up front. A new booking means a new fee, so say the figure.
 	const feeLabel = formatDualCurrency(
 		usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents),
 	);
@@ -284,7 +284,7 @@ function useCancelBooking(onChanged: () => void) {
 		const ok = await confirm({
 			title: "Can't make it?",
 			message:
-				`Moving is free — use "Move" on this row and your slot holds until your consultant confirms. Cancelling releases the slot and ends the consultation; a new booking means a new fee — ${feeLabel}.`,
+				`Moving is free. Use "Move" on this row and your slot holds until your consultant confirms. Cancelling releases the slot and ends the consultation; a new booking means a new fee · ${feeLabel}.`,
 			confirmText: "Cancel & release the slot",
 			tone: "danger",
 		});
@@ -306,7 +306,7 @@ function useCancelBooking(onChanged: () => void) {
 	return { cancel, busy, error };
 }
 
-/* ── Row — one line in the book, expands to the reschedule form ──────────── */
+/* Row. One line in the book, expands to the reschedule form */
 
 function BookingRow({ booking, onChanged }: { booking: Booking; onChanged: () => void }) {
 	const [rescheduling, setRescheduling] = useState(false);
@@ -333,7 +333,7 @@ function BookingRow({ booking, onChanged }: { booking: Booking; onChanged: () =>
 					{booking.rescheduleRequestedAt && !isOver && (
 						<div className="preq">
 							<b>Reschedule requested</b>
-							You asked to move to {new Date(booking.rescheduleRequestedStartsAt!).toLocaleString()} — waiting for approval.
+							You asked to move to {new Date(booking.rescheduleRequestedStartsAt!).toLocaleString()}. Waiting for approval.
 						</div>
 					)}
 					{!booking.meetingUrl && booking.type === "online" && !isOver && booking.employeeId && (
@@ -342,7 +342,7 @@ function BookingRow({ booking, onChanged }: { booking: Booking; onChanged: () =>
 					{error && <p className="appt-error">{error}</p>}
 					{joinError && <p className="appt-error">{joinError}</p>}
 				</td>
-				<td className="mono" style={{ fontSize: "0.7rem" }}>{booking.employeeName?.toUpperCase() ?? "—"}</td>
+				<td className="mono" style={{ fontSize: "0.7rem" }}>{booking.employeeName?.toUpperCase() ?? "N/A"}</td>
 				<td><span className={statusPill(displayStatus)}>{copy.label}</span></td>
 				<td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
 					{booking.meetingUrl && !isOver ? (
@@ -403,7 +403,7 @@ function BookingRow({ booking, onChanged }: { booking: Booking; onChanged: () =>
 	);
 }
 
-/* ── Page ────────────────────────────────────────────────────────────────── */
+/* Page */
 
 export function PortalAppointments() {
 	const [bookings, setBookings] = useState<Booking[] | null>(null);
@@ -449,7 +449,7 @@ export function PortalAppointments() {
 		};
 	}, [bookings, now]);
 
-	// The next upcoming appointment — lifted out of the list as the hero.
+	// The next upcoming appointment. Lifted out of the list as the hero.
 	const next = useMemo(() => {
 		return [...buckets.Upcoming].sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0] ?? null;
 	}, [buckets]);
@@ -464,11 +464,11 @@ export function PortalAppointments() {
 					<p className="eyebrow">Appointments</p>
 					<h1 className="page-title mt-1">Your calendar</h1>
 					<p className="lead mt-2">
-						Consultations and check-ins with your Century NIT team. Reschedules are requests — your consultant confirms them.
+						Consultations and check-ins with your Century NIT team. Reschedules are requests. Your consultant confirms them.
 					</p>
 				</div>
 				{next ? (
-					// A live booking exists — the primary action is managing it, not
+					// A live booking exists. The primary action is managing it, not
 					// booking again. Check-ins stay reachable via the rail card.
 					<a className="btn btn--primary" href="#next">
 						Manage appointment
@@ -484,7 +484,7 @@ export function PortalAppointments() {
 			{!bookings && !error && <p className="appt-muted">Loading…</p>}
 			{overlay}
 
-			{/* Next up — lifted out of the book */}
+			{/* Next up. Lifted out of the book */}
 			{next && nextState ? (
 				<div className="pnext mt-4" id="next">
 					<div className="pnext__date">
@@ -507,7 +507,7 @@ export function PortalAppointments() {
 						{next.rescheduleRequestedAt ? (
 							<div className="preq">
 								<b>Reschedule requested</b>
-								You asked to move to {new Date(next.rescheduleRequestedStartsAt!).toLocaleString()} — waiting for your consultant to confirm. The original time holds until they do.{" "}
+								You asked to move to {new Date(next.rescheduleRequestedStartsAt!).toLocaleString()}. Waiting for your consultant to confirm. The original time holds until they do.{" "}
 								<button
 									type="button"
 									className="jlink"
@@ -563,7 +563,7 @@ export function PortalAppointments() {
 				<div className="sharp-card mt-4">
 					<p className="eyebrow">Nothing scheduled</p>
 					<p className="muted mt-2" style={{ fontSize: "var(--text-sm)" }}>
-						Book your consultation to start your journey — or a check-in once you're enrolled.
+						Book your consultation to start your journey. Or a check-in once you're enrolled.
 					</p>
 				</div>
 			) : null}
@@ -571,7 +571,7 @@ export function PortalAppointments() {
 			{bookings && bookings.length > 0 ? (
 				<div className="psplit mt-5">
 					<div>
-						{/* The book — every appointment, filtered by chips with counts */}
+						{/* The book. Every appointment, filtered by chips with counts */}
 						<div className="psteps" role="tablist" aria-label="Appointment filters">
 							{(["All", "Upcoming", "Past", "Cancelled"] as const).map((t) => (
 								<button
@@ -608,12 +608,12 @@ export function PortalAppointments() {
 						)}
 					</div>
 
-					{/* The rail — book, how it works, the office */}
+					{/* The rail. Book, how it works, the office */}
 					<div className="prail">
 						<div className="sharp-card sharp-card--key sharp-card--invert">
 							<p className="eyebrow" style={{ color: "rgba(255,255,255,0.6)" }}>Book a slot</p>
 							<p style={{ fontSize: "var(--text-sm)", marginTop: "0.5rem", lineHeight: 1.6, color: "rgba(255,255,255,0.85)" }}>
-								Check-ins are free once you're enrolled. Pick a day and a time — we confirm by email.
+								Check-ins are free once you're enrolled. Pick a day and a time. We confirm by email.
 							</p>
 							<Button to="/portal/consultation" variant="inverted" style={{ width: "100%", marginTop: "0.9rem", textAlign: "center" }}>
 								{next ? "Book another →" : "Book appointment →"}
@@ -624,11 +624,11 @@ export function PortalAppointments() {
 							<p className="eyebrow">Good to know</p>
 							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem", lineHeight: 1.6 }}>
 								<strong>Rescheduling.</strong> You request a new time; your consultant confirms it.
-								The old slot holds until they do — nothing is lost if they can't take the new one.
+								The old slot holds until they do. Nothing is lost if they can't take the new one.
 							</p>
 							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.6rem", lineHeight: 1.6 }}>
 								<strong>Cancelling.</strong> Cancelling a paid consultation cancels the consultation
-								itself — the slot releases and a new booking means a new fee. Check-ins after
+								itself. The slot releases and a new booking means a new fee. Check-ins after
 								enrolment cancel freely.
 							</p>
 						</div>

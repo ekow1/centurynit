@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portal — Chapter I · Consultation (proposed)</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1120px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem}
+	.jump a{color:inherit}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.5rem clamp(1.25rem,3vw,2.25rem) 2.5rem}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.struck{text-decoration:line-through;opacity:.55}
+
+	/* ---- portal chrome ---- */
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.title{font-size:1.75rem;font-weight:500;letter-spacing:-.01em;margin-top:.25rem}
+	.lead{color:var(--fg-muted);font-size:.92rem;margin-top:.5rem;max-width:44rem}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--inv{background:#fff;color:var(--ink);border-color:#fff}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.pill{display:inline-flex;align-items:center;padding:.25rem .65rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line-light)}
+	.pill--done{background:var(--muted-bg);border-color:var(--line-light);color:var(--fg-muted)}
+
+	/* band */
+	.now{background:var(--ink);color:#fff;padding:1.6rem clamp(1.25rem,3vw,2.5rem);display:flex;flex-wrap:wrap;gap:1.25rem;justify-content:space-between;align-items:flex-start;margin-top:1.5rem}
+	.now .eyebrow{color:rgba(255,255,255,.6)}
+	.now h2{font-size:1.3rem;font-weight:500;margin-top:.35rem}
+	.now p.d{margin-top:.45rem;max-width:38rem;font-size:.9rem;color:#fff}
+
+	/* step strip */
+	.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem;margin-top:1.25rem}
+	.step{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border:1px solid var(--line-light);font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-muted);min-width:0}
+	.step .m{width:1.4rem;height:1.4rem;border:1px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;flex-shrink:0}
+	.step .l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+	.step .s{margin-left:auto;font-size:.58rem;opacity:.8;white-space:nowrap}
+	.step--done{background:var(--muted-bg)}
+	.step--on{border:1.5px solid var(--ink);color:var(--ink);font-weight:700}
+	.step--done .m,.step--on .m{background:var(--ink);color:#fff}
+
+	/* split + rail */
+	.split{display:grid;grid-template-columns:minmax(0,1fr) 21rem;gap:2rem;align-items:start;margin-top:1.75rem}
+	@media(max-width:900px){.split{grid-template-columns:1fr}.steps{grid-template-columns:1fr 1fr}}
+	.rail{display:flex;flex-direction:column;gap:.8rem}
+	.card{background:#fff;border:1px solid var(--ink);padding:1.25rem}
+	.rail .card{padding:1.1rem}
+	.card--key{border-width:1.5px}
+	.card--inv{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.card--inv .eyebrow{color:rgba(255,255,255,.6)}
+	.card--inv .muted{color:rgba(255,255,255,.7)}
+	.pkv{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--line-light);font-size:.78rem}
+	.pkv:last-child{border-bottom:none}
+	.pkv .k{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--micro);font-size:.64rem;padding-top:.1rem}
+	.pkv .v{text-align:right;min-width:0}
+	.pkv--due .k{color:var(--ink)} .pkv--due .v{font-family:var(--mono);font-weight:700;font-size:.9rem}
+	.card--inv .pkv{border-color:rgba(255,255,255,.25)} .card--inv .pkv .k{color:rgba(255,255,255,.6)}
+
+	/* sections */
+	.sec{margin-bottom:1.75rem}
+	.sh{display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem;flex-wrap:wrap}
+	.no{display:inline-flex;align-items:center;justify-content:center;width:1.4rem;height:1.4rem;border:1px solid var(--line);font-family:var(--mono);font-size:.65rem;font-weight:700}
+	.no--done{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.st{font-weight:700;font-size:.95rem}
+	.hint{font-family:var(--mono);font-size:.66rem;color:var(--fg-muted);letter-spacing:.04em;margin-left:.35rem}
+	.between{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.5rem}
+	.picks{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
+	@media(max-width:700px){.picks{grid-template-columns:1fr}}
+	.pick{border:1px solid var(--line-light);background:#fff;padding:1.1rem 1.15rem;text-align:left;font:inherit;cursor:pointer;display:flex;flex-direction:column;gap:.4rem}
+	.pick b{font-size:.95rem} .pick span{font-size:.78rem;color:var(--fg-muted);line-height:1.5}
+	.pick .price{font-family:var(--mono);font-weight:700;font-size:.8rem;color:var(--ink);margin-top:.2rem}
+	.pick--on{background:var(--ink);color:#fff;border-color:var(--ink)} .pick--on span{color:rgba(255,255,255,.65)} .pick--on .price{color:#fff}
+	.row{display:flex;justify-content:space-between;gap:1rem;padding:.55rem 0;border-bottom:1px solid var(--line-light);font-size:.88rem;align-items:center}
+	.row:last-child{border-bottom:none}
+	.row .k{color:var(--fg-muted)} .row .v{font-weight:500;text-align:right}
+	ul.list{list-style:none;padding:0;margin:.5rem 0 0}
+	.order{border:1.5px solid var(--ink);background:#fff}
+	.order .row{padding:.8rem 1.1rem}
+	.order .total{border-top:1.5px solid var(--ink);font-weight:700}
+	.sub{font-size:.85rem;color:var(--fg-muted);margin-top:.35rem}
+	.big{font-size:1.6rem;font-weight:700;margin-top:.3rem}
+	.mt1{margin-top:.5rem}.mt2{margin-top:.8rem}.mt3{margin-top:1rem}
+	.field{margin-bottom:.9rem}
+	.field label{display:block;font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--fg-muted);margin-bottom:.3rem}
+	.field .in{border:1px solid var(--line);padding:.55rem .7rem;font-size:.85rem;background:var(--muted-bg);color:var(--fg-muted)}
+	.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 1rem}
+	.slots{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.6rem}
+	.slot{font-family:var(--mono);font-size:.72rem;border:1px solid var(--line-light);padding:.45rem .7rem}
+	.slot--on{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.days{display:grid;grid-template-columns:repeat(7,1fr);gap:.4rem;margin-top:.6rem}
+	.day{border:1px solid var(--line-light);padding:.5rem .2rem;text-align:center;font-size:.7rem}
+	.day b{display:block;font-family:var(--mono);font-size:.62rem;margin-bottom:.2rem}
+	.day--on{border:1.5px solid var(--ink)}
+	.day--off{opacity:.4;text-decoration:line-through}
+	.tl{list-style:none;margin:.5rem 0 0;padding:0}
+	.tl li{padding:.7rem 0;border-bottom:1px solid var(--line-light)}
+	.tl .who{font-weight:600;font-size:.88rem} .tl .when{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);margin-left:.5rem}
+	.tl p{font-size:.85rem;margin-top:.15rem}
+	.tl li:last-child{border-bottom:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<h1 class="page">Chapter I · Consultation — proposed layout</h1>
+	<p class="note">Two surfaces, same server data. <b>No case yet → one booking sheet</b> (five numbered sections, no tab bar — Review and Outcome tabs are gone, the duplicated "confirmed" cards collapse into one). <b>Case exists → the Departure grammar</b>: "You are here" band, a four-step strip (Booked → With your consultant → Outcome → Your call), numbered sections, a rail. Dropped: the 14-step journey stepper, the duplicate documents CTAs, the wizard's dead review/outcome tabs, and the second booking entry point.</p>
+	<div class="jump"><a href="#a">A · no case — the booking sheet</a><a href="#b">B · booked — awaiting consultant</a><a href="#c">C · outcome ready — decide</a></div>
+
+	<!-- ================= STATE A ================= -->
+	<span class="tag tag--after" id="a">State A — no case yet · the booking sheet (was: a 7-tab wizard)</span>
+	<div class="mock">
+		<div class="between">
+			<div>
+				<p class="eyebrow">Chapter I · Consultation</p>
+				<h1 class="title">Book your consultation</h1>
+				<p class="lead">One session — video or at a branch — 45 minutes, GH₵ 750 · $50. Your consultant reviews your background, tells you if the route is viable, and hands you a document checklist and a named consultant for the rest of the journey.</p>
+			</div>
+		</div>
+
+		<div class="split">
+			<div>
+				<section class="sec">
+					<div class="sh"><span class="no">1</span><span class="st">How you meet</span><span class="hint">same session, same fee</span></div>
+					<div class="picks">
+						<div class="pick pick--on"><b>Video call</b><span>Meet from anywhere — you still pick which office handles your file.</span><span class="price">45 min · GH₵ 750 · $50</span></div>
+						<div class="pick"><b>At a branch</b><span>Accra or Kumasi — the office you visit.</span><span class="price">45 min · GH₵ 750 · $50</span></div>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">2</span><span class="st">Which office handles you</span><span class="hint">your file sits with one office — even for a video call</span></div>
+					<div class="picks">
+						<div class="pick"><b>Accra HQ</b><span>12 Liberation Road, Accra</span><span class="price">Next slot · WED 16 SEP</span></div>
+						<div class="pick"><b>Kumasi</b><span>Harper Road, Kumasi</span><span class="price">Next slot · FRI 18 SEP</span></div>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">3</span><span class="st">About you</span><span class="hint">your consultant reads this before you meet</span></div>
+					<div class="card">
+						<div class="grid2">
+							<div class="field"><label>Full name</label><div class="in">Enoch Enu</div></div>
+							<div class="field"><label>Phone</label><div class="in">+233 …</div></div>
+							<div class="field"><label>Nationality</label><div class="in">Ghanaian</div></div>
+							<div class="field"><label>Highest education</label><div class="in">WASSCE · 2024</div></div>
+							<div class="field"><label>What are you aiming for</label><div class="in">BSc · Sep 2026 intake</div></div>
+							<div class="field"><label>Preferred countries</label><div class="in">Hungary, Poland</div></div>
+						</div>
+						<p class="sub">Passport details, budget and study choices — the same form as your profile. Filled once; it feeds both.</p>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">4</span><span class="st">Pick a time</span><span class="hint">45 min · branch time · struck days are full</span></div>
+					<div class="card">
+						<div class="days">
+							<div class="day"><b>WED 16</b>4 open</div>
+							<div class="day"><b>THU 17</b>6 open</div>
+							<div class="day day--on"><b>FRI 18</b>3 open</div>
+							<div class="day day--off"><b>SAT 19</b>closed</div>
+							<div class="day"><b>MON 21</b>5 open</div>
+							<div class="day"><b>TUE 22</b>2 open</div>
+							<div class="day"><b>WED 23</b>4 open</div>
+						</div>
+						<div class="slots">
+							<span class="slot">09:00</span><span class="slot">10:30</span><span class="slot slot--on">13:00</span><span class="slot">14:30</span>
+						</div>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">5</span><span class="st">Confirm &amp; pay</span><span class="hint">Paystack · card or mobile money</span></div>
+					<div class="order">
+						<div class="row"><span>Video consultation — 45 min<br><span class="muted" style="font-size:.78rem">Fri 18 Sep · 13:00 · Accra HQ handles the file</span></span><span class="v">GH₵ 750 · $50</span></div>
+						<div class="row"><span class="muted" style="font-size:.78rem">Includes — eligibility review, route recommendation, document checklist, named consultant</span><span class="v muted">—</span></div>
+						<div class="row total"><span>Due now</span><span class="v">GH₵ 750 · $50</span></div>
+					</div>
+					<p class="sub mt2" style="max-width:30rem">Free reschedule up to 24h before · refunded in full if we can't place you · receipt lands in your Money ledger.</p>
+					<div class="mt3"><span class="btn">Pay with Paystack · GH₵ 750 →</span></div>
+				</section>
+			</div>
+
+			<aside class="rail">
+				<div class="card card--key">
+					<p class="eyebrow">Your booking</p>
+					<div class="mt1">
+						<div class="pkv"><span class="k">Type</span><span class="v">Video call</span></div>
+						<div class="pkv"><span class="k">Handling branch</span><span class="v">Accra HQ</span></div>
+						<div class="pkv"><span class="k">Date</span><span class="v">Fri 18 Sep</span></div>
+						<div class="pkv"><span class="k">Time</span><span class="v">13:00 · 45 min</span></div>
+						<div class="pkv pkv--due"><span class="k">Fee</span><span class="v">GH₵ 750 · $50</span></div>
+					</div>
+				</div>
+				<div class="card">
+					<p class="eyebrow">What happens next</p>
+					<p class="muted mt1" style="font-size:.8rem;line-height:1.6">Payment books the slot. You get a confirmation and a reminder the day before; your consultant reads your "About you" before you meet.</p>
+				</div>
+			</aside>
+		</div>
+	</div>
+	<div class="callout"><b>A — what changed</b><ul>
+		<li>7 tab pills → 5 numbered sections on one sheet. The tab bar is gone entirely — nothing is hidden, nothing is locked.</li>
+		<li><b>Removed:</b> the Review tab (a passive status list that duplicated the case view), the locked Outcome tab (outcomes live on the case view now), the Back/Next button pair, the second "Booking confirmed" card, and the "Dashboard · Consultation" eyebrow.</li>
+		<li>"About you" moved out of a cramped tab into a normal section, and it says plainly it's the same fields as the profile — asked once.</li>
+		<li>Order summary is a real order card; one Pay button, one fee figure, in the rail too.</li>
+	</ul></div>
+
+	<!-- ================= STATE B ================= -->
+	<span class="tag tag--after" id="b">State B — booked · waiting for the consultant to be assigned</span>
+	<div class="mock">
+		<div class="between">
+			<div>
+				<p class="eyebrow">Chapter I · Consultation</p>
+				<h1 class="title">Consultation · booked</h1>
+				<p class="lead">Your session is paid and on the calendar. This page is your case file — the appointment, the outcome, and anything your consultant asks for.</p>
+			</div>
+		</div>
+
+		<div class="now">
+			<div>
+				<p class="eyebrow">You are here</p>
+				<h2>Fri 18 Sep, 13:00 — a consultant is being assigned</h2>
+				<p class="d">Accra HQ assigns your consultant within a day. Upload your standard documents meanwhile so nothing waits on paperwork.</p>
+			</div>
+			<span class="btn btn--inv">Open your vault →</span>
+		</div>
+
+		<div class="steps">
+			<div class="step step--done"><span class="m">✓</span><span class="l">Booked</span><span class="s">18 Sep · paid</span></div>
+			<div class="step step--on"><span class="m">2</span><span class="l">With your consultant</span><span class="s">assigning</span></div>
+			<div class="step"><span class="m">3</span><span class="l">Outcome</span><span class="s">after the session</span></div>
+			<div class="step"><span class="m">4</span><span class="l">Your call</span><span class="s">proceed or hold</span></div>
+		</div>
+
+		<div class="split">
+			<div>
+				<section class="sec">
+					<div class="sh"><span class="no no--done">✓</span><span class="st">Your appointment</span><span class="hint">confirmed · CNS-2026-0117</span></div>
+					<div class="card card--key">
+						<div class="between"><p class="eyebrow">Video call · Accra HQ</p><span class="pill pill--solid">Confirmed</span></div>
+						<div class="mt1">
+							<div class="row"><span class="k">When</span><span class="v">Fri 18 Sep 2026, 13:00</span></div>
+							<div class="row"><span class="k">Consultant</span><span class="v muted">Being assigned at your branch</span></div>
+						</div>
+						<p class="sub">The meeting link appears here once your consultant is seated.</p>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">2</span><span class="st">Your assessment</span><span class="hint">after the session</span></div>
+					<p class="mono muted" style="font-size:.75rem">YOUR CONSULTANT REVIEWS YOUR BACKGROUND, DOCUMENTS AND GOALS — THE OUTCOME AND ROUTE RECOMMENDATION APPEAR HERE.</p>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">3</span><span class="st">Your documents</span><span class="hint">standard set · 2 of 5 verified</span></div>
+					<div class="card">
+						<ul class="list" style="margin-top:0">
+							<li class="row"><span style="font-weight:600">Passport bio page</span><span class="pill pill--done">Verified</span></li>
+							<li class="row"><span style="font-weight:600">WASSCE results</span><span class="pill pill--done">Verified</span></li>
+							<li class="row"><span style="font-weight:600">Birth certificate</span><span class="pill pill--hollow">To upload</span></li>
+							<li class="row"><span style="font-weight:600">Passport photo</span><span class="pill pill--hollow">To upload</span></li>
+							<li class="row"><span style="font-weight:600">Proof of funds</span><span class="pill pill--hollow">To upload</span></li>
+						</ul>
+						<div class="mt3"><span class="btn btn--ghost btn--sm">Upload in your vault →</span></div>
+					</div>
+				</section>
+			</div>
+
+			<aside class="rail">
+				<div class="card card--key card--inv">
+					<p class="eyebrow">Countdown</p>
+					<p class="big">3 days</p>
+					<p class="mono muted" style="font-size:.64rem;margin-top:.15rem">TO FRI 18 SEP, 13:00</p>
+				</div>
+				<div class="card">
+					<p class="eyebrow">Money · Chapter I</p>
+					<div class="mt1">
+						<div class="pkv"><span class="k">Consultation fee</span><span class="v">GH₵ 750 paid ✓</span></div>
+						<div class="pkv"><span class="k">Receipt</span><span class="v muted">in your Money ledger</span></div>
+					</div>
+				</div>
+				<div class="card">
+					<p class="eyebrow">Your consultant</p>
+					<p class="muted mt1" style="font-size:.8rem">Being assigned at Accra HQ — usually same day.</p>
+				</div>
+				<div class="card">
+					<p class="eyebrow">After the session</p>
+					<p class="muted mt1" style="font-size:.8rem;line-height:1.6">Your outcome and recommendation land here, then Chapter II · Enrolment opens — the package and your plan.</p>
+				</div>
+			</aside>
+		</div>
+	</div>
+	<div class="callout"><b>B — what changed</b><ul>
+		<li>The 14-step journey stepper inside the page is gone — the strip above and the chapter rail already say where you are.</li>
+		<li>The five next-steps piles (decide / form gaps / standard docs / requested docs / pending action) collapse into <b>one</b> band line + the rail; documents appear once, in section 3 — no more two "Open vault" buttons.</li>
+		<li>Appointment facts card keeps the same fields but reads like the Departure booked card: eyebrow + status pill + rows.</li>
+		<li>Countdown rail card added — the appointment date is the one thing that matters before it happens.</li>
+	</ul></div>
+
+	<!-- ================= STATE C ================= -->
+	<span class="tag tag--after" id="c">State C — session done · outcome ready · your call</span>
+	<div class="mock">
+		<div class="between">
+			<div>
+				<p class="eyebrow">Chapter I · Consultation</p>
+				<h1 class="title">Consultation · outcome in</h1>
+				<p class="lead">Your consultant has reviewed your file. One decision ends this chapter.</p>
+			</div>
+		</div>
+
+		<div class="now">
+			<div>
+				<p class="eyebrow">You are here</p>
+				<h2>Eligible — decide whether to proceed</h2>
+				<p class="d">Proceeding opens Chapter II · Enrolment: the package, your plan, and the deposit that starts your file moving.</p>
+			</div>
+			<span class="btn btn--inv">Review the outcome ↓</span>
+		</div>
+
+		<div class="steps">
+			<div class="step step--done"><span class="m">✓</span><span class="l">Booked</span><span class="s">18 Sep · paid</span></div>
+			<div class="step step--done"><span class="m">✓</span><span class="l">With your consultant</span><span class="s">Ama Owusu</span></div>
+			<div class="step step--done"><span class="m">✓</span><span class="l">Outcome</span><span class="s">eligible</span></div>
+			<div class="step step--on"><span class="m">4</span><span class="l">Your call</span><span class="s">proceed or hold</span></div>
+		</div>
+
+		<div class="split">
+			<div>
+				<section class="sec">
+					<div class="sh"><span class="no no--done">✓</span><span class="st">Your appointment</span><span class="hint">held · Fri 18 Sep</span></div>
+					<p class="mono muted" style="font-size:.75rem">VIDEO CALL · ACCRA HQ · HELD FRI 18 SEP, 13:00 — REF CNS-2026-0117.</p>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no no--done">✓</span><span class="st">Your assessment</span><span class="hint">outcome ready</span></div>
+					<div class="card card--key">
+						<div class="between"><p class="eyebrow">Assessment outcome</p><span class="pill pill--solid">Eligible</span></div>
+						<div class="mt1">
+							<div class="row"><span class="k">Recommended route</span><span class="v">Hungary · University of Debrecen</span></div>
+							<div class="row"><span class="k">Programme</span><span class="v">BSc Computer Science</span></div>
+							<div class="row"><span class="k">Package</span><span class="v">Standard</span></div>
+						</div>
+						<p class="sub">"Strong profile — a direct undergraduate admission is realistic. Funds and the transcript are the things to firm up." — Ama Owusu</p>
+						<div class="mt3" style="display:flex;gap:.6rem;flex-wrap:wrap"><span class="btn">Proceed to enrolment →</span><span class="btn btn--ghost">Put my file on hold</span></div>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">3</span><span class="st">Your documents</span><span class="hint">standard set · 2 of 5 verified</span></div>
+					<div class="card">
+						<ul class="list" style="margin-top:0">
+							<li class="row"><span style="font-weight:600">Passport bio page</span><span class="pill pill--done">Verified</span></li>
+							<li class="row"><span style="font-weight:600">WASSCE results</span><span class="pill pill--done">Verified</span></li>
+							<li class="row"><span style="font-weight:600">Birth certificate</span><span class="pill pill--hollow">To upload</span></li>
+							<li class="row"><span style="font-weight:600">Passport photo</span><span class="pill pill--hollow">To upload</span></li>
+							<li class="row"><span style="font-weight:600">Proof of funds</span><span class="pill pill--hollow">To upload</span></li>
+						</ul>
+						<div class="mt3"><span class="btn btn--ghost btn--sm">Upload in your vault →</span></div>
+					</div>
+				</section>
+
+				<section class="sec">
+					<div class="sh"><span class="no">4</span><span class="st">Messages</span><span class="hint">from your consultant</span></div>
+					<div class="card">
+						<ul class="tl">
+							<li><span class="who">Ama Owusu</span><span class="when">15 SEP</span><p>Good session — I've marked you eligible and recommended Debrecen. Upload the birth certificate when you can.</p></li>
+							<li><span class="who">Branch coordinator</span><span class="when">14 SEP</span><p>Your appointment is confirmed for Friday 13:00, video call.</p></li>
+						</ul>
+					</div>
+				</section>
+			</div>
+
+			<aside class="rail">
+				<div class="card">
+					<p class="eyebrow">Money · Chapter I</p>
+					<div class="mt1">
+						<div class="pkv"><span class="k">Consultation fee</span><span class="v">GH₵ 750 paid ✓</span></div>
+						<div class="pkv"><span class="k">Receipt</span><span class="v muted">in your Money ledger</span></div>
+					</div>
+				</div>
+				<div class="card">
+					<p class="eyebrow">Your consultant</p>
+					<p style="font-weight:700;margin-top:.5rem">Ama Owusu</p>
+					<p class="muted" style="font-size:.74rem;margin-top:.15rem">Consultation · Accra HQ</p>
+					<div style="display:flex;gap:.5rem;margin-top:.8rem"><span class="btn btn--ghost btn--sm">Message</span><span class="btn btn--ghost btn--sm">Book call</span></div>
+				</div>
+				<div class="card">
+					<p class="eyebrow">Next chapter</p>
+					<p class="muted mt1" style="font-size:.8rem;line-height:1.6">Proceeding opens Chapter II · Enrolment — the package and plan, then the deposit that starts your file moving.</p>
+				</div>
+			</aside>
+		</div>
+	</div>
+	<div class="callout"><b>C — what changed</b><ul>
+		<li>Done sections collapse to mono lines (same as Departure); the outcome card carries the decision buttons, so the band just points at it.</li>
+		<li>Consultant rail card gains the Message / Book call pair used on Visa and Departure.</li>
+		<li>Messages keep the timeline, now as numbered section 4 — only when comments exist.</li>
+		<li><b>Open question for you:</b> /portal/appointments also lets a client book a consultation. Proposed: Appointments stays for managing/rescheduling existing bookings; the "Book" entry on it deep-links here so there's one place a consultation is booked. Flag if you'd rather keep both.</li>
+	</ul></div>
+</div>
+</body>
+</html>

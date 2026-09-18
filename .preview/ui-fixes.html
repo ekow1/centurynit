@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UI fixes — workspace sheet + portal applications</title>
+<style>
+:root{--bg:#fff;--fg:#0a0a0a;--muted:#f5f5f5;--muted-fg:#52525b;--b:#0a0a0a;--bl:#d4d4d8;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
+*{box-sizing:border-box;margin:0}
+body{font-family:var(--sans);background:#e8e8e8;color:var(--fg);font-size:.875rem}
+.page{max-width:1240px;margin:0 auto;padding:2rem 1.5rem 5rem}
+.eyebrow{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg)}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
+.lead{color:var(--muted-fg);font-size:.85rem}
+h2{font-size:1.15rem;margin:0}
+h3{font-size:.95rem}
+.note{font-size:.72rem;color:var(--muted-fg);border-left:3px solid var(--fg);padding:.6rem .9rem;margin:.9rem 0;line-height:1.6;background:#fff}
+.note--lite{border-left-color:var(--bl)}
+.frame{background:var(--bg);border:1px solid var(--bl);margin-top:1.25rem;padding:1.25rem}
+.frame h2{font-size:1rem;margin-bottom:.75rem}
+.btn{border:1px solid var(--b);background:var(--bg);padding:.4rem .85rem;font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;cursor:pointer;text-decoration:none;display:inline-block}
+.btn--primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn--sm{padding:.28rem .6rem;font-size:.62rem}
+.pills{display:flex;gap:.4rem;align-items:center}
+.pills--wrap{flex-wrap:wrap}
+.pill{border:1px solid var(--b);padding:.28rem .7rem;font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.05em;background:var(--bg);cursor:pointer;white-space:nowrap}
+.pill.on{background:var(--fg);color:var(--bg)}
+.pill .c{opacity:.6;margin-left:.35rem}
+.search{border:1px solid var(--bl);padding:.45rem .75rem;font:inherit;font-size:.8rem;width:14rem}
+
+/* before / after pairing */
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:.75rem}
+.cmp__col{border:1px solid var(--bl);background:var(--bg)}
+.cmp__tag{padding:.4rem .8rem;border-bottom:1px solid var(--bl);font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;background:var(--muted)}
+.cmp__tag--bad{background:var(--fg);color:var(--bg)}
+.cmp__body{padding:1rem}
+@media (max-width:900px){.cmp{grid-template-columns:1fr}}
+
+/* the handler sheet */
+.sheet{border:1.5px solid var(--b);background:var(--bg);max-width:30rem;margin:0 auto}
+.sheet__head{padding:.9rem 1.1rem;border-bottom:1.5px solid var(--b);display:flex;justify-content:space-between;align-items:baseline}
+.sheet__head h3{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.12em}
+.sheet__body{padding:0 1.1rem 1.1rem}
+.heyebrow{font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin:1rem 0 .4rem}
+.hlist{border:1px solid var(--bl)}
+/* CURRENT row — label + nowrap hint side by side */
+.hrow{display:flex;justify-content:space-between;align-items:baseline;gap:.75rem;width:100%;padding:.55rem .8rem;border:none;border-bottom:1px solid var(--bl);background:var(--bg);font-size:.82rem;text-align:left;cursor:pointer}
+.hrow:last-child{border-bottom:none}
+.hrow:hover{background:var(--muted)}
+.hrow--on,.hrow--on:hover{background:var(--fg);color:var(--bg)}
+.hrow--on .hhint{color:#bbb}
+.hhint{font-family:var(--mono);font-size:.62rem;letter-spacing:.04em;color:var(--muted-fg);white-space:nowrap}
+/* FIXED row — label over hint, hint wraps */
+.hrow2{display:flex;flex-direction:column;gap:.15rem;width:100%;padding:.55rem .8rem;border:none;border-bottom:1px solid var(--bl);background:var(--bg);font-size:.82rem;text-align:left;cursor:pointer}
+.hrow2:last-child{border-bottom:none}
+.hrow2:hover{background:var(--muted)}
+.hrow2--on,.hrow2--on:hover{background:var(--fg);color:var(--bg)}
+.hrow2--on .hhint2{color:#bbb}
+.hrow2 .hnm{display:flex;justify-content:space-between;align-items:baseline;gap:.75rem;font-weight:600}
+.hhint2{font-family:var(--mono);font-size:.62rem;letter-spacing:.04em;color:var(--muted-fg);white-space:normal;line-height:1.5}
+/* leave-open: quiet until picked */
+.hrow--openpick{color:var(--muted-fg)}
+.hfoot{display:flex;justify-content:flex-end;align-items:center;gap:.5rem;padding-top:.8rem}
+.reason{border:1px solid var(--bl);padding:.45rem .75rem;font:inherit;font-size:.8rem;width:100%;margin-top:.8rem}
+
+/* compact branch strip: current + refer */
+.bstrip{display:flex;align-items:center;gap:.6rem;border:1px solid var(--bl);padding:.55rem .8rem;font-size:.82rem}
+.bstrip .cur{font-weight:700}
+.bstrip .mono{font-family:var(--mono);font-size:.62rem;color:var(--muted-fg);text-transform:uppercase;letter-spacing:.06em}
+
+/* task rows */
+.tband{border:1.5px solid var(--b);display:flex;justify-content:space-between;align-items:baseline;padding:.55rem 1rem;background:var(--fg);color:var(--bg)}
+.tband--plain{background:var(--muted);color:var(--fg)}
+.tband .bn{font-family:var(--mono);font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em}
+.trow{display:grid;grid-template-columns:1.8rem 1fr auto 6.5rem 6rem auto;gap:.9rem;align-items:center;border:1px solid var(--bl);border-top:none;padding:.65rem 1rem;cursor:pointer;background:var(--bg)}
+.trow:hover{background:var(--muted)}
+.trow.on{background:var(--fg);color:var(--bg)}
+.trow.on .tkick,.trow.on .tsub,.trow.on .twhen,.trow.on .town,.trow.on .tbr{color:#bbb}
+.trank{font-family:var(--mono);font-size:.68rem;font-weight:700;color:var(--muted-fg)}
+.tkick{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg)}
+.tname{font-weight:700;font-size:.9rem;margin-top:.1rem}
+.tname .ref{font-family:var(--mono);font-weight:400;font-size:.68rem;color:var(--muted-fg);margin-left:.4rem}
+.tsub{font-size:.74rem;color:var(--muted-fg);margin-top:.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:26rem}
+.twhen{font-family:var(--mono);font-size:.66rem;text-align:right;white-space:nowrap}
+.town{font-size:.74rem;white-space:nowrap}
+.town--none{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:2px;font-weight:700}
+.tbr{font-family:var(--mono);font-size:.64rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted-fg);white-space:nowrap}
+.tgroup{border:1px solid var(--bl);border-top:none;padding:.35rem 1rem;background:#fafafa;font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-fg)}
+
+/* portal pieces */
+.pnow{background:var(--fg);color:var(--bg);padding:.55rem .9rem;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;display:flex;gap:1.1rem;flex-wrap:wrap}
+.pnow .dim{color:#999}
+.psteps{display:grid;grid-template-columns:repeat(4,1fr);border:1.5px solid var(--b)}
+.pstep{padding:.6rem .8rem;border-right:1px solid var(--bl)}
+.pstep:last-child{border-right:0}
+.pstep .mk{display:inline-block;border:1.5px solid var(--b);font-family:var(--mono);font-size:.68rem;font-weight:800;padding:.05rem .4rem;margin-right:.4rem}
+.pstep.done .mk{background:var(--fg);color:var(--bg)}
+.pstep .l{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+.pstep .s{font-family:var(--mono);font-size:.6rem;color:var(--muted-fg);margin-top:.25rem}
+.psec{border:1px solid var(--bl);margin-top:1rem}
+.psec__h{display:flex;align-items:baseline;gap:.7rem;padding:.7rem .9rem;border-bottom:1px solid var(--bl)}
+.psec__no{border:1.5px solid var(--b);font-family:var(--mono);font-size:.7rem;font-weight:800;padding:.05rem .42rem}
+.psec__no--done{background:var(--fg);color:var(--bg)}
+.psec__title{font-weight:800;font-size:.95rem}
+.psec__hint{margin-left:auto;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted-fg)}
+.psec__body{padding:.9rem}
+.pipe{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-top:.5rem}
+.pipe span{height:4px;background:var(--bl)}
+.pipe .on{background:var(--fg)}
+.pipe__l{display:grid;grid-template-columns:repeat(3,1fr);font-family:var(--mono);font-size:.56rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-fg);margin-top:.25rem}
+.pipe__l span:nth-child(2){text-align:center}
+.pipe__l span:nth-child(3){text-align:right}
+.offer{border:1px solid var(--b);padding:.7rem .8rem;display:flex;flex-direction:column;gap:.3rem;margin-top:.7rem}
+.offer__k{font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-fg)}
+.offer__row{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem;font-size:.8rem}
+.offer__row b{font-family:var(--mono);font-weight:700;text-align:right}
+/* invoice */
+.inv{border:1px solid var(--bl);padding:.9rem}
+.inv__head{display:flex;justify-content:space-between;align-items:baseline}
+.inv__num{font-family:var(--mono);font-size:.66rem;color:var(--muted-fg)}
+.inv__status{border:1px solid var(--b);font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;padding:.12rem .5rem}
+.inv__line{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--bl);font-size:.8rem}
+.inv__line .amt{font-family:var(--mono);font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+.inv__line .amt .usd{color:var(--muted-fg);font-weight:400;font-size:.85em}
+.inv__tot{display:flex;justify-content:space-between;padding:.45rem 0;font-size:.8rem}
+.inv__tot b{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.inv__meta{font-size:.7rem;color:var(--muted-fg);margin-top:.5rem;line-height:1.6}
+.muted{color:var(--muted-fg)}
+.money-bad{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.money-bad small{color:var(--muted-fg);font-size:.85em;margin-left:.4em}
+.tag{display:inline-block;border:1.5px solid var(--b);background:var(--fg);color:var(--bg);font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.08em;padding:.1rem .45rem}
+.sec{margin-top:3.5rem}
+.sec > .eyebrow{display:block;margin-bottom:.35rem}
+.sec h2{margin-bottom:.2rem}
+.sec .sub{color:var(--muted-fg);font-size:.8rem}
+ol.fixes{margin:.8rem 0 0 1.2rem;font-size:.8rem;line-height:1.9;color:var(--muted-fg)}
+ol.fixes b{color:var(--fg)}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="eyebrow">Century NIT · UI fix preview</div>
+<h1>Two screens, fourteen fixes</h1>
+<p class="lead">Every issue from the screenshots, paired: <b>before</b> on the left, <b>after</b> on the right. Nothing is implemented — this is the proposal.</p>
+
+<!-- ══════════════════════ SCREEN 1 · OPS WORKSPACE ══════════════════════ -->
+<div class="sec">
+  <span class="eyebrow">Screen 1 · Ops workspace</span>
+  <h2>The handler sheet — coverage rows stop colliding</h2>
+  <p class="sub">The nowrap hint squeezes the label into wrapping mid-phrase: "Rest … of the / case". Fix: label on its own line, hint wraps underneath. Applied to every row in the sheet.</p>
+
+  <div class="cmp">
+    <div class="cmp__col">
+      <div class="cmp__tag cmp__tag--bad">Before — label and hint fight for one line</div>
+      <div class="cmp__body" style="padding:0">
+        <div class="hlist" style="border:none">
+          <div class="hrow"><span>This stage only</span><span class="hhint">seat re-opens at the next chapter</span></div>
+          <div class="hrow"><span>Rest of the case</span><span class="hhint">carries every remaining chapter — no placement task again</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="cmp__col">
+      <div class="cmp__tag">After — hint gets its own line, free to wrap</div>
+      <div class="cmp__body" style="padding:0">
+        <div class="hlist" style="border:none">
+          <div class="hrow2 hrow2--on"><span class="hnm"><span>This stage only</span></span><span class="hhint2">Seat re-opens at the next chapter — a new needs-handler task appears for it.</span></div>
+          <div class="hrow2"><span class="hnm"><span>Rest of the case</span></span><span class="hhint2">They carry every remaining chapter — no placement task appears again.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sec">
+  <span class="eyebrow">Screen 1 · Ops workspace</span>
+  <h2>The full sheet, corrected</h2>
+  <p class="sub">Four changes at once: branch collapses to one line, the keep-pin only appears where keep is a real option, "Leave it open" is quiet until clicked, and coverage rows stack.</p>
+
+  <div class="cmp">
+    <div class="cmp__col">
+      <div class="cmp__tag cmp__tag--bad">Before — visa handoff</div>
+      <div class="cmp__body" style="padding:.8rem">
+        <div class="sheet" style="max-width:none">
+          <div class="sheet__head"><h3>Handler · Visa</h3><span>×</span></div>
+          <div class="sheet__body">
+            <p class="heyebrow">1 · Handling branch</p>
+            <div class="hlist">
+              <div class="hrow"><span>Accra HQ</span><span class="hhint">current</span></div>
+              <div class="hrow"><span>Kumasi</span></div>
+              <div class="hrow"><span>Takoradi</span></div>
+              <div class="hrow"><span>Tamale</span></div>
+            </div>
+            <p class="heyebrow">2 · Handler</p>
+            <div class="hlist">
+              <div class="hrow"><span>Enoch Enu</span><span class="hhint">was handler here</span></div>
+              <div class="hrow"><span>Enoch Enu</span><span class="hhint">manager</span></div>
+              <div class="hrow"><span>Comfort Agbaku</span><span class="hhint">manager</span></div>
+              <div class="hrow"><span>Comfort Amenwiga</span><span class="hhint">consultant</span></div>
+              <div class="hrow hrow--on"><span>— Leave it open</span><span class="hhint">stays in the queue</span></div>
+            </div>
+            <p class="heyebrow">3 · Coverage</p>
+            <div class="hlist">
+              <div class="hrow"><span>This stage only</span><span class="hhint">seat re-opens at the next chapter</span></div>
+              <div class="hrow"><span>Rest of the case</span><span class="hhint">carries every remaining chapter — no placement task again</span></div>
+            </div>
+            <input class="reason" placeholder="Reason (optional)">
+            <div class="hfoot"><span class="btn btn--primary btn--sm" style="opacity:.4">Set handler</span></div>
+          </div>
+        </div>
+        <p class="note">Pin shows on a visa handoff where keep isn't offered · Enoch listed twice · "Leave it open" glows selected on open while the button sits disabled · coverage row garbled · four-branch list eats the viewport.</p>
+      </div>
+    </div>
+    <div class="cmp__col">
+      <div class="cmp__tag">After — visa handoff</div>
+      <div class="cmp__body" style="padding:.8rem">
+        <div class="sheet" style="max-width:none">
+          <div class="sheet__head"><h3>Handler · Visa</h3><span>×</span></div>
+          <div class="sheet__body">
+            <p class="heyebrow">1 · Handling branch</p>
+            <div class="bstrip">
+              <span class="cur">Accra HQ</span>
+              <span class="mono">holds the file</span>
+              <span class="mono" style="margin-left:auto;text-decoration:underline;cursor:pointer">Refer to another office…</span>
+            </div>
+            <p class="heyebrow">2 · Handler</p>
+            <div class="hlist">
+              <div class="hrow"><span>Enoch Enu</span><span class="hhint">manager · 4 files</span></div>
+              <div class="hrow"><span>Comfort Agbaku</span><span class="hhint">manager · 2 files</span></div>
+              <div class="hrow"><span>Comfort Amenwiga</span><span class="hhint">consultant · 1 file</span></div>
+              <div class="hrow hrow--openpick"><span>— Leave it open</span><span class="hhint">stays in the queue</span></div>
+            </div>
+            <p class="note" style="margin:.7rem 0 0">Visa handoff: no keep-pin — the previous handler sits in the list like anyone else. On a <b>school-submission</b> handoff they'd still pin first, plus the <b>Keep {name}</b> footer button.</p>
+            <p class="heyebrow">3 · Coverage</p>
+            <div class="hlist">
+              <div class="hrow2"><span class="hnm"><span>This stage only</span></span><span class="hhint2">Seat re-opens at the next chapter.</span></div>
+              <div class="hrow2"><span class="hnm"><span>Rest of the case</span></span><span class="hhint2">They carry every remaining chapter.</span></div>
+            </div>
+            <input class="reason" placeholder="Reason (optional)">
+            <div class="hfoot"><span class="btn btn--primary btn--sm" style="opacity:.4">Set handler</span></div>
+          </div>
+        </div>
+        <p class="note">Coverage only renders once a handler is picked — same as now, just readable. "Refer…" expands the branch list only when asked.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sec">
+  <span class="eyebrow">Screen 1 · Ops workspace</span>
+  <h2>The queue rows — honest dates, no clipped chips, no doubled names</h2>
+  <p class="sub">"Due 0 days ago" was task <i>age</i> mislabeled as lateness. Chips wrap instead of clipping. A client separator stops the row titles repeating the name.</p>
+
+  <div class="cmp">
+    <div class="cmp__col">
+      <div class="cmp__tag cmp__tag--bad">Before</div>
+      <div class="cmp__body" style="padding:.8rem">
+        <div class="pills" style="flex-wrap:nowrap;overflow:hidden;max-width:22rem">
+          <span class="pill on">All <span class="c">5</span></span>
+          <span class="pill">Mine <span class="c">1</span></span>
+          <span class="pill">No handler <span class="c">1</span></span>
+          <span class="pill">Invoici…</span>
+        </div>
+        <div style="margin-top:.9rem">
+          <div class="tgroup">Enock Yaw Enu · 2 tasks</div>
+          <div class="trow"><span class="trank">01</span>
+            <div><span class="tkick">Chase payment · Invoice</span><div class="tname">Enock Yaw Enu</div><div class="tsub">Due 0 days ago · Overdue: balance GH₵ 1,700</div></div>
+            <span class="twhen">2d ago</span><span class="town">Finance</span><span class="tbr">Accra</span><span class="btn btn--sm">Open →</span>
+          </div>
+          <div class="trow"><span class="trank">02</span>
+            <div><span class="tkick">Chase payment · Invoice</span><div class="tname">Enock Yaw Enu</div><div class="tsub">Due 1 days ago · Overdue: balance GH₵ 900</div></div>
+            <span class="twhen">3d ago</span><span class="town">Finance</span><span class="tbr">Accra</span><span class="btn btn--sm">Open →</span>
+          </div>
+        </div>
+        <p class="note">"Due 0 days ago" + "Overdue" in one line contradict each other. The chip row clips mid-word.</p>
+      </div>
+    </div>
+    <div class="cmp__col">
+      <div class="cmp__tag">After</div>
+      <div class="cmp__body" style="padding:.8rem">
+        <div class="pills pills--wrap">
+          <span class="pill on">All <span class="c">5</span></span>
+          <span class="pill">Mine <span class="c">1</span></span>
+          <span class="pill">No handler <span class="c">1</span></span>
+          <span class="pill">Invoicing <span class="c">2</span></span>
+          <span class="pill">Follow-up</span>
+        </div>
+        <div style="margin-top:.9rem">
+          <div class="tgroup">Enock Yaw Enu · 2 tasks</div>
+          <div class="trow"><span class="trank">01</span>
+            <div><span class="tkick">Chase payment · Invoice</span><div class="tname">INV-2026-0051 · balance</div><div class="tsub">Overdue · balance GH₵ 1,700 · chased 2d ago</div></div>
+            <span class="twhen">overdue</span><span class="town">Finance</span><span class="tbr">Accra</span><span class="btn btn--sm">Open →</span>
+          </div>
+          <div class="trow"><span class="trank">02</span>
+            <div><span class="tkick">Chase payment · Invoice</span><div class="tname">INV-2026-0058 · balance</div><div class="tsub">Due today · balance GH₵ 900</div></div>
+            <span class="twhen">today</span><span class="town">Finance</span><span class="tbr">Accra</span><span class="btn btn--sm">Open →</span>
+          </div>
+          <div class="trow on"><span class="trank">03</span>
+            <div><span class="tkick">Needs handler · Visa</span><div class="tname">Enoch Enu <span class="ref">APP-2026-0001</span></div><div class="tsub">Visa processing · was Enoch Enu</div></div>
+            <span class="twhen">2d ago</span><span class="town town--none">— open</span><span class="tbr">Accra</span><span class="btn btn--sm">Handler…</span>
+          </div>
+        </div>
+        <p class="note">The when-cell says the real state — <b>overdue</b>, <b>today</b>, <b>in 3d</b> — from the invoice's due date, not task age. Under a client separator, the title carries the ref instead of repeating the name.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ SCREEN 2 · PORTAL APPLICATIONS ══════════════════════ -->
+<div class="sec">
+  <span class="eyebrow">Screen 2 · Portal — Applications</span>
+  <h2>The invoice — one figure you can actually read</h2>
+  <p class="sub">"GH₵ 1 90.97" was the GHS amount and the USD amount colliding into each other. The applicant only ever pays GHS — the USD figure moves to a dim footnote. Plus: "1 school(s)" and the raw username in "Raised by".</p>
+
+  <div class="cmp">
+    <div class="cmp__col">
+      <div class="cmp__tag cmp__tag--bad">Before</div>
+      <div class="cmp__body" style="padding:.8rem">
+        <div class="inv">
+          <div class="inv__head"><div><span class="eyebrow">Application invoice</span><div class="inv__num">INV-2026-0009</div></div><span class="inv__status">Paid</span></div>
+          <div class="inv__line"><span>University of Oxford — application fee<br><span class="muted" style="font-size:.68rem">MSc Computer Science · paid on your behalf at cost</span></span><span class="money-bad">GH₵ 1,365<small>$90.97</small></span></div>
+          <div class="inv__tot"><span>Total</span><span class="money-bad">GH₵ 1,365<small>$90.97</small></span></div>
+          <div class="inv__tot"><span>Paid</span><span class="money-bad">GH₵ 1,365<small>$90.97</small></span></div>
+          <div class="inv__tot" style="font-weight:800"><span>Balance</span><span class="money-bad">GH₵ 0<small>$0</small></span></div>
+          <p class="inv__meta">Due 28 Sept 2026 · University application fee for 1 school(s), paid on your behalf.</p>
+          <p class="inv__meta">Raised by Enoch Enu (dont_punal) · 14 Sept 2026 · Approved by ENOCH ENU · 14 Sept 2026</p>
+        </div>
+        <p class="note">Primary and secondary currency rendered inline with no separator → they merge. "(s)" and the login handle ship to the applicant.</p>
+      </div>
+    </div>
+    <div class="cmp__col">
+      <div class="cmp__tag">After</div>
+      <div class="cmp__body" style="padding:.8rem">
+        <div class="inv">
+          <div class="inv__head"><div><span class="eyebrow">Application invoice</span><div class="inv__num">INV-2026-0009</div></div><span class="inv__status">Paid</span></div>
+          <div class="inv__line"><span>University of Oxford — application fee<br><span class="muted" style="font-size:.68rem">MSc Computer Science · paid on your behalf at cost</span></span><span class="amt">GH₵ 1,365</span></div>
+          <div class="inv__tot"><span>Total</span><b>GH₵ 1,365</b></div>
+          <div class="inv__tot"><span>Paid</span><b>GH₵ 1,365</b></div>
+          <div class="inv__tot" style="font-weight:800"><span>Balance</span><b>GH₵ 0</b></div>
+          <p class="inv__meta muted">≈ $91 · priced in USD, settled in cedis</p>
+          <p class="inv__meta">Due 28 Sept 2026 · University application fee for 1 school, paid on your behalf.</p>
+          <p class="inv__meta">Raised by Enoch Enu · 14 Sept 2026 · Approved by Enoch Enu · 14 Sept 2026</p>
+        </div>
+        <p class="note">GHS is the figure — the USD approximation lives on one muted line under the totals, not beside every number. Username stripped; "school(s)" pluralized properly.</p>
+      </div>
+    </div>
+  </div>
+  <p class="note note--lite"><b>Open question for you:</b> the amount itself. The frontend treats stored invoice cents as USD and multiplies ×15 for GHS; the API's email formatter treats the same stored number as already-GHS. If your application fees are meant to be ~$91, the display is right and only the collision needs fixing. If they're meant to be GH₵ amounts, the ×15 conversion is wrong everywhere. Which is it?</p>
+</div>
+
+<div class="sec">
+  <span class="eyebrow">Screen 2 · Portal — Applications</span>
+  <h2>The school card — offer block and progress strip</h2>
+  <p class="sub">Missing left pipe label, the caps-name sentence, and the second "Congratulations" removed.</p>
+
+  <div class="cmp">
+    <div class="cmp__col">
+      <div class="cmp__tag cmp__tag--bad">Before</div>
+      <div class="cmp__body" style="padding:.8rem">
+        <div class="pipe"><span class="on"></span><span class="on"></span><span class="on"></span></div>
+        <div class="pipe__l"><span></span><span>Submitted</span><span>Decided</span></div>
+        <div class="offer">
+          <span class="offer__k">Your offer</span>
+          <div class="offer__row"><span>Tuition</span><b>£38,760</b></div>
+          <div class="offer__row"><span>Offer letter</span><span class="muted">arrives once ENOCH uploads it</span></div>
+          <p class="inv__meta" style="border-top:1px dashed var(--bl);padding-top:.4rem">Congratulations! University of Oxford has issued an official admission offer for MSc Computer Science.</p>
+        </div>
+        <p class="note">First pipe label is empty · handler name in caps mid-sentence · "Congratulations" here, then again in the card below.</p>
+      </div>
+    </div>
+    <div class="cmp__col">
+      <div class="cmp__tag">After</div>
+      <div class="cmp__body" style="padding:.8rem">
+        <div class="pipe"><span class="on"></span><span class="on"></span><span class="on"></span></div>
+        <div class="pipe__l"><span>Lodged</span><span>Submitted</span><span>Decided</span></div>
+        <div class="offer">
+          <span class="offer__k">Your offer</span>
+          <div class="offer__row"><span>Tuition</span><b>£38,760</b></div>
+          <div class="offer__row"><span>Offer letter</span><span class="muted">arrives once Enoch uploads it</span></div>
+          <p class="inv__meta" style="border-top:1px dashed var(--bl);padding-top:.4rem">University of Oxford has issued an official admission offer for MSc Computer Science.</p>
+        </div>
+        <p class="note">"Lodged" labels the first segment · name in normal case · the congratulations lives once, on the decision card below.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sec">
+  <span class="eyebrow">Screen 2 · Portal — Applications</span>
+  <h2>The state contradiction — strip vs card vs rail</h2>
+  <p class="sub">Offer accepted but visa consent still pending: three surfaces currently tell three different stories. After: they all say the same thing.</p>
+
+  <div class="cmp">
+    <div class="cmp__col">
+      <div class="cmp__tag cmp__tag--bad">Before — three versions of "next"</div>
+      <div class="cmp__body" style="padding:.8rem">
+        <div class="pnow"><span>Now — offer accepted — your visa chapter is open</span><span class="dim">1 filed · 1 decided · 1 admitted · invoice paid · handler: Enoch Enu</span></div>
+        <div class="psec" style="margin-top:.9rem">
+          <div class="psec__h"><span class="psec__no psec__no--done">✓</span><span class="psec__title">Accept an offer</span><span class="psec__hint">University of Oxford</span></div>
+          <div class="psec__body"><b>"Congratulations on your Admission! Continue to Visa Stage?"</b> <span class="muted">— the visa question sits inside a finished section.</span></div>
+        </div>
+        <p class="note">Strip says visa chapter is <b>open</b> · consent card is still <b>undecided</b> · rail says the next unlock is <b>accept an offer</b> — already done.</p>
+      </div>
+    </div>
+    <div class="cmp__col">
+      <div class="cmp__tag">After — one version</div>
+      <div class="cmp__body" style="padding:.8rem">
+        <div class="pnow"><span>Now — offer accepted — decide on visa processing</span><span class="dim">1 filed · 1 decided · 1 admitted · invoice paid · handler: Enoch Enu</span></div>
+        <div class="psec" style="margin-top:.9rem">
+          <div class="psec__h"><span class="psec__no">5</span><span class="psec__title">Your decision</span><span class="psec__hint">visa processing</span></div>
+          <div class="psec__body"><b>"Congratulations on your admission — should Century NIT handle your visa?"</b><br><span class="muted">Continue / Hold on / Opt out — one decision card, one congratulations, in its own section.</span></div>
+        </div>
+        <p class="note">Rail "next unlock" becomes <b>"your visa decision"</b> until decided, then <b>"visa chapter opens"</b>. Strip and rail always agree with the card.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sec">
+  <span class="eyebrow">Screen 2 · Portal — Applications</span>
+  <h2>Smaller consistency fixes</h2>
+  <ol class="fixes">
+    <li><b>Date format</b> — "14 Sept 2026" (en-GB) and "Sep 14, 2026" (en-US) both appear; pick one (en-GB) everywhere.</li>
+    <li><b>Step strip labels</b> — below 900px the strip hides all text, leaving four bare numbers; keep the labels, drop only the sub-facts.</li>
+    <li><b>"HANDLER: ENOCH ENU" on Enoch's own portal</b> — test-data name collision; the code is fine but worth knowing the header looks broken when they match.</li>
+    <li><b>Duplicate staff record</b> — two "Enoch Enu" rows in the handler list are two different ops accounts; check whether one should be merged or removed.</li>
+  </ol>
+</div>
+
+<div class="note" style="margin-top:3rem">
+  <b>To implement</b> — say the word and I'll do it in this order: sheet row CSS + leave-open state + keep-pin gating + queue date/chips/separator (ops), then invoice money display + "school(s)" + raised-by name + section retitle + NOW-strip/rail agreement + pipe label + date format (portal). The currency-units question needs your answer first — everything else is display-only.
+</div>
+
+</div>
+</body>
+</html>

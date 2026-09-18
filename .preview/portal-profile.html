@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portal Profile — preview</title>
+<style>
+  :root{
+    --background:#ffffff; --foreground:#0a0a0a;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#0a0a0a; --border-light:#d4d4d8;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --text-xs:.72rem; --text-sm:.875rem;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:#fafafa;color:var(--foreground);font-size:var(--text-sm)}
+  .page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--muted-foreground)}
+  .sharp-card{background:var(--background);border:1px solid var(--border-light);padding:1.25rem}
+  .sharp-card--key{background:var(--foreground);color:var(--background)}
+  .sharp-card--key .eyebrow{color:rgba(255,255,255,.6)}
+  .btn{border:1px solid var(--border);background:var(--background);color:var(--foreground);font:inherit;
+    font-size:var(--text-xs);font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+    padding:.55rem .9rem;cursor:pointer;text-decoration:none;display:inline-block}
+  .btn--ghost{border-color:var(--border-light)}
+  .portal-pill{display:inline-block;border:1px solid var(--border);padding:.2rem .6rem;
+    font-family:var(--font-mono);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em}
+  .portal-pill--solid{background:var(--foreground);color:var(--background)}
+
+  /* the cover — who this file is */
+  .cover{background:var(--foreground);color:var(--background);padding:1.75rem 2rem;
+    display:flex;gap:1.5rem;align-items:center;flex-wrap:wrap;margin-top:1.5rem}
+  .cover .eyebrow{color:rgba(255,255,255,.6)}
+  .cover__mono{width:4.2rem;height:4.2rem;border:1.5px solid var(--background);display:flex;
+    align-items:center;justify-content:center;font-size:1.4rem;font-weight:800;flex-shrink:0}
+  .cover__name{font-size:1.6rem;font-weight:800;letter-spacing:-.02em}
+  .cover__meta{color:rgba(255,255,255,.7);font-size:var(--text-xs);margin-top:.25rem}
+  .cover__refs{margin-left:auto;display:flex;gap:2rem;flex-wrap:wrap}
+  .cover__refs .r .k{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.55)}
+  .cover__refs .r .v{font-family:var(--font-mono);font-size:.85rem;font-weight:700;margin-top:.2rem}
+
+  .split{display:grid;grid-template-columns:11rem 1fr;gap:1.5rem;align-items:start;margin-top:1.5rem}
+
+  /* the index — sticky section nav */
+  .index{position:sticky;top:1rem;display:flex;flex-direction:column;border:1px solid var(--border-light);background:var(--background)}
+  .index a{display:flex;justify-content:space-between;align-items:center;padding:.7rem .9rem;
+    border-bottom:1px solid var(--border-light);font-size:var(--text-xs);text-decoration:none;color:inherit}
+  .index a:last-child{border-bottom:none}
+  .index a .n{font-family:var(--font-mono);font-size:.58rem;color:var(--muted-foreground)}
+  .index a.on{background:var(--foreground);color:var(--background)}
+  .index a.on .n{color:rgba(255,255,255,.55)}
+
+  /* dossier sections — one card per subject, head carries the edit affordance */
+  .dsec{border:1px solid var(--border-light);background:var(--background);margin-bottom:1.5rem}
+  .dsec__head{display:flex;justify-content:space-between;align-items:center;padding:.9rem 1.25rem;
+    border-bottom:1px solid var(--border-light)}
+  .dsec__title{font-weight:700;font-size:.95rem}
+  .dsec__hint{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground)}
+  .dsec__body{padding:1rem 1.25rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:.9rem 2rem}
+  .df .k{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground)}
+  .df .v{font-size:var(--text-sm);margin-top:.25rem}
+  .df .v.empty{color:var(--muted-foreground)}
+
+  /* documents — status list */
+  .docs{list-style:none;padding:0}
+  .docs li{display:flex;align-items:center;gap:1rem;padding:.55rem 0;border-bottom:1px solid var(--border-light);font-size:var(--text-xs)}
+  .docs li:last-child{border-bottom:none}
+  .docs .nm{flex:1}
+  .docs .act{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;text-decoration:underline;cursor:pointer}
+
+  .jlink{background:none;border:none;padding:0;font:inherit;text-decoration:underline;cursor:pointer;color:inherit;font-size:var(--text-xs)}
+
+  @media (max-width:820px){.split{grid-template-columns:1fr}.index{position:static;flex-direction:row;overflow-x:auto}.index a{border-bottom:none;border-right:1px solid var(--border-light);white-space:nowrap}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <p class="eyebrow">Profile</p>
+    <h1 style="font-size:1.9rem;font-weight:800;letter-spacing:-.02em;margin-top:.3rem">Your file</h1>
+    <p class="muted" style="margin-top:.5rem;max-width:44rem">What Century NIT holds on you — identity, qualifications, aspirations, documents. Edit in place; your consultant sees the same record.</p>
+  </header>
+
+  <!-- the cover — inverted, references at a glance -->
+  <div class="cover">
+    <div class="cover__mono">AO</div>
+    <div>
+      <p class="eyebrow">Applicant · Eligible</p>
+      <p class="cover__name">Ama Owusu</p>
+      <p class="cover__meta">ama.owusu@example.com · signed in via email · session since 14 Mar, 09:12</p>
+    </div>
+    <div class="cover__refs">
+      <div class="r"><p class="k">Application</p><p class="v">CNT-APP-0042</p></div>
+      <div class="r"><p class="k">Consultation</p><p class="v">CNT-2026-0314</p></div>
+      <div class="r"><p class="k">Documents</p><p class="v">7/10</p></div>
+      <div class="r"><p class="k">Intake</p><p class="v">SEP 2026</p></div>
+    </div>
+  </div>
+
+  <div class="split">
+    <!-- the index — jump, don't scroll -->
+    <nav class="index">
+      <a href="#" class="on"><span>Identity</span><span class="n">01</span></a>
+      <a href="#"><span>Passport</span><span class="n">02</span></a>
+      <a href="#"><span>Academics &amp; work</span><span class="n">03</span></a>
+      <a href="#"><span>Aspirations</span><span class="n">04</span></a>
+      <a href="#"><span>On record</span><span class="n">05</span></a>
+      <a href="#"><span>Documents</span><span class="n">06</span></a>
+      <a href="#"><span>Security</span><span class="n">07</span></a>
+    </nav>
+
+    <div>
+      <!-- 01 identity — the editable you -->
+      <section class="dsec">
+        <div class="dsec__head">
+          <span class="dsec__title">Identity &amp; contact</span>
+          <button class="jlink">Edit →</button>
+        </div>
+        <div class="dsec__body">
+          <div class="df"><p class="k">Full legal name</p><p class="v">Ama Serwaa Owusu</p></div>
+          <div class="df"><p class="k">Email</p><p class="v">ama.owusu@example.com</p></div>
+          <div class="df"><p class="k">Phone</p><p class="v">+233 24 555 0187</p></div>
+          <div class="df"><p class="k">Date of birth</p><p class="v">12 Jun 1999</p></div>
+          <div class="df"><p class="k">Gender</p><p class="v">Female</p></div>
+          <div class="df"><p class="k">Nationality</p><p class="v">Ghanaian</p></div>
+          <div class="df"><p class="k">Address</p><p class="v">14 Independence Ave, Accra</p></div>
+          <div class="df"><p class="k">Heard via</p><p class="v">Referral — K. Asante</p></div>
+        </div>
+      </section>
+
+      <!-- 02 passport -->
+      <section class="dsec">
+        <div class="dsec__head">
+          <span class="dsec__title">Passport &amp; travel ID</span>
+          <span class="dsec__hint">edit under Identity</span>
+        </div>
+        <div class="dsec__body">
+          <div class="df"><p class="k">Passport no.</p><p class="v">G1234567</p></div>
+          <div class="df"><p class="k">Issuing country</p><p class="v">Ghana</p></div>
+          <div class="df"><p class="k">Issued</p><p class="v">04 Feb 2021</p></div>
+          <div class="df"><p class="k">Expires</p><p class="v">03 Feb 2031 · <span class="portal-pill portal-pill--solid">Valid</span></p></div>
+        </div>
+      </section>
+
+      <!-- 03 academics & work -->
+      <section class="dsec">
+        <div class="dsec__head">
+          <span class="dsec__title">Academics &amp; work</span>
+          <span class="dsec__hint">edit under Identity</span>
+        </div>
+        <div class="dsec__body">
+          <div class="df"><p class="k">Highest education</p><p class="v">BSc Computer Science</p></div>
+          <div class="df"><p class="k">Institution</p><p class="v">University of Ghana</p></div>
+          <div class="df"><p class="k">Graduated</p><p class="v">2022 · GPA 3.4</p></div>
+          <div class="df"><p class="k">Employment</p><p class="v">Employed — Softclick Solutions</p></div>
+          <div class="df"><p class="k">Role</p><p class="v">Data analyst · 3 yrs</p></div>
+          <div class="df"><p class="k">English test</p><p class="v">IELTS 7.5 · Nov 2025</p></div>
+        </div>
+      </section>
+
+      <!-- 04 aspirations — the editable brief -->
+      <section class="dsec">
+        <div class="dsec__head">
+          <span class="dsec__title">Aspirations &amp; funding</span>
+          <button class="jlink">Edit →</button>
+        </div>
+        <div class="dsec__body">
+          <div class="df"><p class="k">Degree level</p><p class="v">Master's</p></div>
+          <div class="df"><p class="k">Field</p><p class="v">Data science / analytics</p></div>
+          <div class="df"><p class="k">Countries</p><p class="v">UK · Germany</p></div>
+          <div class="df"><p class="k">Intake</p><p class="v">September 2026</p></div>
+          <div class="df"><p class="k">Funding</p><p class="v">Self-funded + scholarship hunt</p></div>
+          <div class="df"><p class="k">Budget</p><p class="v">$18,000–24,000 / yr</p></div>
+          <div class="df"><p class="k">Sponsor</p><p class="v empty">—</p></div>
+        </div>
+        <div style="padding:0 1.25rem 1rem">
+          <p class="mono muted" style="font-size:.62rem">CHOICES ON FILE: 1. UK · LEEDS BECKETT · MSC DATA SCIENCE &nbsp; 2. UK · PORTSMOUTH · MSC DATA SCIENCE &nbsp; 3. UK · COVENTRY · MSC DATA SCIENCE</p>
+        </div>
+      </section>
+
+      <!-- 05 on record — read-only, deduped: the old four cards collapse into this one -->
+      <section class="dsec">
+        <div class="dsec__head">
+          <span class="dsec__title">On record</span>
+          <span class="dsec__hint">set by your file — read only</span>
+        </div>
+        <div class="dsec__body">
+          <div class="df"><p class="k">Package</p><p class="v">Master's · Hybrid funding</p></div>
+          <div class="df"><p class="k">Payment plan</p><p class="v">Two milestones</p></div>
+          <div class="df"><p class="k">Schools</p><p class="v">3 targeted · selection locked</p></div>
+          <div class="df"><p class="k">Consultation</p><p class="v">Paid · held 12 Feb · Accra office</p></div>
+          <div class="df"><p class="k">Eligibility</p><p class="v"><span class="portal-pill portal-pill--solid">Eligible</span></p></div>
+          <div class="df"><p class="k">Chapter</p><p class="v">III · Applications</p></div>
+        </div>
+      </section>
+
+      <!-- 06 documents -->
+      <section class="dsec">
+        <div class="dsec__head">
+          <span class="dsec__title">Documents</span>
+          <a class="jlink" href="#">Open vault →</a>
+        </div>
+        <div style="padding:1rem 1.25rem">
+          <p class="mono muted" style="font-size:.62rem;margin-bottom:.6rem">7 OF 10 REQUIRED UPLOADED OR VERIFIED</p>
+          <ul class="docs">
+            <li><span class="nm">Passport bio page</span><span class="portal-pill portal-pill--solid">Verified</span><span class="act">View</span></li>
+            <li><span class="nm">Degree certificate</span><span class="portal-pill portal-pill--solid">Verified</span><span class="act">View</span></li>
+            <li><span class="nm">Transcript</span><span class="portal-pill">Uploaded</span><span class="act">View</span></li>
+            <li><span class="nm">Passport photo</span><span class="portal-pill" style="border-style:dashed;color:var(--muted-foreground)">Missing</span><span class="act">Upload</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 07 security -->
+      <section class="dsec">
+        <div class="dsec__head">
+          <span class="dsec__title">Security</span>
+        </div>
+        <div class="dsec__body">
+          <div class="df"><p class="k">Sign-in</p><p class="v">Email + password</p></div>
+          <div class="df"><p class="k">Password</p><p class="v">Set · <button class="jlink">change</button></p></div>
+          <div class="df"><p class="k">Two-factor</p><p class="v"><span class="portal-pill">On · TOTP</span></p></div>
+          <div class="df"><p class="k">Session</p><p class="v">Since 14 Mar, 09:12</p></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

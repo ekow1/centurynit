@@ -132,7 +132,7 @@ export function Home() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const nav = useNavigate();
 
-	// Social login redirect failure — Better Auth sends back to the root URL
+	// Social login redirect failure. Better Auth sends back to the root URL
 	// with ?error=account_not_linked when the Google email matches an existing
 	// account that hasn't linked Google yet. Show a modal explaining what to do
 	// instead of silently landing on the homepage with no feedback.
@@ -415,7 +415,7 @@ export function Home() {
 
 			<hr className="section-rule" />
 
-			{/* The Red Seat — written and on-camera, three per view */}
+			{/* The Red Seat. Written and on-camera, three per view */}
 			<section className="section">
 				<div className="container">
 					<div className="section__head">
@@ -503,7 +503,7 @@ export function Home() {
 
 			<hr className="section-rule" />
 
-			{/* Methodology — four stages on one spine. No durations: they set an
+			{/* Methodology. Four stages on one spine. No durations: they set an
 			    expectation the business cannot honour per applicant. */}
 			<section className="section texture-diagonal">
 				<div className="container">
@@ -786,7 +786,7 @@ function VideoLightbox({
 				onClick={(e) => e.stopPropagation()}
 				role="dialog"
 				aria-modal="true"
-				aria-label={`${video.name} — video testimonial`}
+				aria-label={`${video.name}. Video testimonial`}
 			>
 				<button type="button" className="rs-lightbox__close" onClick={onClose} aria-label="Close">
 					✕
@@ -801,7 +801,7 @@ function VideoLightbox({
 							allowFullScreen
 						/>
 					) : (
-						/* No file wired up yet — say so rather than showing a dead player */
+						/* No file wired up yet. Say so rather than showing a dead player */
 						<div className="rs-lightbox__placeholder" style={{ backgroundImage: `url(${video.poster})` }}>
 							<p className="mono">Film not uploaded yet</p>
 						</div>

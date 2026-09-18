@@ -49,7 +49,7 @@
 	font-size: var(--text-sm, 0.875rem);
 }
 
-/* ── Slot picker ── */
+/* Slot picker */
 
 .appt-slots {
 	display: flex;
@@ -83,7 +83,7 @@
 	text-decoration: line-through;
 }
 
-/* ── Cards ── */
+/* Cards */
 
 .appt-card {
 	border: var(--medium);
@@ -175,7 +175,7 @@
 	letter-spacing: 0.04em;
 }
 
-/* ── Slot Picker Live (resched) ── */
+/* Slot Picker Live (resched) */
 
 .resched__days {
 	display: flex;

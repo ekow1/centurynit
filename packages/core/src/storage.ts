@@ -4,7 +4,7 @@
  * Every piece of application state currently lives in localStorage, which has a
  * ~5MB per-origin ceiling. An unguarded `setItem` that trips that ceiling throws
  * a QuotaExceededError, and because these writes happen inside React effects the
- * throw unmounts the tree — the whole app goes blank on what should be a saved
+ * throw unmounts the tree. The whole app goes blank on what should be a saved
  * field. Safari in private mode throws on `setItem` unconditionally, which is
  * the same failure by a different route.
  *
@@ -23,7 +23,7 @@ export function safeSetItem(key: string, value: string): boolean {
 		localStorage.setItem(key, value);
 		return true;
 	} catch (err) {
-		// One warning per session — these fire from effects and would otherwise
+		// One warning per session. These fire from effects and would otherwise
 		// spam the console on every keystroke.
 		if (!quotaWarned) {
 			quotaWarned = true;

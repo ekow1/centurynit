@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Review — the workspace and the tabs</title>
+<style>
+:root{--bg:#fff;--fg:#0a0a0a;--muted:#f5f5f5;--muted-fg:#52525b;--b:#0a0a0a;--bl:#d4d4d8;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--serif:Georgia,serif;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
+*{box-sizing:border-box;margin:0}
+body{font-family:var(--sans);background:#e8e8e8;color:var(--fg);font-size:.875rem}
+.page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 5rem}
+.eyebrow{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg)}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
+h2{font-size:1.15rem;font-weight:800;margin:2.5rem 0 .4rem}
+h3{font-size:.85rem;font-weight:700;margin:1.4rem 0 .3rem}
+.lead{color:var(--muted-fg);font-size:.85rem;max-width:46rem;line-height:1.6}
+.note{font-size:.72rem;color:var(--muted-fg);border-left:3px solid var(--fg);padding:.6rem .9rem;margin:1rem 0;line-height:1.6;background:#fff}
+.frame{background:var(--bg);border:1px solid var(--bl);margin-top:1.25rem;padding:1.5rem}
+.sev{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;border:1px solid var(--b);padding:.12rem .45rem;white-space:nowrap}
+.sev--bug{background:var(--fg);color:var(--bg)}
+table.review{width:100%;border-collapse:collapse;font-size:.78rem;background:#fff;margin-top:.6rem}
+.review th{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);text-align:left;padding:.45rem .7rem;border-bottom:1px solid var(--b)}
+.review td{padding:.55rem .7rem;border-bottom:1px solid var(--bl);vertical-align:top;line-height:1.5}
+.review td:first-child{white-space:nowrap}
+code,pre{font-family:var(--mono);font-size:.72rem}
+code{background:var(--muted);padding:.05rem .3rem}
+pre{background:var(--muted);padding:.9rem 1.1rem;line-height:1.65;overflow-x:auto;margin:.6rem 0}
+pre .a{color:#0a7a3d}pre .d{color:#b00020}
+pre .c{color:var(--muted-fg)}
+
+/* ---- the tabs as they are today (copied class-for-class) ---- */
+.spine{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .45rem;margin:0 0 1rem}
+.spine__gap{width:.5rem}
+.chip{display:inline-flex;align-items:center;gap:.45rem;padding:.32rem .65rem;border:1px solid var(--bl);background:var(--bg);
+  color:var(--fg);font-family:var(--mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;line-height:1.2;white-space:nowrap;cursor:pointer}
+.chip b{font-weight:700}
+.chip__n{font-weight:400;color:var(--muted-fg)}
+.chip--passed{border-color:var(--bl);color:var(--muted-fg)}
+.chip--passed b{font-weight:600}
+.chip--now{border-color:var(--fg);color:var(--fg)}
+.chip--now::before{content:"";width:7px;height:7px;background:currentColor;flex-shrink:0}
+.chip--on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.chip--on .chip__n{color:rgba(255,255,255,.7)}
+.chip--locked{border-style:dashed;border-color:var(--bl);color:var(--muted-fg);opacity:.75;cursor:default}
+
+.strip{display:flex;border-bottom:1px solid var(--bl)}
+.strip .t{padding:.5rem .9rem;font-family:var(--mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid transparent;cursor:pointer}
+.strip .t--on{border-bottom-color:var(--fg);font-weight:700}
+.strip .t--locked{color:var(--muted-fg);cursor:default}
+
+/* ---- proposed spine ---- */
+.rail{position:sticky;top:0;background:var(--bg);padding:.55rem 0 .4rem;z-index:5}
+.track{display:flex;align-items:stretch;overflow-x:auto;scroll-snap-type:x proximity;scrollbar-width:thin}
+.node{position:relative;display:flex;flex-direction:column;gap:.18rem;align-items:flex-start;scroll-snap-align:start;
+  border:1px solid var(--bl);background:var(--bg);padding:.45rem .8rem .5rem;min-width:7.2rem;font-family:var(--mono);text-align:left;cursor:pointer}
+.node + .node{margin-left:-1px}
+.node__rn{font-size:.6rem;letter-spacing:.1em;color:var(--muted-fg)}
+.node__lb{font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.node__st{font-size:.55rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-fg)}
+.node--passed .node__rn::before{content:"✓ "}
+.node--now{border-color:var(--fg);box-shadow:inset 0 0 0 1px var(--fg)}
+.node--now .node__rn{color:var(--fg)}
+.node--now .node__rn::before{content:"■ "}
+.node--on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.node--on .node__rn,.node--on .node__st{color:rgba(255,255,255,.65)}
+.node--locked{border-style:dashed;color:var(--muted-fg);cursor:default}
+.node--locked .node__lb{color:var(--muted-fg)}
+.node--locked .node__rn::before{content:"— "}
+.node--util{border-color:transparent;margin-left:.4rem;min-width:0}
+.node--util .node__st{color:var(--muted-fg)}
+.track__end{align-self:center;margin-left:.4rem;padding:.3rem .6rem;border:1px dashed var(--bl);font-family:var(--mono);
+  font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-fg);white-space:nowrap}
+.track__end--done{border-style:solid;color:var(--fg)}
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-top:1rem}
+@media(max-width:900px){.vs{grid-template-columns:1fr}}
+.vs .cap{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);margin-bottom:.5rem}
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="eyebrow">Review · monorepo + tab systems</p>
+  <h1>The workspace and the tabs</h1>
+  <p class="lead">The architecture is genuinely good — two Workers, one API, the journey derived in one pure
+  function. What needs attention is the debris left by past design passes and three overlapping tab
+  implementations that disagree with each other and, in one case, with the URL.</p>
+
+  <h2>1 · The workspace — clean the floor before adding furniture</h2>
+  <table class="review">
+    <tr><th>Finding</th><th>Where</th><th>Severity</th><th>Fix</th></tr>
+    <tr>
+      <td>Live session cookies on disk</td>
+      <td><code>cookies.txt</code>, <code>staff-cookies.txt</code></td>
+      <td><span class="sev sev--bug">security</span></td>
+      <td>Already gitignored — delete the files. A gitignore line does not revoke a token that was ever committed.</td>
+    </tr>
+    <tr>
+      <td>Second lockfile inside a workspace</td>
+      <td><code>century-nit-web/package-lock.json</code></td>
+      <td><span class="sev sev--bug">bug</span></td>
+      <td>Delete it. npm workspaces resolve from the root lockfile only; this one can pin divergent versions for anything that reads it (auditors, editors, stray <code>npm i</code>).</td>
+    </tr>
+    <tr>
+      <td>Stray pnpm store inside a package</td>
+      <td><code>packages/shared/node_modules/.pnpm/…</code></td>
+      <td><span class="sev">hygiene</span></td>
+      <td>Someone ran <code>pnpm install</code> inside <code>packages/shared</code>. Delete <code>node_modules</code> there and reinstall from the root — two package managers in one tree diverge silently.</td>
+    </tr>
+    <tr>
+      <td>Tracked one-off patch scripts</td>
+      <td><code>century-nit-api/{append_schema.*,patch_*.ts,scratch_*.ts,seed2.ts,run_sql.ts}</code>, <code>century-nit-web/patch*.{js,cjs}</code></td>
+      <td><span class="sev">hygiene</span></td>
+      <td>~17 files. Either delete (their work is in the migration chain) or move under <code>scripts/</code> so the package root stops reading like a workbench.</td>
+    </tr>
+    <tr>
+      <td>Dead backups at repo root</td>
+      <td><code>AppState.original.tsx</code> (77&nbsp;KB), <code>PortalPages.original.tsx</code> (98&nbsp;KB), <code>scratch_*.tsx</code>, <code>*.diff</code>, <code>*.patch</code>, <code>apply-*.mjs</code></td>
+      <td><span class="sev">hygiene</span></td>
+      <td>Ignored by git but still on disk — every <code>grep</code> and file search pays for them. Delete; git is the backup.</td>
+    </tr>
+    <tr>
+      <td>Monolith files</td>
+      <td><code>PortalPages.tsx</code> 4,977 ln · <code>app.css</code> 9,045 ln · <code>AppState.tsx</code> 2,835 ln · <code>EnterpriseAdministration.tsx</code> 3,066 ln · <code>scheduling.css</code> 4,583 ln</td>
+      <td><span class="sev">maintainability</span></td>
+      <td>Split along the seams that already exist: portal pages per route file, <code>AppState</code> into auth/data/sync slices, scheduling.css into <code>scheduling.css</code> + <code>case.css</code> (it currently hosts the case-detail styles).</td>
+    </tr>
+    <tr>
+      <td>Undecided preview convention</td>
+      <td><code>.preview/</code> — 30 files, untracked, not ignored</td>
+      <td><span class="sev">process</span></td>
+      <td>Pick one: commit them (design history travels with the repo) or add <code>.preview/</code> to <code>.gitignore</code>. Limbo is the worst option — it is today.</td>
+    </tr>
+  </table>
+
+  <h2>2 · The tabs — three implementations, one job</h2>
+  <p class="lead" style="margin-top:.4rem">Tab-like selection is implemented three different ways, and the styles
+  and the components live in different packages:</p>
+  <table class="review">
+    <tr><th>Implementation</th><th>Component</th><th>Styles</th><th>Used by</th></tr>
+    <tr>
+      <td>Underline strip</td>
+      <td><code>ops/pages/case/CaseTabs.tsx</code></td>
+      <td><code>core/styles/components.css</code></td>
+      <td>Workspace, ConsultationDetail, and raw <code>.cn-tabs</code> markup in EnterpriseApplicants</td>
+    </tr>
+    <tr>
+      <td>Chapter chips</td>
+      <td><code>ops/pages/case/CaseSpine.tsx</code></td>
+      <td><code>ops/styles/scheduling.css</code></td>
+      <td>CaseDetail only</td>
+    </tr>
+    <tr>
+      <td>Ad-hoc pills</td>
+      <td>inline <code>ops-pill</code> + <code>role="tablist"</code></td>
+      <td><code>scheduling.css</code></td>
+      <td>~15 list filters across the ops app</td>
+    </tr>
+  </table>
+  <p class="note">The component lives in <code>century-nit-ops</code> but its stylesheet lives in
+  <code>packages/core</code> — so the portal could not reuse the strip even if it wanted to, and the chip
+  styles hide inside a file named for a different feature. Move <code>CaseTabs</code>/<code>CaseSpine</code>
+  into <code>century-nit-core/ui</code> next to their styles. The hook keeps the router, so it stays in the
+  app (or takes injected get/set callbacks) — <code>core</code> has no react-router dependency today and
+  shouldn't grow one for this.</p>
+
+  <h3>The bug: <code>useCaseTab</code> ignores the URL it claims to mirror</h3>
+  <p class="lead">The hook's whole purpose is deep-linking — "a notification or a handoff can deep-link to a
+  chapter". But the re-derivation effect depends on <code>[recordKey, preset]</code> only, so if
+  <code>?tab=</code> changes while the detail is already mounted — exactly what a deep link does — the tab
+  stays stale.</p>
+  <pre><span class="c">// today — state copies the URL once, then stops listening</span>
+const [tab, setTabState] = useState&lt;T&gt;(derive);
+useEffect(() =&gt; setTabState(derive()),
+  [recordKey, preset]);  <span class="c">// urlTab is read but not a dependency</span>
+
+<span class="c">// proposed — the URL is the state; nothing to sync</span>
+const urlTab = searchParams.get("tab");
+<span class="a">const tab = isId(urlTab) ? urlTab : (preset ?? fallback());</span>
+const setTab = (next: T) =&gt; setSearchParams(prev =&gt; {
+  const p = new URLSearchParams(prev); p.set("tab", next); return p;
+}, { replace: true });</pre>
+  <p class="note">Deriving at render kills the effect, the <code>eslint-disable</code> comment, and the whole
+  class of "URL and state disagree" bugs — while making every deep link work, including browser back.
+  <code>fallback()</code> runs each render but is a pure lookup; cheap.</p>
+
+  <h3>Smaller defects</h3>
+  <table class="review">
+    <tr><th>Where</th><th>What</th></tr>
+    <tr><td><code>CaseSpine</code></td><td>"VI Complete" is a <code>&lt;div aria-hidden&gt;</code> inside <code>role="tablist"</code> — screen readers are told the row has a tab that isn't there, and sighted users see a state AT never hears. Make it a real disabled <code>role="tab"</code>, or move it out of the list.</td></tr>
+    <tr><td><code>CaseSpine</code></td><td>The "now" chip gets its meaning from <code>::before</code> and a <code>title</code> — a sighted-mouse-only signal. Give it <code>aria-current="true"</code> and put the lock/unlock hint in <code>aria-describedby</code>, not just <code>title</code>.</td></tr>
+    <tr><td><code>CaseTabs</code></td><td>The lock is a 🔒 emoji — the only emoji in a monochrome mono-font interface. A dashed border + "—" marker (as below) says the same thing in the system's own language.</td></tr>
+    <tr><td><code>PortalSections</code> ledger</td><td>Two rows are numbered "V" — the pre-departure milestone and the ticket. The numeral is the chapter system; a second V silently breaks it. The ticket is part of chapter V, so it should carry no numeral (indent it under V) rather than repeat one.</td></tr>
+    <tr><td><code>MobileTabBar</code></td><td>"Login" links to <code>/start</code> — the journey funnel, not sign-in. If the funnel is intentional the label lies; if not, the route is wrong.</td></tr>
+    <tr><td><code>ConsultationDetail</code></td><td>Uses the underline strip while its sibling <code>CaseDetail</code> uses chips — same app, same job, two visual languages. A consultation is a short sequence too (Background → Decision), so it can take the spine with two nodes.</td></tr>
+  </table>
+
+  <h2>3 · The proposal — one tab family, two densities</h2>
+  <p class="lead">One component in <code>century-nit-core/ui</code>: <code>&lt;Tabs&gt;</code> for flat sets
+  (Workspace), <code>&lt;ChapterTabs&gt;</code> for ordered journeys (case, consultation). Same lock/active/
+  current semantics, same <code>?tab=</code> hook underneath. Below: today's spine, then the proposed one.</p>
+
+  <div class="vs">
+    <div>
+      <p class="cap">Today — chips, dead end-cap, no progress</p>
+      <div class="frame" style="margin-top:0">
+        <div class="spine">
+          <button class="chip"><b>Overview</b></button>
+          <span class="spine__gap"></span>
+          <button class="chip chip--passed"><b>✓ I Consultation</b></button>
+          <button class="chip chip--passed"><b>✓ II Enrolment</b></button>
+          <button class="chip chip--now chip--on"><b>III Applications</b></button>
+          <button class="chip chip--locked"><b>IV Visa</b></button>
+          <button class="chip chip--locked"><b>V Departure</b></button>
+          <div class="chip chip--locked"><b>VI Complete</b></div>
+          <span class="spine__gap"></span>
+          <button class="chip"><b>Money</b> <span class="chip__n">2 due</span></button>
+          <button class="chip"><b>Docs</b> <span class="chip__n">3</span></button>
+        </div>
+      </div>
+      <p class="note">Nine floating pills. Passed/now/locked read only through border styles; the
+      end-cap is a div that fakes a tab; nothing says what "now" means without a hover; wraps
+      awkwardly on narrow screens.</p>
+    </div>
+    <div>
+      <p class="cap">Proposed — a connected track, states spelled out</p>
+      <div class="frame" style="margin-top:0">
+        <div class="rail">
+          <div class="track" role="tablist" aria-label="Case chapters">
+            <button class="node node--util" role="tab" aria-selected="false">
+              <span class="node__lb">Overview</span>
+              <span class="node__st">the case at a glance</span>
+            </button>
+            <button class="node node--passed" role="tab" aria-selected="false">
+              <span class="node__rn">I</span><span class="node__lb">Consultation</span><span class="node__st">done</span>
+            </button>
+            <button class="node node--passed" role="tab" aria-selected="false">
+              <span class="node__rn">II</span><span class="node__lb">Enrolment</span><span class="node__st">done</span>
+            </button>
+            <button class="node node--now node--on" role="tab" aria-selected="true" aria-current="true">
+              <span class="node__rn">III</span><span class="node__lb">Applications</span><span class="node__st">in progress · viewing</span>
+            </button>
+            <button class="node node--locked" role="tab" aria-disabled="true" aria-describedby="lk1" title="Unlocks on the first admission">
+              <span class="node__rn">IV</span><span class="node__lb">Visa</span><span class="node__st" id="lk1">locked · needs an admission</span>
+            </button>
+            <button class="node node--locked" role="tab" aria-disabled="true" title="Unlocks once the visa is approved">
+              <span class="node__rn">V</span><span class="node__lb">Departure</span><span class="node__st">locked</span>
+            </button>
+            <span class="track__end">VI · Complete</span>
+            <button class="node node--util" role="tab" aria-selected="false">
+              <span class="node__lb">Money</span><span class="node__st">2 due</span>
+            </button>
+            <button class="node node--util" role="tab" aria-selected="false">
+              <span class="node__lb">Docs</span><span class="node__st">3 open</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <p class="note">The nodes touch — the track <em>is</em> the timeline. Each carries a status line in
+      words, not just border style: "done", "in progress · viewing", "locked · needs an admission".
+      The end-cap leaves the tablist. Money/Docs keep their counts. Sticky, and scrolls with
+      snap on narrow screens instead of wrapping into a pile.</p>
+    </div>
+  </div>
+
+  <h3>The same spine on a consultation</h3>
+  <div class="frame">
+    <div class="track" role="tablist" aria-label="Consultation sections">
+      <button class="node node--now node--on" role="tab" aria-selected="true" aria-current="true">
+        <span class="node__lb">Background</span><span class="node__st">viewing</span>
+      </button>
+      <button class="node" role="tab" aria-selected="false">
+        <span class="node__lb">Documents</span><span class="node__st">2 to review</span>
+      </button>
+      <button class="node node--locked" role="tab" aria-disabled="true" title="Unlocks when the assessment starts">
+        <span class="node__lb">Decision</span><span class="node__st">locked · awaiting assessment</span>
+      </button>
+    </div>
+  </div>
+
+  <h2>4 · Order of work</h2>
+  <table class="review">
+    <tr><th>#</th><th>Change</th><th>Blast radius</th></tr>
+    <tr><td>1</td><td>Delete cookie files, nested lockfile, stray pnpm store, root scratch files; relocate tracked patch scripts</td><td>none — files only</td></tr>
+    <tr><td>2</td><td>Fix <code>useCaseTab</code>: derive from the URL (5-line change)</td><td>fixes deep links in case, consultation, workspace</td></tr>
+    <tr><td>3</td><td>Move <code>CaseTabs</code>/<code>CaseSpine</code> to <code>century-nit-core/ui</code>; move chip styles out of scheduling.css</td><td>3 call sites + imports</td></tr>
+    <tr><td>4</td><td>A11y pass: real tabs or no tablist, <code>aria-current</code>, <code>aria-describedby</code> hints, drop the emoji</td><td>CaseTabs, CaseSpine, EnterpriseApplicants</td></tr>
+    <tr><td>5</td><td>Portal ledger: drop the duplicated "V" numeral; relabel or reroute the Login tab</td><td>PortalSections, MobileTabBar</td></tr>
+    <tr><td>6</td><td>Split the monoliths (PortalPages, AppState, app.css, scheduling.css) along existing seams</td><td>large — do incrementally</td></tr>
+  </table>
+</div>
+</body>
+</html>

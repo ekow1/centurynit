@@ -1,7 +1,7 @@
 import type { CaseComment } from "century-nit-shared";
 
 /**
- * The case history the consultant marked for the client — the visa
+ * The case history the consultant marked for the client. The visa
  * milestones as they are recorded, the decision and its reason, a note
  * written for the client. The same lines Ops sees in the case History,
  * filtered server-side to the applicant-visible ones. Newest first; a
@@ -49,5 +49,5 @@ export function ConsultantUpdates({
 	);
 }
 
-/** Visa-chapter lines — what the officer records as the application moves. */
+/** Visa-chapter lines. What the officer records as the application moves. */
 export const isVisaUpdate = (c: CaseComment) => /^visa\b|^biometrics\b|^passport \/ permit/i.test(c.text);

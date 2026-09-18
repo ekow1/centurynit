@@ -21,7 +21,7 @@ import { ownershipCapabilityFor, roleHasCapability } from "./schemas/ops.js";
  *
  *   1. Each portal stage has one signal that marks it *done*
  *      (`STAGE_DONE`). The applicant stands on the step after the highest
- *      step that is done — later evidence (an admission, a paid visa) counts
+ *      step that is done. Later evidence (an admission, a paid visa) counts
  *      even when an earlier step was never formally ticked, because the case
  *      really has moved on. Earlier steps that were passed without their
  *      signal are reported as "skipped", never "done".
@@ -57,7 +57,7 @@ export type JourneySignals = {
 	hasConsultation: boolean;
 	/** Assessment outcome is Eligible or Conditionally Eligible. */
 	isEligible: boolean;
-	/** `applications.proceedStatus` — the consent gate. */
+	/** `applications.proceedStatus`. The consent gate. */
 	proceedStatus: string | null;
 	/** A package (funding track) has been chosen. */
 	hasPackage: boolean;
@@ -105,7 +105,7 @@ export type JourneyChapterUnlocks = {
 };
 
 export type DerivedJourney = {
-	/** Coarse stage when known, else the portal stage — what ops calls it. */
+	/** Coarse stage when known, else the portal stage. What ops calls it. */
 	currentStage: string;
 	portalStage: JourneyPortalStage;
 	chapterUnlocks: JourneyChapterUnlocks;
@@ -119,7 +119,7 @@ export type DerivedJourney = {
  * applicant past this step; the signals do the rest.
  *
  * `travel_assistance` floors at `travel_assistance` on purpose: Departure
- * opens on the visa and the flight is booked first — the fee milestone
+ * opens on the visa and the flight is booked first. The fee milestone
  * unlocks only once travel is settled (booked or own booking), which is a
  * signal (`travelAssistanceStatus`), not something the coarse stage can
  * assert on its own.
@@ -166,7 +166,7 @@ const STAGE_DONE: Record<JourneyPortalStage, (f: Facts) => boolean> = {
 	consultation: (f) => f.hasConsultation,
 	eligibility: (f) => f.isEligible,
 	proceed: (f) => f.hasProceeded,
-	// Choosing a package is not enough — the step ends with the deposit.
+	// Choosing a package is not enough. The step ends with the deposit.
 	school_package: (f) => f.hasPackage && f.depositPaid,
 	// A handler counts only once the deposit that requested one is paid.
 	awaiting_handler: (f) => f.depositPaid && f.hasHandler,
@@ -183,7 +183,7 @@ const STAGE_DONE: Record<JourneyPortalStage, (f: Facts) => boolean> = {
 
 function facts(s: JourneySignals): Facts {
 	// Travel is done when the flight is booked, or the applicant is booking
-	// their own, or has paused it — the request's status is the one signal.
+	// their own, or has paused it. The request's status is the one signal.
 	const taResolved = isTravelResolved(s.travelAssistanceStatus);
 	// The pre-departure milestone: the balance on a full plan, the second
 	// milestone on instalments. Post-arrival is aftercare and never gates.
@@ -228,20 +228,20 @@ export function deriveJourney(signals: JourneySignals): DerivedJourney {
 		journey: true,
 		consultation: true,
 		package: f.isEligible,
-		// Stays open once a package is chosen — waiting for a handler is part
+		// Stays open once a package is chosen. Waiting for a handler is part
 		// of this chapter, not a locked future one.
 		application: f.isEligible && f.hasPackage,
 		tracking: f.appInvoicePaid && f.hasSelection,
 		visa: f.hasAdmitted,
 		// Both Departure pages open with the visa; the flight is booked first
-		// and the fee milestone unlocks once travel is settled — it releases
+		// and the fee milestone unlocks once travel is settled. It releases
 		// the papers, never the page.
 		payment_execution: f.hasAdmitted && f.visaInvoicePaid && f.visaDone,
 		travel_assistance: f.hasAdmitted && f.visaInvoicePaid && f.visaDone,
 		complete: f.isCompleted,
 	};
 
-	// Per-step status from real signals — a step passed without its signal is
+	// Per-step status from real signals. A step passed without its signal is
 	// "skipped", so "done" never lies.
 	const currentIdx = idx(portalStage);
 	const stageStatuses: Record<string, JourneyStageStatus> = {};
@@ -257,7 +257,7 @@ export function deriveJourney(signals: JourneySignals): DerivedJourney {
 			? PORTAL_STAGE_LABELS[PORTAL_STAGE_ORDER[currentIdx + 1]]
 			: null;
 
-	// A refusal does not move the ladder — the visa chapter stays current —
+	// A refusal does not move the ladder. The visa chapter stays current,
 	// but the applicant must not read "Visa tracking" as if nothing happened.
 	const refused = portalStage === "visa" && Boolean(f.visaRefused);
 
@@ -297,13 +297,13 @@ export function emptyJourney(): DerivedJourney {
 	};
 }
 
-/* ── Who may own which stage ─────────────────────────────────────────────── */
+/* Who may own which stage */
 
 /**
  * Roles allowed to be assigned as the handler of each stage. There are no
  * dedicated visa/travel roles yet, so the service stages are open to the
  * consultant tier; the plan chapter belongs to finance. Roles absent from a
- * list (customer_service, admin, super_admin) never own casework — they
+ * list (customer_service, admin, super_admin) never own casework. They
  * triage, invite and configure.
  */
 export const STAGE_ASSIGNABLE_ROLES: Record<JourneyStage | "consultation", readonly string[]> = {

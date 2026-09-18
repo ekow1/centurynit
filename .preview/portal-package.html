@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Enrolment — preview</title>
+<style>
+  :root{
+    --background:#ffffff; --foreground:#0a0a0a;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#0a0a0a; --border-light:#d4d4d8;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --text-xs:.72rem; --text-sm:.875rem;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:#fafafa;color:var(--foreground);font-size:var(--text-sm)}
+  .page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .page-title{font-size:1.9rem;font-weight:700;letter-spacing:-.02em}
+  .lead{color:var(--muted-foreground)}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--muted-foreground)}
+  .sharp-card{background:var(--background);border:1px solid var(--border-light);padding:1.25rem}
+  .btn{border:1px solid var(--border);background:var(--background);color:var(--foreground);font:inherit;
+    font-size:var(--text-xs);font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+    padding:.55rem .9rem;cursor:pointer;text-decoration:none;display:inline-block}
+  .btn--primary{background:var(--foreground);color:var(--background)}
+  .btn--ghost{border-color:var(--border-light)}
+  .btn--sm{padding:.4rem .7rem;font-size:.68rem}
+  .portal-pill{display:inline-block;border:1px solid var(--border);padding:.2rem .6rem;
+    font-family:var(--font-mono);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em}
+  .portal-pill--solid{background:var(--foreground);color:var(--background)}
+  .portal-pill--hollow{color:var(--muted-foreground);border-color:var(--border-light)}
+
+  /* step pills — the enrolment sub-steps, done in ink */
+  .pillrow{display:flex;gap:.4rem;flex-wrap:wrap;margin:1rem 0 1.75rem}
+  .pillrow .portal-pill{font-size:.65rem}
+  .portal-pill--done{background:var(--muted);border-color:var(--border-light);color:var(--muted-foreground)}
+
+  /* form + summary split */
+  .split{display:grid;grid-template-columns:1fr 19.5rem;gap:1.5rem;align-items:start}
+
+  /* numbered section heads — one sequence, no repeats */
+  .sec{margin-bottom:1.75rem}
+  .sec__no{display:inline-flex;align-items:center;justify-content:center;width:1.4rem;height:1.4rem;
+    border:1px solid var(--border);font-family:var(--font-mono);font-size:.65rem;font-weight:700;margin-right:.5rem}
+  .sec__no--done{background:var(--foreground);color:var(--background)}
+  .sec__title{font-weight:700;font-size:.95rem}
+  .sec__hint{font-size:var(--text-xs);color:var(--muted-foreground);margin:.35rem 0 .75rem}
+
+  /* choice cards — selected inverts, no blue */
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(13rem,1fr));gap:.6rem}
+  .pick{border:1px solid var(--border-light);background:var(--background);padding:.9rem 1rem;text-align:left;
+    font:inherit;cursor:pointer;display:flex;flex-direction:column;gap:.3rem;position:relative}
+  .pick:hover{box-shadow:inset 0 0 0 1px var(--foreground)}
+  .pick--on{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+  .pick--on .muted,.pick--on .eyebrow{color:rgba(255,255,255,.65)}
+  .pick__name{font-weight:700}
+  .pick__price{font-family:var(--font-mono);font-weight:700;margin-top:.2rem}
+  .pick__tag{position:absolute;top:.7rem;right:.7rem;font-family:var(--font-mono);font-size:.58rem;
+    text-transform:uppercase;letter-spacing:.08em;border:1px solid currentColor;padding:.12rem .4rem}
+
+  .chips{display:flex;gap:.45rem;flex-wrap:wrap}
+  .chip{border:1px solid var(--border-light);background:var(--background);padding:.55rem .8rem;font:inherit;
+    font-size:var(--text-xs);cursor:pointer;font-weight:500}
+  .chip--on{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+  .chip small{display:block;font-weight:400;color:inherit;opacity:.65;margin-top:.1rem}
+
+  /* the summary rail — the money never leaves the viewport */
+  .rail{position:sticky;top:1rem;display:flex;flex-direction:column;gap:.8rem}
+  .rail .sharp-card{padding:1.1rem}
+  .sum-title{font-weight:700;font-size:1.05rem;margin:.3rem 0 .6rem}
+  .line{display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-bottom:1px solid var(--border-light);font-size:var(--text-xs)}
+  .line .k{color:var(--muted-foreground)}
+  .line .v{font-family:var(--font-mono);font-weight:600;white-space:nowrap;text-align:right}
+  .line--due .k{color:var(--foreground);font-weight:700}
+  .line--due .v{font-size:.9rem}
+  .terms{font-size:.68rem;color:var(--muted-foreground);line-height:1.5;margin:.8rem 0}
+  .scope{list-style:none;padding:0;margin:.5rem 0 0;font-size:var(--text-xs)}
+  .scope li{padding:.3rem 0;border-bottom:1px dashed var(--border-light)}
+  .scope li:last-child{border-bottom:none}
+  .excl{color:var(--muted-foreground)}
+
+  @media (max-width:900px){.split{grid-template-columns:1fr}.rail{position:static}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <p class="eyebrow">Chapter II · Enrolment</p>
+  <h1 class="page-title" style="margin:.2rem 0 .3rem">Enrol with Century NIT</h1>
+  <p class="lead" style="font-size:var(--text-sm)">Confirm you're enrolling, choose your package and plan, pay the deposit — your consultant is assigned when it lands.</p>
+
+  <!-- the chapter's sub-steps, properly numbered -->
+  <div class="pillrow">
+    <span class="portal-pill portal-pill--solid">1 · Confirm</span>
+    <span class="portal-pill">2 · Package &amp; plan</span>
+    <span class="portal-pill portal-pill--hollow">3 · Deposit</span>
+    <span class="portal-pill portal-pill--hollow">4 · Consultant</span>
+  </div>
+
+  <div class="split">
+    <!-- left: the choices -->
+    <div>
+
+      <section class="sec">
+        <p><span class="sec__no">1</span><span class="sec__title">Confirm your enrolment</span></p>
+        <div class="sharp-card" style="margin-top:.6rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
+          <p class="muted" style="font-size:var(--text-sm)">Your assessment says <strong style="color:var(--foreground)">Eligible</strong>. Confirm to lock your place in the intake.</p>
+          <a class="btn btn--primary btn--sm" href="#">Confirmed — I enrol</a>
+        </div>
+      </section>
+
+      <section class="sec">
+        <p><span class="sec__no">2</span><span class="sec__title">Funding track</span></p>
+        <div class="cards" style="margin-top:.6rem">
+          <button class="pick pick--on">
+            <span class="pick__tag">Advisor's pick</span>
+            <span class="eyebrow">Funded / award-led</span>
+            <span class="pick__name">Scholarship Path</span>
+            <span class="muted" style="font-size:var(--text-xs)">We target programmes with awards and assistantships first.</span>
+            <span class="pick__price">$2,950</span>
+          </button>
+          <button class="pick">
+            <span class="eyebrow">Partial award + self-fund</span>
+            <span class="pick__name">Hybrid Path</span>
+            <span class="muted" style="font-size:var(--text-xs)">Awards where they exist; self-funded where they don't.</span>
+            <span class="pick__price">$2,450</span>
+          </button>
+          <button class="pick">
+            <span class="eyebrow">Self / family funded</span>
+            <span class="pick__name">Standard Path</span>
+            <span class="muted" style="font-size:var(--text-xs)">Full funding in place; we optimise for speed and fit.</span>
+            <span class="pick__price">$1,950</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="sec">
+        <p><span class="sec__no">3</span><span class="sec__title">Degree level</span></p>
+        <div class="chips" style="margin-top:.6rem">
+          <button class="chip">Bachelor<small>Undergraduate</small></button>
+          <button class="chip chip--on">Master's<small>Advisor's pick</small></button>
+          <button class="chip">PhD<small>Doctoral</small></button>
+        </div>
+      </section>
+
+      <section class="sec">
+        <p><span class="sec__no">4</span><span class="sec__title">Target schools</span></p>
+        <p class="sec__hint">We prepare, review and lodge submissions across your full list. Three is the recommended spread.</p>
+        <div class="chips">
+          <button class="chip">1</button><button class="chip">2</button>
+          <button class="chip chip--on">3<small>recommended</small></button>
+          <button class="chip">4</button><button class="chip">5</button><button class="chip">6</button>
+        </div>
+      </section>
+
+      <section class="sec">
+        <p><span class="sec__no">5</span><span class="sec__title">Payment plan</span></p>
+        <p class="sec__hint">The deposit is due now either way — the plan decides how the rest follows.</p>
+        <div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))">
+          <button class="pick pick--on">
+            <span class="pick__name">Full</span>
+            <span class="muted" style="font-size:var(--text-xs)">10% now · 90% before you depart</span>
+          </button>
+          <button class="pick">
+            <span class="pick__name">Instalments</span>
+            <span class="muted" style="font-size:var(--text-xs)">10% now · 50% before departure · 40% after you arrive</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="sec">
+        <p class="eyebrow" style="margin-bottom:.5rem">Covered by the service fee</p>
+        <div class="sharp-card">
+          <ul class="scope" style="columns:2;column-gap:2rem">
+            <li>✓ Credential evaluation &amp; verification</li>
+            <li>✓ University portal submissions</li>
+            <li>✓ SOP polishing</li>
+            <li>✓ Courier &amp; dispatch</li>
+            <li>✓ Visa mock-interview coaching</li>
+            <li>✓ Document notarisation</li>
+          </ul>
+          <ul class="scope" style="margin-top:.6rem">
+            <li class="excl">✗ University application fees — billed per school selected</li>
+            <li class="excl">✗ Tuition — paid to the university that admits you</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+
+    <!-- right: the composed package — always visible -->
+    <div class="rail">
+      <div class="sharp-card" style="border-color:var(--border);border-width:1.5px">
+        <p class="eyebrow">Your package</p>
+        <p class="sum-title">Scholarship Path × Master's · 3 schools</p>
+
+        <div class="line"><span class="k">Service fee</span><span class="v">$2,950</span></div>
+        <div class="line line--due"><span class="k">Deposit · due now (10%)</span><span class="v">$295</span></div>
+        <div class="line"><span class="k">Pre-departure milestone</span><span class="v">$2,655</span></div>
+        <div class="line"><span class="k">— due</span><span class="v">after your visa is approved</span></div>
+
+        <p class="terms">
+          By paying the deposit you agree: your admission letter and visa documents are released, and your
+          ticket is issued, after the pre-departure milestone. School application fees and tuition are the
+          institutions', not ours.
+        </p>
+
+        <a class="btn btn--primary" href="#" style="width:100%;text-align:center">Pay the deposit · $295 →</a>
+        <a class="btn btn--ghost" href="#" style="width:100%;text-align:center;margin-top:.5rem">Save &amp; pay later</a>
+      </div>
+
+      <div class="sharp-card">
+        <p class="eyebrow">What the deposit opens</p>
+        <p class="muted" style="font-size:var(--text-xs);margin-top:.4rem;line-height:1.6">
+          Your consultant is assigned within 1–2 business days, and school selection opens in
+          <strong style="color:var(--foreground)">Chapter III · Applications</strong>.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

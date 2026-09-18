@@ -25,7 +25,7 @@ type Props = {
 };
 
 /**
- * Stage consent card — the applicant's explicit decision to start, hold, or
+ * Stage consent card. The applicant's explicit decision to start, hold, or
  * opt out of a major journey stage. Only "continue" sends the case to Ops for
  * handler assignment.
  */
@@ -50,7 +50,7 @@ export function StageConsentCard({
 		return (
 			<div className="card card--pad mb-4">
 				<p className="display" style={{ fontSize: "1.25rem" }}>
-					{title} — sent to Ops
+					{title}. Sent to Ops
 				</p>
 				<p className="muted mt-2">
 					Your case has been sent to our team for handler assignment. You'll be notified
@@ -64,7 +64,7 @@ export function StageConsentCard({
 		return (
 			<div className="card card--pad mb-4">
 				<p className="display" style={{ fontSize: "1.25rem" }}>
-					{title} — on hold
+					{title}. On hold
 				</p>
 				<p className="muted mt-2">
 					You've put this stage on hold. You can continue whenever you're ready.
@@ -85,7 +85,7 @@ export function StageConsentCard({
 		return (
 			<div className="card card--pad mb-4">
 				<p className="display" style={{ fontSize: "1.25rem" }}>
-					{title} — opted out
+					{title}. Opted out
 				</p>
 				<p className="muted mt-2">
 					You've opted out of this stage. Contact us if you change your mind.
@@ -102,7 +102,7 @@ export function StageConsentCard({
 		);
 	}
 
-	// No decision yet — show the choice buttons.
+	// No decision yet. Show the choice buttons.
 	async function submit(decision: "continue" | "hold" | "opt_out") {
 		setBusy(true);
 		try {

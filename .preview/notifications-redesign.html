@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notifications — redesign mock</title>
+<style>
+	:root {
+		--ink: #18181b;
+		--paper: #ffffff;
+		--line: #e4e4e7;
+		--line-soft: #f4f4f5;
+		--muted: #71717a;
+		--mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+	}
+	* { box-sizing: border-box; margin: 0; padding: 0; }
+	body {
+		font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+		background: #fafafa;
+		color: var(--ink);
+		padding: 2rem;
+	}
+	h1 { font-size: 1.3rem; font-weight: 750; letter-spacing: -.01em; }
+	.mock-note { font-size: .8rem; color: var(--muted); margin-top: .4rem; max-width: 46rem; line-height: 1.55; }
+	.stage { display: flex; gap: 2.5rem; margin-top: 2rem; align-items: flex-start; flex-wrap: wrap; }
+	.panel {
+		width: 400px;
+		background: var(--paper);
+		border: 1px solid var(--line);
+		box-shadow: 0 10px 40px -10px rgba(0,0,0,.15);
+	}
+	.panel__head {
+		display: flex; align-items: center; justify-content: space-between;
+		padding: .9rem 1.1rem; border-bottom: 1px solid var(--line);
+	}
+	.panel__title { font-size: .85rem; font-weight: 700; display: flex; align-items: center; gap: .5rem; }
+	.count-chip {
+		font-family: var(--mono); font-size: .62rem; font-weight: 700;
+		background: var(--ink); color: #fff; padding: .1rem .4rem;
+	}
+	.link-btn {
+		font-size: .72rem; font-weight: 600; color: var(--muted);
+		background: none; border: none; cursor: pointer; padding: 0;
+	}
+	.link-btn:hover { color: var(--ink); text-decoration: underline; }
+
+	/* filter row */
+	.filters { display: flex; gap: 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+	.filters button {
+		font-family: var(--mono); font-size: .6rem; letter-spacing: .04em;
+		text-transform: uppercase; padding: .55rem .7rem; border: none;
+		background: none; color: var(--muted); cursor: pointer;
+		border-bottom: 2px solid transparent; white-space: nowrap;
+	}
+	.filters button.on { color: var(--ink); border-bottom-color: var(--ink); font-weight: 700; }
+	.filters .fnum { font-weight: 400; opacity: .6; margin-left: .2rem; }
+
+	/* day group */
+	.day {
+		font-family: var(--mono); font-size: .58rem; letter-spacing: .14em;
+		text-transform: uppercase; color: var(--muted);
+		padding: .7rem 1.1rem .35rem;
+	}
+	/* item */
+	.item {
+		display: flex; gap: .75rem; padding: .8rem 1.1rem;
+		border-bottom: 1px solid var(--line-soft); cursor: pointer;
+		position: relative;
+	}
+	.item:hover { background: #fafafa; }
+	.item.unread { border-left: 3px solid var(--ink); padding-left: calc(1.1rem - 3px); }
+	.item .ic {
+		width: 26px; height: 26px; border: 1.5px solid var(--ink);
+		display: grid; place-items: center; flex: none; margin-top: .1rem;
+	}
+	.item.read .ic { border-color: var(--line); color: var(--muted); }
+	.item .ic svg { width: 13px; height: 13px; }
+	.item__t { font-size: .82rem; font-weight: 700; line-height: 1.3; }
+	.item.read .item__t { font-weight: 500; color: #52525b; }
+	.item__b { font-size: .76rem; color: var(--muted); line-height: 1.45; margin-top: .15rem;
+		display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+	.item__meta { display: flex; align-items: center; gap: .6rem; margin-top: .4rem; }
+	.item__when { font-family: var(--mono); font-size: .6rem; color: var(--muted); }
+	.item__act { font-family: var(--mono); font-size: .6rem; font-weight: 700; color: var(--ink); }
+	.item__tick {
+		position: absolute; top: .8rem; right: 1rem;
+		font-family: var(--mono); font-size: .58rem; color: var(--muted);
+		border: 1px solid var(--line); padding: .15rem .4rem; background: #fff;
+		display: none;
+	}
+	.item.unread:hover .item__tick { display: block; }
+	.item__tick:hover { border-color: var(--ink); color: var(--ink); }
+
+	/* push row */
+	.push-row {
+		display: flex; align-items: center; gap: .7rem;
+		padding: .8rem 1.1rem; border-top: 1px solid var(--line);
+		background: var(--line-soft);
+	}
+	.push-row .dot { width: 8px; height: 8px; flex: none; }
+	.push-row .dot.off { border: 1.5px solid var(--muted); }
+	.push-row .dot.on { background: var(--ink); }
+	.push-row p { font-size: .72rem; color: var(--muted); flex: 1; }
+	.push-row strong { color: var(--ink); font-weight: 600; }
+
+	/* empty */
+	.empty { padding: 2.5rem 1rem; text-align: center; color: var(--muted); font-size: .8rem; }
+
+	.legend { max-width: 24rem; font-size: .78rem; line-height: 1.7; color: #3f3f46; }
+	.legend h2 { font-size: .9rem; font-weight: 750; margin-bottom: .8rem; }
+	.legend li { margin-bottom: .55rem; margin-left: 1.1rem; }
+	.legend b { font-family: var(--mono); font-size: .72rem; }
+	.tag { font-family: var(--mono); font-size: .58rem; letter-spacing: .1em; text-transform: uppercase;
+		border: 1px solid var(--line); padding: .2rem .5rem; color: var(--muted); }
+</style>
+</head>
+<body>
+	<h1>Notification panel — proposed</h1>
+	<p class="mock-note">
+		The current dropdown is a flat 20-item list with an All/Unread toggle and a dead "Enable alerts" button.
+		This is the redesign: grouped by day, filterable by what it's about, an action label per item,
+		mark-read without navigating, and an honest push-alerts row at the foot. Click things — the filters,
+		dots and ticks are live.
+	</p>
+
+	<div class="stage">
+		<!-- ══ PANEL ══ -->
+		<div class="panel" id="panel">
+			<div class="panel__head">
+				<p class="panel__title">Notifications <span class="count-chip" id="unreadChip">4 unread</span></p>
+				<button class="link-btn" onclick="markAll()">Mark all read</button>
+			</div>
+
+			<div class="filters" id="filters">
+				<button class="on" data-f="all">All</button>
+				<button data-f="unread">Unread<span class="fnum" id="unreadNum">4</span></button>
+				<button data-f="money">Money<span class="fnum">2</span></button>
+				<button data-f="docs">Docs<span class="fnum">1</span></button>
+				<button data-f="journey">Journey<span class="fnum">2</span></button>
+				<button data-f="chat">Messages</button>
+			</div>
+
+			<div id="list"></div>
+
+			<!-- push alerts foot — honest state, real once push is restored -->
+			<div class="push-row" id="pushRow">
+				<span class="dot off" id="pushDot"></span>
+				<p><strong>Browser alerts off.</strong> <span id="pushTxt">Get a notification even when this tab is closed.</span></p>
+				<button class="link-btn" id="pushBtn" onclick="togglePush()">Turn on</button>
+			</div>
+		</div>
+
+		<!-- ══ WHAT CHANGED ══ -->
+		<div class="legend">
+			<h2>What changes vs today</h2>
+			<ul>
+				<li><b>Day groups.</b> Today / Yesterday / Earlier — the flat scroll becomes a timeline.</li>
+				<li><b>Type filters.</b> All · Unread · Money · Docs · Journey · Messages, with counts. Money matters get found in one tap instead of scrolling past stage chatter.</li>
+				<li><b>Action label.</b> Each item says where it goes — "View invoice →", "Open case →" — instead of a bare click target.</li>
+				<li><b>Mark read on hover.</b> A ✓ chip per item — read it without leaving the page. Today clicking always navigates away.</li>
+				<li><b>Unread = ink bar.</b> Left-edge bar + weight, not a floating dot — same signal language as the case rail.</li>
+				<li><b>Relative time.</b> "12m ago" / "Yesterday" instead of a raw timestamp.</li>
+				<li><b>Honest push row.</b> The foot shows real state: off → "Turn on", on → "On for this browser". Today the button calls a stub and does literally nothing.</li>
+				<li><b>Bug fixed.</b> The live panel sets <b>margin: 0</b> after <b>marginTop</b> on the body and timestamp — so body, time and meta all crowd together. Visible once you look for it.</li>
+			</ul>
+			<p style="margin-top:1rem"><span class="tag">same data</span> <span class="tag">same bell</span> <span class="tag">no new backend reads</span></p>
+		</div>
+	</div>
+
+<script>
+	const ICONS = {
+		money: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14"/><line x1="2" y1="10" x2="22" y2="10"/></svg>',
+		docs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+		journey: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
+		chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+		visa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+	};
+
+	const DATA = [
+		{ g:"money",   day:"Today",     t:"Invoice paid — receipt attached", b:"GH₵2 received for INV-2026-0004 (Consultation booking). Your receipt is in Money.", a:"View receipt →", when:"12m ago", read:false },
+		{ g:"docs",    day:"Today",     t:"Document verified", b:"Passport bio-data page was verified by your consultant.", a:"Open documents →", when:"1h ago", read:false },
+		{ g:"journey", day:"Today",     t:"Your consultant has been assigned", b:"Enoch Yaw Enu is now handling your application. School selection is open in Chapter III.", a:"Open case →", when:"2h ago", read:false },
+		{ g:"chat",    day:"Today",     t:"New message from the desk", b:"Please upload your transcript as a single PDF — scans in separate files can't be merged.", a:"Reply →", when:"3h ago", read:true },
+		{ g:"money",   day:"Yesterday", t:"Invoice issued", b:"INV-2026-0005 · Application fee — GH₵5 due on issue.", a:"Pay now →", when:"Yesterday", read:true },
+		{ g:"journey", day:"Yesterday", t:"Application moved to Visa", b:"All school applications were submitted. Your file is now in the visa chapter.", a:"Track →", when:"Yesterday", read:true },
+		{ g:"visa",    day:"Earlier",   t:"Biometrics booked", b:"VFS Accra · Tue 22 Sep, 10:30. Bring your passport and the appointment letter.", a:"Details →", when:"Mon", read:true },
+		{ g:"journey", day:"Earlier",   t:"Handler review requested", b:"The desk asked for one more bank-statement page before submission.", a:"Open case →", when:"Last week", read:true },
+	];
+
+	const DAY_ORDER = ["Today", "Yesterday", "Earlier"];
+	let filter = "all";
+	let pushOn = false;
+
+	function cat(n) { return n.g === "visa" ? "journey" : n.g; }
+
+	function render() {
+		const list = document.getElementById("list");
+		const items = DATA.filter(n => {
+			if (filter === "all") return true;
+			if (filter === "unread") return !n.read;
+			return cat(n) === filter;
+		});
+		const unread = DATA.filter(n => !n.read).length;
+		document.getElementById("unreadChip").textContent = unread ? `${unread} unread` : "all read";
+		document.getElementById("unreadNum").textContent = unread;
+
+		if (!items.length) {
+			list.innerHTML = `<div class="empty">Nothing ${filter === "unread" ? "unread" : "here"}.</div>`;
+			return;
+		}
+		let html = "";
+		for (const d of DAY_ORDER) {
+			const rows = items.filter(n => n.day === d);
+			if (!rows.length) continue;
+			html += `<p class="day">${d}</p>`;
+			for (const n of rows) {
+				const i = DATA.indexOf(n);
+				html += `
+				<div class="item ${n.read ? "read" : "unread"}" onclick="openItem(${i})">
+					<span class="ic">${ICONS[n.g]}</span>
+					<div style="flex:1;min-width:0">
+						<p class="item__t">${n.t}</p>
+						<p class="item__b">${n.b}</p>
+						<div class="item__meta">
+							<span class="item__when">${n.when}</span>
+							<span class="item__act">${n.a}</span>
+						</div>
+					</div>
+					<button class="item__tick" onclick="event.stopPropagation();tick(${i})">✓ read</button>
+				</div>`;
+			}
+		}
+		list.innerHTML = html;
+	}
+
+	function tick(i) { DATA[i].read = true; render(); }
+	function openItem(i) { DATA[i].read = true; render(); }
+	function markAll() { DATA.forEach(n => n.read = true); render(); }
+
+	function togglePush() {
+		pushOn = !pushOn;
+		document.getElementById("pushDot").className = "dot " + (pushOn ? "on" : "off");
+		document.getElementById("pushTxt").textContent = pushOn
+			? "On for this browser. You'll be alerted even when the tab is closed."
+			: "Get a notification even when this tab is closed.";
+		document.getElementById("pushBtn").textContent = pushOn ? "Turn off" : "Turn on";
+	}
+
+	document.getElementById("filters").addEventListener("click", (e) => {
+		const b = e.target.closest("button");
+		if (!b) return;
+		filter = b.dataset.f;
+		document.querySelectorAll("#filters button").forEach(x => x.classList.toggle("on", x === b));
+		render();
+	});
+
+	render();
+</script>
+</body>
+</html>

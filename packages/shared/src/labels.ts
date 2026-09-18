@@ -1,5 +1,5 @@
 /**
- * The vocabulary — every user-facing word for a chapter, a step, a status, a
+ * The vocabulary. Every user-facing word for a chapter, a step, a status, a
  * decision, a role or a kind of money, for both apps. The client portal and
  * the operations console read from here, so they cannot drift apart.
  *
@@ -17,7 +17,7 @@
  *   - British spelling: enrolment, instalment, programme.
  */
 
-/* ── Chapters ─────────────────────────────────────────────────────────────── */
+/* Chapters */
 
 export type ChapterId = "consult" | "enrol" | "apply" | "visa" | "depart" | "done";
 
@@ -26,7 +26,7 @@ export const CHAPTERS: readonly {
 	numeral: string;
 	label: string;
 	short: string;
-	/** One line under the name — what the chapter is for. */
+	/** One line under the name. What the chapter is for. */
 	blurb: string;
 }[] = [
 	{ id: "consult", numeral: "I", label: "Consultation", short: "Consult", blurb: "Meet, assess, verify documents" },
@@ -41,7 +41,7 @@ export const CHAPTER_LABELS: Record<ChapterId, string> = Object.fromEntries(
 	CHAPTERS.map((c) => [c.id, c.label]),
 ) as Record<ChapterId, string>;
 
-/** The steps inside each chapter, in order — lines on a card, never chapters. */
+/** The steps inside each chapter, in order. Lines on a card, never chapters. */
 export const CHAPTER_STEPS: Record<ChapterId, readonly string[]> = {
 	consult: ["Booked", "Held", "Assessed", "Documents verified"],
 	enrol: ["Confirmed", "Package & plan", "Deposit paid", "Consultant assigned"],
@@ -76,7 +76,7 @@ export const STAGE_LABELS: Record<string, string> = {
 	completed: "Complete",
 };
 
-/* ── Journey steps as the client sees them ────────────────────────────────── */
+/* Journey steps as the client sees them */
 
 export type PortalStepId =
 	| "new"
@@ -97,7 +97,7 @@ export type PortalStepId =
 
 /**
  * Each fine step belongs to a chapter and is named as "what is happening
- * now" in that chapter — the chapter is the heading, this is the line.
+ * now" in that chapter. The chapter is the heading, this is the line.
  */
 export const PORTAL_STEP: Record<PortalStepId, { chapter: ChapterId; label: string; short: string }> = {
 	new: { chapter: "consult", label: "Getting started", short: "New" },
@@ -117,7 +117,7 @@ export const PORTAL_STEP: Record<PortalStepId, { chapter: ChapterId; label: stri
 	completed: { chapter: "done", label: "Complete", short: "Complete" },
 };
 
-/** Full names, keyed by step — what the spine, the journey band and ops show. */
+/** Full names, keyed by step. What the spine, the journey band and ops show. */
 export const PORTAL_STAGE_LABELS: Record<string, string> = Object.fromEntries(
 	Object.entries(PORTAL_STEP).map(([id, v]) => [id, v.label]),
 );
@@ -132,10 +132,10 @@ export const PORTAL_STEP_CHAPTER: Record<PortalStepId, ChapterId> = Object.fromE
 	Object.entries(PORTAL_STEP).map(([id, v]) => [id, v.chapter]),
 ) as Record<PortalStepId, ChapterId>;
 
-/* ── Decisions ────────────────────────────────────────────────────────────── */
+/* Decisions */
 
 /**
- * The one triple for a client's answer at a chapter door — enrolment, visa,
+ * The one triple for a client's answer at a chapter door. Enrolment, visa,
  * travel. The stored values differ by history (`accepted / paused /
  * declined`, `continue / hold / opt_out`, `yes / hold / no`); the words do
  * not.
@@ -166,7 +166,7 @@ export function decisionOf(value: string | null | undefined): DecisionId | null 
 	}
 }
 
-/* ── Invoice status ───────────────────────────────────────────────────────── */
+/* Invoice status */
 
 /**
  * Effective invoice statuses (`overdue` is derived at read time). The same
@@ -182,7 +182,7 @@ export const INVOICE_STATUS_LABELS: Record<string, string> = {
 	void: "Void",
 };
 
-/** What each invoice is for — the title on its card. */
+/** What each invoice is for. The title on its card. */
 export const INVOICE_TYPE_LABELS: Record<string, string> = {
 	application: "University application fees",
 	visa: "Visa costs",
@@ -193,14 +193,14 @@ export const INVOICE_TYPE_LABELS: Record<string, string> = {
 };
 
 /**
- * Invoice types whose money is not the agency's: collected and passed on —
+ * Invoice types whose money is not the agency's: collected and passed on,
  * the universities' application fees, the destination's visa costs, the
  * airline fare. Reports keep them out of revenue.
  */
 export const PASS_THROUGH_INVOICE_TYPES: readonly string[] = ["application", "visa", "travel"];
 export const isPassThroughInvoice = (type: string): boolean => PASS_THROUGH_INVOICE_TYPES.includes(type);
 
-export const INVOICE_PROFORMA_HINT = "Being prepared — you'll be able to pay it here once it's issued.";
+export const INVOICE_PROFORMA_HINT = "Being prepared. You'll be able to pay it here once it's issued.";
 
 /** Service fee milestones (the agency's own fee), in order. */
 export const SERVICE_FEE_MILESTONE_LABELS: Record<string, string> = {
@@ -214,7 +214,7 @@ export const PAYMENT_PLAN_LABELS: Record<string, string> = {
 	installment: "Instalments",
 };
 
-/* ── Visa sub-stage ───────────────────────────────────────────────────────── */
+/* Visa sub-stage */
 
 export const VISA_STAGE_LABELS: Record<string, string> = {
 	locked: "Not started",
@@ -231,9 +231,9 @@ export const VISA_OUTCOME_LABELS: Record<string, string> = {
 	refused: "Visa refused",
 };
 
-/* ── School application: see schemas/school.ts (SCHOOL_TRACK_STATUS_LABELS, SCHOOL_OUTCOME_LABELS) ── */
+/* School application: see schemas/school.ts (SCHOOL_TRACK_STATUS_LABELS, SCHOOL_OUTCOME_LABELS) */
 
-/* ── Travel request status ────────────────────────────────────────────────── */
+/* Travel request status */
 
 export const TRAVEL_STATUS_LABELS: Record<string, string> = {
 	decision_pending: "Awaiting choice",
@@ -245,7 +245,7 @@ export const TRAVEL_STATUS_LABELS: Record<string, string> = {
 	on_hold: "On hold",
 };
 
-/* ── Case record ──────────────────────────────────────────────────────────── */
+/* Case record */
 
 /** The case record's own state (distinct from where it is in the journey). */
 export const CASE_STATUS_LABELS: Record<string, string> = {
@@ -260,7 +260,7 @@ export const CASE_STATUS_LABELS: Record<string, string> = {
 	Rejected: "Closed",
 };
 
-/* ── People ───────────────────────────────────────────────────────────────── */
+/* People */
 
 /** Staff roles as shown on the roster and in pickers. */
 export const ROLE_LABELS: Record<string, string> = {
@@ -273,13 +273,13 @@ export const ROLE_LABELS: Record<string, string> = {
 	finance: "Finance officer",
 };
 
-/** Who owns each chapter's work — the title the console shows beside a name. */
+/** Who owns each chapter's work. The title the console shows beside a name. */
 export const OWNER_CLASS_LABELS: Record<string, string> = {
 	consultant: "Consultant",
 	visa_officer: "Visa officer",
 	travel_officer: "Travel officer",
 	finance_officer: "Finance officer",
-	none: "—",
+	none: "N/A",
 };
 
 /** The same, keyed by the stored stage the owner was assigned for. */
@@ -302,7 +302,7 @@ export const HANDLER_TITLE = "owner";
 /** The person, in the console. */
 export const PERSON_TITLE = "client";
 
-/* ── Tasks ────────────────────────────────────────────────────────────────── */
+/* Tasks */
 
 /** The three groups a console task list is split into. */
 export const TASK_GROUP_LABELS = {
@@ -311,10 +311,10 @@ export const TASK_GROUP_LABELS = {
 	waiting_finance: "Waiting on finance",
 } as const;
 
-/* ── Workspace ────────────────────────────────────────────────────────────── */
+/* Workspace */
 
 /**
- * The two views inside the Workspace — the queue waiting to be cleared versus
+ * The two views inside the Workspace. The queue waiting to be cleared versus
  * the workload each person is carrying.
  */
 export const WORKSPACE_TAB_LABELS = {

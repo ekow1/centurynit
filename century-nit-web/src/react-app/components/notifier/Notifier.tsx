@@ -15,7 +15,7 @@ import { createPortal } from "react-dom";
  * App-wide notifier: transient toasts + a blocking confirm modal.
  *
  * Replaces every former `window.alert` / `window.confirm` site so success and
- * error feedback use the in-app chrome instead of native browser dialogs — the
+ * error feedback use the in-app chrome instead of native browser dialogs. The
  * latter break the brutalist/minimal design language, cannot be styled, and
  * (alert) are non-blocking-only and un-dismissible by intent.
  *
@@ -23,7 +23,7 @@ import { createPortal } from "react-dom";
  * `{ toast, confirm }` pair. The viewport is rendered through a portal to
  * `document.body` so it floats above route boundaries and route Suspense.
  *
- * Visual palette is the project's own dark/light inverse — no new color tokens
+ * Visual palette is the project's own dark/light inverse. No new color tokens
  * are introduced. Error accent uses the same isolated-hex pattern already used
  * for `.cal-dot--warn` (`#b26a00`) in the ops app: one stroke of `#b91c1c` on
  * the error icon, kept out of the theme layer on purpose.
@@ -154,7 +154,7 @@ export function useNotifier(): NotifierValue {
 	return ctx;
 }
 
-/* ── Viewport ─────────────────────────────────────────────────────────────── */
+/* Viewport */
 
 function NotifierViewport({
 	toasts,
@@ -167,7 +167,7 @@ function NotifierViewport({
 	confirmState: ConfirmState;
 	onResolveConfirm: (value: boolean) => void;
 }) {
-	// This is a Vite CSR SPA — `document.body` is present by render time, but
+	// This is a Vite CSR SPA. `document.body` is present by render time, but
 	// defensively bail (render no portal) if it is somehow unavailable rather
 	// than crash on a null container.
 	if (typeof document === "undefined" || !document.body) return null;
@@ -182,7 +182,7 @@ function NotifierViewport({
 	);
 }
 
-/* ── Toasts ───────────────────────────────────────────────────────────────── */
+/* Toasts */
 
 function ToastStack({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: string) => void }) {
 	if (toasts.length === 0) return null;
@@ -236,7 +236,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
 	);
 }
 
-/* ── Confirm ──────────────────────────────────────────────────────────────── */
+/* Confirm */
 
 function ConfirmDialog({
 	state,
@@ -248,7 +248,7 @@ function ConfirmDialog({
 	const confirmRef = useRef<HTMLButtonElement | null>(null);
 
 	// Autofocus the confirm button so Enter continues; Escape cancels. The
-	// backdrop click also resolves `false` — same as cancel — because the
+	// backdrop click also resolves `false`, same as cancel, because the
 	// caller treats both negative outcomes identically.
 	useEffect(() => {
 		confirmRef.current?.focus();
@@ -262,7 +262,7 @@ function ConfirmDialog({
 			}
 		};
 		document.addEventListener("keydown", onKey);
-		// Lock the page underneath — the modal is a blocking decision.
+		// Lock the page underneath. The modal is a blocking decision.
 		const prevOverflow = document.body.style.overflow;
 		document.body.style.overflow = "hidden";
 		return () => {
@@ -319,7 +319,7 @@ function ConfirmDialog({
 	);
 }
 
-/* ── Visual variants ──────────────────────────────────────────────────────── */
+/* Visual variants */
 
 const CHECK_ICON = (
 	<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden style={{ display: "block" }}>

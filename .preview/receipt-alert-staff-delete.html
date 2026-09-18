@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Receipt alert + staff delete — Century NIT ops</title>
+<link rel="stylesheet" href="./ops-chrome.css" />
+<style>
+:root { --bg:#f4f4f4; --ink:#0d0d0d; --paper:#fff; --muted:#5c5c5c; --line:#d8d8d8; --soft:#efefef; --inset:#f7f7f7; }
+html,body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; font-size:15px; }
+*, *::before, *::after { box-sizing:border-box; }
+button { font:inherit; }
+.mono { font-family:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace; }
+.wrap { display:flex; flex-direction:column; gap:28px; max-width:1180px; margin:0 auto; padding:28px 22px 40px; }
+.kicker { font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+.card { background:var(--paper); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+.card .hd { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--inset); font-weight:700; }
+.card .bd { padding:16px; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+@media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
+.note { padding:14px 16px; border:1px dashed var(--line); border-radius:8px; background:var(--inset); font-size:13px; line-height:1.6; color:var(--muted); }
+.note b { color:var(--ink); }
+/* ops notification (the new settlement-failure alert) */
+.ops-item { display:grid; grid-template-columns:3px 1fr; gap:0; border-bottom:1px solid var(--line); }
+.ops-item:last-child { border-bottom:none; }
+.ops-bar { background:var(--ink); }
+.ops-item .pad { padding:12px 14px; }
+.ops-eyebrow { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.ops-eyebrow .t { font-weight:700; font-size:13px; }
+.ops-eyebrow .dot { width:7px;height:7px;border-radius:50%;background:var(--ink);flex:none; }
+.ops-eyebrow .ts { font-family:ui-monospace,monospace; font-size:10.5px; color:var(--muted); }
+.ops-eyebrow .pr { font-family:ui-monospace,monospace; font-size:9px; font-weight:700; text-transform:uppercase; border:1.5px solid var(--ink); padding:0 4px; border-radius:3px; }
+.ops-body { font-size:12.5px; color:#333; margin:3px 0 6px; line-height:1.4; }
+.ops-act { display:flex; gap:10px; align-items:center; }
+.ops-act a { font-size:12px; font-weight:700; color:var(--ink); text-decoration:underline; text-underline-offset:2px; }
+.ops-act .resend { font-size:11.5px; font-weight:700; border:1px solid var(--ink); background:var(--paper); padding:2px 8px; border-radius:4px; cursor:pointer; }
+.ops-act .resend.sent { background:var(--inset); color:var(--muted); border-color:var(--line); cursor:default; }
+.read-old .ops-bar { background:transparent; }
+.read-old .t { color:var(--muted); font-weight:600; }
+/* staff detail rail */
+.rail { display:flex; flex-direction:column; gap:10px; }
+.action { display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid var(--line); border-radius:8px; padding:12px 14px; background:var(--paper); }
+.action .l .t { font-weight:700; font-size:13px; }
+.action .l .s { font-size:11.5px; color:var(--muted); margin-top:2px; }
+.btn { border:1.5px solid var(--ink); background:var(--paper); color:var(--ink); font-weight:700; font-size:12px; padding:7px 14px; border-radius:5px; cursor:pointer; }
+.btn.inv { background:var(--ink); color:var(--paper); }
+.btn.danger { border-color:#8b1a1a; color:#8b1a1a; }
+.btn.danger.inv { background:#8b1a1a; color:#fff; }
+/* confirm modal */
+.overlay { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:50; }
+.overlay.on { display:flex; }
+.modal { width:460px; max-width:94vw; background:var(--paper); border-radius:10px; border:1px solid var(--line); box-shadow:0 20px 60px rgba(0,0,0,.4); }
+.modal .mhd { padding:16px 20px 10px; font-size:17px; font-weight:800; }
+.modal .mbd { padding:0 20px 16px; font-size:13.5px; line-height:1.6; }
+.modal .mbd .warn { border:1px solid #8b1a1a33; background:#fdf6f6; border-radius:6px; padding:10px 12px; margin-top:10px; font-size:12.5px; }
+.modal .mft { display:flex; gap:10px; justify-content:flex-end; padding:14px 20px; border-top:1px solid var(--line); }
+.tag { font-family:ui-monospace,monospace; font-size:10px; font-weight:700; text-transform:uppercase; padding:1px 6px; border:1px solid var(--line); border-radius:4px; }
+</style>
+</head>
+<body>
+<div class="page">
+	<header class="topbar">
+		<div class="brand"><span class="mark">CN</span><span>Ops console</span></div>
+		<div class="topright"><span class="env">Preview</span></div>
+	</header>
+	<div class="wrap">
+		<div>
+			<div class="kicker">Two fixes · one backend change + one UI affordance</div>
+			<h1 style="font-size:26px;margin:8px 0 4px;">Receipts surface failures · staff can be deleted</h1>
+			<p style="font-size:13.5px;color:var(--muted);margin:0;">Shipped code shown exactly as it now behaves.</p>
+		</div>
+
+		<div class="grid2">
+			<!-- 1. The new in-app alert when settlement fails -->
+			<div class="card">
+				<div class="hd"><span>Ops inbox — when a paid booking fails to settle</span><span class="tag">new</span></div>
+				<div>
+					<div class="ops-item">
+						<div class="ops-bar"></div>
+						<div class="pad">
+							<div class="ops-eyebrow"><span class="t">Paid booking needs attention</span><span><span class="pr">High</span> <span class="dot"></span> <span class="ts">just now</span></span></div>
+							<div class="ops-body">CNS-2026-0001 was paid but the invoice/receipt step failed — the client has no receipt. See the audit log for the error.</div>
+							<div class="ops-act"><a>View booking →</a><button class="resend" id="resendBtn" onclick="resend()">Resend receipt</button></div>
+						</div>
+					</div>
+					<div class="ops-item read-old">
+						<div class="ops-bar"></div>
+						<div class="pad">
+							<div class="ops-eyebrow"><span class="t">New consultation assigned · CNS-2026-0001</span><span class="ts">18:22</span></div>
+							<div class="ops-body">Kofi Nyarkoh — Netherlands track, freelance. Assigned to you.</div>
+							<div class="ops-act"><a>Open case →</a></div>
+						</div>
+					</div>
+				</div>
+				<div class="bd">
+					<div class="note"><b>Why you got no receipt:</b> the booking was created and the consultant notified — but the invoice/receipt step threw inside a silent catch. Now that failure lands in <b>admin_audit</b> <i>and</i> this inbox alert to super_admin/manager/finance. The payment itself still stands — ops resends the receipt instead of the client waiting.</div>
+				</div>
+			</div>
+
+			<!-- 2. Staff detail rail with delete -->
+			<div class="card">
+				<div class="hd"><span>Staff detail — Ekow Firmino · consultant</span><span class="tag">new</span></div>
+				<div class="bd rail">
+					<div class="action">
+						<div class="l"><div class="t">Working hours</div><div class="s">Mon–Fri · 09:00–17:00 · Africa/Accra</div></div>
+						<button class="btn">Edit</button>
+					</div>
+					<div class="action">
+						<div class="l"><div class="t">Deactivate</div><div class="s">Suspend login — keeps the record and history</div></div>
+						<button class="btn">Deactivate</button>
+					</div>
+					<div class="action">
+						<div class="l"><div class="t">Delete permanently</div><div class="s">Removes console login + staff record. Cases, consultations and history stay — they become unassigned.</div></div>
+						<button class="btn danger" onclick="document.getElementById('del').classList.add('on')">Delete</button>
+					</div>
+				</div>
+				<div class="bd">
+					<div class="note"><b>Why it looked broken:</b> the API route <span class="mono">DELETE /staff/:id</span> existed all along — the console just never rendered the button, only deactivate. Hidden on your own row; super admins only.</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="overlay" id="del">
+	<div class="modal">
+		<div class="mhd">Delete Ekow Firmino?</div>
+		<div class="mbd">
+			This removes their console login and staff record immediately.
+			<div class="warn"><b>What stays:</b> their cases, consultations, bookings and audit history — ownership fields become <i>Unassigned</i>, nothing is lost. <b>What goes:</b> the staff record, login, sessions and MFA.</div>
+		</div>
+		<div class="mft">
+			<button class="btn" onclick="document.getElementById('del').classList.remove('on')">Cancel</button>
+			<button class="btn danger inv" onclick="confirmDel(this)">Delete staff member</button>
+		</div>
+	</div>
+</div>
+<script>
+function confirmDel(b){ b.textContent="Deleted"; b.disabled=true; setTimeout(()=>document.getElementById('del').classList.remove('on'),600); }
+function resend(){ const b=document.getElementById('resendBtn'); b.textContent="Queued ✓"; b.classList.add('sent'); }
+</script>
+</body>
+</html>

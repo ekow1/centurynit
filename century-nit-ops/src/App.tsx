@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useSearchParams } from "react-router-dom";
 import { Suspense, lazy, useEffect, type ComponentType } from "react";
 import { OpsAuthProvider, useOpsAuth, ROLE_HOME } from "./pages/OpsAuthContext";
 import { OpsRequireAuth, OpsRequireModule } from "./pages/OpsRequireAuth";
@@ -32,7 +32,7 @@ const EnterprisePaymentConfig = lazyNamed(() => import("./pages/EnterprisePaymen
 const EnterpriseLedger = lazyNamed(() => import("./pages/EnterpriseLedger"), "EnterpriseLedger");
 const EnterprisePaymentsLog = lazyNamed(() => import("./pages/EnterprisePaymentsLog"), "EnterprisePaymentsLog");
 const EnterpriseHelpdesk = lazyNamed(() => import("./pages/EnterpriseHelpdesk"), "EnterpriseHelpdesk");
-const ChatPage = lazyNamed(() => import("./pages/ChatPage"), "ChatPage");
+
 const EnterpriseCampaigns = lazyNamed(() => import("./pages/EnterpriseCampaigns"), "EnterpriseCampaigns");
 const EnterpriseAdministration = lazyNamed<{ section: string }>(() => import("./pages/EnterpriseAdministration"), "EnterpriseAdministration");
 const EnterpriseConsultations = lazyNamed(() => import("./pages/EnterpriseConsultations"), "EnterpriseConsultations");
@@ -88,6 +88,14 @@ function LegacyRedirect({ to }: { to: string }) {
 	});
 	const qs = params.toString();
 	return <Navigate to={qs ? `${path}?${qs}` : path} replace />;
+}
+
+/** /chat is retired — client threads live on Helpdesk. A saved
+ * `?conversation=<id>` link lands on the same thread via `?id=`. */
+function ChatRedirect() {
+	const [params] = useSearchParams();
+	const conv = params.get("conversation") ?? params.get("id");
+	return <Navigate to={conv ? `/helpdesk?id=${conv}` : "/helpdesk"} replace />;
 }
 
 function RouteFallback() {
@@ -148,7 +156,9 @@ export default function App() {
 									<Route path="leads" element={<Ops module="leads"><EnterpriseLeads /></Ops>} />
 									<Route path="crm" element={<Ops module="crm"><EnterpriseLeads /></Ops>} />
 									<Route path="helpdesk" element={<Ops module="helpdesk"><EnterpriseHelpdesk /></Ops>} />
-									<Route path="chat" element={<Ops module="chat"><ChatPage /></Ops>} />
+									{/* /chat is retired — Helpdesk is the single comms surface.
+									    Old ?conversation= deep links land on the same thread. */}
+									<Route path="chat" element={<ChatRedirect />} />
 									<Route path="marketing/email" element={<Ops module="marketing"><EnterpriseCampaigns /></Ops>} />
 									<Route path="marketing/sms" element={<LegacyRedirect to="/marketing/email" />} />
 									{/* The old Board, Visa and Departure queues are views inside Cases; the URLs live on as redirects. */}

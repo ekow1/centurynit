@@ -48,3 +48,6 @@ scratch_*
 
 # Local PDF engine test outputs
 century-nit-api/test-*.pdf
+
+# Windows reserved-name artifact accidentally created inside .preview
+.preview/NUL

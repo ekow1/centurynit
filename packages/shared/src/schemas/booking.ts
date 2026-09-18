@@ -9,14 +9,14 @@ import { z } from "zod";
  * the portal and staff see as a consultation in ops.
  */
 
-/* ─── Status ─────────────────────────────────────────────────────────────── */
+/* Status */
 
 /**
  * Lifecycle of a booking.
  *
  * This is the server's own state machine. The portal's `consultationPhase` and
  * the ops `ConsultationStatus` are *presentation* states layered on top and are
- * unchanged — see `BOOKING_STATUS_TO_OPS` below for the mapping, which exists so
+ * unchanged. See `BOOKING_STATUS_TO_OPS` below for the mapping, which exists so
  * neither of those had to be rewritten.
  */
 export const bookingStatusSchema = z.enum([
@@ -71,7 +71,7 @@ export type CalendarSyncStatus = z.infer<typeof calendarSyncStatusSchema>;
 export const bookingTypeSchema = z.enum(["online", "in_person"]);
 export type BookingType = z.infer<typeof bookingTypeSchema>;
 
-/* ─── Primitives ─────────────────────────────────────────────────────────── */
+/* Primitives */
 
 /** YYYY-MM-DD in the branch's local calendar. */
 export const dateStringSchema = z
@@ -89,7 +89,7 @@ export const timeStringSchema = z
  */
 export const timezoneSchema = z.string().min(1).max(64);
 
-/* ─── Requests ───────────────────────────────────────────────────────────── */
+/* Requests */
 
 export const createBookingSchema = z.object({
 	serviceId: z.string().min(1),
@@ -130,12 +130,12 @@ export const availabilityQuerySchema = z.object({
 	branchId: z.string().min(1),
 	date: dateStringSchema,
 	durationMinutes: z.coerce.number().int().min(15).max(240).default(45),
-	/** Restrict to one employee — used by the manager's assign dialog. */
+	/** Restrict to one employee. Used by the manager's assign dialog. */
 	employeeId: z.string().uuid().optional(),
 });
 export type AvailabilityQuery = z.infer<typeof availabilityQuerySchema>;
 
-/** A run of days from `from` — the picker greys out days with nothing open before anyone clicks. */
+/** A run of days from `from`. The picker greys out days with nothing open before anyone clicks. */
 export const availabilityDaysQuerySchema = z.object({
 	branchId: z.string().min(1),
 	from: dateStringSchema,
@@ -144,11 +144,11 @@ export const availabilityDaysQuerySchema = z.object({
 });
 export type AvailabilityDaysQuery = z.infer<typeof availabilityDaysQuerySchema>;
 
-/* ─── Responses ──────────────────────────────────────────────────────────── */
+/* Responses */
 
 export const availabilitySlotSchema = z.object({
 	time: timeStringSchema,
-	/** UTC instant this slot starts — the authoritative value. */
+	/** UTC instant this slot starts. The authoritative value. */
 	startsAt: z.string().datetime(),
 	available: z.boolean(),
 	/** Why not, when unavailable: "booked" | "outside-hours" | "past" | "conflict". */
@@ -222,7 +222,7 @@ export const bookingSchema = z.object({
 	calendarEventId: z.string().nullable(),
 	calendarSyncStatus: calendarSyncStatusSchema,
 
-	/** Live meeting status — populated by the meetingStatusPoller worker. */
+	/** Live meeting status. Populated by the meetingStatusPoller worker. */
 	meetingActive: z.boolean(),
 	meetingParticipants: z.number().int(),
 	meetingCheckedAt: z.string().datetime().nullable(),
@@ -247,7 +247,7 @@ export const bookingListSchema = z.object({
 	total: z.number().int(),
 });
 
-/* ─── Working hours ──────────────────────────────────────────────────────── */
+/* Working hours */
 
 /** Minutes past local midnight for `HH:MM`. */
 function minutesOf(time: string): number {
@@ -258,7 +258,7 @@ function minutesOf(time: string): number {
 /**
  * One weekday's availability window.
  *
- * A day the employee does not work is simply absent — the same convention the
+ * A day the employee does not work is simply absent. The same convention the
  * database uses, where a missing row means "not working". An `enabled` flag
  * instead would be a second representation of the same fact that every query
  * would have to remember to filter on.
@@ -301,15 +301,15 @@ export const workingHoursResponseSchema = z.object({
 	),
 	/**
 	 * Bookings already assigned to this employee that now fall outside their
-	 * hours. Narrowing hours never cancels anything — existing commitments stand
-	 * — but the employee should be told they have some.
+	 * hours. Narrowing hours never cancels anything. Existing commitments stand
+	 *. But the employee should be told they have some.
 	 */
 	conflictingBookings: z.number().int(),
 });
 
 export type WorkingHoursResponse = z.infer<typeof workingHoursResponseSchema>;
 
-/* ─── Errors specific to scheduling ──────────────────────────────────────── */
+/* Errors specific to scheduling */
 
 /**
  * Codes the frontend branches on. `SLOT_TAKEN` in particular is the response to

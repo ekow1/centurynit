@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ops — Consultations (proposed)</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1280px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem}
+	.jump a{color:inherit}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.25rem clamp(1rem,2.5vw,2rem) 2rem}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	code{font-family:var(--mono);font-size:.9em;background:var(--muted-bg);padding:0 .25em}
+
+	/* ---- ops chrome ---- */
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.page-title{font-size:1.4rem;font-weight:500;letter-spacing:-.01em}
+	.lead{color:var(--fg-muted);font-size:.85rem;margin-top:.3rem}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.7rem;font-weight:700;padding:.6rem 1.1rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--sm{padding:.35rem .7rem;font-size:.6rem}
+	.pill{display:inline-flex;align-items:center;gap:.35rem;padding:.2rem .6rem;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line-light)}
+	.pill--wait{background:var(--muted-bg);border-color:var(--line)}
+	.pill .n{opacity:.65}
+	.chip-hot{background:var(--ink);color:#fff}
+
+	/* meta strip */
+	.metaline{display:flex;align-items:baseline;gap:.6rem;font-size:.78rem;color:var(--fg-muted);margin:.8rem 0 1rem;border-bottom:1px solid var(--line-light);padding-bottom:.8rem}
+	.metaline b{color:var(--ink);font-weight:700}
+	.metaline .sep{opacity:.4}
+
+	/* split scaffold */
+	.split{display:flex;gap:1rem;align-items:flex-start}
+	.listpane{border:1px solid var(--line-light);background:#fff;display:flex;flex-direction:column}
+	.detailpane{border:1px solid var(--line-light);background:#fff;display:flex;flex-direction:column;min-width:0}
+	.split--before .listpane{flex:0 0 62%}
+	.split--before .detailpane{flex:0 0 23rem;max-width:23rem}
+	.split--after .listpane{flex:0 0 30%;min-width:19rem}
+	.split--after .detailpane{flex:1}
+
+	/* filter row */
+	.filters{padding:.7rem .8rem;border-bottom:1px solid var(--line-light);background:var(--muted-bg);display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
+	.filters .q{flex:1 1 9rem;min-width:8rem;border:1px solid var(--line);padding:.45rem .6rem;font-size:.75rem;font-family:var(--sans)}
+	.fchip{border:1px solid var(--line);background:#fff;padding:.35rem .6rem;font-family:var(--mono);font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;white-space:nowrap}
+	.fchip--on{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.fchip--hot{border-color:var(--ink);font-weight:700}
+	.fchip--hot .n{background:var(--ink);color:#fff;padding:0 .3rem;margin-left:.2rem}
+	.fchip .n{opacity:.6;margin-left:.15rem}
+	.drawer{margin-left:auto}
+	.drawer-body{border-top:1px dashed var(--line);margin-top:.55rem;padding-top:.55rem;flex-basis:100%;display:flex;flex-wrap:wrap;gap:.35rem}
+
+	/* bands + rows */
+	.band{display:flex;justify-content:space-between;padding:.4rem .9rem;border-bottom:1px solid var(--line-light);background:var(--muted-bg);font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted)}
+	.band--alert{background:var(--ink);color:#fff}
+	.row{display:flex;justify-content:space-between;gap:.6rem;padding:.6rem .9rem;border-bottom:1px solid var(--line-light);border-left:4px solid transparent;cursor:pointer}
+	.row:hover{background:var(--muted-bg)}
+	.row--sel{border-left-color:var(--ink);background:#fff;box-shadow:inset 0 0 0 1px var(--ink)}
+	.row--sel--before{background:var(--ink);color:#fff;border-left-color:transparent}
+	.row--sel--before .muted,.row--sel--before .eyebrow{color:rgba(255,255,255,.65)}
+	.row__main{min-width:0;flex:1}
+	.row__top{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap}
+	.row__ref{font-family:var(--mono);font-size:.66rem;letter-spacing:.04em}
+	.row__name{font-weight:700;font-size:.88rem;margin-top:.15rem}
+	.row__sub{font-size:.72rem;color:var(--fg-muted);margin-top:.1rem}
+	.row__meta{font-family:var(--mono);font-size:.6rem;color:var(--fg-muted);margin-top:.3rem;display:flex;gap:.5rem;flex-wrap:wrap}
+	.row--sel--before .row__sub,.row--sel--before .row__meta{color:rgba(255,255,255,.7)}
+	.row__arrow{align-self:center;color:var(--fg-muted)}
+
+	/* detail */
+	.dbar{display:flex;justify-content:space-between;align-items:center;gap:.75rem;padding:.4rem .8rem .4rem 1.1rem;border-bottom:1px solid var(--line-light);background:var(--muted-bg)}
+	.dhead{padding:1rem 1.1rem .8rem;border-bottom:1px solid var(--line-light)}
+	.dhead h2{font-size:1.15rem;font-weight:600;margin-top:.3rem}
+	.dhead .meta{display:flex;gap:.6rem;flex-wrap:wrap;font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);margin-top:.4rem}
+	.dtabs{display:flex;border-bottom:1.5px solid var(--ink)}
+	.dtab{padding:.55rem 1rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;border-right:1px solid var(--line-light);color:var(--fg-muted);cursor:pointer}
+	.dtab--on{background:var(--ink);color:#fff}
+	.dtab--locked{opacity:.45;cursor:not-allowed}
+	.dbody{padding:1rem 1.1rem}
+	.card{border:1px solid var(--line-light);padding:.9rem;margin-bottom:.9rem}
+	.card .eyebrow{display:block;margin-bottom:.45rem}
+	.docline{display:flex;justify-content:space-between;align-items:baseline;gap:.8rem;padding:.45rem 0;border-bottom:1px solid var(--line-light);font-size:.8rem}
+	.docline:last-child{border-bottom:0}
+	.docname{font-weight:600;text-decoration:underline;text-underline-offset:3px}
+	.docmeta{font-family:var(--mono);font-size:.6rem;color:var(--fg-muted);margin-top:.15rem}
+	.docacts{display:flex;gap:.35rem;align-items:center;flex-shrink:0}
+	.reqchips{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem}
+	.reqchip{border:1px solid var(--line);padding:.35rem .65rem;font-size:.7rem;cursor:pointer;background:#fff}
+	.reqchip--on{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.reqrow{display:flex;gap:.5rem;margin-top:.6rem}
+	.reqrow input{flex:1;border:1px solid var(--line);padding:.45rem .6rem;font-size:.75rem}
+	.declared{font-family:var(--mono);font-size:.6rem;color:var(--fg-muted)}
+	.tznote{font-family:var(--mono);font-size:.6rem;color:var(--fg-muted);margin-top:.2rem}
+	.flag{display:inline-block;font-family:var(--mono);font-size:.55rem;letter-spacing:.08em;border:1px solid var(--ink);padding:.1rem .4rem;vertical-align:middle;margin-left:.4rem}
+
+	/* cramped before-pane */
+	.cramped .dtab{padding:.5rem .6rem;font-size:.55rem}
+	.cramped .dbody{padding:.8rem .7rem}
+	.cramped .docline{flex-direction:column;gap:.3rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1 class="page">Ops — Consultations: the 23rem problem</h1>
+<p class="note">
+	Screenshot: a full consultation detail — tabs, required-docs checklist, request form, verify actions —
+	crammed into a rail that was built for a compact “now” summary. Plus the same chip wall we just removed from Workspace.
+</p>
+
+<div class="callout">
+	<b>Diagnosis:</b>
+	<li><b>The pane is pinned at 23rem forever.</b> Consultations passes <code>rail=</code> to <code>CaseScaffold</code> → <code>cn-scaffold--rail</code> fixes the detail at <code>min(23rem, 38%)</code>. The <code>--open</code> rule that would widen it only fires with <code>collapseDetail</code>, which this page doesn't set. So a selected record — the full <code>ConsultationDetail</code> — is squeezed into a rail designed for four <code>ops-dkv</code> stats.</li>
+	<li><b>Nine status chips + Everyone/Mine + search</b> — identical disease to the Workspace wall we shipped a fix for yesterday. Seven of nine chips read 0.</li>
+	<li><b>The selected row is a full-ink inversion</b> — 110px of solid black for a selection state. The detail pane already says what's selected.</li>
+	<li><b>“1:00 AM” booking</b> — <code>dateTime</code> formats <code>startsAt</code> in the branch timezone. Either a 1 AM slot was actually offered, or a booking was written off-path. Worth flagging, not hiding: render the branch time explicitly and flag off-hours slots.</li>
+	<li><b>“Requested from the client” is a comma-separated free-text box</b> — typos become permanent request names, and the client sees whatever was typed.</li>
+	<li><b>Uploaded doc reads “Invoice-NCIRADXY_0003.pdf · passport”</b> — the file is labelled by declared type with nothing flagging the name/type mismatch.</li>
+</div>
+
+<!-- ==================== BEFORE ==================== -->
+<div class="tag">Current — as screenshotted</div>
+<div class="mock">
+	<div style="display:flex;justify-content:space-between;align-items:flex-end">
+		<div>
+			<h2 class="page-title">Consultations</h2>
+			<p class="lead">Bookings arrive from the client portal. Place a handler to begin the assessment.</p>
+		</div>
+		<span class="pill">All Branches ▾</span>
+	</div>
+	<div class="metaline"><b>1</b> of 1 consultations <span class="sep">·</span> Operations Manager scope <span class="sep">·</span> <b>1</b> today</div>
+
+	<div class="split split--before">
+		<div class="listpane">
+			<div class="filters">
+				<span class="fchip fchip--on">All <span class="n">1</span></span>
+				<span class="fchip">Under review <span class="n">0</span></span>
+				<span class="fchip">Assigned <span class="n">0</span></span>
+				<span class="fchip">Confirmed <span class="n">1</span></span>
+				<span class="fchip">Reschedule asked <span class="n">0</span></span>
+				<span class="fchip">In assessment <span class="n">0</span></span>
+				<span class="fchip">Completed <span class="n">0</span></span>
+				<span class="fchip">Cancelled <span class="n">0</span></span>
+				<span class="fchip">Everyone <span class="n">1</span></span>
+				<span class="fchip">Mine <span class="n">1</span></span>
+				<input class="q" placeholder="Search applicant, ref, country…">
+			</div>
+			<div class="band"><span>Today · 1</span></div>
+			<div class="row row--sel--before">
+				<div class="row__main">
+					<div class="row__top">
+						<span class="row__ref">CRS-2026-0001</span>
+						<span class="pill" style="background:#fff;color:#000;border-color:#fff">Confirmed</span>
+						<span class="row__sub">◉ joinable now</span>
+					</div>
+					<p class="row__name">ENOCK YAW ENU</p>
+					<p class="row__sub">Sep 17, 2026, 1:00 AM · United Kingdom</p>
+					<div class="row__meta"><span>◷ ENOCH ENU</span></div>
+				</div>
+				<span class="row__arrow">→</span>
+			</div>
+		</div>
+		<div class="detailpane cramped">
+			<div class="dbar"><span></span><span><span class="btn btn--sm btn--ghost">⤢ Expand</span> <span class="btn btn--sm btn--ghost">✕ Close</span></span></div>
+			<div class="dtabs" style="flex-wrap:wrap">
+				<span class="dtab">Background •</span><span class="dtab dtab--on">Documents — 1 to review</span><span class="dtab dtab--locked">Decision</span>
+			</div>
+			<div class="dbody">
+				<div class="card"><span class="eyebrow">Required documents</span>
+					<div class="docline"><span>English proficiency</span><span class="pill pill--hollow">Not uploaded</span></div>
+				</div>
+				<div class="card"><span class="eyebrow">Requested from the client</span>
+					<p class="muted" style="font-size:.72rem">Nothing requested yet.</p>
+					<div class="reqrow"><input placeholder="Documents needed, comma separated —"><span class="btn btn--sm">Request documents</span></div>
+				</div>
+				<div class="card"><span class="eyebrow">Uploaded · 0/1 verified · 1 to review</span>
+					<div class="docline">
+						<div><span class="docname">Invoice-NCIRADXY_0003.pdf</span><div class="docmeta">passport · 33 KB · 9/16/2026 · Inspect →</div></div>
+						<div class="docacts"><span class="pill pill--wait">Pending review</span></div>
+					</div>
+					<div class="docacts" style="margin-top:.5rem"><span class="btn btn--sm">Verify</span><span class="btn btn--sm btn--ghost">Reject</span></div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="callout">
+	<li>Detail at <b>23rem</b>: tabs wrap, doc rows stack, the request input is unusable, Verify/Reject fall off the fold.</li>
+	<li>Ten chips to filter one row — seven permanently read 0.</li>
+	<li>The selected row is a wall of ink; the eye goes to the row, not the work.</li>
+</div>
+
+<!-- ==================== AFTER ==================== -->
+<div class="tag tag--after">Proposed</div>
+<div class="mock">
+	<div style="display:flex;justify-content:space-between;align-items:flex-end">
+		<div>
+			<h2 class="page-title">Consultations</h2>
+			<p class="lead">Bookings arrive from the client portal. Place a handler to begin the assessment.</p>
+		</div>
+		<span class="pill">All Branches ▾</span>
+	</div>
+	<div class="metaline"><b>1</b> of 1 consultations <span class="sep">·</span> Operations Manager scope <span class="sep">·</span> <b>1</b> today</div>
+
+	<div class="split split--after">
+		<div class="listpane">
+			<div class="filters">
+				<span class="fchip fchip--on">All <span class="n">1</span></span>
+				<span class="fchip fchip--hot">Needs action <span class="n">0</span></span>
+				<span class="fchip">Today <span class="n">1</span></span>
+				<span class="fchip">Mine <span class="n">1</span></span>
+				<input class="q" placeholder="Search…">
+				<span class="fchip drawer">Filters ▾</span>
+				<div class="drawer-body">
+					<span class="eyebrow" style="flex-basis:100%">Status</span>
+					<span class="fchip">Under review <span class="n">0</span></span>
+					<span class="fchip">Assigned <span class="n">0</span></span>
+					<span class="fchip">Confirmed <span class="n">1</span></span>
+					<span class="fchip">Reschedule <span class="n">0</span></span>
+					<span class="fchip">In assessment <span class="n">0</span></span>
+					<span class="fchip">Completed <span class="n">0</span></span>
+					<span class="fchip">Cancelled <span class="n">0</span></span>
+				</div>
+			</div>
+			<div class="band"><span>Today · 1</span><span>GMT</span></div>
+			<div class="row row--sel">
+				<div class="row__main">
+					<div class="row__top">
+						<span class="row__ref">CRS-2026-0001</span>
+						<span class="pill pill--solid">Confirmed</span>
+						<span class="eyebrow">◉ joinable now</span>
+					</div>
+					<p class="row__name">Enock Yaw Enu</p>
+					<p class="row__sub">Sep 17 · <b>01:00 Accra</b> · United Kingdom · ◉ online<span class="flag">off-hours slot — verify</span></p>
+					<div class="row__meta"><span>handler: Enoch Enu</span><span>·</span><span>1 doc to review</span></div>
+				</div>
+				<span class="row__arrow">→</span>
+			</div>
+			<div class="row">
+				<div class="row__main">
+					<div class="row__top"><span class="row__ref">CRS-2026-0002</span><span class="pill pill--hollow">Under review</span></div>
+					<p class="row__name">Ama Serwaa</p>
+					<p class="row__sub">Sep 18 · 10:00 Accra · Canada · ◎ in person</p>
+					<div class="row__meta"><span>no handler — place one →</span></div>
+				</div>
+				<span class="row__arrow">→</span>
+			</div>
+		</div>
+
+		<div class="detailpane">
+			<div class="dbar"><span class="eyebrow">CRS-2026-0001 · Confirmed</span><span><span class="btn btn--sm btn--ghost">⤢ Expand</span> <span class="btn btn--sm btn--ghost">✕ Close</span></span></div>
+			<div class="dhead">
+				<span class="eyebrow">Consultation · online</span>
+				<h2>Enock Yaw Enu</h2>
+				<div class="meta"><span>Sep 17 · 01:00 Africa/Accra</span><span class="flag">off-hours slot — verify</span><span>United Kingdom</span><span>handler: Enoch Enu</span></div>
+			</div>
+			<div class="dtabs">
+				<span class="dtab">Background</span><span class="dtab dtab--on">Documents · 1 to review</span><span class="dtab dtab--locked">Decision — starts with the call</span>
+			</div>
+			<div class="dbody">
+				<div class="card">
+					<div style="display:flex;justify-content:space-between;align-items:center"><span class="eyebrow" style="margin:0">Required documents</span><span class="pill pill--wait">0/4 verified</span></div>
+					<div class="docline"><span>Passport</span><span class="pill pill--wait">To review ↓</span></div>
+					<div class="docline"><span>English proficiency</span><span class="pill pill--hollow">Not uploaded</span></div>
+					<div class="docline"><span>Degree certificate</span><span class="pill pill--hollow">Not uploaded</span></div>
+					<div class="docline"><span>Bank statement</span><span class="pill pill--hollow">Not uploaded</span></div>
+				</div>
+				<div class="card">
+					<span class="eyebrow">Requested from the client</span>
+					<p class="muted" style="font-size:.72rem">Nothing requested yet. Pick from the standard list — the client sees these exact names.</p>
+					<div class="reqchips">
+						<span class="reqchip">English proficiency</span><span class="reqchip">Degree certificate</span><span class="reqchip">Bank statement</span><span class="reqchip">Sponsor letter</span><span class="reqchip">Transcript</span>
+					</div>
+					<div class="reqrow"><input placeholder="Other — one document name"><span class="btn btn--sm">Request selected</span></div>
+				</div>
+				<div class="card">
+					<div style="display:flex;justify-content:space-between;align-items:center"><span class="eyebrow" style="margin:0">Uploaded</span><span class="pill pill--wait">0/1 verified · 1 to review</span></div>
+					<div class="docline">
+						<div>
+							<span class="docname">Invoice-NCIRADXY_0003.pdf</span>
+							<div class="docmeta">declared as <b>passport</b> — filename suggests otherwise <span class="flag">check before verifying</span> · 33 KB · Sep 16 · Inspect →</div>
+						</div>
+						<div class="docacts"><span class="btn btn--sm">Verify</span><span class="btn btn--sm btn--ghost">Reject</span></div>
+					</div>
+					<p class="docmeta" style="margin-top:.5rem"><span class="mono">Open in Document Vault →</span></p>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="callout">
+	<b>What changed:</b>
+	<li><b>The pane opens.</b> Nothing selected → the “Today” rail keeps its 23rem. A record selected → the detail takes the flex width (list narrows to ~30%). One CSS rule + emitting <code>cn-scaffold--open</code> whenever <code>detail !== null</code>, not only under <code>collapseDetail</code>.</li>
+	<li><b>Chip wall → one scan row.</b> <code>All · Needs action · Today · Mine</code> + search + <code>Filters ▾</code> holding the seven status facets — same drawer pattern shipped on Workspace, same URL params (<code>status</code>, <code>owner</code>, <code>branch</code>, <code>q</code> unchanged).</li>
+	<li><b>“Needs action” is a real cut</b> — Under review + reschedule-asked folded into one facet, so the two states that demand a manager aren't scattered across zero-count chips.</li>
+	<li><b>Selection loses the ink wall.</b> Left bar + inset ring instead of full inversion — consistent with the bare scaffold's selection language.</li>
+	<li><b>Rows say more in less height.</b> Time is labelled with its zone (“01:00 Accra”), doc-review and missing-handler surface on the row, and off-hours slots get a flag instead of silently looking normal.</li>
+	<li><b>Doc requests become a checklist.</b> Standard document names as chips (+ a free-text “other”), so the client sees canonical names, not typos. Rows show “declared as X — filename suggests otherwise” when name and type disagree.</li>
+	<li><b>The bar carries the record.</b> <code>CRS-2026-0001 · Confirmed</code> in the pane bar — identity survives scroll, Expand/Close unchanged.</li>
+</div>
+<div class="callout">
+	<b>Build notes (after approval):</b>
+	<li><code>CaseScaffold.tsx</code> — emit <code>cn-scaffold--open</code> when <code>detail</code> is set in rail mode too; CSS <code>.cn-scaffold--rail.cn-scaffold--open &gt; .cn-scaffold__detail { flex: 1 }</code>. Affects only rail pages with a selection.</li>
+	<li><code>EnterpriseConsultations.tsx</code> — swap the two <code>FilterGroup</code>s for the Workspace cut-row + drawer; add <code>needs-action</code> facet mapping (Under Review + rescheduleRequestedAt). All params stay URL-backed.</li>
+	<li><code>useCasesApi.ts</code> — suffix <code>dateTime</code> with the zone label (<code>row.timezone</code> is already on the API row); flag slots outside branch hours.</li>
+	<li><code>CaseDocumentsPanel.tsx</code> — request checklist from the standard doc catalogue; “declared as” line + name/type mismatch note.</li>
+	<li>Open question: how did a <b>01:00 Accra</b> slot get booked — does the portal slot picker allow it? Verify before treating the flag as sufficient.</li>
+</div>
+
+</div>
+</body>
+</html>

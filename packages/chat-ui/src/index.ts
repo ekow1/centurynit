@@ -1,5 +1,5 @@
 /**
- * Century NIT shared chat UI — WhatsApp-style messaging components.
+ * Century NIT shared chat UI. WhatsApp-style messaging components.
  *
  * Import from `century-nit-chat-ui` in any host (ops console, client portal,
  * business-context surfaces). All components are themeable via CSS custom

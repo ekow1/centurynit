@@ -3,8 +3,8 @@ import { z } from "zod";
 /**
  * Operations staff roles.
  *
- * The permission matrix (`ROLE_PERMISSIONS` below) lives here so both halves —
- * the API's `requireModule` middleware and the ops app's `OpsAuthContext` —
+ * The permission matrix (`ROLE_PERMISSIONS` below) lives here so both halves,
+ * the API's `requireModule` middleware and the ops app's `OpsAuthContext`,
  * check the same definition. The React copy only hides UI; the server is the
  * authority.
  */
@@ -28,7 +28,7 @@ export type OpsRole = string;
  * only uses them to hide UI.
  */
 export const opsModuleSchema = z.enum([
-	// ── Operations (manager / consultant) ──
+	// Operations (manager / consultant)
 	"dashboard",
 	"applications",
 	"consultations",
@@ -52,7 +52,7 @@ export const opsModuleSchema = z.enum([
 	"packages",
 	"reports",
 	"chat",
-	// ── Platform administration (admin only) ──
+	// Platform administration (admin only)
 	"system",
 	"users",
 	"auth",
@@ -61,7 +61,7 @@ export const opsModuleSchema = z.enum([
 	"site",
 	"notifications",
 	"settings",
-	// ── Branch scheduling configuration (manager + systems) ──
+	// Branch scheduling configuration (manager + systems)
 	"scheduling",
 ]);
 
@@ -163,7 +163,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, OpsModule[]> = {
 	],
 };
 
-/* ── Capabilities ─────────────────────────────────────────────────────────
+/* Capabilities
  *
  * A module says what a role can *see*; a capability says what it can *do*.
  * Both are strings in the same `permissions` list on a role, so the role
@@ -191,7 +191,7 @@ export const capabilitySchema = z.enum([
 	"edit_universities",
 	/** Turn a proforma into a payable invoice; void; credit. */
 	"issue_invoices",
-	/** May own the work of a chapter — offered in that chapter's assign control. */
+	/** May own the work of a chapter. Offered in that chapter's assign control. */
 	"own:consult",
 	"own:apply",
 	"own:visa",
@@ -220,7 +220,7 @@ export const CAPABILITIES: readonly { id: Capability; label: string; hint: strin
 export const permissionSchema = z.union([opsModuleSchema, capabilitySchema]);
 export type Permission = z.infer<typeof permissionSchema>;
 
-/** What each built-in role can do — the seed and the "reset to defaults". */
+/** What each built-in role can do. The seed and the "reset to defaults". */
 export const ROLE_CAPABILITIES: Record<SystemRole, Capability[]> = {
 	super_admin: capabilitySchema.options as unknown as Capability[],
 	manager: ["assign_work", "see_all_cases", "see_all_branches", "invite_staff", "manage_clients", "edit_packages", "edit_universities", "issue_invoices", "own:consult", "own:apply", "own:visa", "own:depart"],

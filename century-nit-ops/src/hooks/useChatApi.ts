@@ -30,6 +30,7 @@ export function useChatConversations(enabled = true) {
 	const [conversations, setConversations] = useState<ChatConversation[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [forbidden, setForbidden] = useState(false);
 	const forbiddenRef = useRef(false);
 
 	const refresh = useCallback(async () => {
@@ -39,7 +40,11 @@ export function useChatConversations(enabled = true) {
 			setConversations(Array.isArray(res?.conversations) ? res.conversations : []);
 			setError(null);
 		} catch (e: any) {
-			if (isForbidden(e)) { forbiddenRef.current = true; return; }
+			if (isForbidden(e)) {
+				forbiddenRef.current = true;
+				setForbidden(true);
+				return;
+			}
 			setError(e.message ?? "Failed to load conversations");
 		} finally {
 			setLoading(false);
@@ -59,7 +64,7 @@ export function useChatConversations(enabled = true) {
 		if (ev.type === "chat.conversation.created" || ev.type === "chat.message") void refresh();
 	}, [enabled, refresh]));
 
-	return { conversations, loading, error, refresh };
+	return { conversations, loading, error, forbidden, refresh };
 }
 
 /* ── Unread counts hook ─────────────────────────────────────────────────── */
@@ -329,12 +334,12 @@ export function useCreateConversation() {
 			title?: string;
 			participantOpsUserIds?: string[];
 			initialMessage?: string;
-		}): Promise<ChatConversation | null> => {
+			clientUserId?: string;
+			stageKey?: string;
+		}): Promise<ChatConversation> => {
 			setCreating(true);
 			try {
 				return await createChatConversation(opts);
-			} catch {
-				return null;
 			} finally {
 				setCreating(false);
 			}

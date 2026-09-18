@@ -20,8 +20,8 @@ import { OnboardingModal } from "../../components/portal/OnboardingModal";
 import { MfaPrompt } from "../../components/portal/MfaPrompt";
 
 /**
- * The sidebar is the journey: the six chapters as the spine — done, current,
- * locked — then the client's files. Home stays a page (the chapter map);
+ * The sidebar is the journey: the six chapters as the spine. Done, current,
+ * locked. Then the client's files. Home stays a page (the chapter map);
  * support is the floating CommunicationCenter, not a page.
  */
 const MAIN_NAV = [
@@ -108,7 +108,7 @@ export function PortalLayout() {
 	else if (activeChapter >= 0) pageTitle = CHAPTER_NAV[activeChapter].label;
 	else if (pathname === "/portal/journey") pageTitle = "Journey";
 
-	// The Documents note: the review's state, not a count — the vault is its own fetch.
+	// The Documents note: the review's state, not a count. The vault is its own fetch.
 	const docsNote = application.docReviewStatus === "rejected" ? "fix" : application.docReviewStatus === "pending" ? "in review" : null;
 	const docsHot = application.docReviewStatus === "rejected";
 
@@ -178,7 +178,7 @@ export function PortalLayout() {
 										await signOut();
 									} catch (err) {
 										console.error("Sign out failed on the server", err);
-										toast.error("Couldn't reach the server to end your session — please try again. Your account is still signed in.");
+										toast.error("Couldn't reach the server to end your session. Please try again. Your account is still signed in.");
 									}
 								}}
 								title="Sign out"

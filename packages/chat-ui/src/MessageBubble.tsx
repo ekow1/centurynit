@@ -15,7 +15,7 @@ export interface MessageBubbleProps {
 	showAuthor?: boolean;
 	/** Actions config. Edit/delete default to false; parent enables them when authorized. */
 	actions?: MessageActionsConfig;
-	/** Callbacks — all optional; absent actions are hidden. Each receives the message. */
+	/** Callbacks. All optional; absent actions are hidden. Each receives the message. */
 	onReply?: (message: ChatMessage) => void;
 	onReact?: (message: ChatMessage, emoji: string) => void;
 	onForward?: (message: ChatMessage) => void;
@@ -23,7 +23,7 @@ export interface MessageBubbleProps {
 	onEdit?: (message: ChatMessage) => void;
 	onDelete?: (message: ChatMessage) => void;
 	onMore?: (message: ChatMessage) => void;
-	/** Click on a quoted reply preview — typically scroll-to-original. */
+	/** Click on a quoted reply preview. Typically scroll-to-original. */
 	onQuoteClick?: (messageId: string) => void;
 	style?: CSSProperties;
 }
@@ -95,7 +95,7 @@ export function MessageBubble({
 		);
 	}
 
-	// Internal notes are staff-only — they render with a dashed frame and a
+	// Internal notes are staff-only. They render with a dashed frame and a
 	// NOTE marker so they can never be mistaken for a client-facing reply.
 	const isNote = message.visibility === "internal";
 

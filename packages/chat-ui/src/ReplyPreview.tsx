@@ -17,7 +17,7 @@ export interface ReplyPreviewProps {
  *
  * Displays the quoted message's author and a truncated preview of its content,
  * with a close button to cancel the reply. Clicking the preview body calls
- * `onCancel` as well — WhatsApp dismisses on click of the quote area.
+ * `onCancel` as well. WhatsApp dismisses on click of the quote area.
  */
 export function ReplyPreview({ message, onCancel, style }: ReplyPreviewProps) {
 	ensureChatUiStyles();

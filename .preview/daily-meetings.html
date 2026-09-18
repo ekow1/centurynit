@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Daily rooms — replacing Google Meet</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1120px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.tag--api{border-color:var(--fg-muted);color:var(--fg-muted)}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.mock{background:#fafafa;border:1px solid #bbb;padding:0;overflow:hidden}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.struck{text-decoration:line-through;opacity:.55}
+	.vs{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start}
+	@media(max-width:900px){.vs{grid-template-columns:1fr}}
+	.vs .h{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.5rem}
+	.vs .mock{padding:0}
+
+	/* shared chrome */
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap;text-decoration:none}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.card{background:#fff;border:1px solid var(--ink);padding:1.25rem}
+	.pill{display:inline-block;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;padding:.28rem .6rem;border:1px solid var(--ink)}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line)}
+	.kv{display:flex;justify-content:space-between;gap:1rem;padding:.42rem 0;border-bottom:1px solid var(--line-light);font-size:.8rem}
+	.kv:last-child{border-bottom:0}
+	.kv .k{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-muted);padding-top:.15rem}
+	.kv .v{text-align:right}
+	.strip{background:var(--muted-bg);border-bottom:1px solid var(--line-light);padding:.55rem 1.25rem;font-size:.72rem;display:flex;gap:.75rem;flex-wrap:wrap;align-items:center}
+	.strip .sep{opacity:.3}
+	.toolbar{display:flex;gap:.5rem;padding:.5rem 1.25rem;border-bottom:1px solid var(--line-light);background:#fff;flex-wrap:wrap;align-items:center}
+	code{font-family:var(--mono);font-size:.74rem;background:var(--muted-bg);padding:.1rem .35rem}
+	table.diff{width:100%;border-collapse:collapse;font-size:.78rem;max-width:64rem}
+	table.diff th{font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;text-align:left;padding:.45rem .6rem;border-bottom:1.5px solid var(--ink)}
+	table.diff td{padding:.5rem .6rem;border-bottom:1px solid var(--line-light);vertical-align:top}
+	pre{background:#111;color:#eee;font-family:var(--mono);font-size:.72rem;padding:1rem 1.25rem;overflow-x:auto;line-height:1.6}
+	pre .cm{color:#888}
+	pre .k{color:#9ecbff}
+
+	/* flow diagram */
+	.flow{display:flex;gap:0;align-items:stretch;max-width:64rem;margin:.5rem 0 0;flex-wrap:wrap}
+	.flow .step{flex:1;min-width:9rem;background:#fff;border:1px solid var(--ink);padding:.7rem .8rem;font-size:.72rem;position:relative}
+	.flow .step b{display:block;font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;margin-bottom:.3rem}
+	.flow .arr{align-self:center;padding:0 .4rem;font-weight:700}
+
+	/* fake video room */
+	.room{background:#18181b;color:#e4e4e7;border:1px solid #000;padding:1.5rem;text-align:center;position:relative}
+	.room .tile{display:inline-block;width:5.5rem;height:4rem;background:#27272a;border:1px solid #3f3f46;margin:0 .3rem;line-height:4rem;font-family:var(--mono);font-size:.55rem;letter-spacing:.1em}
+	.room .controls{margin-top:1rem;display:flex;gap:.4rem;justify-content:center}
+	.room .cbtn{font-family:var(--mono);font-size:.55rem;letter-spacing:.08em;border:1px solid #52525b;color:#d4d4d8;padding:.3rem .6rem}
+	.room .badge{position:absolute;top:.6rem;left:.6rem;font-family:var(--mono);font-size:.52rem;letter-spacing:.12em;color:#a1a1aa;border:1px solid #3f3f46;padding:.15rem .4rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1 class="page">Daily rooms instead of Google Meet</h1>
+<p class="note">Same seams, different provider. Rooms stay a column on the booking; the only new machinery is a
+<b>join endpoint</b> that mints a per-person, per-slot token. Everything the user sees is one button — the
+token work is invisible.</p>
+<nav class="jump">
+	<a href="#flow">A · the join flow</a>
+	<a href="#ops">B · ops detail</a>
+	<a href="#portal">C · portal card</a>
+	<a href="#room">D · inside the room</a>
+	<a href="#live">E · live meetings</a>
+	<a href="#security">F · what tokens buy</a>
+	<a href="#map">G · change map</a>
+</nav>
+
+<!-- ══════════════════ A · JOIN FLOW ══════════════════ -->
+<div class="tag" id="flow">A · The join flow — one button, token under the hood</div>
+
+<div class="mock" style="padding:1.25rem">
+	<div class="flow">
+		<div class="step"><b>1 · Click</b>Portal "Join meeting →" or ops "Join →" — the same button that today opens the raw Meet link.</div>
+		<div class="arr">→</div>
+		<div class="step"><b>2 · POST /bookings/:id/join</b>API checks who you are: staff on this case, or the client who owns the booking. Anyone else → 403.</div>
+		<div class="arr">→</div>
+		<div class="step"><b>3 · Mint token</b>POST /meeting-tokens — staff get <code>is_owner</code>; the client gets their name, their user id, and an expiry tied to the slot.</div>
+		<div class="arr">→</div>
+		<div class="step"><b>4 · window.open</b><code>https://centurynit.daily.co/rm-9k2x?t=eyJ…</code> — Daily's hosted page opens already inside the private room.</div>
+	</div>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>The URL alone is dead weight.</b> The room is <code>privacy: "private"</code> — no token, no entry, no knocking needed.</li>
+		<li><b>Tokens are minted per click, never stored.</b> Reschedule the slot and the next mint carries the new window automatically.</li>
+		<li><b>Backward compatible.</b> Booking's provider is <code>google_meet</code> or a pasted link → /join returns the stored URL untouched.</li>
+	</ul>
+</div>
+
+<!-- ══════════════════ B · OPS DETAIL ══════════════════ -->
+<div class="tag tag--after" id="ops">B · Ops consultation detail — meeting block</div>
+<div class="vs">
+	<div>
+		<div class="h">Today — shared link</div>
+		<div class="mock">
+			<div class="strip"><span class="eyebrow">Meeting link</span><span class="pill pill--hollow">GOOGLE MEET</span></div>
+			<div style="padding:.75rem 1.25rem">
+				<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+					<a class="btn btn--sm">Join →</a>
+					<span class="mono muted" style="font-size:.68rem">https://meet.google.com/abc-defg-hij</span>
+				</div>
+				<p class="muted" style="font-size:.68rem;margin-top:.5rem">Anyone with this URL who knocks can be admitted. The link is the whole secret.</p>
+			</div>
+		</div>
+	</div>
+	<div>
+		<div class="h">Daily — token'd join</div>
+		<div class="mock">
+			<div class="strip"><span class="eyebrow">Meeting room</span><span class="pill pill--solid">DAILY · PRIVATE</span><span class="muted" style="font-size:.65rem">expires 2h after the slot</span></div>
+			<div style="padding:.75rem 1.25rem">
+				<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+					<a class="btn btn--sm">Join → <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">(as host)</span></a>
+					<a class="btn btn--sm btn--ghost">Resend invite</a>
+					<a class="btn btn--sm btn--ghost">Change</a>
+				</div>
+				<p class="muted" style="font-size:.68rem;margin-top:.5rem">Join mints your owner token — you land in the room with host controls. The client joins from their portal; the stored room URL works for nobody on its own.</p>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="callout"><b>One honest detail:</b> there is no shareable link to leak. "Copy link" disappears — a room URL without a token is a dead end. The client gets in through their portal button or the emailed link (which is itself token'd, expiring with the slot).</div>
+
+<!-- ══════════════════ C · PORTAL CARD ══════════════════ -->
+<div class="tag tag--after" id="portal">C · Portal appointment card — unchanged surface</div>
+<div class="vs">
+	<div>
+		<div class="mock">
+			<div class="strip"><span class="eyebrow">Consultation</span><span class="pill">CONFIRMED</span></div>
+			<div style="padding:.9rem 1.25rem">
+				<p style="font-size:.82rem;font-weight:600">Thu 18 Sep · 10:00 — online</p>
+				<p class="muted" style="font-size:.72rem;margin:.25rem 0 .75rem">with Ama · Accra office</p>
+				<a class="btn btn--sm">Join meeting →</a>
+				<span class="muted" style="font-size:.65rem;margin-left:.5rem">opens your private room</span>
+			</div>
+		</div>
+		<div class="h" style="margin-top:.6rem">Join enabled — inside the window</div>
+	</div>
+	<div>
+		<div class="mock">
+			<div class="strip"><span class="eyebrow">Consultation</span><span class="pill">CONFIRMED</span></div>
+			<div style="padding:.9rem 1.25rem">
+				<p style="font-size:.82rem;font-weight:600">Thu 18 Sep · 10:00 — online</p>
+				<p class="muted" style="font-size:.72rem;margin:.25rem 0 .75rem">with Ama · Accra office</p>
+				<a class="btn btn--sm" style="opacity:.4">Join opens 15 min before</a>
+			</div>
+		</div>
+		<div class="h" style="margin-top:.6rem">Outside the window — token <code>nbf</code> backs it server-side</div>
+	</div>
+</div>
+<div class="callout">
+	<ul>
+		<li>The card looks identical — but now the early-join block is enforced <b>at the room</b>: a token minted before <code>nbf</code> won't open the door even if the button is bypassed.</li>
+		<li>Client lands in Daily Prebuilt with their name already set (<code>user_name</code>) — no "enter your name" screen.</li>
+	</ul>
+</div>
+
+<!-- ══════════════════ D · INSIDE THE ROOM ══════════════════ -->
+<div class="tag tag--after" id="room">D · Inside the room — hosted Daily Prebuilt</div>
+<div class="mock" style="padding:1.25rem">
+	<div class="room">
+		<span class="badge">centurynit.daily.co · private · token'd</span>
+		<div class="tile">YOU (HOST)</div>
+		<div class="tile">ENOCH M.</div>
+		<div class="controls">
+			<span class="cbtn">MUTE</span><span class="cbtn">CAMERA</span><span class="cbtn">SHARE</span><span class="cbtn" style="border-color:#888">REMOVE ⨯</span><span class="cbtn">LEAVE</span>
+		</div>
+	</div>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>Host controls come free with <code>is_owner</code></b> — mute others, remove a participant, end for all. No Google account, no Workspace org needed.</li>
+		<li><b>No lobby dance.</b> Meet's "TRUSTED → external knocks" flow disappears: the token <i>is</i> the admission. Staff and client land directly in the room.</li>
+		<li>Room auto-deletes at <code>exp</code> — no zombie spaces, no cleanup job.</li>
+	</ul>
+</div>
+
+<!-- ══════════════════ E · LIVE MEETINGS ══════════════════ -->
+<div class="tag" id="live">E · Live meetings — poller swaps provider, page untouched</div>
+<div class="vs">
+	<div>
+		<div class="h">Today</div>
+		<pre>pollMeetingStatus()
+  └─ spaces.get(spaceId)
+     └─ activeConference?
+        → meetingActive / meetingParticipants
+        → meetingCheckedAt
+LiveMeetings page reads the columns</pre>
+	</div>
+	<div>
+		<div class="h">Daily</div>
+		<pre>pollMeetingStatus()
+  └─ GET /rooms/{name}/presence
+     └─ participants[]
+        → meetingActive / meetingParticipants
+        → meetingCheckedAt
+LiveMeetings page reads the columns
+<span class="cm">// identical — and Daily actually returns a
+// participant count, which Meet never did live</span></pre>
+	</div>
+</div>
+
+<!-- ══════════════════ F · TOKENS ══════════════════ -->
+<div class="tag" id="security">F · What the token layer buys over a shared link</div>
+<table class="diff">
+	<tr><th style="width:32%"></th><th>Google Meet (today)</th><th>Daily + /join</th></tr>
+	<tr><td><b>Who can enter</b></td><td>Anyone holding the URL, then a knock</td><td>Only a valid token — minted after our authz check</td></tr>
+	<tr><td><b>Link forwarded</b></td><td>Stranger knocks, gets admitted or not</td><td>Dead — token is bound to room + slot + identity</td></tr>
+	<tr><td><b>Host controls</b></td><td>Needs a Google Workspace account</td><td><code>is_owner</code> on the staff token — no account needed</td></tr>
+	<tr><td><b>Early join</b></td><td>UI-only hint — room is always open</td><td><code>nbf</code> on the token — the room refuses</td></tr>
+	<tr><td><b>After the slot</b></td><td>Space lingers until Google expires it</td><td>Room deletes at <code>exp</code>; cancel deletes it now</td></tr>
+	<tr><td><b>Audit</b></td><td>"someone joined"</td><td>Join mint is ours — we log who, when, which role</td></tr>
+</table>
+
+<!-- ══════════════════ G · CHANGE MAP ══════════════════ -->
+<div class="tag tag--api" id="map">G · Change map — what this build touches</div>
+<table class="diff">
+	<tr><th>Piece</th><th>Change</th><th>Size</th></tr>
+	<tr><td><code>services/meet/provider.ts</code></td><td>New interface: create / status / end / createToken. meet/index.ts becomes a facade — <code>DAILY_API_KEY</code> set → Daily; else Google; else disconnected.</td><td>new file</td></tr>
+	<tr><td><code>services/meet/daily.ts</code></td><td>Thin REST client (fetch, no SDK), injectable for tests — same seam as the Meet fake.</td><td>new file</td></tr>
+	<tr><td><code>POST /bookings/:id/join</code></td><td>Authz → mint token → return token'd URL. Provider-aware: non-Daily bookings return the stored URL.</td><td>~80 lines</td></tr>
+	<tr><td>Portal + ops Join buttons</td><td><code>href</code> → <code>await join(id)</code> → <code>window.open</code>. Only frontend change.</td><td>~20 lines ×2</td></tr>
+	<tr><td>Poller + cancel</td><td>Presence instead of <code>spaces.get</code>; cancel runs <code>DELETE /rooms/{name}</code>.</td><td>small</td></tr>
+	<tr><td>Env</td><td><code>DAILY_API_KEY</code> + <code>DAILY_DOMAIN</code> secrets. OAuth consent flow for meetings retired — one failure mode gone.</td><td>2 vars</td></tr>
+	<tr><td><b>Untouched</b></td><td colspan="2">Bookings columns · auto-create on booking · "Add Custom Link" (Zoom/Teams still work) · LiveMeetings page · the join-button copy. Migration is per-booking: old Meet rows keep working through /join.</td></tr>
+</table>
+<div class="callout"><b>Later, same seam:</b> embed Daily Prebuilt via <code>daily-js</code> inside the portal/ops — the meeting never leaves the app. The /join endpoint already returns exactly what the embed needs. Not required for this pass.</div>
+
+</div>
+</body>
+</html>

@@ -47,7 +47,7 @@ function TravelAssistanceInner() {
 		const t = new Date(iso).getTime();
 		return Number.isNaN(t) ? null : Math.ceil((t - Date.now()) / 86_400_000);
 	};
-	// The documents Century holds for the client — shown here because this is where the milestone is paid.
+	// The documents Century holds for the client. Shown here because this is where the milestone is paid.
 	const [officialDocs, setOfficialDocs] = useState<ApplicantDocument[]>([]);
 	useEffect(() => {
 		let alive = true;
@@ -235,24 +235,24 @@ function TravelAssistanceInner() {
 		? "Your request has been sent to our travel team. A travel officer will be assigned and will prepare your ticket invoice."
 		: `${ta.assignedOpsUserName ? `${ta.assignedOpsUserName} is` : "Your travel officer is"} finding your flight and preparing the ticket invoice. You'll be able to pay it here once it's ready.`;
 
-	// The band — the one thing this chapter needs right now. The flight first;
+	// The band. The one thing this chapter needs right now. The flight first;
 	// the fee milestone waits on it.
 	const band = canComplete
-		? { title: "Everything is settled — close your file", detail: "Fee milestone paid, travel settled, checklist done. Completing hands you to post-arrival support.", cta: <Button variant="inverted" onClick={() => void handleComplete()} arrow>Complete my journey</Button> }
+		? { title: "Everything is settled. Close your file", detail: "Fee milestone paid, travel settled, checklist done. Completing hands you to post-arrival support.", cta: <Button variant="inverted" onClick={() => void handleComplete()} arrow>Complete my journey</Button> }
 		: status === "decision_pending"
-			? { title: "Tell us how you'd like to fly", detail: "One decision — the flight booking service is part of your package; the only invoice here is the ticket itself.", cta: null }
+			? { title: "Tell us how you'd like to fly", detail: "One decision. The flight booking service is part of your package; the only invoice here is the ticket itself.", cta: null }
 			: showWaiting
 				? { title: "Your travel officer is finding your flight", detail: waitingLine, cta: null }
 				: tripDue
-					? { title: `Pay the ticket invoice — ${formatMoney(trip?.balanceCents ?? 0, "ghs")} due`, detail: `The airline ticket, at cost. ${ta?.assignedOpsUserName ?? "Your travel officer"} books the seat as soon as it's paid and posts the confirmation here.`, cta: <Button variant="inverted" onClick={() => void payTicketing()} arrow>Pay now</Button> }
+					? { title: `Pay the ticket invoice · ${formatMoney(trip?.balanceCents ?? 0, "ghs")} due`, detail: `The airline ticket, at cost. ${ta?.assignedOpsUserName ?? "Your travel officer"} books the seat as soon as it's paid and posts the confirmation here.`, cta: <Button variant="inverted" onClick={() => void payTicketing()} arrow>Pay now</Button> }
 					: trip?.status === "paid" && !showBooked
-						? { title: "Ticket paid — your officer is booking", detail: "The fare is settled. Your travel officer is booking the flight and will post the confirmation here.", cta: null }
+						? { title: "Ticket paid. Your officer is booking", detail: "The fare is settled. Your travel officer is booking the flight and will post the confirmation here.", cta: null }
 						: status === "on_hold"
 							? { title: "Travel is on hold", detail: "Travel assistance is on hold. Resume it, or choose to book your own flight, to unlock this milestone.", cta: null }
 							: (showBooked || status === "declined") && !feePaid
 								? { title: "Settle the fee milestone to release your documents", detail: "Your flight is settled. Your admission letter, visa documents and e-ticket release on payment.", cta: <Button to="/portal/payment-execution" variant="inverted" arrow>Pay the milestone</Button> }
 								: (showBooked || status === "declined") && feePaid && !checklistDone
-									? { title: showBooked ? "Flight booked — finish the checklist below" : "Travel settled — finish the checklist below", detail: showBooked ? (ta?.booking?.confirmationCode ? `Keep ${ta.booking.confirmationCode} for check-in.` : "Keep the confirmation code for check-in.") : "Your milestone is paid and your documents are released. The checklist is the last step.", cta: null }
+									? { title: showBooked ? "Flight booked. Finish the checklist below" : "Travel settled. Finish the checklist below", detail: showBooked ? (ta?.booking?.confirmationCode ? `Keep ${ta.booking.confirmationCode} for check-in.` : "Keep the confirmation code for check-in.") : "Your milestone is paid and your documents are released. The checklist is the last step.", cta: null }
 									: { title: "Departure in motion", detail: "Your officer updates this page as each piece settles.", cta: null };
 
 	return (
@@ -283,7 +283,7 @@ function TravelAssistanceInner() {
 				{band.cta}
 			</div>
 
-			{/* the strip — the same four dependencies the sections below follow */}
+			{/* the strip. The same four dependencies the sections below follow */}
 			<div className="psteps4">
 				{steps.map((s, i) => {
 					const st = s.done ? "done" : i === onStep ? "on" : "pending";
@@ -340,12 +340,12 @@ function TravelAssistanceInner() {
 						) : (
 							<p className="mono muted" style={{ fontSize: "0.75rem" }}>
 								{showBooked ? "BOOKED WITH CENTURY NIT" : "BOOKING WITH CENTURY NIT"}
-								{ta?.assignedOpsUserName ? ` — ${ta.assignedOpsUserName.toUpperCase()} IS YOUR TRAVEL OFFICER` : ""}.
+								{ta?.assignedOpsUserName ? ` · ${ta.assignedOpsUserName.toUpperCase()} IS YOUR TRAVEL OFFICER` : ""}.
 							</p>
 						)}
 					</section>
 
-					{/* 2 · the flight — waiting, invoice, or booked */}
+					{/* 2 · the flight. Waiting, invoice, or booked */}
 					<section className="psec" id="your-flight">
 						<div className="psec__h">
 							<span className={`psec__no${showBooked ? " psec__no--done" : ""}`}>{showBooked ? "✓" : "2"}</span>
@@ -390,7 +390,7 @@ function TravelAssistanceInner() {
 											trip.status === "paid"
 												? showBooked
 													? "Paid."
-													: "Paid — your travel officer is booking the flight and will post the confirmation here."
+													: "Paid. Your travel officer is booking the flight and will post the confirmation here."
 												: trip.status === "proforma"
 													? "Your ticket invoice is being issued. You'll be able to pay it here shortly."
 													: undefined
@@ -449,11 +449,11 @@ function TravelAssistanceInner() {
 							</div>
 						)}
 						{!showWaiting && !showInvoice && !showBooked && (
-							<p className="mono muted" style={{ fontSize: "0.75rem" }}>Choose how you'd like to fly above — this section fills in from there.</p>
+							<p className="mono muted" style={{ fontSize: "0.75rem" }}>Choose how you'd like to fly above. This section fills in from there.</p>
 						)}
 					</section>
 
-					{/* 3 · the milestone — locked until the flight is booked, then the release */}
+					{/* 3 · the milestone. Locked until the flight is booked, then the release */}
 					<section className="psec">
 						<div className="psec__h">
 							<span className={`psec__no${feePaid ? " psec__no--done" : ""}`}>{feePaid ? "✓" : "3"}</span>
@@ -472,7 +472,7 @@ function TravelAssistanceInner() {
 						</div>
 						{feePaid ? (
 							<p className="mono muted" style={{ fontSize: "0.75rem" }}>
-								SERVICE FEE MILESTONE PAID{application.agencySettledAt ? ` · ${(day(application.agencySettledAt) ?? "").toUpperCase()}` : ""} — YOUR DOCUMENTS ARE RELEASED BELOW.{postArrivalUsd ? ` ${ghs(postArrivalUsd).toUpperCase()} FOLLOWS AFTER ARRIVAL ON YOUR SCHEDULE.` : ""}
+								SERVICE FEE MILESTONE PAID{application.agencySettledAt ? ` · ${(day(application.agencySettledAt) ?? "").toUpperCase()}` : ""}. YOUR DOCUMENTS ARE RELEASED BELOW.{postArrivalUsd ? ` ${ghs(postArrivalUsd).toUpperCase()} FOLLOWS AFTER ARRIVAL ON YOUR SCHEDULE.` : ""}
 							</p>
 						) : !milestoneUnlocked ? (
 							<div className="sharp-card">
@@ -554,7 +554,7 @@ function TravelAssistanceInner() {
 						</div>
 						<PreDepartureChecklist tasks={preDepartureTasks} onToggle={togglePreDepartureTask} locked={Boolean(application.completedAt)} />
 
-						{/* travel is settled — close the file */}
+						{/* travel is settled. Close the file */}
 						{settled && (
 							<div className="sharp-card next-action mt-3">
 								<p className="eyebrow">Close the chapter</p>
@@ -590,7 +590,7 @@ function TravelAssistanceInner() {
 					</section>
 				</div>
 
-				{/* the rail — countdown, money, officer, what happens after */}
+				{/* the rail. Countdown, money, officer, what happens after */}
 				<div className="prail">
 					<div className="sharp-card sharp-card--key sharp-card--invert">
 						<p className="eyebrow" style={{ color: "rgba(255,255,255,0.6)" }}>Countdown</p>
@@ -655,7 +655,7 @@ function TravelAssistanceInner() {
 							</>
 						) : (
 							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem" }}>
-								Assigned when you choose "Book with us" — usually same day.
+								Assigned when you choose "Book with us". Usually same day.
 							</p>
 						)}
 					</div>
@@ -663,7 +663,7 @@ function TravelAssistanceInner() {
 					<div className="sharp-card">
 						<p className="eyebrow">After landing</p>
 						<p className="muted" style={{ fontSize: "var(--text-sm)", lineHeight: 1.6, marginTop: "0.5rem" }}>
-							Post-arrival support continues — check in when you land, enrolment week, and any issues in
+							Post-arrival support continues. Check in when you land, enrolment week, and any issues in
 							your first month. Completing this chapter closes your file.
 						</p>
 					</div>

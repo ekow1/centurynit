@@ -214,12 +214,12 @@ export function FloatingChat() {
 	const [tab, setTab] = useState<ChatTab>("ai");
 	const [input, setInput] = useState("");
 
-	// Consultant tab — real chat via shared components + SSE.
+	// Consultant tab. Real chat via shared components + SSE.
 	const applicantChat = useApplicantChat(!!authUser);
 	const [consultantDraft, setConsultantDraft] = useState("");
 	const [consultantReplyTo, setConsultantReplyTo] = useState<QuotedMessage | null>(null);
 
-	// AI tab — real streaming chat via the Workers AI edge endpoint.
+	// AI tab. Real streaming chat via the Workers AI edge endpoint.
 	const aiChat = useAiChat("portal-floating", {
 		getContext: () => ({
 			applicantName: authUser?.name ?? booking.assessment?.firstName ?? "",
@@ -251,7 +251,7 @@ export function FloatingChat() {
 		const trimmed = input.trim();
 		if (!trimmed) return;
 
-		// AI tab — streamed from the Workers AI edge endpoint.
+		// AI tab. Streamed from the Workers AI edge endpoint.
 		setInput("");
 		void aiChat.send(trimmed);
 	}
@@ -266,7 +266,7 @@ export function FloatingChat() {
 			? { ...base, subtitle: `${applicantChat.consultantName ?? booking.consultantName} · responds within 24h` }
 			: base;
 
-	// Consultant tab — shared component callbacks.
+	// Consultant tab. Shared component callbacks.
 	const isOwn = useCallback(
 		(m: SharedChatMessage) => m.senderOpsUserId == null,
 		[],
@@ -486,7 +486,7 @@ export function FloatingChat() {
 								) : null}
 							</div>
 
-							{/* Input — scripted tabs */}
+							{/* Input. Scripted tabs */}
 							<form
 								onSubmit={handleScriptedSubmit}
 								style={{

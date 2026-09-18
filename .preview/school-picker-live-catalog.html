@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portal school picker — live catalogue (proposed)</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1280px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.tag--bug{border-color:#000;background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.25rem clamp(1rem,2.5vw,2rem) 2rem}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	code{font-family:var(--mono);font-size:.9em;background:var(--muted-bg);padding:0 .25em}
+	.strike{text-decoration:line-through;text-decoration-thickness:1.5px}
+
+	/* ---- shared chrome ---- */
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.7rem;font-weight:700;padding:.6rem 1.1rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn[disabled]{opacity:.4;cursor:default}
+	.pill{display:inline-flex;align-items:center;gap:.35rem;padding:.2rem .6rem;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line-light)}
+
+	/* ---- the picker card (portal grammar) ---- */
+	.psec{border:1.5px solid var(--ink);background:#fff;max-width:56rem}
+	.psec__head{display:flex;gap:.9rem;align-items:flex-start;padding:1rem 1.25rem;border-bottom:1px solid var(--line-light)}
+	.psec__no{width:1.6rem;height:1.6rem;border:1.5px solid var(--ink);display:grid;place-items:center;font-family:var(--mono);font-weight:800;font-size:.8rem;flex:none}
+	.psec__t{font-weight:650;font-size:.95rem}
+	.psec__h{color:var(--fg-muted);font-size:.75rem;margin-top:.15rem}
+	.fields{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;padding:1rem 1.25rem}
+	.field label{display:block;font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.3rem}
+	.field select,.field .sel{width:100%;border:1.5px solid var(--ink);padding:.5rem .55rem;font-size:.8rem;font-family:var(--sans);background:#fff;appearance:none;cursor:pointer}
+	.field .sel--disabled,.field select[disabled]{border-color:var(--line-light);color:var(--fg-muted);background:var(--muted-bg);cursor:default}
+	.field .sel{display:flex;justify-content:space-between;align-items:center}
+	.field .sel::after{content:"▾";font-size:.7rem}
+	.peek{display:flex;align-items:baseline;gap:.6rem;padding:.7rem 1.25rem;border-top:1px solid var(--line-light);font-size:.78rem}
+	.peek .k{font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted)}
+	.peek .s{color:var(--fg-muted);font-size:.72rem}
+	.src{font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;padding:.2rem .5rem;border:1px solid var(--line);color:var(--fg-muted)}
+	.src--live{border-color:var(--ink);color:var(--ink);background:var(--muted-bg)}
+	.src--bad{border-color:var(--ink);background:var(--ink);color:#fff}
+	.empty{padding:.7rem 1.25rem;border-top:1px solid var(--line-light);font-size:.75rem;color:var(--fg-muted)}
+	.empty b{color:var(--ink)}
+	/* skeleton */
+	.skel{display:inline-block;height:.9em;width:8rem;background:linear-gradient(90deg,#e4e4e7,#f4f4f5,#e4e4e7);animation:sk 1.1s infinite}
+	@keyframes sk{50%{opacity:.55}}
+
+	/* ---- data-flow diagram ---- */
+	.flow{display:flex;align-items:stretch;gap:0;margin:.5rem 0 1rem;max-width:64rem}
+	.flow .node{flex:1;border:1.5px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.72rem}
+	.flow .node .h{font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);display:block;margin-bottom:.3rem}
+	.flow .arr{align-self:center;padding:0 .55rem;font-family:var(--mono);font-size:.85rem;flex:none}
+	.flow .node--bad{border-style:dashed}
+	.flow .node--db{background:var(--ink);color:#fff}
+	.flow .node--db .h{color:#a3a3a3}
+
+	/* ---- ops modal mini ---- */
+	.sheet{border:1.5px solid var(--ink);max-width:26rem;background:#fff}
+	.sheet__head{padding:.8rem 1rem;border-bottom:1.5px solid var(--ink);font-weight:650;font-size:.85rem;display:flex;justify-content:space-between;align-items:center}
+	.sheet__body{padding:1rem;display:grid;gap:.7rem}
+
+	/* ---- receipt doc mini ---- */
+	.doc{border:1px solid var(--line);background:#fff;max-width:34rem}
+	.doc__head{background:var(--ink);color:#fff;padding:1.2rem 1.5rem}
+	.doc__seal{display:inline-block;border:1.5px solid #fff;padding:.2rem .5rem;font-family:var(--mono);font-size:.58rem;font-weight:700;letter-spacing:.15em;text-transform:uppercase}
+	.doc__co{font-family:Georgia,serif;font-size:1.15rem;font-weight:700;margin-top:.45rem}
+	.doc__co--fixed{font-family:var(--sans);letter-spacing:-.02em}
+	.doc__paid{display:flex;align-items:center;gap:.9rem;padding:1rem 1.5rem;border-bottom:1.5px solid var(--ink)}
+	.doc__pseal{border:2px solid var(--ink);padding:.35rem .7rem;font-family:var(--mono);font-weight:800;font-size:.7rem;letter-spacing:.2em}
+	.doc__amt{font-family:Georgia,serif;font-size:1.55rem;font-weight:800;letter-spacing:-.02em}
+	.doc__amt--fixed{font-family:var(--mono);font-size:1.25rem}
+	.doc__when{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);margin-top:.15rem}
+	.pair{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start}
+	@media (max-width:900px){.pair{grid-template-columns:1fr}.fields{grid-template-columns:1fr 1fr}}
+	.flag{font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:var(--ink);padding:.15rem .45rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1 class="page">School picker — pull from the live catalogue, not the bundle</h1>
+<p class="note">Two diagnoses, one fix. <b>(a)</b> The portal's Chapter III school picker renders the <b>static catalogue bundled into the JS</b> (<code>packages/core/src/content.ts</code> — <code>universities</code>, <code>programs</code>, <code>filterProgramsForPackage</code>) — frozen at build time, blind to everything ops does in the catalogue. <b>(b)</b> Ops's own modal calls the live endpoints but the server <b>ignores</b> <code>?destinationId=</code> / <code>?universityId=</code> — every select shows the full list.</p>
+<div class="jump">
+	<a href="#diag">01 · the drift</a>
+	<a href="#before">02 · picker today</a>
+	<a href="#after">03 · picker — live cascade</a>
+	<a href="#ops">04 · ops modal — filters honoured</a>
+	<a href="#receipt">05 · receipt popup — font fix</a>
+</div>
+
+<!-- ════════════════════════ 01 DIAGNOSIS ════════════════════════ -->
+<span class="tag tag--bug" id="diag">01 · Why the picker "doesn't pool" the DB</span>
+<div class="mock">
+	<p class="eyebrow" style="margin-bottom:.8rem">Data flow today</p>
+	<div class="flow">
+		<div class="node node--db"><span class="h">Postgres</span><b>catalog_universities / catalog_programs / destinations</b><br><span class="muted" style="color:#a3a3a3">8 unis · 8 programmes · 6 destinations — ops edits live here</span></div>
+		<span class="arr">→</span>
+		<div class="node"><span class="h">GET /catalog/*</span><b>Live API</b><br><span class="muted">used by ops modal + portal assessment — but <b>filters ignored</b></span></div>
+		<span class="arr">→</span>
+		<div class="node node--bad"><span class="h">Portal school picker</span><b>Static bundle</b> <code>content.ts</code><br><span class="muted">never calls the API — a copy frozen at build time</span></div>
+	</div>
+	<div class="flow">
+		<div class="node"><span class="h">Portal submits</span><code>universityId: "oxford"</code> <span class="muted">(slug from bundle)</span></div>
+		<span class="arr">→</span>
+		<div class="node"><span class="h">POST /me/schools</span>freeze-snapshot: <code>SELECT … WHERE id = 'oxford'</code></div>
+		<span class="arr">→</span>
+		<div class="node"><span class="h">Today</span>row exists — <span class="muted">DB was seeded from the same file</span><br><b>Tomorrow</b> — ops renames/removes a row → snapshot lands <code>null</code> silently</div>
+	</div>
+	<div class="callout"><b>So it half-works by accident.</b> The bundle and the seed share slugs, so lookups resolve — but the picker can't see anything ops adds, edits, or deactivates. One catalogue change and the portal offers ghost schools; the freeze-snapshot then writes <code>universityName: null</code> with no error. The fix isn't syncing the two — it's deleting the second source.</div>
+</div>
+
+<!-- ════════════════════════ 02 BEFORE ════════════════════════ -->
+<span class="tag" id="before">02 · Picker today — bundled snapshot</span>
+<div class="mock">
+	<div class="psec">
+		<div class="psec__head">
+			<span class="psec__no">1</span>
+			<div>
+				<p class="psec__t">Pick up to five schools <span class="src src--bad">SOURCE: BUNDLE · FROZEN AT BUILD</span></p>
+				<p class="psec__h">Each university's own application fee, passed on at cost.</p>
+			</div>
+		</div>
+		<div class="fields">
+			<div class="field"><label>Country</label><span class="sel">United Kingdom</span></div>
+			<div class="field"><label>University</label><span class="sel">University of Oxford</span></div>
+			<div class="field"><label>Programme</label><span class="sel">MSc Computer Science</span></div>
+			<div class="field"><label>Intake</label><span class="sel">September 2026</span></div>
+		</div>
+		<div class="peek">
+			<span class="k">Tuition</span><b>£34,700 / yr</b><span class="s">≈ $43,000 USD ≈ GH₵645,000 · paid to the university, not to us</span>
+		</div>
+		<div class="empty" style="border-top:1px dashed var(--line-light)">
+			<span class="flag">the catch</span>&nbsp; Ops adds <b>University of Edinburgh</b> to the catalogue → this list never shows it. Ops marks <b>MSc CS — inactive</b> → this list still offers it. Values look right because the seed was copied from this file; they're already drifting.
+		</div>
+	</div>
+</div>
+
+<!-- ════════════════════════ 03 AFTER ════════════════════════ -->
+<span class="tag tag--after" id="after">03 · Picker — live cascade (interactive)</span>
+<div class="mock">
+	<div class="psec">
+		<div class="psec__head">
+			<span class="psec__no">1</span>
+			<div>
+				<p class="psec__t">Pick up to five schools <span class="src src--live">SOURCE: /catalog · LIVE</span></p>
+				<p class="psec__h">Each university's own application fee, passed on at cost.</p>
+			</div>
+		</div>
+		<div class="fields">
+			<div class="field"><label>Country</label><select id="f-dest"></select></div>
+			<div class="field"><label>University</label><select id="f-uni"></select></div>
+			<div class="field"><label>Programme</label><select id="f-prog"></select></div>
+			<div class="field"><label>Intake</label><select id="f-intake" disabled></select></div>
+		</div>
+		<div class="peek" id="peek"><span class="s">Pick a programme to see its tuition before you add it.</span></div>
+		<div class="empty" id="empty" style="display:none"></div>
+		<div class="peek" style="justify-content:flex-end;border-top:1px solid var(--line-light)">
+			<span class="muted mono" id="payload" style="font-size:.6rem"></span>
+			<button class="btn" id="add" disabled>Add school</button>
+		</div>
+	</div>
+	<div class="callout">
+		<b>Same markup, live source.</b> The cascade reuses <code>useAssessmentCatalog()</code> — already in the file, already hitting <code>/catalog/destinations · /universities · /programs</code> for the booking flow. Changes:
+		<li>Country filters universities by <code>destinationId</code>; university filters programmes; programme fills intakes + tuition from the live row (<code>tuitionUsd</code> → <code>formatDualCurrency</code>).</li>
+		<li><code>is_active = false</code> rows never render — ops controls the list in one place.</li>
+		<li>Package gate still applies: <code>filterProgramsForPackage</code> logic runs on the live rows (level + funding track).</li>
+		<li>Empty states are honest — "No programmes listed for this university yet" — instead of the static fallback <code>programs[0]</code> silently substituting MIT.</li>
+		<li>Submits real catalogue ids → the server's freeze-snapshot always resolves.</li>
+	</div>
+	<div class="callout"><b>Loading + failure.</b> While the catalogue loads the selects render skeletons (<span class="skel"></span>); a failed fetch shows "Couldn't load the school list — retry" instead of an empty dropdown that looks like the catalogue is empty.</div>
+</div>
+
+<!-- ════════════════════════ 04 OPS ════════════════════════ -->
+<span class="tag tag--after" id="ops">04 · Ops modal — make the filters real</span>
+<div class="mock">
+	<div class="pair">
+		<div>
+			<p class="eyebrow" style="margin-bottom:.5rem">Today — params ignored</p>
+			<div class="sheet">
+				<div class="sheet__head">Add school application <span class="src src--bad">ALL 8 UNIS · ALL 8 PROGS</span></div>
+				<div class="sheet__body">
+					<div class="field"><label>Destination</label><span class="sel">United Kingdom</span></div>
+					<div class="field"><label>University</label><span class="sel">Oxford · Imperial · UCL · <span class="strike">MIT · Stanford · Toronto…</span></span></div>
+					<div class="field"><label>Programme</label><span class="sel"><span class="strike">every programme in the catalogue</span></span></div>
+				</div>
+			</div>
+			<p class="muted" style="font-size:.72rem;margin-top:.5rem"><code>GET /catalog/universities?destinationId=uk</code> — the server returns <b>all rows</b>; the param is ignored. Same for <code>?universityId=</code>.</p>
+		</div>
+		<div>
+			<p class="eyebrow" style="margin-bottom:.5rem">Fixed — cascade honoured</p>
+			<div class="sheet">
+				<div class="sheet__head">Add school application <span class="src src--live">UK → 3 UNIS · UCL → 1 PROG</span></div>
+				<div class="sheet__body">
+					<div class="field"><label>Destination</label><span class="sel">United Kingdom</span></div>
+					<div class="field"><label>University</label><span class="sel">Oxford · Imperial · UCL</span></div>
+					<div class="field"><label>Programme</label><span class="sel">BSc Architecture</span></div>
+					<div class="field"><label>Intake</label><span class="sel">September 2026</span></div>
+				</div>
+			</div>
+			<p class="muted" style="font-size:.72rem;margin-top:.5rem">Two-line server fix — <code>WHERE destination_id = :param</code> / <code>WHERE university_id = :param</code> (plus <code>is_active</code>) — or filter client-side on the full list the endpoint already returns. Either way the modal stops offering schools outside the destination.</p>
+		</div>
+	</div>
+</div>
+
+<!-- ════════════════════════ 05 RECEIPT ════════════════════════ -->
+<span class="tag tag--after" id="receipt">05 · Receipt popup — kill the serif</span>
+<div class="mock">
+	<div class="pair">
+		<div>
+			<p class="eyebrow" style="margin-bottom:.5rem">Today — Georgia serif</p>
+			<div class="doc">
+				<div class="doc__head"><span class="doc__seal">Century NIT</span><p class="doc__co">Century NIT Consult</p></div>
+				<div class="doc__paid"><span class="doc__pseal">PAID</span><div><p class="doc__amt">GH₵ 75 · $5.00</p><p class="doc__when">17 Sep 2026 · via PAYSTACK</p></div></div>
+			</div>
+			<p class="muted" style="font-size:.72rem;margin-top:.5rem"><code>receipt.ts</code> — <code>.co</code> and <code>.paid__amt</code> are the <b>only serif anywhere in the product</b>. Every other surface is system-ui + mono.</p>
+		</div>
+		<div>
+			<p class="eyebrow" style="margin-bottom:.5rem">Fixed — display + mono, like everything else</p>
+			<div class="doc">
+				<div class="doc__head"><span class="doc__seal">Century NIT</span><p class="doc__co doc__co--fixed">Century NIT Consult</p></div>
+				<div class="doc__paid"><span class="doc__pseal">PAID</span><div><p class="doc__amt doc__amt--fixed">GH₵ 75 · $5.00</p><p class="doc__when">17 Sep 2026 · via PAYSTACK</p></div></div>
+			</div>
+			<p class="muted" style="font-size:.72rem;margin-top:.5rem">Wordmark → system-ui tight-tracked; the paid figure → mono, matching the line items, totals and every <code>.amt</code> cell below it. Two <code>font-family</code> changes in <code>DOC_CSS</code>.</p>
+		</div>
+	</div>
+	<div class="callout"><b>While we're in there:</b> the popup prints <code>Accra, Ghana — London, United Kingdom</code> and <code>support@centurynit.com</code>. If the real support address differs, fix it in the same pass — it's hardcoded in the footer.</div>
+</div>
+
+<div class="callout" style="margin-top:2rem">
+	<b>Fix list, smallest version:</b>
+	<li><b>Portal picker</b> — swap static <code>universities/programs/destinations</code> for <code>useAssessmentCatalog()</code> rows; cascade by <code>destinationId → universityId</code>; intake + tuition from the live programme row; drop the <code>|| "uk"</code> / <code>programs[0]</code> fallbacks; honour <code>is_active</code>.</li>
+	<li><b>API</b> — honour <code>?destinationId=</code> on <code>/catalog/universities</code> and <code>?universityId=</code> on <code>/catalog/programs</code> (+ <code>is_active</code> filter), or filter in the two callers.</li>
+	<li><b>Ops modal</b> — automatically correct once the cascade actually filters.</li>
+	<li><b>receipt.ts</b> — Georgia → display/mono in <code>DOC_CSS</code>; verify the footer contact line.</li>
+</div>
+
+</div>
+
+<script>
+const DEST=[{id:"uk",name:"United Kingdom"},{id:"usa",name:"United States"},{id:"canada",name:"Canada"},{id:"australia",name:"Australia"},{id:"germany",name:"Germany"},{id:"uae",name:"United Arab Emirates"}];
+const UNI=[
+	{id:"oxford",name:"University of Oxford",destinationId:"uk"},
+	{id:"imperial",name:"Imperial College London",destinationId:"uk"},
+	{id:"ucl",name:"University College London",destinationId:"uk"},
+	{id:"mit",name:"Massachusetts Institute of Technology",destinationId:"usa"},
+	{id:"stanford",name:"Stanford University",destinationId:"usa"},
+	{id:"toronto",name:"University of Toronto",destinationId:"canada"},
+	{id:"melbourne",name:"University of Melbourne",destinationId:"australia"},
+	{id:"tum",name:"Technical University of Munich",destinationId:"germany"},
+];
+const PROG=[
+	{id:"ox-cs-msc",name:"MSc Computer Science",universityId:"oxford",tuitionUsd:43000,tuition:"£34,700 / yr",intake:["September 2026","January 2027"]},
+	{id:"imp-ai-msc",name:"MSc Artificial Intelligence",universityId:"imperial",tuitionUsd:41000,tuition:"£32,900 / yr",intake:["September 2026"]},
+	{id:"ucl-arch-bsc",name:"BSc Architecture",universityId:"ucl",tuitionUsd:33000,tuition:"£26,400 / yr",intake:["September 2026"]},
+	{id:"mit-ee-bs",name:"SB Electrical Engineering & Computer Science",universityId:"mit",tuitionUsd:59800,tuition:"$59,800 / yr",intake:["September 2026"]},
+	{id:"stanford-mba",name:"MBA",universityId:"stanford",tuitionUsd:79000,tuition:"$79,000 / yr",intake:["September 2026"]},
+	{id:"utoronto-ds-msc",name:"MSc Applied Computing - Data Science",universityId:"toronto",tuitionUsd:46000,tuition:"CA$62,000 / yr",intake:["September 2026","January 2027"]},
+	{id:"melb-med-md",name:"Doctor of Medicine",universityId:"melbourne",tuitionUsd:57000,tuition:"A$85,000 / yr",intake:["February 2027"]},
+	{id:"tum-me-msc",name:"MSc Mechanical Engineering",universityId:"tum",tuitionUsd:0,tuition:"No tuition — semester fee €85",intake:["October 2026"]},
+];
+const $=id=>document.getElementById(id);
+const fill=(sel,rows,ph)=>{sel.innerHTML=`<option value="">${ph}</option>`+rows.map(r=>`<option value="${r.id}">${r.name}</option>`).join("");sel.disabled=!rows.length&&ph!=="Choose a country";};
+fill($("f-dest"),DEST,"Choose a country");
+fill($("f-uni"),[],"Choose a university");$("f-uni").disabled=true;
+fill($("f-prog"),[],"Choose a programme");$("f-prog").disabled=true;
+$("f-intake").disabled=true;
+function peek(){const p=PROG.find(x=>x.id===$("f-prog").value);
+	if(p){const ghs=Math.round(p.tuitionUsd*15).toLocaleString();$("peek").innerHTML=`<span class="k">Tuition</span><b>${p.tuition}</b><span class="s">≈ $${p.tuitionUsd.toLocaleString()} USD ≈ GH₵${ghs} · paid to the university, not to us</span>`;$("payload").textContent=`POST → {universityId:"${p.universityId}", programId:"${p.id}"} — real catalogue ids`;}
+	else{$("peek").innerHTML=`<span class="s">Pick a programme to see its tuition before you add it.</span>`;$("payload").textContent="";}
+	$("add").disabled=!p;}
+function empty(msg){$("empty").style.display=msg?"block":"none";$("empty").innerHTML=msg||"";}
+$("f-dest").onchange=()=>{const us=UNI.filter(u=>u.destinationId===$("f-dest").value);fill($("f-uni"),us,"Choose a university");$("f-uni").disabled=!us.length;fill($("f-prog"),[],"Choose a programme");$("f-prog").disabled=true;$("f-intake").innerHTML="";$("f-intake").disabled=true;empty(us.length?"":`<b>No universities listed for this destination yet</b> — your consultant can add one, or pick another country.`);peek();};
+$("f-uni").onchange=()=>{const ps=PROG.filter(p=>p.universityId===$("f-uni").value);fill($("f-prog"),ps,"Choose a programme");$("f-prog").disabled=!ps.length;$("f-intake").innerHTML="";$("f-intake").disabled=true;empty(ps.length?"":`<b>No programmes listed for this university yet</b> — your consultant can add one.`);peek();};
+$("f-prog").onchange=()=>{const p=PROG.find(x=>x.id===$("f-prog").value);fill($("f-intake"),(p?.intake||[]).map(i=>({id:i,name:i})),"Choose an intake");$("f-intake").disabled=!p;empty("");peek();};
+</script>
+</body>
+</html>

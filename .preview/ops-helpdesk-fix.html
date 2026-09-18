@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ops — Helpdesk fix</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1180px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3.5rem 0 .6rem}
+	.tag--solid{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.screen{background:#f2f2f2;border:1px solid #999;box-shadow:5px 5px 0 rgba(0,0,0,.12)}
+	.screen-bar{background:var(--ink);color:#fff;font-family:var(--mono);font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;padding:.4rem .8rem;display:flex;justify-content:space-between}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.8rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.callout--warn{border-left-style:dashed}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	code{font-family:var(--mono);font-size:.74rem;background:var(--muted-bg);padding:.1rem .35rem}
+	.pill{display:inline-block;font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;padding:.24rem .55rem;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line)}
+	.pill--dashed{color:var(--fg-muted);border-style:dashed}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.72rem;font-weight:700;padding:.55rem 1rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;white-space:nowrap;font-family:var(--sans);text-decoration:none}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--sm{padding:.35rem .7rem;font-size:.6rem}
+	.chip{font-family:var(--mono);font-size:.6rem;letter-spacing:.06em;padding:.3rem .65rem;border:1px solid var(--ink);background:#fff;cursor:pointer;text-transform:uppercase}
+	.chip.on{background:var(--ink);color:#fff}
+	.chip .n{opacity:.6;margin-left:.3rem}
+	.chip--dashed{border-style:dashed;color:var(--fg-muted)}
+	.chip--dead{opacity:.45;border-color:var(--line);color:var(--fg-muted)}
+	.input{border:1px solid var(--ink);background:#fff;font-size:.74rem;padding:.45rem .6rem;font-family:var(--sans);min-width:0}
+	.pagehead{padding:1rem 1.25rem .6rem;background:#fff;border-bottom:1px solid var(--line-light)}
+	.pagehead h2{font-size:1.15rem;letter-spacing:-0.01em}
+	.pagehead .lead{font-size:.72rem;color:var(--fg-muted);margin-top:.15rem}
+	.statstrip{display:flex;gap:1.4rem;padding:.55rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);font-size:.72rem;align-items:center;flex-wrap:wrap}
+	.statstrip b{font-size:.95rem;margin-right:.2rem}
+	.statstrip .lbl{color:var(--fg-muted);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono)}
+	.statstrip .sep{color:var(--line)}
+	.statstrip .link{margin-left:auto;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em}
+	.chips{display:flex;gap:.4rem;padding:.55rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);flex-wrap:wrap;align-items:center}
+	.chips input{margin-left:auto}
+
+	.tbl{width:100%;border-collapse:collapse;font-size:.76rem;background:#fff}
+	.tbl th{font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);text-align:left;padding:.5rem .8rem;border-bottom:1.5px solid var(--ink);background:var(--muted-bg)}
+	.tbl td{padding:.5rem .8rem;border-bottom:1px solid var(--line-light);vertical-align:top}
+	.tbl tr.on td{background:var(--muted-bg);box-shadow:inset 3px 0 0 var(--ink)}
+	.tbl .r{text-align:right}
+	.tbl .sub{font-size:.66rem;color:var(--fg-muted)}
+	.tbl .nm{font-weight:700}
+	.tbl .mn{font-family:var(--mono);font-size:.66rem;color:var(--fg-muted)}
+
+	.band{display:flex;justify-content:space-between;align-items:baseline;padding:.45rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase}
+	.band--hot{background:var(--ink);color:#fff}
+	.band .note{font-size:.56rem;opacity:.7;letter-spacing:.06em;text-transform:none}
+	.tgroup{padding:.3rem 1.25rem .15rem;font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted);background:#fff}
+
+	.split{display:grid;background:#fff}
+	.split--thread{grid-template-columns:1fr 1.3fr 240px}
+	.pane{border-left:1px solid var(--line-light);background:#fff;display:flex;flex-direction:column;min-height:0}
+	.pane:first-child{border-left:0}
+	.pane-h{font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);padding:.5rem .8rem;border-bottom:1px solid var(--line-light);background:var(--muted-bg)}
+	.pane .sec{font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);padding:.6rem .8rem .3rem}
+	.kv{display:flex;justify-content:space-between;gap:.6rem;padding:.3rem .8rem;font-size:.72rem;border-bottom:1px dotted var(--line-light)}
+	.kv:last-child{border-bottom:0}
+	.kv .k{color:var(--fg-muted);font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;padding-top:.1rem}
+	.kv .v{text-align:right}
+
+	/* queue rows */
+	.qrow{display:flex;justify-content:space-between;gap:.6rem;padding:.55rem 1.25rem;border-bottom:1px solid var(--line-light);background:#fff;cursor:pointer}
+	.qrow.on{box-shadow:inset 3px 0 0 var(--ink);background:var(--muted-bg)}
+	.qrow .main{min-width:0}
+	.qrow .ref{font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;color:var(--fg-muted);text-transform:uppercase}
+	.qrow .who{font-weight:700;font-size:.76rem}
+	.qrow .prev{font-size:.66rem;color:var(--fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:22rem}
+	.qrow .side{text-align:right;font-family:var(--mono);font-size:.58rem;color:var(--fg-muted);flex-shrink:0;display:flex;flex-direction:column;gap:.2rem;align-items:flex-end}
+	.qrow .unread{background:var(--ink);color:#fff;padding:.05rem .4rem}
+	.qrow .wait{color:#fff;background:var(--ink);padding:.05rem .4rem}
+
+	/* thread mock */
+	.thead{display:flex;align-items:center;gap:.6rem;padding:.6rem .9rem;border-bottom:1px solid var(--line-light);background:#fff}
+	.thead .who{font-weight:700;font-size:.8rem}
+	.thead .sub{font-family:var(--mono);font-size:.58rem;color:var(--fg-muted)}
+	.msg{max-width:75%;padding:.45rem .7rem;font-size:.74rem;margin:.4rem .9rem;border:1px solid var(--line-light);background:#fff}
+	.msg .m-meta{font-family:var(--mono);font-size:.55rem;color:var(--fg-muted);margin-bottom:.15rem;text-transform:uppercase;letter-spacing:.08em}
+	.msg--me{margin-left:auto;background:var(--ink);color:#fff;border-color:var(--ink)}
+	.msg--me .m-meta{color:#d4d4d8}
+	.msg--note{margin-left:auto;background:var(--muted-bg);border-style:dashed}
+	.divider{font-family:var(--mono);font-size:.56rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted);text-align:center;padding:.3rem 0}
+	.composer{margin:.4rem .9rem .8rem;border:1.5px solid var(--ink);background:#fff;padding:.5rem .7rem;font-size:.74rem;color:var(--fg-muted);display:flex;justify-content:space-between;align-items:center}
+	.modebar{display:flex;gap:.35rem;padding:.45rem .9rem 0}
+	.mode{font-family:var(--mono);font-size:.56rem;letter-spacing:.08em;text-transform:uppercase;padding:.25rem .6rem;border:1px solid var(--ink);background:#fff}
+	.mode.on{background:var(--ink);color:#fff}
+	.mode--dashed{border-style:dashed;color:var(--fg-muted)}
+
+	/* sheet / modal mock */
+	.sheet{position:relative;background:#fff;border:1.5px solid var(--ink);max-width:520px;margin:1.5rem auto;box-shadow:8px 8px 0 rgba(0,0,0,.14)}
+	.sheet-h{padding:.7rem 1rem;border-bottom:1.5px solid var(--ink);font-weight:800;font-size:.85rem;letter-spacing:-.01em;display:flex;justify-content:space-between;align-items:center}
+	.sheet-h .x{font-family:var(--mono);font-size:.7rem;color:var(--fg-muted)}
+	.sheet-b{padding:.9rem 1rem}
+	.field{margin-bottom:.9rem}
+	.field label{display:block;font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.3rem}
+	.field .box{border:1px solid var(--ink);padding:.5rem .7rem;font-size:.76rem;background:#fff}
+	.field .box .caret{float:right;color:var(--fg-muted)}
+	.pick{border:1px solid var(--line-light);border-top:0;padding:.45rem .7rem;font-size:.74rem;background:#fff}
+	.pick.on{border-left:3px solid var(--ink);background:var(--muted-bg);font-weight:700}
+	.pick .sub{font-size:.64rem;color:var(--fg-muted);font-weight:400}
+	.sheet-f{padding:.7rem 1rem;border-top:1px solid var(--line-light);display:flex;justify-content:flex-end;gap:.5rem}
+	.overlay{position:relative;background:repeating-linear-gradient(45deg,#ececec,#ececec 6px,#e2e2e2 6px,#e2e2e2 12px);padding:1.5rem 0;border-top:1px solid #999}
+
+	.legend{display:flex;gap:1.2rem;flex-wrap:wrap;font-size:.68rem;color:var(--fg-muted);padding:.5rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);flex-direction:column;align-items:flex-start;gap:.35rem}
+	.legend b{color:var(--ink);font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em}
+
+	.dead{position:relative;opacity:.45}
+	.dead::after{content:"";position:absolute;left:-2px;right:-2px;top:50%;height:1.5px;background:var(--ink)}
+	.mark{font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;background:var(--ink);color:#fff;padding:.1rem .4rem;text-transform:uppercase}
+	.mark--hollow{background:#fff;color:var(--ink);border:1px solid var(--ink)}
+	.nav-mock{display:flex;gap:.4rem;padding:.5rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);flex-wrap:wrap;font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;align-items:center}
+	.nav-mock .nvi{padding:.25rem .6rem;border:1px solid var(--line-light);color:var(--fg-muted)}
+	.nav-mock .nvi.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.nav-mock .nvi.gone{text-decoration:line-through;opacity:.45}
+	.err{background:#fff;border:1px solid var(--ink);border-left-width:4px;padding:.5rem .8rem;font-size:.72rem;margin:.5rem 1.25rem}
+	.emptybox{padding:2.5rem 1rem;text-align:center;color:var(--fg-muted);font-size:.74rem}
+	.emptybox .big{font-size:1rem;font-weight:700;color:var(--ink);margin-bottom:.3rem}
+</style>
+<div class="wrap">
+
+<h1 class="page">Helpdesk — the fix</h1>
+<p class="note">
+	Three things are wrong today: <b>(1)</b> staff can't start a conversation — the page has no create control and the ops API only makes staff↔staff threads; <b>(2)</b> the page is gated on the <code>chat</code> module while it lives under <code>helpdesk</code>, so some roles get a silently empty queue; <b>(3)</b> a redundant <code>/chat</code> page duplicates the floating CommunicationHub. This is the corrected design.
+</p>
+<div class="jump">
+	<a href="#s1">01 — why it's dead today</a>
+	<a href="#s2">02 — nav: one comms surface</a>
+	<a href="#s3">03 — the queue, fixed</a>
+	<a href="#s4">04 — new conversation sheet</a>
+	<a href="#s5">05 — build list</a>
+</div>
+
+<!-- ═══════════════════════ 01 DIAGNOSIS ═══════════════════════ -->
+<h2 id="s1" class="tag tag--solid">01 · Why nothing works today — four failures found in the code</h2>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /helpdesk · current state</span><span>annotated</span></div>
+	<div class="pagehead">
+		<h2>Helpdesk</h2>
+		<div class="lead">Client conversations — triage, reply, resolve</div>
+	</div>
+	<div class="statstrip">
+		<span><b>0</b><span class="lbl">open</span></span><span class="sep">·</span>
+		<span><b>0</b><span class="lbl">awaiting</span></span><span class="sep">·</span>
+		<span><b>0</b><span class="lbl">unclaimed</span></span>
+		<span class="link">Open the Worklist →</span>
+	</div>
+	<div class="chips">
+		<span class="chip on">All<span class="n">0</span></span>
+		<span class="chip chip--dead">Awaiting<span class="n">0</span></span>
+		<span class="chip chip--dead">Unread<span class="n">0</span></span>
+		<span class="chip chip--dead">Unclaimed<span class="n">0</span></span>
+		<span class="chip chip--dead">Mine<span class="n">0</span></span>
+		<span class="mark">9 chips — all dead, no create button anywhere</span>
+	</div>
+	<div class="emptybox">
+		<div class="big">No client conversations.</div>
+		Waiting for clients to write first. There is no way for staff to open a thread.
+	</div>
+	<div class="legend">
+		<span><b>FAIL 1 — cannot create</b> <code>EnterpriseHelpdesk.tsx</code> has no create control at all, and the ops endpoint <code>POST /chat/conversations</code> only builds staff↔staff threads (<code>direct</code>/<code>group</code>/<code>entity</code> — it takes <code>participantOpsUserId</code>, never a <code>clientUserId</code>). Client threads (<code>support</code>/<code>case</code>/<code>stage</code>/<code>applicant</code>) are only born in the client portal via <code>/me/communication/route</code>. Ops can only ever reply — never initiate.</span>
+		<span><b>FAIL 2 — wrong gate</b> the page loads data only if <code>roleCanAccess(role,"chat")</code> but it sits under <code>module="helpdesk"</code>, and every <code>/chat/*</code> API requires <code>requireModule("chat")</code> server-side. A role with helpdesk-but-not-chat → 403 → swallowed by <code>forbiddenRef</code> → empty queue, zero error shown.</span>
+		<span><b>FAIL 3 — silent failure</b> <code>useChatConversations</code> catches the 403, sets <code>forbiddenRef</code>, returns — the page renders an empty queue with no explanation. "Nothing is working" because nothing tells you why.</span>
+		<span><b>FAIL 4 — duplicate surface</b> <code>/chat</code> (ChatPage, full-page staff messaging) duplicates the floating CommunicationHub already mounted on every screen. Two places doing one job.</span>
+	</div>
+</div>
+<div class="callout callout--warn">
+	<b>What staff actually need:</b> a walk-in calls, a WhatsApp message arrives, a client emails — the first contact is often <b>staff-initiated</b>, not client-initiated. The current design only ever replies. The queue can sit empty forever while the phone rings.
+</div>
+
+<!-- ═══════════════════════ 02 NAV ═══════════════════════ -->
+<h2 id="s2" class="tag tag--solid">02 · Navigation — one comms surface, not three</h2>
+<div class="screen">
+	<div class="screen-bar"><span>ops · sidebar nav · before → after</span><span>annotated</span></div>
+	<div class="nav-mock">
+		<span class="nvi">Workspace</span><span class="nvi">Dashboard</span><span class="nvi">Cases</span>
+		<span class="nvi">Consultations</span><span class="nvi">Clients</span>
+		<span class="nvi on">Helpdesk</span>
+		<span class="nvi gone">Chat</span>
+		<span class="mark">removed</span>
+		<span class="nvi">Documents</span><span class="nvi">Live meetings</span>
+	</div>
+	<div class="legend">
+		<span><b>Remove the Chat nav item + page.</b> Staff↔staff messaging already lives in the floating CommunicationHub (bottom-right launcher on every screen — presence, directory, DMs, group threads). A full page for it is redundant.</span>
+		<span><b><code>/chat?conversation=…</code> redirects to <code>/helpdesk?id=…</code>.</b> Notifications that deep-link to a thread keep working; staff-DM links open the CommunicationHub instead (the bell already intercepts them).</span>
+		<span><b>Helpdesk owns all client communication</b> — client threads, replies, internal notes, ownership, lifecycle. One surface, one queue.</span>
+	</div>
+</div>
+
+<!-- ═══════════════════════ 03 THE QUEUE ═══════════════════════ -->
+<h2 id="s3" class="tag tag--solid">03 · The queue — fixed: a real create button, real errors, tighter chips</h2>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /helpdesk · proposed</span><span>annotated</span></div>
+	<div class="pagehead" style="display:flex;justify-content:space-between;align-items:flex-start">
+		<div>
+			<h2>Helpdesk</h2>
+			<div class="lead">Client conversations — every thread a client can see</div>
+		</div>
+		<span class="btn">+ New conversation <span class="mark" style="margin-left:.4rem">the missing control</span></span>
+	</div>
+	<div class="statstrip">
+		<span><b>6</b><span class="lbl">open</span></span><span class="sep">·</span>
+		<span><b>3</b><span class="lbl">awaiting reply</span></span><span class="sep">·</span>
+		<span><b>2</b><span class="lbl">unclaimed</span></span><span class="sep">·</span>
+		<span><b>4</b><span class="lbl">unread</span></span><span class="sep">·</span>
+		<span class="muted">longest wait <b>1d</b></span>
+		<span class="link">Open the Worklist →</span>
+	</div>
+	<div class="chips">
+		<span class="chip on">All<span class="n">6</span></span>
+		<span class="chip">Awaiting<span class="n">3</span></span>
+		<span class="chip">Unclaimed<span class="n">2</span></span>
+		<span class="chip">Mine<span class="n">1</span></span>
+		<span class="chip chip--dashed">Filters ▾</span>
+		<input class="input" placeholder="Search threads…" style="margin-left:auto">
+	</div>
+	<div class="legend" style="border-bottom:0">
+		<span><b>Chips cut 9 → 5.</b> Support/Case/Stage/Applicant type cuts move into the <b>Filters ▾</b> drawer (same pattern as the Worklist) — they're facets, not daily triage. Unread merges into Awaiting.</span>
+	</div>
+	<div class="split split--thread">
+		<!-- queue -->
+		<div>
+			<div class="band band--hot"><span>Awaiting reply · 3</span><span class="note">longest wait first</span></div>
+			<div class="qrow on">
+				<div class="main"><div class="ref">Support</div><div class="who">Efua Owusu</div><div class="prev">"I still can't see my invoice for APP-0042…"</div></div>
+				<div class="side"><span>2h</span><span class="unread">2</span><span class="wait">waiting 1d</span><span>unclaimed</span></div>
+			</div>
+			<div class="qrow">
+				<div class="main"><div class="ref">Case · APP-0042</div><div class="who">Kwame Boateng</div><div class="prev">"Do I upload the waiver form here?"</div></div>
+				<div class="side"><span>4h</span><span class="unread">1</span><span>A. Owusu</span></div>
+			</div>
+			<div class="band"><span>In conversation · 3</span><span class="note">you replied last</span></div>
+			<div class="qrow">
+				<div class="main"><div class="ref">Stage · Visa</div><div class="who">Ama Serwaa</div><div class="prev">You: "Your CAS letter arrived —…"</div></div>
+				<div class="side"><span>Yesterday</span><span>you</span></div>
+			</div>
+			<div class="band"><span>Resolved · 12</span><span class="note">show ▸</span></div>
+		</div>
+		<!-- thread -->
+		<div class="pane">
+			<div class="thead">
+				<div><div class="who">Efua Owusu</div><div class="sub">SUPPORT · UNCLAIMED</div></div>
+				<span class="pill" style="margin-left:auto">Claim</span>
+				<span class="pill pill--hollow">Reassign</span>
+				<span class="pill pill--solid">Resolve ✓</span>
+			</div>
+			<div class="msg"><div class="m-meta">Efua · client</div>Hi, I paid yesterday but the invoice still shows unpaid — APP-0042.</div>
+			<div class="msg"><div class="m-meta">Efua · client</div>Can someone check? I have the receipt.</div>
+			<div class="msg msg--note"><div class="m-meta">You · internal note</div>Payment landed this morning — INV-0142 unallocated. Asking finance.</div>
+			<div class="divider">— awaiting your reply —</div>
+			<div class="modebar">
+				<span class="mode on">Reply</span><span class="mode mode--dashed">Note</span>
+				<span class="mode mode--dashed" style="margin-left:auto">Snippets</span><span class="mode mode--dashed">📎</span>
+			</div>
+			<div class="composer"><span>Reply to Efua…</span><span class="pill pill--solid">Send</span></div>
+		</div>
+		<!-- context rail -->
+		<div class="pane">
+			<div class="pane-h">Context</div>
+			<div class="sec">Client</div>
+			<div class="kv"><span class="k">Name</span><span class="v">Efua Owusu</span></div>
+			<div class="kv"><span class="k">Branch</span><span class="v">Accra</span></div>
+			<div class="kv"><span class="k">Since</span><span class="v">Jan 2026</span></div>
+			<div class="sec">Journey</div>
+			<div class="kv"><span class="k">APP-0042</span><span class="v">Visa · active →</span></div>
+			<div class="sec">Money</div>
+			<div class="kv"><span class="k">INV-0142</span><span class="v">paid ✓</span></div>
+			<div class="sec">Next appointment</div>
+			<div class="kv"><span class="k">—</span><span class="v">none booked</span></div>
+		</div>
+	</div>
+	<div class="legend">
+		<span><b>Errors stop being silent.</b> If the conversation API 403s, the queue pane shows <i>"Your role can view the helpdesk but can't open threads — chat access required. Ask a manager."</i> If it 500s, an error bar with Retry replaces the empty box.</span>
+		<span><b>Empty state becomes honest.</b> "No client conversations yet — start one with + New conversation" instead of a dead panel.</span>
+	</div>
+</div>
+
+<!-- ═══════════════════════ 04 NEW CONVERSATION ═══════════════════════ -->
+<h2 id="s4" class="tag tag--solid">04 · "+ New conversation" — the sheet that was never built</h2>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /helpdesk?new=1 · proposed</span><span>annotated</span></div>
+	<div class="overlay">
+		<div class="sheet">
+			<div class="sheet-h">New conversation <span class="x">ESC ✕</span></div>
+			<div class="sheet-b">
+				<div class="field">
+					<label>Client <span class="mark">step 1</span></label>
+					<div class="box">Efua Owusu — efua.owusu@… <span class="caret">▾ search clients…</span></div>
+					<div class="pick"><b>Ama Serwaa</b><div class="sub">ama.s@… · APP-0038 · Accra</div></div>
+					<div class="pick on"><b>Efua Owusu</b><div class="sub">efua.owusu@… · APP-0042 · Accra <span class="mark--hollow mark">already has an open thread — you'll join it, not duplicate</span></div></div>
+				</div>
+				<div class="field">
+					<label>Regarding <span class="mark">step 2</span></label>
+					<div style="display:flex;gap:.35rem;flex-wrap:wrap">
+						<span class="chip">General support</span>
+						<span class="chip on">Case · APP-0042</span>
+						<span class="chip">Stage · Visa</span>
+						<span class="chip">Consultation · Mar 12</span>
+					</div>
+				</div>
+				<div class="field">
+					<label>First message <span class="mark">step 3</span></label>
+					<div class="box" style="min-height:3.2rem;color:var(--fg-muted)">Hi Efua — following up on your visa case…</div>
+					<div style="margin-top:.3rem"><span class="mode mode--dashed">Snippets</span></div>
+				</div>
+			</div>
+			<div class="sheet-f"><span class="btn btn--ghost btn--sm">Cancel</span><span class="btn btn--sm">Start thread →</span></div>
+		</div>
+	</div>
+	<div class="legend">
+		<span><b>The API gap this needs:</b> today <code>createConversationSchema</code> accepts only <code>participantOpsUserId(s)</code> — no client. Add an ops-side create: <code>POST /chat/conversations</code> extended with <code>{ clientUserId, linkedEntityType?, linkedEntityId?, stageKey?, initialMessage }</code>, reusing the portal's <code>findOrCreateConversation</code> logic — <b>one thread per client per context</b>, idempotent. If an open thread already exists for that client+case, join it instead of forking a second.</span>
+		<span><b>"Regarding" picks the thread type:</b> General support → <code>support</code>; Case → <code>case</code> linked to the application; Stage → <code>stage</code> with stageKey. Same taxonomy the portal uses, so the client sees one continuous thread.</span>
+		<span><b>Deep link:</b> <code>/helpdesk?new=1</code> opens the sheet; <code>?client=&lt;id&gt;</code> pre-fills the picker (from the client record pane).</span>
+		<span><b>Staff↔staff stays in the hub.</b> This sheet is only for client threads — DM a colleague via the floating CommunicationHub.</span>
+	</div>
+</div>
+
+<!-- ═══════════════════════ 05 BUILD LIST ═══════════════════════ -->
+<h2 id="s5" class="tag tag--solid">05 · Build list — what changes</h2>
+<div class="screen">
+	<div class="screen-bar"><span>implementation checklist</span><span>ops + api</span></div>
+	<table class="tbl">
+		<tr><th style="width:2rem">#</th><th>Change</th><th>Where</th></tr>
+		<tr><td class="mn">1</td><td><b>Ops-side client conversation create.</b> Extend <code>createConversationSchema</code> (+<code>clientUserId</code>, <code>type</code>, <code>stageKey</code>) or add <code>POST /chat/conversations/client</code>; service reuses <code>findOrCreateConversation</code> so it's idempotent — one open thread per client+context. Creator becomes owner participant.</td><td class="mn">shared/schemas/chat.ts · api services/chat.ts · routes/chat.ts</td></tr>
+		<tr><td class="mn">2</td><td><b>Fix the permission split.</b> Page gates on <code>helpdesk</code> module; API endpoints accept <code>helpdesk</code> <i>or</i> <code>chat</code> (or map helpdesk→chat server-side). No more silent 403 dead queue.</td><td class="mn">EnterpriseHelpdesk.tsx · api middleware</td></tr>
+		<tr><td class="mn">3</td><td><b>Surface errors.</b> <code>useChatConversations</code> exposes <code>forbidden</code> separately from <code>error</code>; the page renders an explicit "no access" state and a retry bar — never a silent empty queue.</td><td class="mn">hooks/useChatApi.ts · EnterpriseHelpdesk.tsx</td></tr>
+		<tr><td class="mn">4</td><td><b>"+ New conversation" sheet.</b> Client picker (search applicants), Regarding chips (support / case / stage / consultation), first-message composer, snippets. Opens via header button or <code>?new=1</code>; <code>?client=</code> pre-fills.</td><td class="mn">EnterpriseHelpdesk.tsx</td></tr>
+		<tr><td class="mn">5</td><td><b>Chips → 5 + Filters drawer.</b> All / Awaiting / Unclaimed / Mine + Filters ▾ (type cuts, unread, sort). Same pattern as the Worklist drawer.</td><td class="mn">EnterpriseHelpdesk.tsx</td></tr>
+		<tr><td class="mn">6</td><td><b>Remove the Chat page.</b> Delete the <code>/chat</code> nav item; route redirects to <code>/helpdesk</code>. Staff messaging stays in the floating CommunicationHub. ChatPage file retired (notification links already resolve to the hub or helpdesk).</td><td class="mn">EnterpriseLayout.tsx · App.tsx · ChatPage.tsx</td></tr>
+		<tr><td class="mn">7</td><td><b>Client record → "Message client" action.</b> The Clients detail pane gains a button linking to <code>/helpdesk?new=1&amp;client=&lt;id&gt;</code> — start a thread from the record where you already are.</td><td class="mn">ClientDirectory.tsx</td></tr>
+	</table>
+	<div class="legend">
+		<span><b>Not changing:</b> the thread view, MessageList/Composer, snippets, notes, claim/reassign/resolve, attachments, SSE live updates, and the context rail all stay — they work once a conversation exists.</span>
+	</div>
+</div>
+
+<div class="callout">
+	<b>One decision for you:</b> when ops start a thread, should it go out as a <b>portal message only</b> (client sees it next login + notification), or should "New conversation" also offer to <b>send the first message as an email</b> so the client definitely sees it? The mock assumes portal-only, matching how client threads behave today.
+</div>
+
+</div>
+</html>

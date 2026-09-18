@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Awaiting handler — preview</title>
+<style>
+  :root{
+    --background:#ffffff; --foreground:#0a0a0a;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#0a0a0a; --border-light:#d4d4d8;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --text-xs:.72rem; --text-sm:.875rem;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:#fafafa;color:var(--foreground);font-size:var(--text-sm)}
+  .page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .page-title{font-size:1.9rem;font-weight:700;letter-spacing:-.02em}
+  .lead{color:var(--muted-foreground)}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--muted-foreground)}
+  .sharp-card{background:var(--background);border:1px solid var(--border-light);padding:1.25rem}
+  .btn{border:1px solid var(--border);background:var(--background);color:var(--foreground);font:inherit;
+    font-size:var(--text-xs);font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+    padding:.55rem .9rem;cursor:pointer;text-decoration:none;display:inline-block}
+  .btn--primary{background:var(--foreground);color:var(--background)}
+  .btn--ghost{border-color:var(--border-light)}
+  .portal-pill{display:inline-block;border:1px solid var(--border);padding:.2rem .6rem;
+    font-family:var(--font-mono);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em}
+  .portal-pill--solid{background:var(--foreground);color:var(--background)}
+  .portal-pill--hollow{color:var(--muted-foreground);border-color:var(--border-light)}
+
+  .split{display:grid;grid-template-columns:1fr 19.5rem;gap:1.5rem;align-items:start}
+  .sec{margin-bottom:1.75rem}
+  .sec__title{font-weight:700;font-size:.95rem}
+  .sec__hint{font-size:var(--text-xs);color:var(--muted-foreground);margin:.35rem 0 .75rem}
+
+  /* checkpoint ledger — the same done/current/locked grammar as the chapter spine */
+  .seq{display:flex;flex-direction:column}
+  .seq__row{display:grid;grid-template-columns:2.2rem 1fr auto;gap:1rem;align-items:center;
+    border:1px solid var(--border-light);border-top:none;padding:.9rem 1.1rem}
+  .seq__row:first-child{border-top:1px solid var(--border-light)}
+  .seq__no{width:1.6rem;height:1.6rem;display:inline-flex;align-items:center;justify-content:center;
+    border:1px solid var(--border);font-family:var(--font-mono);font-size:.68rem;font-weight:700}
+  .seq__name{font-weight:700}
+  .seq__meta{font-family:var(--font-mono);font-size:.68rem;color:var(--muted-foreground);margin-top:.15rem}
+  .seq__st{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;
+    border:1px solid currentColor;padding:.14rem .45rem}
+  .seq__row--done .seq__no{background:var(--foreground);color:var(--background)}
+  .seq__row--done .seq__st{color:var(--muted-foreground)}
+  .seq__row--now{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+  .seq__row--now .seq__no{border-color:var(--background);background:var(--background);color:var(--foreground)}
+  .seq__row--now .seq__meta{color:rgba(255,255,255,.65)}
+  .seq__row--later{color:var(--muted-foreground)}
+  .seq__row--later .seq__no{border-color:var(--border-light);border-style:dashed}
+
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  .pulse-dot{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block;
+    animation:pulse 1.5s infinite ease-in-out}
+
+  /* rail */
+  .rail{position:sticky;top:1rem;display:flex;flex-direction:column;gap:.8rem}
+  .rail .sharp-card{padding:1.1rem}
+  .line{display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;
+    border-bottom:1px solid var(--border-light);font-size:var(--text-xs)}
+  .line .k{color:var(--muted-foreground)}
+  .line .v{font-family:var(--font-mono);font-weight:600;text-align:right}
+  .line:last-child{border-bottom:none}
+  .terms{font-size:.68rem;color:var(--muted-foreground);line-height:1.5;margin:.8rem 0 0}
+
+  /* document rows — while you wait */
+  .drow{display:flex;justify-content:space-between;align-items:center;gap:1rem;
+    padding:.55rem 0;border-bottom:1px dashed var(--border-light);font-size:var(--text-xs)}
+  .drow:last-child{border-bottom:none}
+  .drow .st{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.06em}
+  .drow .st--ok{color:var(--foreground)}
+  .drow .st--due{color:var(--muted-foreground);text-decoration:underline;text-underline-offset:3px}
+
+  @media (max-width:900px){.split{grid-template-columns:1fr}.rail{position:static}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <p class="eyebrow">Chapter II · Enrolment → III · Applications</p>
+  <h1 class="page-title" style="margin:.2rem 0 .3rem">Your consultant is being assigned</h1>
+  <p class="lead" style="font-size:var(--text-sm)">Deposit received — the office is assigning your handler. School selection opens the moment they land.</p>
+
+  <div class="split" style="margin-top:1.5rem">
+    <!-- left: where the case sits + what you can still do -->
+    <div>
+
+      <section class="sec">
+        <p class="eyebrow" style="margin-bottom:.6rem">Where your case sits</p>
+        <div class="seq">
+          <div class="seq__row seq__row--done">
+            <span class="seq__no">✓</span>
+            <div>
+              <p class="seq__name">Enrolment deposit received</p>
+              <p class="seq__meta">GH₵ 3,540.00 · RCT-2026-0041 · 14 FEB 2026 · PAYSTACK</p>
+            </div>
+            <span class="seq__st">Done</span>
+          </div>
+          <div class="seq__row seq__row--now">
+            <span class="seq__no">2</span>
+            <div>
+              <p class="seq__name">Handler being assigned</p>
+              <p class="seq__meta">ACCRA HQ DESK · USUALLY 1–2 BUSINESS DAYS · QUEUED 14 FEB</p>
+            </div>
+            <span class="seq__st" style="display:inline-flex;align-items:center;gap:.4rem"><span class="pulse-dot"></span>In motion</span>
+          </div>
+          <div class="seq__row seq__row--later">
+            <span class="seq__no">3</span>
+            <div>
+              <p class="seq__name">School selection opens</p>
+              <p class="seq__meta">CHAPTER III · APPLICATIONS · UNLOCKS ON ASSIGNMENT</p>
+            </div>
+            <span class="seq__st">Queued</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <p class="eyebrow" style="margin-bottom:.6rem">While you wait</p>
+        <div class="sharp-card">
+          <p class="muted" style="font-size:var(--text-sm);margin-bottom:.4rem">
+            Your handler starts faster when your file is complete — <strong style="color:var(--foreground)">2 documents</strong> are still outstanding.
+          </p>
+          <div>
+            <div class="drow"><span>Passport bio page</span><span class="st st--ok">Verified</span></div>
+            <div class="drow"><span>Degree certificate</span><span class="st st--ok">Verified</span></div>
+            <div class="drow"><span>Academic transcript</span><span class="st st--due">Upload needed</span></div>
+            <div class="drow"><span>Passport photo</span><span class="st st--due">Upload needed</span></div>
+          </div>
+          <div style="margin-top:.9rem">
+            <a class="btn btn--primary" href="#">Finish your file →</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <div class="sharp-card" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
+          <p class="muted" style="font-size:var(--text-xs);display:flex;align-items:center;gap:.5rem">
+            <span class="pulse-dot"></span>
+            This page advances itself — checking the assignment every 20 seconds. No need to refresh or call.
+          </p>
+          <a class="btn btn--ghost" href="#">View full journey</a>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- right: the case record -->
+    <div class="rail">
+      <div class="sharp-card" style="border-color:var(--border);border-width:1.5px">
+        <p class="eyebrow">Your case</p>
+        <p style="font-weight:700;font-size:1.05rem;margin:.3rem 0 .6rem">APP-2025-0001</p>
+        <div class="line"><span class="k">Package</span><span class="v">Scholarship × Master's</span></div>
+        <div class="line"><span class="k">Schools</span><span class="v">3 targets</span></div>
+        <div class="line"><span class="k">Plan</span><span class="v">Full · 10% + 90%</span></div>
+        <div class="line"><span class="k">Deposit</span><span class="v">GH₵ 3,540 · paid</span></div>
+        <div class="line"><span class="k">Handling branch</span><span class="v">Accra HQ</span></div>
+        <div class="line"><span class="k">Consultant</span><span class="v" style="color:var(--muted-foreground)">— assigning</span></div>
+        <div style="margin-top:.9rem">
+          <a class="btn btn--ghost" href="#" style="width:100%;text-align:center">Deposit receipt</a>
+        </div>
+      </div>
+
+      <div class="sharp-card">
+        <p class="eyebrow">When your handler lands</p>
+        <p class="muted" style="font-size:var(--text-xs);margin-top:.4rem;line-height:1.65">
+          They introduce themselves by email and in-app message, school selection opens in
+          <strong style="color:var(--foreground)">Chapter III</strong>, and this page moves you
+          forward automatically — you will not miss it.
+        </p>
+      </div>
+
+      <div class="sharp-card">
+        <p class="eyebrow">Questions meanwhile</p>
+        <p class="muted" style="font-size:var(--text-xs);margin-top:.4rem;line-height:1.65">
+          Anything about your package, deposit or timeline — message the desk.
+        </p>
+        <a class="btn" href="#" style="width:100%;text-align:center;margin-top:.7rem">Message us</a>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

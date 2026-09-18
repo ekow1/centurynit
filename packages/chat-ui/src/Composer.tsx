@@ -10,7 +10,7 @@ export interface ComposerProps {
 	onChange: (v: string) => void;
 	/** Submit the message. Parent handles the API call and optimistic append. */
 	onSend: (text: string) => void;
-	/** True while the send request is in flight — disables the input. */
+	/** True while the send request is in flight. Disables the input. */
 	sending?: boolean;
 	/** Placeholder text. */
 	placeholder?: string;

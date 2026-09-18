@@ -52,7 +52,7 @@ function currentStageCta(
 		if (proceedStatus === "accepted") {
 			return STAGE_CTA.school_package ?? { to: "/portal/package", label: "Choose package" };
 		}
-		// invited — the consent gate is still open. The consultation page shows
+		// invited. The consent gate is still open. The consultation page shows
 		// the assessment recommendation + consent card, so we send them there
 		// instead of straight to package selection.
 		return { to: "/portal/consultation", label: "Review recommendation" };
@@ -73,7 +73,7 @@ const STAGE_META: Record<ProcessStageId, { title: string; desc: string }> = {
 	school_tracking: { title: "Application tracking", desc: "Follow each school application through the process." },
 	visa_invoice: { title: "Pay the visa fee", desc: "On admission, settle the visa fee to open your visa case." },
 	visa: { title: "Visa tracking", desc: "Your consultant processes your visa after you settle the invoice." },
-	payment_execution: { title: "Pre-departure fee milestone", desc: "Unlocks once your flight is booked — it releases your documents." },
+	payment_execution: { title: "Pre-departure fee milestone", desc: "Unlocks once your flight is booked. It releases your documents." },
 	travel_assistance: { title: "Departure", desc: "Choose how to book your flight, pay the ticket, and work through the pre-departure checklist." },
 	completed: { title: "Journey complete", desc: "Everything is settled - thank you for using Century NIT." },
 };
@@ -128,12 +128,12 @@ export function DashboardHome() {
 
 	const currentChapter = PORTAL_STEP_CHAPTER[current as PortalStepId] as ChapterId | undefined;
 
-	/* ── Rail data: money position, next appointment, documents on file ── */
+	/* Rail data: money position, next appointment, documents on file */
 	const [money, setMoney] = useState<{ paid: number; due: number; next: string | null } | null>(null);
 	const [nextAppt, setNextAppt] = useState<Booking | null>(null);
 	const [docsOnFile, setDocsOnFile] = useState<number | null>(null);
 
-	// A live booking turns "Book consultation" into "your appointment" — the
+	// A live booking turns "Book consultation" into "your appointment". The
 	// stage hasn't moved on, but the thing to do with it has.
 	const cta = nextAppt && (current === "new" || current === "consultation")
 		? { to: "/portal/appointments", label: "Your appointment" }
@@ -191,7 +191,7 @@ export function DashboardHome() {
 					Welcome{authUser ? `, ${authUser.name.split(" ")[0]}` : ""}
 				</h1>
 				<p className="lead mt-2">
-					One glance at your journey — where you are, what needs you, and who is on your file.
+					One glance at your journey. Where you are, what needs you, and who is on your file.
 				</p>
 				<div className="dash-refs">
 					<span className="dash-ref">
@@ -219,7 +219,7 @@ export function DashboardHome() {
 				/>
 			)}
 
-			{/* The one ask — action required, else where you stand */}
+			{/* The one ask. Action required, else where you stand */}
 			{current !== "proceed" && (pendingAction ? (
 				<div className="action-now mt-5">
 					<div>
@@ -249,7 +249,7 @@ export function DashboardHome() {
 				</div>
 			))}
 
-			{/* The six chapters, at a glance — the journey map's edge into home */}
+			{/* The six chapters, at a glance. The journey map's edge into home */}
 			{current !== "proceed" && (
 				<div className="jmini mt-4">
 					{CHAPTERS.map((ch) => {
@@ -274,7 +274,7 @@ export function DashboardHome() {
 			{current !== "proceed" && (
 				<div className="psplit mt-5">
 					<div>
-						{/* Now — the live detail of the chapter you are in */}
+						{/* Now. The live detail of the chapter you are in */}
 						<div className="psec">
 							<span className="psec__title">Now · {CHAPTERS.find((c) => c.id === currentChapter)?.label ?? meta.title}</span>
 							<span className="psec__hint">
@@ -300,8 +300,8 @@ export function DashboardHome() {
 									<div className="nowlist__row nowlist__foot">
 										<span>
 											{offersCount > 0
-												? `${offersCount} offer${offersCount === 1 ? "" : "s"} in — accepting one opens the visa chapter.`
-												: "Your handler lodges each file and chases replies — changes land here first."}
+												? `${offersCount} offer${offersCount === 1 ? "" : "s"} in. Accepting one opens the visa chapter.`
+												: "Your handler lodges each file and chases replies. Changes land here first."}
 										</span>
 										<Link to="/portal/application" className="jlink">Open applications →</Link>
 									</div>
@@ -324,7 +324,7 @@ export function DashboardHome() {
 						</p>
 					</div>
 
-					{/* The rail — money, calendar, people, documents */}
+					{/* The rail. Money, calendar, people, documents */}
 					<div className="prail">
 						<div className="sharp-card sharp-card--key sharp-card--invert">
 							<p className="eyebrow" style={{ color: "rgba(255,255,255,0.6)" }}>Money</p>
@@ -336,7 +336,7 @@ export function DashboardHome() {
 									</div>
 									<div className="pkv" style={{ borderColor: "rgba(255,255,255,0.3)" }}>
 										<span className="pkv__k" style={{ color: "rgba(255,255,255,0.72)" }}>Due now</span>
-										<span className="pkv__v">{money.due > 0 ? <MoneyStack usd={money.due} /> : "—"}</span>
+										<span className="pkv__v">{money.due > 0 ? <MoneyStack usd={money.due} /> : "N/A"}</span>
 									</div>
 								</>
 							) : (
@@ -388,7 +388,7 @@ export function DashboardHome() {
 								</div>
 								<div className="pkv">
 									<span className="pkv__k">Handler</span>
-									<span className="pkv__v">{application.assignedStaffName ?? "—"}</span>
+									<span className="pkv__v">{application.assignedStaffName ?? "N/A"}</span>
 								</div>
 								<div className="pkv">
 									<span className="pkv__k">Travel officer</span>
@@ -404,14 +404,14 @@ export function DashboardHome() {
 							<p className="eyebrow">Documents</p>
 							<div className="pkv" style={{ marginTop: "0.4rem" }}>
 								<span className="pkv__k">On file</span>
-								<span className="pkv__v"><strong>{docsOnFile !== null ? `${docsOnFile}` : "—"}</strong></span>
+								<span className="pkv__v"><strong>{docsOnFile !== null ? `${docsOnFile}` : "N/A"}</strong></span>
 							</div>
 							<p style={{ marginTop: "0.8rem" }}>
 								<Link to="/portal/documents" className="jlink">Open the vault →</Link>
 							</p>
 						</div>
 
-						{/* From your file — the consultant's latest notes, newest first */}
+						{/* From your file. The consultant's latest notes, newest first */}
 						<ConsultantUpdates comments={application.comments} limit={3} title="From your file" />
 					</div>
 				</div>

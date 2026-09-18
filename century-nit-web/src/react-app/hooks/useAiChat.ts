@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * Real, streaming AI chat backed by the Workers AI edge endpoint `POST /ai/chat`
- * (see `src/worker/index.ts`). The portal's two AI surfaces — FloatingChat and
- * CommunicationCenter — and the public EnquiryWidget all use this hook, passing
+ * (see `src/worker/index.ts`). The portal's two AI surfaces. FloatingChat and
+ * CommunicationCenter. And the public EnquiryWidget all use this hook, passing
  * a different `surface` so the worker picks the right system prompt (and, for
  * the public `web` surface, enforces Turnstile).
  *
  * State is client-only: history lives in React state and is replayed to the
  * endpoint each turn, matching the previous "AI is local-only" design. There is
- * no server persistence and no SSE reconnect — every send is one request/stream.
+ * no server persistence and no SSE reconnect. Every send is one request/stream.
  */
 
 export type AiChatSurface = "portal-floating" | "portal-comm" | "web";
@@ -127,7 +127,7 @@ export function useAiChat(surface: AiChatSurface, options: UseAiChatOptions = {}
 						const body = await res.json();
 						if (body?.error?.message) detail = body.error.message;
 					} catch {
-						// non-JSON error body — keep the status text
+						// non-JSON error body. Keep the status text
 					}
 					setError(detail);
 					setMessages((p) =>

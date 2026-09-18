@@ -19,13 +19,13 @@ export function InvoiceCard({
 }: {
 	invoice: Pick<ApiInvoice, "invoiceNumber" | "status" | "type" | "lines" | "subtotalCents" | "paidCents" | "balanceCents" | "dueAt" | "note"> & {
 		creditedCents?: number;
-		/** The trail — shown when present: raised by X, approved by Y. */
+		/** The trail. Shown when present: raised by X, approved by Y. */
 		raisedByName?: string | null;
 		raisedAt?: string | null;
 		issuedByName?: string | null;
 		reviewedAt?: string | null;
 	};
-	/** Heading — "Application invoice", "Visa invoice", "Ticket invoice"… */
+	/** Heading. "Application invoice", "Visa invoice", "Ticket invoice"… */
 	title: string;
 	display?: MoneyDisplay;
 	/** Buttons for this viewer. */

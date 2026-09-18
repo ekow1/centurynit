@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ops — Case detail, redesigned</title>
+<style>
+:root{--bg:#fff;--fg:#0a0a0a;--muted:#f5f5f5;--muted-fg:#52525b;--b:#0a0a0a;--bl:#d4d4d8;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--serif:Georgia,serif;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
+*{box-sizing:border-box;margin:0}
+body{font-family:var(--sans);background:#e8e8e8;color:var(--fg);font-size:.875rem}
+.page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 4rem}
+.eyebrow{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg)}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
+.lead{color:var(--muted-fg);font-size:.85rem}
+.note{font-size:.72rem;color:var(--muted-fg);border-left:3px solid var(--fg);padding:.6rem .9rem;margin:1.5rem 0;line-height:1.6;background:#fff}
+.frame{background:var(--bg);border:1px solid var(--bl);margin-top:1.25rem;padding:1.5rem}
+.btn{border:1px solid var(--b);background:var(--bg);padding:.4rem .85rem;font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;cursor:pointer}
+.btn--primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn--sm{padding:.28rem .6rem;font-size:.62rem}
+.jlink{font-family:var(--mono);font-size:.62rem;text-decoration:underline;text-underline-offset:2px;color:var(--fg);background:none;border:0;cursor:pointer}
+.spill{display:inline-block;border:1px solid var(--b);padding:.1rem .45rem;font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.06em}
+.spill--solid{background:var(--fg);color:var(--bg)}
+
+/* the case header */
+.chead{border:1.5px solid var(--b);padding:1.1rem 1.25rem;display:flex;justify-content:space-between;gap:1.5rem;flex-wrap:wrap}
+.chead .who h2{font-size:1.25rem;font-weight:800;margin:.2rem 0}
+.chead .who .ref{font-family:var(--mono);font-size:.65rem;color:var(--muted-fg)}
+.chead .facts{font-family:var(--mono);font-size:.65rem;color:var(--muted-fg);margin-top:.5rem;line-height:1.8}
+.chead .people{text-align:right;font-size:.72rem;line-height:1.9;min-width:13rem}
+.chead .people .k{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg)}
+
+/* the chapter spine — replaces the tab strip's plain words */
+.spine{display:grid;grid-template-columns:repeat(6,1fr) auto auto;border:1.5px solid var(--b);border-top:none}
+.spine button{border:0;border-right:1px solid var(--bl);background:var(--bg);padding:.65rem .4rem .6rem;text-align:center;cursor:pointer;font:inherit}
+.spine button:last-child{border-right:0}
+.spine .rn{font-family:var(--mono);font-size:.85rem;font-weight:800}
+.spine .lb{font-family:var(--mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-fg);margin-top:.15rem}
+.spine button.done .rn{color:var(--muted-fg)}.spine button.done .rn::before{content:"✓ "}
+.spine button.now{background:var(--fg)}.spine button.now .rn,.spine button.now .lb{color:var(--bg)}
+.spine button.locked{opacity:.45;cursor:default}.spine button.locked .rn::after{content:" ·"}
+.spine button.util .rn{font-size:.62rem;padding-top:.2rem}
+
+/* next-action band */
+.nab{border:1.5px solid var(--b);margin-top:1rem}
+.nab .na{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.7rem 1.1rem;border-bottom:1px solid var(--bl)}
+.nab .na:last-child{border-bottom:0}
+.nab .na--blocked{background:var(--fg);color:var(--bg)}
+.nab .na--blocked .d{color:#bbb}
+.nab .t{font-weight:700;font-size:.82rem}
+.nab .d{font-size:.7rem;color:var(--muted-fg);margin-top:.1rem}
+
+/* tab body sample — applications */
+.sec{margin-top:1.25rem}
+.sec__head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5px solid var(--b);padding-bottom:.35rem;margin-bottom:.6rem}
+.sec__head h3{font-size:.95rem;font-weight:800}
+.sec__head .k{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg)}
+table.sheet{width:100%;border-collapse:collapse;font-size:.8rem}
+.sheet th{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);text-align:left;padding:.5rem .75rem;border-bottom:1px solid var(--b)}
+.sheet td{padding:.6rem .75rem;border-bottom:1px solid var(--bl);vertical-align:top}
+.sheet td:last-child,.sheet th:last-child{text-align:right}
+.amt{font-family:var(--mono);font-weight:600}
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="eyebrow">Ops · case detail</p>
+  <h1>The case detail — the spine replaces the tab row</h1>
+  <p class="lead">Eight tabs today read as eight peers: Overview, Consultation, Enrolment, Applications, Visa, Departure, Money, Documents. But six of them are the journey — they have an order, a "now" and a lock state. The detail reads the spine like the client reads theirs.</p>
+
+  <div class="frame">
+    <!-- header — same fields, tighter -->
+    <div class="chead">
+      <div class="who">
+        <span class="ref">APP-2026-0041 · ACCRA</span> <span class="spill spill--solid">Under review</span>
+        <h2>Kwame Mensah</h2>
+        <p class="facts">kwame@example.com · +233 24 555 0192<br>United Kingdom · BA (Hons) Business Management</p>
+      </div>
+      <div class="people">
+        <p><span class="k">Consultant</span><br>A. Osei <button class="jlink">change</button></p>
+        <p style="margin-top:.4rem"><span class="k">Also on file</span><br>Visa — D. Larkai</p>
+        <p style="margin-top:.4rem"><button class="btn btn--sm">History · 12</button> <button class="btn btn--sm">Assign</button></p>
+      </div>
+    </div>
+
+    <!-- the spine — six chapters + the two utilities -->
+    <div class="spine">
+      <button class="done"><p class="rn">I</p><p class="lb">Consultation</p></button>
+      <button class="done"><p class="rn">II</p><p class="lb">Enrolment</p></button>
+      <button class="now"><p class="rn">III</p><p class="lb">Applications</p></button>
+      <button class="locked"><p class="rn">IV</p><p class="lb">Visa</p></button>
+      <button class="locked"><p class="rn">V</p><p class="lb">Departure</p></button>
+      <button class="locked"><p class="rn">VI</p><p class="lb">Complete</p></button>
+      <button class="util"><p class="rn">₵</p><p class="lb">Money</p></button>
+      <button class="util"><p class="rn">▤</p><p class="lb">Docs</p></button>
+    </div>
+
+    <!-- next actions — unchanged anatomy, stays -->
+    <div class="nab">
+      <div class="na na--blocked">
+        <div><p class="t">Needs an owner · Applications</p><p class="d" style="color:#bbb">Deposit received — assign a consultant before school selection proceeds.</p></div>
+        <button class="btn btn--sm" style="background:#fff;border-color:#fff">Assign owner</button>
+      </div>
+      <div class="na">
+        <div><p class="t">2 documents awaiting review</p><p class="d">Passport bio page · Degree certificate — uploaded 12 Feb</p></div>
+        <button class="btn btn--sm">Review →</button>
+      </div>
+      <div class="na">
+        <div><p class="t">Waiting on the client — pay application invoice INV-2026-0184</p><p class="d">$405 due · issued 4 Feb · due 18 Feb</p></div>
+        <span class="spill">Waiting</span>
+      </div>
+    </div>
+
+    <!-- tab body sample: chapter III -->
+    <div class="sec">
+      <div class="sec__head"><h3>Applications</h3><span class="k">3 schools · 1 offer</span></div>
+      <table class="sheet">
+        <thead><tr><th>School</th><th>Programme</th><th>Status</th><th>Decided</th><th></th></tr></thead>
+        <tbody>
+          <tr><td>Leeds Beckett University<small style="display:block;color:var(--muted-fg);font-size:.68rem">Sept 2026 intake</small></td><td>BA (Hons) Business Mgmt</td><td><span class="spill spill--solid">Offer</span></td><td class="amt">12 Feb</td><td><button class="jlink">terms →</button></td></tr>
+          <tr><td>University of Portsmouth</td><td>MSc International Business</td><td><span class="spill">Submitted</span></td><td class="amt">—</td><td><button class="jlink">file →</button></td></tr>
+          <tr><td>Coventry University</td><td>MSc Global Business</td><td><span class="spill">Submitted</span></td><td class="amt">—</td><td><button class="jlink">file →</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="note">
+    <strong>WHAT CHANGES.</strong> (1) <strong>The tab row becomes the chapter spine.</strong> Today the tabs are eight equal words with a small dot for "now" and a lock glyph — the spine gives them the portal's roman numerals: done chapters carry ✓, the current one is inverted (and is the page's "you are here"), locked ones dim with their unlock reason on hover. Money and Documents aren't chapters — they drop to the right as utility cells (₵ / ▤), not fake stages. (2) The <strong>header</strong> keeps CaseHeader's fields but drops the nested card-in-card: one bordered head — who, the mono fact line, and the people column (consultant + change, other officers, History/Assign). (3) <strong>NextActionBand is already right</strong> — blocked = inverted row, waiting = pill. It stays. (4) Locked chapters no longer dead-end into "Overview": hovering a locked cell shows <em>why</em> ("Unlocks on the first admission"), clicking a locked cell does nothing instead of navigating away.
+  </p>
+  <p class="note">
+    <strong>WHAT IT FIXES.</strong> A handler opening a case currently can't tell chapter progress without reading each tab; the spine shows the whole journey at a glance — the same I–VI vocabulary the client's portal uses, so "the client is in Chapter III" means the same thing on both sides.
+  </p>
+</div>
+</body>
+</html>

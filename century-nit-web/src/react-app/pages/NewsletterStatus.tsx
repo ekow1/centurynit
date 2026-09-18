@@ -17,7 +17,7 @@ type Status =
  *
  * The second leg of double opt-in. The visitor clicked the confirmation link
  * in the email; we call the API to flip their subscription to `confirmed`.
- * No auth — the token is the credential.
+ * No auth. The token is the credential.
  */
 export function NewsletterConfirm() {
 	const [params] = useSearchParams();
@@ -64,7 +64,7 @@ export function NewsletterConfirm() {
 					<>
 						<div className="newsletter-status-icon newsletter-status-icon--ok">&#10003;</div>
 						<h1>Already subscribed</h1>
-						<p>You're all set — we already have you on the list.</p>
+						<p>You're all set. We already have you on the list.</p>
 						<Link to="/" className="newsletter-status-link">
 							Back to home
 						</Link>
@@ -93,7 +93,7 @@ export function NewsletterConfirm() {
  *
  * One-click unsubscribe from campaign emails. The token is the same
  * `confirm_token` issued at subscribe time and included in every campaign
- * footer. No auth, no form — one click and they're off the list.
+ * footer. No auth, no form. One click and they're off the list.
  */
 export function NewsletterUnsubscribe() {
 	const [params] = useSearchParams();
@@ -140,7 +140,7 @@ export function NewsletterUnsubscribe() {
 					<>
 						<div className="newsletter-status-icon newsletter-status-icon--ok">&#10003;</div>
 						<h1>Already unsubscribed</h1>
-						<p>You're not on our list — no further action needed.</p>
+						<p>You're not on our list. No further action needed.</p>
 						<Link to="/" className="newsletter-status-link">
 							Back to home
 						</Link>

@@ -12,7 +12,7 @@ import {
 /**
  * Better Auth client for the same-origin `/api/auth` endpoints.
  *
- * The plugins mirror the server's exactly — a client plugin only adds the typed
+ * The plugins mirror the server's exactly. A client plugin only adds the typed
  * calls for routes the server already exposes, so the two lists have to agree or
  * the call simply 404s.
  */
@@ -93,7 +93,7 @@ export async function resetPassword({ token, newPassword, confirmPassword }: { t
 	if (error) throw new Error(formatError(error, "Could not reset password"));
 }
 
-/* ── Phone ───────────────────────────────────────────────────────────────── */
+/* Phone */
 
 /**
  * Send a sign-in code by SMS.
@@ -130,7 +130,7 @@ export async function verifyPhoneCode(phoneNumber: string, code: string) {
 	return data;
 }
 
-/* ── One-time email codes ────────────────────────────────────────────────── */
+/* One-time email codes */
 
 export async function sendEmailCode(email: string) {
 	const mail = email.trim().toLowerCase();
@@ -144,7 +144,7 @@ export async function sendEmailCode(email: string) {
 	return mail;
 }
 
-/** Sign in with a one-time email code — no password involved. */
+/** Sign in with a one-time email code. No password involved. */
 export async function verifyEmailCode(email: string, otp: string) {
 	const { data, error } = await authClient.signIn.emailOtp({
 		email: email.trim().toLowerCase(),
@@ -186,7 +186,7 @@ export async function verifyEmailOtp(email: string, otp: string) {
 	return data;
 }
 
-/* ── Two-factor (optional for clients) ───────────────────────────────────── */
+/* Two-factor (optional for clients) */
 
 /**
  * Whether sign-in stopped to ask for a second factor.
@@ -201,7 +201,7 @@ export function needsSecondFactor(data: unknown): boolean {
 /**
  * The enrolled MFA method while sign-in waits on the second factor.
  *
- * Between the password step and verification there is no session — only the
+ * Between the password step and verification there is no session. Only the
  * signed two-factor cookie Better Auth set. `GET /api/auth/mfa/method` reads
  * that cookie server-side and answers which challenge to render. Returns
  * null when there is no pending challenge (or it expired); callers then fall
@@ -227,13 +227,13 @@ function mfaErrorMessage(
 ): string {
 	switch (error?.code) {
 		case "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE":
-			return "Too many attempts — sign in again to restart verification.";
+			return "Too many attempts. Sign in again to restart verification.";
 		case "ACCOUNT_TEMPORARILY_LOCKED":
-			return "Too many failed attempts — this account is temporarily locked. Try again later.";
+			return "Too many failed attempts. This account is temporarily locked. Try again later.";
 		case "INVALID_TWO_FACTOR_COOKIE":
-			return "This verification expired — sign in again.";
+			return "This verification expired. Sign in again.";
 		case "OTP_HAS_EXPIRED":
-			return "That code expired — request a new one.";
+			return "That code expired. Request a new one.";
 		default:
 			return formatError(error, fallback);
 	}
@@ -264,7 +264,7 @@ export async function verifyMfaEmailCode(code: string, trustDevice?: boolean) {
 }
 
 /**
- * Redeem one of the single-use recovery codes issued at enrolment — the way
+ * Redeem one of the single-use recovery codes issued at enrolment. The way
  * back in when the authenticator app or the inbox is gone.
  */
 export async function verifyMfaBackupCode(code: string, trustDevice?: boolean) {

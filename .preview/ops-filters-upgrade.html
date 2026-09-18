@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Workspace — the filter wall, fixed</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1180px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3.5rem 0 .6rem}
+	.tag--solid{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.screen{background:#f2f2f2;border:1px solid #999;box-shadow:5px 5px 0 rgba(0,0,0,.12)}
+	.screen-bar{background:var(--ink);color:#fff;font-family:var(--mono);font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;padding:.4rem .8rem;display:flex;justify-content:space-between}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.8rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.callout--warn{border-left-style:dashed}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	code{font-family:var(--mono);font-size:.74rem;background:var(--muted-bg);padding:.1rem .35rem}
+	.pill{display:inline-block;font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;padding:.24rem .55rem;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line)}
+	.pill--dashed{color:var(--fg-muted);border-style:dashed}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.72rem;font-weight:700;padding:.55rem 1rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;white-space:nowrap;font-family:var(--sans);text-decoration:none}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--sm{padding:.35rem .7rem;font-size:.6rem}
+	.chip{font-family:var(--mono);font-size:.6rem;letter-spacing:.06em;padding:.3rem .65rem;border:1px solid var(--ink);background:#fff;cursor:pointer;text-transform:uppercase}
+	.chip.on{background:var(--ink);color:#fff}
+	.chip .n{opacity:.6;margin-left:.3rem}
+	.chip--dashed{border-style:dashed;color:var(--fg-muted)}
+	.chip--dead{opacity:.45;border-color:var(--line);color:var(--fg-muted)}
+	.input{border:1px solid var(--ink);background:#fff;font-size:.74rem;padding:.45rem .6rem;font-family:var(--sans);min-width:0}
+	.pagehead{padding:1rem 1.25rem .6rem;background:#fff;border-bottom:1px solid var(--line-light)}
+	.pagehead h2{font-size:1.15rem;letter-spacing:-0.01em}
+	.pagehead .lead{font-size:.72rem;color:var(--fg-muted);margin-top:.15rem}
+	.statstrip{display:flex;gap:1.4rem;padding:.55rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);font-size:.72rem;align-items:center;flex-wrap:wrap}
+	.statstrip b{font-size:.95rem;margin-right:.2rem}
+	.statstrip .lbl{color:var(--fg-muted);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono)}
+	.statstrip .sep{color:var(--line)}
+	.statstrip .link{margin-left:auto;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em}
+	.chips{display:flex;gap:.4rem;padding:.55rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);flex-wrap:wrap;align-items:center}
+	.chips input{margin-left:auto}
+
+	.tbl{width:100%;border-collapse:collapse;font-size:.76rem;background:#fff}
+	.tbl th{font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);text-align:left;padding:.5rem .8rem;border-bottom:1.5px solid var(--ink);background:var(--muted-bg)}
+	.tbl td{padding:.5rem .8rem;border-bottom:1px solid var(--line-light);vertical-align:top}
+	.tbl tr.on td{background:var(--muted-bg);box-shadow:inset 3px 0 0 var(--ink)}
+	.tbl .r{text-align:right}
+	.tbl .sub{font-size:.66rem;color:var(--fg-muted)}
+	.tbl .nm{font-weight:700}
+	.tbl .mn{font-family:var(--mono);font-size:.66rem;color:var(--fg-muted)}
+
+	/* worklist bands + rows */
+	.band{display:flex;justify-content:space-between;align-items:baseline;padding:.45rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light);font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase}
+	.band--hot{background:var(--ink);color:#fff}
+	.band .note{font-size:.56rem;opacity:.7;letter-spacing:.06em;text-transform:none}
+	.tgroup{padding:.3rem 1.25rem .15rem;font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted);background:#fff}
+	.trow{display:grid;grid-template-columns:1.6rem 1fr 7.5rem 8rem 5.5rem 5rem;gap:.6rem;align-items:center;padding:.5rem 1.25rem;border-bottom:1px solid var(--line-light);background:#fff;font-size:.76rem}
+	.trow .kick{font-family:var(--mono);font-size:.54rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted)}
+	.trow .who{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted)}
+	.trow .act{text-align:right}
+	.linkish{font-family:var(--mono);font-size:.64rem;text-transform:uppercase;letter-spacing:.06em;text-decoration:underline;cursor:pointer}
+
+	/* split panes */
+	.split{display:grid;background:#fff}
+	.split--2{grid-template-columns:1fr 300px}
+	.pane{border-left:1px solid var(--line-light);background:#fff}
+	.pane-h{font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);padding:.5rem .8rem;border-bottom:1px solid var(--line-light);background:var(--muted-bg)}
+	.pane .sec{font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);padding:.6rem .8rem .3rem}
+	.kv{display:flex;justify-content:space-between;gap:.6rem;padding:.3rem .8rem;font-size:.72rem;border-bottom:1px dotted var(--line-light)}
+	.kv:last-child{border-bottom:0}
+	.kv .k{color:var(--fg-muted);font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;padding-top:.1rem}
+	.kv .v{text-align:right}
+
+	.legend{display:flex;gap:1.2rem;flex-wrap:wrap;font-size:.68rem;color:var(--fg-muted);padding:.5rem 1.25rem;background:#fff;border-bottom:1px solid var(--line-light)}
+	.legend b{color:var(--ink);font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em}
+
+	/* annotated strike-through for the "before" shot */
+	.dead{position:relative;opacity:.45}
+	.dead::after{content:"";position:absolute;left:-2px;right:-2px;top:50%;height:1.5px;background:var(--ink)}
+	.mark{background:var(--ink);color:#fff;font-family:var(--mono);font-size:.56rem;padding:.1rem .35rem;letter-spacing:.08em}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1 class="page">Workspace — the filter wall, fixed</h1>
+<p class="note">
+	<b>The problem:</b> the worklist puts <b>14 controls between you and the first task</b> —
+	6 queue chips + 3 time chips + search + Type + "Date/Time" + Branch + Delegate. Half the chips read
+	<code>0</code>, the time chips duplicate the section bands the list already renders, "No handler"
+	duplicates the Unassigned stat in the NOW rail, the "Date/Time" select actually <i>sorts</i> (it's mislabeled),
+	and <b>overdue work renders below today's</b> — the most stale item on the page sits second.
+	This pass: one row of real cuts, sections ordered by urgency, and everything else behind one disclosure.
+</p>
+<div class="jump">
+	<a href="#s1">01 Diagnosis — what's wrong</a>
+	<a href="#s2">02 The fix — one row of cuts</a>
+	<a href="#s3">03 Expanded filters — where the rest went</a>
+	<a href="#s4">04 Section order — overdue first</a>
+	<a href="#s5">05 NOW rail — coverage condensed</a>
+</div>
+
+<!-- ════════════════════ 01 DIAGNOSIS ════════════════════ -->
+<h2 id="s1" class="tag tag--solid">01 · Diagnosis — what's wrong with the current bar</h2>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /workspace · current</span><span>annotated</span></div>
+	<div class="chips" style="gap:.35rem">
+		<span class="chip on">All<span class="n">4</span></span>
+		<span class="chip">Mine<span class="n">1</span></span>
+		<span class="chip chip--dead">No handler<span class="n">0</span></span>
+		<span class="chip chip--dead">Coordinated<span class="n">0</span></span>
+		<span class="chip chip--dead">Invoicing<span class="n">0</span></span>
+		<span class="chip chip--dead">Follow up<span class="n">0</span></span>
+		<span style="margin-left:auto"></span>
+		<span class="chip dead">Any time</span>
+		<span class="chip dead">Today<span class="n">1</span></span>
+		<span class="chip dead">Overdue<span class="n">2</span></span>
+	</div>
+	<div class="chips" style="gap:.5rem;border-bottom:1px solid var(--line-light)">
+		<input class="input" placeholder="Search queue…" style="margin-left:0;flex:1;max-width:14rem">
+		<span class="pill pill--hollow dead">Type ▾</span>
+		<span class="pill pill--hollow dead">Date/Time: Priority ▾</span>
+		<span class="pill pill--hollow dead">Branch ▾</span>
+		<span class="pill pill--dashed dead">Delegate…</span>
+	</div>
+	<div class="legend" style="border-bottom:0;flex-direction:column;gap:.35rem;align-items:flex-start">
+		<span><b>4 chips read zero</b> — dead weight in the first scan of the day.</span>
+		<span><b>Time chips duplicate the bands</b> — the list already renders <code>TODAY · 1</code>, <code>OVERDUE · 2</code>, <code>EVERYTHING ELSE</code> as headers. Clicking "Overdue" just hides two of the three headers you were about to see anyway.</span>
+		<span><b>"No handler" duplicates "Unassigned"</b> in the NOW rail — same count, two widgets, one screen.</span>
+		<span><b>"Date/Time ▾" is a sort, not a filter</b> — its options are Priority / Newest / Oldest. The label lies.</span>
+		<span><b>Delegate… sits disabled</b> until a consultation is selected — a row action pretending to be a page control.</span>
+	</div>
+</div>
+<div class="callout callout--warn">
+	<ul>
+		<li><b>Count the cost:</b> a manager lands here 30×/day. 14 controls ≈ 2 rows of chrome before a single task — and the information in them (counts) is already carried by the bands and the NOW rail.</li>
+		<li><b>The real cuts people make</b> are three: <i>everything</i>, <i>mine</i>, <i>unassigned</i>. The rest is occasional.</li>
+	</ul>
+</div>
+
+<!-- ════════════════════ 02 THE FIX ════════════════════ -->
+<h2 id="s2" class="tag tag--solid">02 · The fix — one row of cuts, everything else one click away</h2>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /workspace · proposed</span><span>worklist</span></div>
+	<div class="pagehead" style="display:flex;justify-content:space-between;align-items:flex-end">
+		<div>
+			<h2>Workspace</h2>
+			<p class="lead">Good day, Super. Here is what needs attention.</p>
+		</div>
+		<div class="mn" style="font-size:.62rem;text-align:right">THU, SEP 17 · 05:33 AM<br><b style="color:var(--ink)">4 open</b> · 1 today · <b>2 overdue</b></div>
+	</div>
+
+	<!-- ONE row. Three real cuts + search + the filter drawer toggle. -->
+	<div class="chips">
+		<span class="chip on">All<span class="n">4</span></span>
+		<span class="chip">Mine<span class="n">1</span></span>
+		<span class="chip">Unassigned<span class="n">0</span></span>
+		<span class="chip chip--dashed">Filters ▾</span>
+		<input class="input" placeholder="Search queue…">
+	</div>
+
+	<div class="split split--2">
+		<div>
+			<!-- OVERDUE FIRST — stale work leads the day -->
+			<div class="band"><span>Overdue · 2</span><span class="note">oldest 6 days</span></div>
+			<div class="tgroup">Enoch Yaw Enu · 2 tasks</div>
+			<div class="trow">
+				<span class="mn">01</span>
+				<span><b>Chase payment — Invoice</b><div class="sub">INV-2026-0027 · 3d overdue · balance GH₵1,050</div></span>
+				<span class="mn">3d over</span>
+				<span class="who">Enoch Enu</span>
+				<span class="mn">Accra</span>
+				<span class="act"><span class="linkish">open →</span></span>
+			</div>
+			<div class="trow">
+				<span class="mn">02</span>
+				<span><b>Chase payment — Invoice</b><div class="sub">INV-2026-0018 · 6d overdue · balance GH₵1</div></span>
+				<span class="mn">6d over</span>
+				<span class="who">You</span>
+				<span class="mn">—</span>
+				<span class="act"><span class="linkish">open →</span></span>
+			</div>
+
+			<div class="band"><span>Today · 1</span><span class="note"></span></div>
+			<div class="trow">
+				<span class="mn">03</span>
+				<span><b>Enoch Yaw Enu</b><div class="sub"><span class="kick">Assess · Consultation</span> · Ready for assessment · Online · United Kingdom</div></span>
+				<span class="mn">today 11:00</span>
+				<span class="who">Enoch Enu</span>
+				<span class="mn">Accra</span>
+				<span class="act"><span class="linkish">open →</span></span>
+			</div>
+
+			<div class="band"><span>Everything else · 1</span><span class="note"></span></div>
+			<div class="trow">
+				<span class="mn">04</span>
+				<span><b>Enoch Yaw Enu</b><div class="sub"><span class="kick">Issue invoice</span> · INV-2026-0031 · raised by Test Ops · GH₵5,250</div></span>
+				<span class="mn">5d ago</span>
+				<span class="who">Finance</span>
+				<span class="mn">—</span>
+				<span class="act"><span class="linkish">open →</span></span>
+			</div>
+		</div>
+
+		<aside class="pane">
+			<div class="pane-h">Now</div>
+			<div class="kv"><span class="k">Mine open</span><span class="v"><b>1</b></span></div>
+			<div class="kv"><span class="k">Overdue</span><span class="v"><b>2</b></span></div>
+			<div class="kv"><span class="k">Unassigned</span><span class="v"><b>0</b></span></div>
+			<div class="kv"><span class="k">Awaiting approval</span><span class="v"><b>1</b></span></div>
+			<div class="pane-h" style="border-top:1px solid var(--line-light)">Coverage · today</div>
+			<div class="kv"><span class="k">Branches</span><span class="v"><b>0 of 5</b> covered</span></div>
+			<div class="kv"><span class="k"></span><span class="v"><span class="linkish">set coverage →</span></span></div>
+			<div class="kv"><span class="k"></span><span class="v muted" style="font-size:.62rem">new cases land unassigned</span></div>
+		</aside>
+	</div>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>One row:</b> <code>All · Mine · Unassigned</code> (the triage cuts) + search + <b>Filters ▾</b>. Fourteen controls → five.</li>
+		<li><b>Zero-count chips stay</b> when they're triage (Unassigned is a state you want to see hit 0) — the category chips that were zero-by-default (Coordinated, Invoicing, Follow-up) move into the drawer.</li>
+		<li><b>Time chips deleted</b> — the bands already split the day; "Overdue 2" as a chip was a worse version of the OVERDUE band header.</li>
+		<li><b>Sections reordered:</b> Overdue → Today → Everything else. The oldest work leads; live items still get a <code>Live 11:00</code> pill inside Today.</li>
+		<li><b>Delegate…</b> moves onto the selected consultation's preview pane, where the thing being delegated is actually on screen.</li>
+		<li><b>Coverage condenses</b> to <code>0 of 5 covered → set coverage</code>; the five identical "NOBODY" rows were noise.</li>
+	</ul>
+</div>
+
+<!-- ════════════════════ 03 FILTER DRAWER ════════════════════ -->
+<h2 id="s3" class="tag">03 · Filters ▾ — where the occasional cuts live</h2>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /workspace · filters expanded</span><span>same page, drawer open</span></div>
+	<div class="chips">
+		<span class="chip on">All<span class="n">4</span></span>
+		<span class="chip">Mine<span class="n">1</span></span>
+		<span class="chip">Unassigned<span class="n">0</span></span>
+		<span class="chip on" style="border-style:dashed">Filters ▴</span>
+		<input class="input" placeholder="Search queue…">
+	</div>
+	<!-- the drawer: category + type + sort + branch, one quiet strip -->
+	<div style="display:flex;gap:1.4rem;flex-wrap:wrap;padding:.6rem 1.25rem;background:var(--muted-bg);border-bottom:1px solid var(--line-light);align-items:center">
+		<span style="display:flex;gap:.35rem;align-items:center">
+			<span class="mn" style="font-size:.56rem">KIND</span>
+			<span class="chip">Consultation</span><span class="chip chip--dead">Application</span><span class="chip">Invoice<span class="n">2</span></span><span class="chip chip--dead">Travel</span><span class="chip chip--dead">Lead</span>
+		</span>
+		<span style="display:flex;gap:.35rem;align-items:center">
+			<span class="mn" style="font-size:.56rem">NEEDS</span>
+			<span class="chip chip--dead">Coordinated</span><span class="chip chip--dead">Invoicing</span><span class="chip chip--dead">Follow-up</span>
+		</span>
+		<span style="display:flex;gap:.35rem;align-items:center">
+			<span class="mn" style="font-size:.56rem">BRANCH</span>
+			<span class="pill pill--hollow">All ▾</span>
+		</span>
+		<span style="display:flex;gap:.35rem;align-items:center">
+			<span class="mn" style="font-size:.56rem">SORT</span>
+			<span class="pill pill--hollow">Priority ▾</span>
+		</span>
+	</div>
+	<div class="legend"><span><b>Honest counts:</b> dead categories render dimmed — visible so the shape of the backlog is honest, cheap because they're not competing with the live cuts.</span></div>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>Everything from the old second row survives</b> — Type, Branch, the Priority sort (correctly labeled SORT now), and the three category chips. One click opens them; zero clicks doesn't cost a row.</li>
+		<li><b>URL still carries it all</b> — <code>?filter=&type=&branch=&sort=&q=&open=</code> unchanged, so deep links and refreshes keep working.</li>
+	</ul>
+</div>
+
+<!-- ════════════════════ 04 SECTION ORDER ════════════════════ -->
+<h2 id="s4" class="tag">04 · Section order — the stalest work leads</h2>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /workspace · bands</span><span>before → after</span></div>
+	<table class="tbl">
+		<thead><tr><th>Today (before)</th><th>Proposed order</th><th>Why</th></tr></thead>
+		<tbody>
+			<tr>
+				<td><span class="mn">1.</span> TODAY · 1</td>
+				<td><span class="mn">1.</span> <b>OVERDUE · 2</b> <span class="mn">— oldest 6 days</span></td>
+				<td class="muted">A 6-day-overdue invoice is more urgent than an 11 AM consult. The band that ages worst leads.</td>
+			</tr>
+			<tr>
+				<td><span class="mn">2.</span> OVERDUE · 2 <span class="mn">— oldest 6 days</span></td>
+				<td><span class="mn">2.</span> <b>TODAY · 1</b> <span class="mn">— live items keep their pill</span></td>
+				<td class="muted">Today's work still reads "today 11:00" / "Live" — it just doesn't jump the queue ahead of stale debt.</td>
+			</tr>
+			<tr>
+				<td><span class="mn">3.</span> EVERYTHING ELSE · 1</td>
+				<td><span class="mn">3.</span> <b>EVERYTHING ELSE · 1</b></td>
+				<td class="muted">Unchanged — backlog by age, oldest first.</td>
+			</tr>
+		</tbody>
+	</table>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>One-line change</b> in <code>taskSections()</code> — reorder the array <code>[today, overdue, rest]</code> → <code>[overdue, today, rest]</code>. The band component already handles the "oldest N days" note.</li>
+		<li><b>Optional upgrade:</b> give the OVERDUE band the inverted (ink) treatment when it has rows — the only band that can demand attention. Today keeps the neutral band.</li>
+	</ul>
+</div>
+
+<!-- ════════════════════ 05 NOW RAIL ════════════════════ -->
+<h2 id="s5" class="tag">05 · NOW rail — same truth, half the rows</h2>
+<div class="screen">
+	<div class="screen-bar"><span>ops · /workspace · right rail</span><span>before → after</span></div>
+	<div class="split split--2">
+		<div>
+			<div class="pane-h" style="border-left:0">Before — 9 rows, 5 identical</div>
+			<div class="kv"><span class="k">Mine open</span><span class="v">1</span></div>
+			<div class="kv"><span class="k">Overdue</span><span class="v">2</span></div>
+			<div class="kv"><span class="k">Unassigned</span><span class="v">0</span></div>
+			<div class="kv"><span class="k">Awaiting approval</span><span class="v">1</span></div>
+			<div class="kv"><span class="k">Accra</span><span class="v muted" style="font-size:.62rem">NOBODY — NEW CASES LAND…</span></div>
+			<div class="kv"><span class="k">Kumasi</span><span class="v muted" style="font-size:.62rem">NOBODY — NEW CASES LAND…</span></div>
+			<div class="kv"><span class="k">Takoradi</span><span class="v muted" style="font-size:.62rem">NOBODY — NEW CASES LAND…</span></div>
+			<div class="kv"><span class="k">Tamale</span><span class="v muted" style="font-size:.62rem">NOBODY — NEW CASES LAND…</span></div>
+			<div class="kv"><span class="k">Cape Coast</span><span class="v muted" style="font-size:.62rem">NOBODY — NEW CASES LAND…</span></div>
+		</div>
+		<div>
+			<div class="pane-h" style="border-left:0">After — 6 rows, no repeats</div>
+			<div class="kv"><span class="k">Mine open</span><span class="v"><b>1</b></span></div>
+			<div class="kv"><span class="k">Overdue</span><span class="v"><b>2</b></span></div>
+			<div class="kv"><span class="k">Unassigned</span><span class="v"><b>0</b></span></div>
+			<div class="kv"><span class="k">Awaiting approval</span><span class="v"><b>1</b></span></div>
+			<div class="kv"><span class="k">Coverage</span><span class="v"><b>0 of 5</b> · <span class="linkish">set →</span></span></div>
+			<div class="kv"><span class="k"></span><span class="v muted" style="font-size:.62rem">uncovered branches route to unassigned</span></div>
+		</div>
+	</div>
+</div>
+<div class="callout">
+	<ul>
+		<li><b>Covered branches still itemize</b> — when Accra has a coordinator, that row says <code>Accra · K. Mensah</code>. The five-row fan-out only existed to say "nobody" five times.</li>
+		<li><b>Set coverage →</b> opens the same coverage sheet it does today.</li>
+	</ul>
+</div>
+
+<div class="callout" style="margin-top:2rem;max-width:none">
+	<ul>
+		<li><b>Summary of the diff:</b> chips 9 → 3 + a drawer · sort labeled SORT · time chips deleted (bands do it) · Delegate moves to the preview pane · sections order overdue-first · coverage condenses to one line. <b>~60% less chrome</b> before the first task, zero capability lost.</li>
+		<li><b>Say go and it ships</b> — it's a reorder + a disclosure in <code>Workspace.tsx</code>/<code>PendingTasks.tsx</code>/<code>NowPane.tsx</code>, no API changes.</li>
+	</ul>
+</div>
+
+</div>
+</body>
+</html>

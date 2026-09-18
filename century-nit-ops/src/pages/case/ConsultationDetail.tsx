@@ -13,7 +13,7 @@ import type { ApplicantDocument } from "century-nit-shared";
 import { getConsultationActivity, type ConsultationActivityEvent } from "../../lib/api";
 import { CaseHeader, StatusPill, type NextAction } from "century-nit-core/ui";
 import { CaseTodo } from "./CaseTodo";
-import { ConsultationCall, MeetingWindowModal, type MeetingWindowInfo } from "./ConsultationCall";
+import { ConsultationCall, MeetingEndedModal, MeetingWindowModal, type MeetingEndedInfo, type MeetingWindowInfo } from "./ConsultationCall";
 
 
 function isKnown(v: string | undefined | null): v is string {
@@ -116,6 +116,7 @@ export function ConsultationDetail({
 	const [joiningMeet, setJoiningMeet] = useState(false);
 	const [call, setCall] = useState<{ url: string; token: string } | null>(null);
 	const [meetNotOpen, setMeetNotOpen] = useState<MeetingWindowInfo | null>(null);
+	const [meetEnded, setMeetEnded] = useState<MeetingEndedInfo | null>(null);
 	/** Result recorded this session, shown until the refreshed row carries it. */
 	const [completedResult, setCompletedResult] = useState<MockConsultation["assessmentResult"] | null>(null);
 	const consultation: MockConsultation = completedResult
@@ -577,6 +578,8 @@ export function ConsultationDetail({
 												} catch (err) {
 													if (err instanceof ApiError && err.code === "MEETING_NOT_OPEN" && typeof err.details === "object" && err.details !== null && "opensAt" in err.details) {
 														setMeetNotOpen({ ...(err.details as Omit<MeetingWindowInfo, "title">), title: `Consultation · ${consultation.ref}` });
+													} else if (err instanceof ApiError && err.code === "MEETING_ENDED" && typeof err.details === "object" && err.details !== null && "endsAt" in err.details) {
+														setMeetEnded({ ...(err.details as Omit<MeetingEndedInfo, "title">), title: `Consultation · ${consultation.ref}` });
 													} else {
 														onToast("error", err instanceof Error ? err.message : "Could not join the meeting.");
 													}
@@ -1066,6 +1069,9 @@ export function ConsultationDetail({
 			) : null}
 			{meetNotOpen ? (
 				<MeetingWindowModal info={meetNotOpen} onClose={() => setMeetNotOpen(null)} />
+			) : null}
+			{meetEnded ? (
+				<MeetingEndedModal info={meetEnded} onClose={() => setMeetEnded(null)} />
 			) : null}
 		</div>
 	);

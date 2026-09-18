@@ -7,7 +7,7 @@ import { MAX_AVATAR_BYTES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
  * Images are re-encoded in the browser so they fit comfortably under the size
  * ceiling; PDFs and Word documents cannot be recompressed in a browser, so they
  * pass through untouched and their limit is enforced by the server. Nothing here
- * is a security boundary — the server re-checks type and size before issuing a
+ * is a security boundary. The server re-checks type and size before issuing a
  * signed URL.
  */
 
@@ -33,7 +33,7 @@ function compressToFit(
 /**
  * Prepare a document for upload.
  *
- * Images are compressed only when they are large enough to matter — a small
+ * Images are compressed only when they are large enough to matter. A small
  * scan keeps its original bytes, so no quality is traded for no reason. Any
  * non-image, or an image that could not be re-encoded, is returned unchanged.
  */
@@ -50,7 +50,7 @@ export function prepareDocumentForUpload(
  * Prepare an avatar photo.
  *
  * The photo is already cropped to a square before this runs; this just keeps
- * the stored file small — 1024 px is plenty for any avatar slot.
+ * the stored file small. 1024 px is plenty for any avatar slot.
  */
 export function prepareAvatarForUpload(
 	file: File,

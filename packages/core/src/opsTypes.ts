@@ -25,7 +25,7 @@ export type ConsultationWorkflow = {
 
 export type DocStatus = "Verified" | "Pending Review" | "Rejected";
 
-/* ─── Branches ───
+/* Branches
  * Records store the canonical branch id; `branchName` is used at render time.
  * Branch-scoped roles (coordinator, consultant) compare against these ids.
  */
@@ -42,7 +42,7 @@ export type BranchId = (typeof OPS_BRANCHES)[number]["id"];
 
 /**
  * Canonical id for a branch. Records store content-catalogue ids (`accra-hq`,
- * `kumasi`…) while staff rows carry ops ids (`accra`…) — this normalizes both
+ * `kumasi`…) while staff rows carry ops ids (`accra`…). This normalizes both
  * spellings plus city names to the ops id space so comparisons always work.
  */
 export function branchId(name: string): string {
@@ -111,7 +111,7 @@ export type AssessmentResult = {
 export interface MockConsultation {
 	id: string; // The consultation ID
 	applicantId: string;
-	/** When the record last changed (ISO) — what the work queue dates a task by. */
+	/** When the record last changed (ISO). What the work queue dates a task by. */
 	updatedAt?: string;
 	applicantUserId?: string | null;
 	ref: string;
@@ -167,33 +167,33 @@ export interface MockConsultation {
 	meetingLink?: string;
 	/** Google Maps URL for in-person consultations */
 	mapsUrl?: string;
-	/** ISO timestamp of the booked slot — parseable, unlike `dateTime`. */
+	/** ISO timestamp of the booked slot. Parseable, unlike `dateTime`. */
 	startsAt?: string | null;
-	/** IANA zone the slot was booked in (the branch's) — `startsAt` is UTC; this is what `dateTime` renders in. */
+	/** IANA zone the slot was booked in (the branch's). `startsAt` is UTC; this is what `dateTime` renders in. */
 	timezone?: string | null;
 	/** The coordinator who manages this case. */
 	coordinatorId?: string | null;
 	coordinatorName?: string | null;
 	coordinatorEmail?: string | null;
-	/** Which scope put them on the case — a handover, the applicant's journey, or the day's duty. */
+	/** Which scope put them on the case. A handover, the applicant's journey, or the day's duty. */
 	coordinatedVia?: "case" | "applicant" | "duty" | null;
 	coordinatorAssignedAt?: string | null;
 	coordinatorAssignedByName?: string | null;
 	delegationNote?: string | null;
-	/** Coverage — the assigned officer carries the case this consultation opens. */
+	/** Coverage. The assigned officer carries the case this consultation opens. */
 	handlerCarriesCase?: boolean;
 	workflow: ConsultationWorkflow;
 	/** Application opened from this completed consultation, if any. */
 	applicationId?: string | null;
 	applicationNumber?: string | null;
 	applicationStage?: string | null;
-	/** Cancellation stamp — when, who, why (from the linked booking). */
+	/** Cancellation stamp. When, who, why (from the linked booking). */
 	cancelledAt?: string | null;
 	cancelledBy?: string | null;
 	cancellationReason?: string | null;
-	/** The client holds a free-rebooking credit — next checkout skips payment. */
+	/** The client holds a free-rebooking credit. Next checkout skips payment. */
 	freeRebooking?: boolean;
-	/** This case replaced a cancelled one — points back at it. */
+	/** This case replaced a cancelled one. Points back at it. */
 	rebookedFromId?: string | null;
 }
 
@@ -204,7 +204,7 @@ export type VisaStage = "locked" | "awaiting_handler" | "pending" | "biometrics"
 /**
  * Ops spells this plural and allows "unset"; the portal spells it singular with
  * no empty case (`PaymentPlanId` in content.ts). They are genuinely different
- * types, not a duplicate — `OpsDirectiveBridge.opsPlanToPortal()` translates
+ * types, not a duplicate. `OpsDirectiveBridge.opsPlanToPortal()` translates
  * between them. Reconcile the two in a shared schema when the API lands
  * (API_MIGRATION_PLAN §7 "Risks"), not by making one silently assignable to the
  * other now.
@@ -224,7 +224,7 @@ export interface MockApplication {
 	id: string;
 	appId: string;
 	applicantId: string;
-	/** When the record last changed (ISO) — what the work queue dates a task by. */
+	/** When the record last changed (ISO). What the work queue dates a task by. */
 	updatedAt?: string;
 	applicantName: string;
 	email: string;
@@ -235,7 +235,7 @@ export interface MockApplication {
 	country: string;
 	degreeLevel: string;
 	assignedStaff: string;
-	/** The applicant's journey coordinator — stage-to-finish oversight carried from consultation. */
+	/** The applicant's journey coordinator. Stage-to-finish oversight carried from consultation. */
 	journeyCoordinatorName?: string | null;
 	journeyCoordinatorEmail?: string | null;
 	assignedStaffEmail: string;
@@ -262,15 +262,15 @@ export interface MockApplication {
 	depositPaid?: boolean;
 	/** Counselor note shown in visa tracking */
 	visaCounselorNote?: string;
-	/** The visa application's facts — reference, appointment, biometrics, decision, validity. */
+	/** The visa application's facts. Reference, appointment, biometrics, decision, validity. */
 	visaDetails?: VisaDetails;
-	/** The Departure chapter's facts — report-by date, briefing, pickup, accommodation, emergency contact, arrival. */
+	/** The Departure chapter's facts. Report-by date, briefing, pickup, accommodation, emergency contact, arrival. */
 	departureDetails?: DepartureDetails;
 	/** The visa-stage documents and where each upload stands. */
 	visaDocumentChecklist?: DocumentChecklistItem[];
 	/** Payment plan selection (after visa invoice paid) */
 	paymentPlanId?: PaymentPlanId;
-	/** The post-arrival schedule the client chose — months and frequency. */
+	/** The post-arrival schedule the client chose. Months and frequency. */
 	postArrivalMonths?: number | null;
 	postArrivalFrequency?: string | null;
 	/** Agency settlement milestone index (0=deposit, 1=balance, 2=clearance) */
@@ -287,10 +287,10 @@ export interface MockApplication {
 	declinedReason?: string | null;
 	/** Number of target schools requested in service package */
 	targetSchoolCount?: number | null;
-	/** The admitted school the client accepted — visa, deposit and departure hang off it. */
+	/** The admitted school the client accepted. Visa, deposit and departure hang off it. */
 	acceptedSchoolId?: string | null;
 	offerAcceptedAt?: string | null;
-	/** The applicant's login id — documents and chat are keyed on it. */
+	/** The applicant's login id. Documents and chat are keyed on it. */
 	applicantUserId?: string | null;
 	/** Whole-case owner (applications.assignedStaffId). */
 	assignedStaffId?: string | null;
@@ -303,7 +303,7 @@ export interface MockApplication {
 	/** Active per-stage specialists (visa / travel / finance) from stage_assignments. */
 	stageHandlers?: { stage: string; opsUserId: string; opsUserName: string; opsUserEmail: string }[];
 	/**
-	 * The step the applicant sees in the portal — same derivation the portal
+	 * The step the applicant sees in the portal. Same derivation the portal
 	 * reads (`deriveJourney`), so ops and the client name the same step.
 	 */
 	journey?: {
@@ -311,7 +311,7 @@ export interface MockApplication {
 		label: string;
 		nextUnlock: string | null;
 		stageStatuses: Record<string, "done" | "current" | "locked" | "skipped">;
-		/** Which portal chapters are open — what the case tabs unlock on. */
+		/** Which portal chapters are open. What the case tabs unlock on. */
 		chapterUnlocks?: Record<string, boolean>;
 	} | null;
 	/** Parent consultation that opened this application, if any. */
@@ -347,7 +347,7 @@ export interface MockApplication {
 export interface MockApplicant {
 	id: string;
 	applicantId: string;
-	/** When the record last changed (ISO) — what the work queue dates a task by. */
+	/** When the record last changed (ISO). What the work queue dates a task by. */
 	updatedAt?: string;
 	name: string;
 	email: string;
@@ -385,7 +385,7 @@ export interface MockApplicant {
 	visaCounselorNote?: string;
 	/** Payment plan selection (after visa invoice paid) */
 	paymentPlanId?: PaymentPlanId;
-	/** The post-arrival schedule the client chose — months and frequency. */
+	/** The post-arrival schedule the client chose. Months and frequency. */
 	postArrivalMonths?: number | null;
 	postArrivalFrequency?: string | null;
 	/** Agency settlement milestone index (0=deposit, 1=balance, 2=clearance) */
@@ -398,7 +398,7 @@ export interface MockApplicant {
 	targetSchoolCount?: number | null;
 }
 
-/* ─── Ops → Portal directives ───
+/* Ops → Portal directives
  *
  * The ops side never mutates portal state directly. It writes a directive, and
  * the SimBridge applies it to the applicant's AppState. This keeps the two
@@ -412,9 +412,9 @@ export type OpsInvoiceLine = {
 	label: string;
 	detail: string;
 	amount: number;
-	/** The school this line bills, on application invoices — kept through a review. */
+	/** The school this line bills, on application invoices. Kept through a review. */
 	schoolApplicationId?: string | null;
-	/** When the line falls due — the post-arrival instalments; null otherwise. */
+	/** When the line falls due. The post-arrival instalments; null otherwise. */
 	dueAt?: string | null;
 };
 
@@ -425,7 +425,7 @@ export type Invoice = {
 	invoiceNumber: string;
 	applicantId: string;
 	applicantName: string;
-	/** Becomes `applicationId` on the API — the linked application UUID, if any. */
+	/** Becomes `applicationId` on the API. The linked application UUID, if any. */
 	applicationId?: string | null;
 	type: InvoiceType;
 	lines: OpsInvoiceLine[];
@@ -434,7 +434,7 @@ export type Invoice = {
 	status: InvoiceStatus;
 	issuedAt: string;
 	issuedBy: string;
-	/** When payment is expected — drives overdue and the aging buckets */
+	/** When payment is expected. Drives overdue and the aging buckets */
 	dueAt?: string;
 	/** Part-payments, so a balance can be carried rather than all-or-nothing */
 	payments?: InvoicePayment[];
@@ -480,7 +480,7 @@ export function invoiceBalance(inv: Invoice): number {
 	return Math.max(0, inv.subtotal - invoicePaid(inv) - (inv.creditedAmount ?? 0));
 }
 
-/** Days past due — negative means not yet due */
+/** Days past due. Negative means not yet due */
 export function invoiceAgeDays(inv: Invoice, now = Date.now()): number | null {
 	if (!inv.dueAt) return null;
 	return Math.floor((now - new Date(inv.dueAt).getTime()) / 86_400_000);
@@ -582,7 +582,7 @@ export const EMPTY_DIRECTIVES: OpsDirectives = {
  * Both sides now share the `JourneyStage` enum from `century-nit-shared`, and
  * the fine-grained `ProcessStageId` is derived from it plus the invoice /
  * school signals by `deriveJourney` (via `JOURNEY_STAGE_FLOOR` in
- * `packages/shared/src/journey.ts`) — there is no longer a separate
+ * `packages/shared/src/journey.ts`). There is no longer a separate
  * ops-stage namespace to translate between.
  */
 
@@ -594,7 +594,7 @@ export const EMPTY_DIRECTIVES: OpsDirectives = {
  * is no longer a separate snapshot projected from the portal's localStorage.
  */
 
-/* ─── Ledger & Payments Log ─── */
+/* Ledger & Payments Log */
 
 export type LedgerEntryType = "invoice_issued" | "payment" | "credit" | "void";
 

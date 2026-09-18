@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portal auth — the sign-in page, rebuilt</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+		--display:"Arial Narrow",var(--sans);
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1180px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3.5rem 0 .6rem}
+	.tag--solid{background:var(--ink);color:#fff}
+	.tag:first-child{margin-top:0}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.screen{background:#f2f2f2;border:1px solid #999;box-shadow:5px 5px 0 rgba(0,0,0,.12)}
+	.screen-bar{background:var(--ink);color:#fff;font-family:var(--mono);font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;padding:.4rem .8rem;display:flex;justify-content:space-between}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.8rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.callout--warn{border-left-style:dashed}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	code{font-family:var(--mono);font-size:.74rem;background:var(--muted-bg);padding:.1rem .35rem}
+	.flag{font-family:var(--mono);font-size:.56rem;letter-spacing:.1em;text-transform:uppercase;background:var(--ink);color:#fff;padding:.15rem .4rem;vertical-align:middle;white-space:nowrap}
+	.flag--hollow{background:#fff;color:var(--ink);border:1px dashed var(--ink)}
+
+	/* ── the auth split itself ── */
+	.authpage{display:grid;grid-template-columns:1fr 1fr;min-height:560px;background:#fff}
+	.authbrand{background:var(--ink);color:#fff;padding:2.2rem 2.4rem;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden}
+	.authbrand::before{content:"";position:absolute;inset:0;background-image:repeating-linear-gradient(135deg,transparent 0,transparent 2px,rgba(255,255,255,.03) 2px,rgba(255,255,255,.03) 4px)}
+	.authbrand>*{position:relative}
+	.ab-logo{font-family:var(--display);font-size:1.25rem;font-weight:700;letter-spacing:-.02em}
+	.ab-logo span{font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;font-weight:400;opacity:.75;margin-left:.5rem}
+	.ab-title{font-family:var(--display);font-size:2.15rem;line-height:1.12;letter-spacing:-.025em;font-weight:500;margin:0}
+	.ab-title em{font-style:italic;font-weight:400}
+	.ab-lead{margin-top:1rem;font-size:.86rem;line-height:1.65;opacity:.85;max-width:24rem}
+	.ab-chapters{margin-top:1.9rem;border-top:1px solid rgba(255,255,255,.25)}
+	.ab-ch{display:grid;grid-template-columns:2rem 1fr auto;gap:.8rem;align-items:baseline;padding:.5rem 0;border-bottom:1px solid rgba(255,255,255,.18);font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase}
+	.ab-ch .n{opacity:.55}
+	.ab-ch .d{opacity:.55;letter-spacing:.04em;text-transform:none;font-size:.6rem}
+	.ab-foot{font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;opacity:.65}
+
+	.authform{display:flex;align-items:center;justify-content:center;padding:2.4rem 2rem}
+	.af-panel{width:100%;max-width:23rem}
+	.af-eyebrow{font-family:var(--mono);font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-muted)}
+	.af-title{font-family:var(--display);font-size:1.7rem;letter-spacing:-.02em;font-weight:500;margin-top:.4rem}
+	.af-sub{margin-top:.55rem;font-size:.8rem;line-height:1.55;color:var(--fg-muted)}
+
+	.seg{display:flex;border:1px solid var(--ink);margin-top:1.4rem}
+	.seg button{flex:1;padding:.65rem .5rem;font-family:var(--mono);font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;background:#fff;border:none;cursor:pointer;color:var(--fg-muted)}
+	.seg button.on{background:var(--ink);color:#fff}
+
+	.gbtn{display:flex;align-items:center;gap:.8rem;width:100%;padding:.75rem 1rem;border:1.5px solid var(--ink);background:#fff;font-size:.82rem;font-weight:600;cursor:pointer;margin-top:1.4rem;text-align:left}
+	.gbtn:hover{background:var(--muted-bg)}
+	.gmark{display:grid;place-items:center;width:1.4rem;height:1.4rem;border:1.5px solid var(--ink);font-family:var(--display);font-weight:700;font-size:.85rem;flex-shrink:0}
+	.gbtn .arrow{margin-left:auto;font-family:var(--mono)}
+
+	.orline{display:flex;align-items:center;gap:.8rem;margin:1.3rem 0;font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted)}
+	.orline::before,.orline::after{content:"";flex:1;height:1px;background:var(--line-light)}
+
+	.fld{margin-bottom:1rem}
+	.fld label{display:block;font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted);margin-bottom:.35rem}
+	.fld .in{width:100%;border:1.5px solid var(--ink);padding:.6rem .7rem;font-size:.85rem;font-family:var(--sans);background:#fff}
+	.fld .hint{font-size:.68rem;color:var(--fg-muted);margin-top:.3rem}
+	.fld .err{font-size:.68rem;color:var(--ink);margin-top:.3rem;font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em;text-decoration:underline;text-decoration-style:wavy}
+
+	/* password checklist — the enforced rule inks its box when met;
+	   suggestions stay hollow. Only length is actually required. */
+	.pwcheck{border:1px solid var(--line);margin-top:.5rem}
+	.pwcheck__row{display:flex;align-items:center;gap:.55rem;padding:.4rem .6rem;font-family:var(--mono);font-size:.58rem;letter-spacing:.07em;text-transform:uppercase;color:var(--fg-muted);border-bottom:1px dotted var(--line-light)}
+	.pwcheck__row:last-child{border-bottom:none}
+	.pwcheck__row .box{width:.62rem;height:.62rem;border:1.5px solid var(--fg-muted);flex-shrink:0}
+	.pwcheck__row--met{color:var(--ink);font-weight:700}
+	.pwcheck__row--met .box{background:var(--ink);border-color:var(--ink)}
+	.pwcheck__row .tag-r{margin-left:auto;font-size:.5rem;letter-spacing:.1em;color:var(--fg-muted);border:1px dashed var(--line);padding:.1rem .3rem}
+	.pwcheck__row--met .tag-r{color:var(--ink);border-color:var(--ink);border-style:solid}
+
+	.cta{display:flex;justify-content:space-between;align-items:center;width:100%;background:var(--ink);color:#fff;border:1.5px solid var(--ink);padding:.75rem 1rem;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+	.cta .arrow{font-family:var(--mono)}
+
+	.alts{display:flex;justify-content:space-between;gap:1rem;margin-top:1rem;flex-wrap:wrap}
+	.alts a,.alts button{font-family:var(--mono);font-size:.6rem;letter-spacing:.07em;text-transform:uppercase;color:var(--fg-muted);text-decoration:underline;text-underline-offset:3px;background:none;border:none;cursor:pointer;padding:0}
+	.alts a:hover,.alts button:hover{color:var(--ink)}
+
+	.legal{margin-top:1.6rem;font-family:var(--mono);font-size:.55rem;letter-spacing:.04em;line-height:1.6;color:var(--fg-muted)}
+
+	/* error + status banners */
+	.banner{border:1.5px solid var(--ink);padding:.6rem .8rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.05em;text-transform:uppercase;margin-top:1.2rem}
+	.banner--ink{background:var(--ink);color:#fff}
+	.banner--dash{border-style:dashed;color:var(--fg-muted)}
+
+	/* otp boxes */
+	.otp{display:flex;gap:.5rem;margin:1.2rem 0}
+	.otp i{width:2.6rem;height:3rem;border:1.5px solid var(--ink);display:grid;place-items:center;font-style:normal;font-family:var(--mono);font-size:1.2rem;font-weight:700;background:#fff}
+.otp i.cur{box-shadow:inset 0 -3px 0 var(--ink)}
+	.otp i.fill{background:var(--ink);color:#fff}
+
+	/* mfa identity strip — who is being verified + where in the flow */
+	.ident{display:flex;align-items:center;gap:.55rem;border:1px solid var(--line);padding:.45rem .7rem;margin-top:1rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.05em}
+	.ident__dot{width:.5rem;height:.5rem;background:var(--ink);flex-shrink:0}
+	.ident__mail{font-weight:700}
+	.ident__step{margin-left:auto;color:var(--fg-muted);font-size:.55rem;letter-spacing:.1em;text-transform:uppercase}
+
+	/* escape-route divider — alternatives framed as recovery, not tabs */
+	.escrow{display:flex;align-items:center;gap:.8rem;margin:1.3rem 0 .8rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted)}
+	.escrow::before,.escrow::after{content:"";flex:1;height:1px;background:var(--line-light)}
+
+	/* trust-device row — subordinate to the CTA */
+	.trust{display:flex;align-items:center;gap:.55rem;margin-top:.85rem;font-family:var(--mono);font-size:.58rem;letter-spacing:.05em;color:var(--fg-muted);cursor:pointer}
+	.trust .box{width:.62rem;height:.62rem;border:1.5px solid var(--fg-muted);flex-shrink:0}
+	.trust--on .box{background:var(--ink);border-color:var(--ink)}
+
+	/* annotated "today" screen */
+	.oldtab{display:flex;gap:1rem;border-bottom:1px solid var(--line-light);margin-top:1.3rem}
+	.oldtab button{padding:.5rem .8rem;background:none;border:none;border-bottom:2px solid transparent;font-size:.8rem;color:var(--fg-muted);cursor:pointer}
+	.oldtab button.on{border-bottom-color:var(--ink);color:var(--ink);font-weight:700}
+	.strike{position:relative}
+	.strike::after{content:"";position:absolute;left:-2px;right:-2px;top:50%;height:1.5px;background:var(--ink)}
+	.annot{position:relative}
+	.annot .pin{position:absolute;right:-.4rem;top:-.4rem;z-index:2}
+
+	.smallrow{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start}
+	@media(max-width:900px){.authpage{grid-template-columns:1fr}.authbrand{min-height:300px}.smallrow{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+	<span class="tag tag--solid">Analysis → mock</span>
+	<h1 class="page">Portal sign-in — <code>/start</code> (StartJourney)</h1>
+	<p class="note">
+		The portal auth page is functionally rich — password, Google, email-code, MFA, signup-verify,
+		reset — but the structure buries it under <b>two stacked tab systems</b>, defaults every visitor
+		to a Google-only tab, nukes the whole page on every submit, and the <b>password-reset flow is
+		broken end-to-end</b>: the email sends a <i>link</i> back to <code>/start?token=…</code>, but the
+		page never reads <code>?token</code> — it asks the user to "paste the reset token" that the email
+		never displays. Anyone who clicks the link lands on the sign-in form with the token ignored.
+	</p>
+	<div class="jump">
+		<a href="#today">↓ What ships today</a>
+		<a href="#signin">↓ Sign in — one screen</a>
+		<a href="#signup">↓ Create account</a>
+		<a href="#code">↓ Email code</a>
+		<a href="#mfa">↓ MFA challenge</a>
+		<a href="#reset">↓ Reset — the link works</a>
+		<a href="#build">↓ Build notes</a>
+	</div>
+
+	<!-- ═══════════════ TODAY ═══════════════ -->
+	<span class="tag" id="today">Today — what's wrong</span>
+	<div class="screen">
+		<div class="screen-bar"><span>portal /start — current</span><span>annotated</span></div>
+		<div class="authpage">
+			<div class="authbrand">
+				<div class="ab-logo">Century NIT <span>International</span></div>
+				<div>
+					<h2 class="ab-title">Your entire application journey — <em>in one place.</em></h2>
+					<p class="ab-lead">Consultation, school packages, admissions tracking, visa processing, and payments — unified in a single dashboard.</p>
+					<div class="ab-chapters" style="border-top:none;margin-top:1.4rem">
+						<div style="font-family:var(--mono);font-size:.62rem;letter-spacing:.04em;display:flex;flex-direction:column;gap:.6rem">
+							<span>✓ Consultation booking</span>
+							<span>✓ University &amp; program tracking</span>
+							<span>✓ Document vault</span>
+							<span>✓ Visa &amp; payment timeline</span>
+						</div>
+					</div>
+				</div>
+				<div class="ab-foot">Licensed consultancy — Accra &amp; Kumasi</div>
+			</div>
+			<div class="authform">
+				<div class="af-panel">
+					<p class="af-eyebrow">Welcome back</p>
+					<h3 class="af-title">Start your journey <span class="flag">title ≠ eyebrow</span></h3>
+					<p class="af-sub">Sign in to access your dashboard.</p>
+
+					<div class="oldtab annot">
+						<span class="pin flag">tab row 1 — inline-styled</span>
+						<button class="on">Log In</button>
+						<button>Sign Up</button>
+					</div>
+
+					<div class="seg annot" style="margin-top:1rem">
+						<span class="pin flag">tab row 2 — different idiom</span>
+						<button class="on">Social</button>
+						<button>Email &amp; Password</button>
+						<button>Email Code</button>
+					</div>
+
+					<button class="gbtn annot" style="border-color:var(--line)">
+						<span class="pin flag flag--hollow">the only screen most visitors see — one button</span>
+						<span class="gmark" style="border-color:#4285F4;color:#4285F4">G</span>
+						Continue with Google
+					</button>
+					<p class="af-sub" style="font-size:.7rem">…the multicolor G is the only colored pixel on the page. Password sign-in is behind tab 2.</p>
+				</div>
+			</div>
+		</div>
+	</div>
+	<ul class="callout">
+		<li><b>Five tab buttons, two idioms.</b> "Log In / Sign Up" (underline tabs, inline styles) stacked above "Social / Email &amp; Password / Email Code" (boxed segmented). Two decisions pretending to be one.</li>
+		<li><b>The default view is a tab containing one button.</b> First tab is "Social", so every visitor sees a Google button and nothing else. The email+password form — the most common path — is one click deep.</li>
+		<li><b>Full-page takeover on submit.</b> Any action swaps the whole split screen for a spinner overlay — context, brand, and the form all vanish for a second.</li>
+		<li><b>Reset is broken.</b> The email carries a link to <code>/start?token=…</code>; the page ignores <code>?token</code> and asks the user to paste a token the email never shows. Dead end.</li>
+		<li><b>Copy bugs.</b> The signup-verify step says "Account created" (it isn't — that's the point of verifying first) and "we sent a verification link" (it's a 6-digit code, and it prints <code>resetEmail</code> — empty — instead of <code>signupEmail</code>).</li>
+		<li><b>Password minimums disagree.</b> Signup enforces ≥12, reset accepts ≥8.</li>
+		<li><b>"Done" in a circle.</b> The reset-success mark renders the literal word where a ✓ should be.</li>
+	</ul>
+
+	<!-- ═══════════════ SIGN IN ═══════════════ -->
+	<span class="tag tag--solid" id="signin">New — sign in</span>
+	<p class="note" style="margin-top:.4rem">One segmented control (Sign in / Create account), then every method on one screen — Google first, email below, code as an alternative link. No second tab row.</p>
+	<div class="screen">
+		<div class="screen-bar"><span>portal /start — proposed</span><span>sign in</span></div>
+		<div class="authpage">
+			<div class="authbrand">
+				<div class="ab-logo">Century NIT <span>International</span></div>
+				<div>
+					<h2 class="ab-title">Your entire application journey — <em>in one place.</em></h2>
+					<p class="ab-lead">One account tracks you from first consultation to departure. This is what the portal holds:</p>
+					<div class="ab-chapters">
+						<div class="ab-ch"><span class="n">I</span><span>Consultation</span><span class="d">meet · assess · verify documents</span></div>
+						<div class="ab-ch"><span class="n">II</span><span>Enrolment</span><span class="d">confirm · package · plan · deposit</span></div>
+						<div class="ab-ch"><span class="n">III</span><span>Applications</span><span class="d">schools · submissions · offers</span></div>
+						<div class="ab-ch"><span class="n">IV</span><span>Visa</span><span class="d">fee · biometrics · decision</span></div>
+						<div class="ab-ch"><span class="n">V</span><span>Departure</span><span class="d">fee milestone · flight · checklist</span></div>
+						<div class="ab-ch"><span class="n">VI</span><span>Complete</span><span class="d">departed · post-arrival plan</span></div>
+					</div>
+				</div>
+				<div class="ab-foot">Licensed consultancy — Accra · Kumasi · Takoradi · Tamale · Tema</div>
+			</div>
+			<div class="authform">
+				<div class="af-panel">
+					<p class="af-eyebrow">Client portal</p>
+					<h3 class="af-title">Welcome back</h3>
+					<p class="af-sub">Sign in to pick up where you left off.</p>
+
+					<div class="seg">
+						<button class="on">Sign in</button>
+						<button>Create account</button>
+					</div>
+
+					<button class="gbtn">
+						<span class="gmark">G</span>
+						Continue with Google
+						<span class="arrow">→</span>
+					</button>
+
+					<div class="orline">or with email</div>
+
+					<div class="fld">
+						<label>Email</label>
+						<input class="in" value="enoch@example.com" readonly>
+					</div>
+					<div class="fld">
+						<label>Password</label>
+						<input class="in" type="password" value="••••••••••" readonly>
+					</div>
+					<button class="cta">Sign in <span class="arrow">→</span></button>
+
+					<div class="alts">
+						<button>Email me a code instead</button>
+						<button>Forgot password?</button>
+					</div>
+
+					<p class="legal">By continuing you agree to our terms. Protected by two-factor authentication.</p>
+				</div>
+			</div>
+		</div>
+	</div>
+	<ul class="callout">
+		<li><b>Google stays first</b> — it <i>is</i> the smoothest path — but the mono bordered "G" mark replaces the 4-color logo, and the email form is visible on the same screen rather than hidden behind a tab.</li>
+		<li><b>"Email me a code instead"</b> swaps the password field for a send-code state — same screen, no tab.</li>
+		<li><b>Loading stays on the button</b> ("Signing in…" with the arrow swapping to a spinner) — the page never disappears.</li>
+		<li><b>Brand panel earns its half:</b> the six chapters preview what the account unlocks — real portal structure instead of a generic feature list. Branch list reflects all five real branches.</li>
+	</ul>
+
+	<!-- ═══════════════ SIGNUP + CODE ═══════════════ -->
+	<span class="tag tag--solid" id="signup">New — create account · email code</span>
+	<div class="smallrow">
+		<div class="screen">
+			<div class="screen-bar"><span>/start — create account</span><span>same panel</span></div>
+			<div class="authform" style="padding:1.8rem">
+				<div class="af-panel">
+					<p class="af-eyebrow">Client portal</p>
+					<h3 class="af-title">Create your account</h3>
+					<p class="af-sub">One account for the whole journey — consultation to departure.</p>
+
+					<div class="seg">
+						<button>Sign in</button>
+						<button class="on">Create account</button>
+					</div>
+
+					<button class="gbtn">
+						<span class="gmark">G</span>
+						Sign up with Google
+						<span class="arrow">→</span>
+					</button>
+
+					<div class="orline">or with email</div>
+
+					<div class="fld"><label>Full name</label><input class="in" placeholder="Enoch Yaw Enu"></div>
+					<div class="fld"><label>Email</label><input class="in" placeholder="you@example.com"></div>
+					<div class="fld">
+						<label>Password</label>
+						<input class="in" type="password" value="lamp boat cedar nine" readonly>
+						<div class="pwcheck">
+							<div class="pwcheck__row pwcheck__row--met"><span class="box"></span>12+ characters <span class="tag-r">required</span></div>
+							<div class="pwcheck__row"><span class="box"></span>not your name or email</div>
+							<div class="pwcheck__row"><span class="box"></span>four random words beat symbols</div>
+						</div>
+						<p class="hint">A passphrase is easiest — <code>lamp boat cedar nine</code> is stronger and easier to type than <code>P@ssw0rd1</code>.</p>
+					</div>
+					<button class="cta">Create account <span class="arrow">→</span></button>
+					<p class="legal">We'll email a 6-digit code to verify it's really you — the account only exists once the code checks out.</p>
+				</div>
+			</div>
+		</div>
+
+		<div class="screen" id="code">
+			<div class="screen-bar"><span>/start — email code</span><span>no password path</span></div>
+			<div class="authform" style="padding:1.8rem">
+				<div class="af-panel">
+					<p class="af-eyebrow">Check your inbox</p>
+					<h3 class="af-title">Enter the code</h3>
+					<p class="af-sub">We sent a 6-digit code to <b style="color:var(--ink)">enoch@example.com</b>. It expires shortly.</p>
+
+					<div class="otp">
+						<i class="fill">4</i><i class="fill">1</i><i class="fill">9</i><i class="cur">2</i><i></i><i></i>
+					</div>
+
+					<button class="cta">Continue <span class="arrow">→</span></button>
+
+					<div class="alts">
+						<button>Resend in 24s</button>
+						<button>Use a different address</button>
+						<button>Use password instead</button>
+					</div>
+					<p class="legal">Six boxed cells — paste fills all six, typing auto-advances, and the 6th digit submits. No button needed.</p>
+				</div>
+			</div>
+		</div>
+	</div>
+	<ul class="callout">
+		<li><b>Verify-email copy fixed:</b> eyebrow reads "Check your inbox" (not "Account created"), the sub says "6-digit code" (not "link"), and it prints the address you actually typed — the live page interpolates the wrong variable and shows a blank.</li>
+		<li><b>Signup honesty:</b> "the account only exists once the code checks out" — matching the real no-zombie-account backend flow.</li>
+		<li><b>Password checklist</b> — appears only when <i>choosing</i> a password (signup + reset), never on sign-in. The enforced rule ("12+ characters", tagged <code>required</code>) inks its box the moment it's met; the other rows are hollow suggestions, not blockers — the backend only enforces length (<code>minPasswordLength: 12</code>), so the UI never claims otherwise. Hint line teaches the passphrase habit.</li>
+		<li><b>One password minimum</b> — 12 characters everywhere: signup, reset, change.</li>
+	</ul>
+
+	<!-- ═══════════════ MFA + RESET ═══════════════ -->
+	<span class="tag tag--solid" id="mfa">New — MFA challenge</span>
+	<p class="note" style="margin-top:.4rem">Three upgrades, one screen. <b>1.</b> The hierarchy: identity → the challenge → escape routes below — chips above the field read like tabs competing with the input. <b>2.</b> The screen now <b>resolves the enrolled method before it paints</b> — a tiny endpoint reads the signed <code>two_factor</code> cookie Better Auth already sets at password time (it maps to a <code>verifications</code> row whose value is the user id) and returns the enrolled method. Email-OTP users land on the email challenge with the code already sent — no more TOTP boxes shown to people who never enrolled an app. <b>3.</b> "Trust this device" — Better Auth already supports it (<code>trustDevice</code> in the verify body → 30-day trust cookie); it's a checkbox, zero backend work.</p>
+	<div class="smallrow">
+		<div class="screen">
+			<div class="screen-bar"><span>/start — two-factor</span><span>resolved: authenticator</span></div>
+			<div class="authform" style="padding:1.8rem">
+				<div class="af-panel">
+					<p class="af-eyebrow">Security check</p>
+					<h3 class="af-title">Verify it's you</h3>
+					<div class="ident">
+						<span class="ident__dot" aria-hidden></span>
+						<span class="ident__mail">enoch@example.com</span>
+						<span class="ident__step">step 2 of 2</span>
+					</div>
+
+					<div class="fld" style="margin-top:1.2rem">
+						<label>Authenticator app code</label>
+						<div class="otp">
+							<i class="fill">8</i><i class="fill">3</i><i class="cur">1</i><i></i><i></i><i></i>
+						</div>
+						<p class="hint">Open your authenticator app — the code refreshes every 30 seconds.</p>
+					</div>
+
+					<button class="cta">Verify <span class="arrow">→</span></button>
+					<label class="trust"><span class="box"></span>Trust this device for 30 days</label>
+
+					<div class="escrow">Can't get to your authenticator?</div>
+					<div class="alts" style="justify-content:center;gap:1.4rem">
+						<button>Email me a code</button>
+						<button>Use a recovery code</button>
+					</div>
+					<div class="alts" style="justify-content:center;margin-top:.9rem"><button>← Back to sign in</button></div>
+				</div>
+			</div>
+		</div>
+
+		<div class="screen">
+			<div class="screen-bar"><span>/start — two-factor</span><span>resolved: email OTP — code auto-sent</span></div>
+			<div class="authform" style="padding:1.8rem">
+				<div class="af-panel">
+					<p class="af-eyebrow">Security check</p>
+					<h3 class="af-title">Verify it's you</h3>
+					<div class="ident">
+						<span class="ident__dot" aria-hidden></span>
+						<span class="ident__mail">enoch@example.com</span>
+						<span class="ident__step">step 2 of 2</span>
+					</div>
+
+					<div class="fld" style="margin-top:1.2rem">
+						<label>Email code</label>
+						<div class="otp">
+							<i></i><i></i><i></i><i></i><i></i><i></i>
+						</div>
+						<p class="hint">Code sent the moment you signed in — check <b style="color:var(--ink)">en***@example.com</b>. It expires in a few minutes.</p>
+					</div>
+
+					<button class="cta">Verify <span class="arrow">→</span></button>
+					<label class="trust"><span class="box"></span>Trust this device for 30 days</label>
+
+					<div class="escrow">Wrong inbox, or nothing arrived?</div>
+					<div class="alts" style="justify-content:center;gap:1.4rem">
+						<button>Resend in 24s</button>
+						<button>Use a recovery code</button>
+					</div>
+					<div class="alts" style="justify-content:center;margin-top:.9rem"><button>← Back to sign in</button></div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<ul class="callout">
+		<li><b>The method is resolved, not guessed</b> — <code>GET /auth/mfa/method</code> reads the signed <code>two_factor</code> cookie (the same credential <code>verify-totp</code> checks) → <code>verifications</code> row → user id → <code>mfaMethod</code>. TOTP enrollees get the authenticator challenge; email-OTP enrollees get the email challenge <i>with the code already sent</i>. Today both consoles default to TOTP and make email-OTP users self-switch — worse, ops calls <code>getMfaEnrollment()</code> in this window but it 401s (no session yet) and silently falls back to TOTP, so its auto-send path is dead code.</li>
+		<li><b>Identity strip up top</b> — "● enoch@example.com · step 2 of 2". Every professional MFA screen names the account being unlocked and where you are in the flow.</li>
+		<li><b>The challenge is the hero</b> — method label + boxes + Verify. The active method is stated in the label and the hint, not implied by which chip is inked.</li>
+		<li><b>Trust this device</b> — a quiet checkbox under the CTA. Better Auth already supports <code>trustDevice</code> in the verify body and issues a 30-day <code>trust_device</code> cookie; we just never passed it. Next sign-in on that device skips the challenge entirely.</li>
+		<li><b>Escape routes move below the fold of the action</b> — a labelled divider ("Can't get to your authenticator?") reframes alternatives as recovery routes, then quiet links. Only the methods you're <i>not</i> enrolled in are offered — an email-OTP user never sees "Use authenticator" because they don't have one.</li>
+		<li><b>Email mode says where the code went</b> — masked address in the hint, resend lives with the other escape links.</li>
+		<li><b>Recovery mode</b> swaps the six boxes for a single text field with its own hint — same frame, different input.</li>
+	</ul>
+
+	<span class="tag" id="reset" style="margin-top:2.5rem">Reset — the link works</span>
+	<div class="screen">
+		<div class="screen-bar"><span>/start?token=… — the reset link lands here</span><span>fixed</span></div>
+			<div class="authform" style="padding:1.8rem">
+				<div class="af-panel">
+					<p class="af-eyebrow">Password reset</p>
+					<h3 class="af-title">Choose a new password</h3>
+					<p class="af-sub">The link in your email carried the token — you're straight to the step that matters, for <b style="color:var(--ink)">enoch@example.com</b>.</p>
+
+					<div class="fld">
+						<label>New password</label>
+						<input class="in" type="password" value="•••••••••••••" readonly>
+						<div class="pwcheck">
+							<div class="pwcheck__row pwcheck__row--met"><span class="box"></span>12+ characters <span class="tag-r">required</span></div>
+							<div class="pwcheck__row"><span class="box"></span>not your name or email</div>
+							<div class="pwcheck__row"><span class="box"></span>four random words beat symbols</div>
+						</div>
+						<p class="hint">Same bar as signup — 12 characters minimum.</p>
+					</div>
+					<div class="fld">
+						<label>Confirm password</label>
+						<input class="in" type="password" value="••••••••••••" readonly>
+						<p class="err">Passwords don't match yet</p>
+					</div>
+					<button class="cta">Update password <span class="arrow">→</span></button>
+					<div class="alts"><button>← Back to sign in</button></div>
+					<p class="legal">Today the email link lands on /start and the token is ignored — the page asks you to paste a token the email never shows. Now <code>?token=</code> is read on load and routes straight here.</p>
+				</div>
+			</div>
+		</div>
+	</div>
+	<ul class="callout">
+		<li><b>Reset deep link works:</b> <code>/start?token=…</code> opens the "set password" step directly. The "paste the token" step survives only as a fallback for manual entry.</li>
+		<li><b>MFA alternatives sit below the action</b> — a labelled divider + quiet links replace both the old context-sensitive link pile and a chip strip; the challenge always leads.</li>
+		<li><b>Success screen</b> gets a real ✓ mark in the square, not the word "Done".</li>
+	</ul>
+
+	<!-- ═══════════════ BUILD NOTES ═══════════════ -->
+	<span class="tag" id="build">Build notes</span>
+	<ul class="callout">
+		<li><b>One tab system:</b> delete the inline-styled Log In / Sign Up underline row — the boxed <code>.auth-tabs</code> segmented control becomes the only switcher. The "Social" tab dies; Google is a button on the main form.</li>
+		<li><b>Kill the full-screen <code>loading-overlay</code></b> — button-level loading text only. The page never leaves.</li>
+		<li><b>Read <code>?token=</code></b> in the search-param effect (it already handles <code>?verified</code>/<code>?error</code>) → <code>setStep("set")</code> with the token in state.</li>
+		<li><b>OTP component:</b> six <code>&lt;input maxlength=1&gt;</code> cells with auto-advance + paste-split; reused for email-code, signup-verify, and MFA TOTP.</li>
+		<li><b>MFA frame:</b> identity strip (<code>● email · step 2 of 2</code>) under the title; the method label + hint carry the active method; a labelled divider + link row below the CTA offers the other routes — current method excluded.</li>
+		<li><b>New endpoint <code>GET /auth/mfa/method</code> (~20 lines, no auth middleware):</b> read the <code>better-auth.two_factor</code> cookie → look up <code>verifications</code> where <code>identifier = cookieValue</code> → <code>value</code> is the user id → return <code>{ method, maskedEmail }</code>. Missing/expired → 401 → frontend falls back to the TOTP challenge. This is the same lookup <code>verify-totp</code> performs — the cookie is already the proof-of-password artifact.</li>
+		<li><b>Portal challenge flow:</b> on entering <code>mfa_otp</code>, fetch the method → if <code>email_otp</code>, render the email challenge and fire <code>send-otp</code> once automatically → if <code>totp</code>, authenticator boxes as today. The masked email in the hint comes from the endpoint, not from client state.</li>
+		<li><b>Trust device:</b> checkbox state → pass <code>trustDevice: true</code> in <code>verifyTotp</code>/<code>verifyOtp</code>/<code>verifyBackupCode</code> bodies. The plugin sets the <code>trust_device</code> cookie (30-day default, configurable via <code>trustDeviceMaxAge</code>).</li>
+		<li><b>Ops gets the same fix:</b> replace the broken <code>getMfaEnrollment()</code> call in the twoFactorRedirect branch with this endpoint — that's what makes the <code>email_otp</code> auto-send path actually reachable, and it lets us delete the dead fallback branch.</li>
+		<li><b>Error honesty:</b> map Better Auth's <code>TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE</code> to "too many attempts — sign in again" instead of the generic "code not accepted".</li>
+		<li><b>Copy fixes:</b> verify_email eyebrow → "Check your inbox"; sub interpolates <code>signupEmail</code>; "6-digit code" not "link"; reset minimum → 12 (matches the real <code>minPasswordLength</code>); success mark → ✓.</li>
+		<li><b>Password checklist component:</b> a <code>PwChecklist</code> next to the input — required rule inverts on <code>password.length &gt;= 12</code>, suggestions (<i>not your name or email</i>, <i>four random words beat symbols</i>) stay hollow and never block submit. Submit stays disabled until the required row inks. Confirm-password gets a live "don't match yet" line under the field.</li>
+		<li><b>Chapter list uses real vocabulary:</b> Roman numerals I–VI and the actual blurbs from <code>CHAPTERS</code> in <code>packages/shared/labels.ts</code> — VI is "departed · post-arrival plan", not an alumni metaphor (this is a consultancy, not a school).</li>
+		<li><b>Mono Google mark:</b> bordered square "G" — the four-color SVG is the only non-monochrome element on the page.</li>
+		<li><b>One backend addition</b> — <code>GET /auth/mfa/method</code> only. Every flow otherwise already exists (Better Auth email/password, Google OAuth, email OTP, TOTP/email/backup MFA, trust device, token reset).</li>
+		<li><b>Mobile:</b> brand panel already collapses — unchanged.</li>
+	</ul>
+
+</div>
+</body>
+</html>

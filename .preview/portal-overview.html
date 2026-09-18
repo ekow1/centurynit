@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portal Overview — preview</title>
+<style>
+  :root{
+    --background:#ffffff; --foreground:#0a0a0a;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#0a0a0a; --border-light:#d4d4d8;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --text-xs:.72rem; --text-sm:.875rem;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:#fafafa;color:var(--foreground);font-size:var(--text-sm)}
+  .page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--muted-foreground)}
+  .sharp-card{background:var(--background);border:1px solid var(--border-light);padding:1.25rem}
+  .sharp-card--key{background:var(--foreground);color:var(--background)}
+  .sharp-card--key .eyebrow{color:rgba(255,255,255,.6)}
+  .btn{border:1px solid var(--border);background:var(--background);color:var(--foreground);font:inherit;
+    font-size:var(--text-xs);font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+    padding:.55rem .9rem;cursor:pointer;text-decoration:none;display:inline-block}
+  .btn--ghost{border-color:var(--border-light)}
+  .btn--inv{background:var(--background);color:var(--foreground);border-color:var(--background)}
+  .portal-pill{display:inline-block;border:1px solid var(--border);padding:.2rem .6rem;
+    font-family:var(--font-mono);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em}
+  .portal-pill--solid{background:var(--foreground);color:var(--background)}
+  .portal-pill--done{background:var(--muted);border-color:var(--border-light);color:var(--muted-foreground)}
+  .portal-pill--hollow{border-color:var(--border-light);color:var(--muted-foreground);border-style:dashed}
+
+  .page-title{font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
+  .lead{color:var(--muted-foreground);max-width:46rem}
+  .refs{display:flex;gap:1.5rem;margin-top:1rem;flex-wrap:wrap}
+  .refs span{font-family:var(--font-mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground)}
+  .refs strong{color:var(--foreground)}
+
+  /* the band — same journey-now grammar as every chapter page */
+  .band{background:var(--foreground);color:var(--background);padding:1.5rem 1.75rem;
+    display:flex;justify-content:space-between;align-items:center;gap:2rem;flex-wrap:wrap;margin-top:1.5rem}
+  .band .eyebrow{color:rgba(255,255,255,.6)}
+  .band__title{font-size:1.35rem;font-weight:800;margin-top:.3rem}
+  .band__detail{color:rgba(255,255,255,.7);font-size:var(--text-sm);margin-top:.3rem;max-width:40rem}
+
+  /* the chapter strip — six cells, state in ink */
+  .chapters{display:grid;grid-template-columns:repeat(6,1fr);border:1px solid var(--border-light);
+    background:var(--background);margin-top:1.5rem}
+  .chap{padding:.9rem 1rem;border-right:1px solid var(--border-light);text-decoration:none;color:inherit;display:block}
+  .chap:last-child{border-right:none}
+  .chap__n{font-family:var(--font-mono);font-size:.68rem;font-weight:700;display:inline-flex;
+    width:1.5rem;height:1.5rem;border:1.5px solid var(--border);align-items:center;justify-content:center}
+  .chap--done .chap__n{background:var(--foreground);color:var(--background)}
+  .chap--now{background:var(--muted)}
+  .chap--now .chap__n{border-width:2px}
+  .chap--locked .chap__n{border-style:dashed;border-color:var(--border-light);color:var(--muted-foreground)}
+  .chap__name{font-size:.72rem;font-weight:600;margin-top:.5rem}
+  .chap--locked .chap__name{color:var(--muted-foreground)}
+  .chap__st{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;
+    color:var(--muted-foreground);margin-top:.15rem}
+
+  .split{display:grid;grid-template-columns:1fr 20rem;gap:1.5rem;align-items:start;margin-top:1.5rem}
+  .rail{display:flex;flex-direction:column;gap:1rem;position:sticky;top:1rem}
+  .kv{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--border-light);font-size:var(--text-xs)}
+  .kv:last-child{border-bottom:none}
+  .kv .k{font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground);font-size:.62rem;padding-top:.1rem}
+  .kv .v{text-align:right}
+  .sharp-card--key .kv{border-color:rgba(255,255,255,.25)}
+  .sharp-card--key .kv .k{color:rgba(255,255,255,.55)}
+
+  .psec{display:flex;align-items:baseline;gap:.7rem;margin:1.8rem 0 .8rem}
+  .psec__t{font-weight:700;font-size:1.05rem}
+  .psec__hint{margin-left:auto;font-family:var(--font-mono);font-size:.65rem;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.08em}
+
+  /* the now card — current chapter's live detail */
+  .now{border:1.5px solid var(--border);background:var(--background);box-shadow:inset 4px 0 0 var(--foreground);padding:1.25rem}
+  .now__row{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;
+    padding:.6rem 0;border-bottom:1px solid var(--border-light);font-size:var(--text-sm)}
+  .now__row:last-child{border-bottom:none}
+
+  /* consultant updates — the human feed */
+  .feed{list-style:none;padding:0;border:1px solid var(--border-light);background:var(--background)}
+  .feed li{display:flex;gap:1rem;padding:.8rem 1.1rem;border-bottom:1px solid var(--border-light);font-size:var(--text-xs);align-items:baseline}
+  .feed li:last-child{border-bottom:none}
+  .feed .who{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--muted-foreground);min-width:6.5rem}
+  .feed .when{margin-left:auto;font-family:var(--font-mono);font-size:.6rem;color:var(--muted-foreground);white-space:nowrap}
+
+  /* next appointment */
+  .appt-mini{display:flex;gap:1rem;align-items:center;margin-top:.5rem}
+  .appt-mini__date{width:3.2rem;height:3.2rem;border:1.5px solid var(--border);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;flex-shrink:0}
+  .appt-mini__date b{font-size:1.1rem}
+  .appt-mini__date span{font-family:var(--font-mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground)}
+
+  .jlink{background:none;border:none;padding:0;font:inherit;text-decoration:underline;cursor:pointer;color:inherit;font-size:var(--text-xs)}
+
+  @media (max-width:900px){.split{grid-template-columns:1fr}.rail{position:static}.chapters{grid-template-columns:repeat(3,1fr)}.chap{border-bottom:1px solid var(--border-light)}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <p class="eyebrow">Overview</p>
+    <h1 class="page-title" style="margin-top:.3rem">Welcome, Ama</h1>
+    <p class="lead" style="margin-top:.5rem">One glance at your journey — where you are, what needs you, and who is on your file.</p>
+    <div class="refs">
+      <span>Application · <strong>CNT-APP-0042</strong></span>
+      <span>Consultation · <strong>CNT-2026-0314</strong></span>
+    </div>
+  </header>
+
+  <!-- the band — the one ask, always -->
+  <div class="band">
+    <div>
+      <p class="eyebrow">Chapter III · Applications — action required</p>
+      <p class="band__title">Two offers in — accept one to open the visa chapter</p>
+      <p class="band__detail">Leeds Beckett and Portsmouth have both admitted you. Your consultant is holding the visa file until you pick a school.</p>
+    </div>
+    <a class="btn btn--inv" href="#">Review offers →</a>
+  </div>
+
+  <!-- the six chapters, at a glance — the journey map's edge into home -->
+  <div class="chapters">
+    <a class="chap chap--done" href="#"><span class="chap__n">✓</span><p class="chap__name">Consultation</p><p class="chap__st">Done</p></a>
+    <a class="chap chap--done" href="#"><span class="chap__n">✓</span><p class="chap__name">Enrolment</p><p class="chap__st">Done</p></a>
+    <a class="chap chap--now" href="#"><span class="chap__n">III</span><p class="chap__name">Applications</p><p class="chap__st">You are here</p></a>
+    <a class="chap chap--locked" href="#"><span class="chap__n">IV</span><p class="chap__name">Visa</p><p class="chap__st">Locked</p></a>
+    <a class="chap chap--locked" href="#"><span class="chap__n">V</span><p class="chap__name">Departure</p><p class="chap__st">Locked</p></a>
+    <a class="chap chap--locked" href="#"><span class="chap__n">VI</span><p class="chap__name">Complete</p><p class="chap__st">Locked</p></a>
+  </div>
+
+  <div class="split">
+    <div>
+      <!-- now — the current chapter's live detail -->
+      <div class="psec">
+        <span class="psec__t">Now · Applications</span>
+        <span class="psec__hint">3 schools filed</span>
+      </div>
+      <div class="now">
+        <div class="now__row">
+          <span><strong>Leeds Beckett University</strong> · MSc Data Science</span>
+          <span class="portal-pill portal-pill--solid">Admitted</span>
+        </div>
+        <div class="now__row">
+          <span><strong>University of Portsmouth</strong> · MSc Data Science</span>
+          <span class="portal-pill portal-pill--solid">Admitted</span>
+        </div>
+        <div class="now__row">
+          <span><strong>Coventry University</strong> · MSc Data Science</span>
+          <span class="portal-pill">Under review</span>
+        </div>
+        <div class="now__row" style="border-top:1.5px solid var(--border);padding-top:.9rem">
+          <span class="muted" style="font-size:var(--text-xs)">Accepting an offer opens Chapter IV — your visa file is prepared for that school.</span>
+          <a class="jlink" href="#">Open applications →</a>
+        </div>
+      </div>
+
+      <!-- the feed — what your people did lately -->
+      <div class="psec">
+        <span class="psec__t">From your file</span>
+        <span class="psec__hint">consultant activity</span>
+      </div>
+      <ul class="feed">
+        <li><span class="who">K. Mensah</span><span>Portsmouth offer received — congratulations. Deposit terms attached to the offer card.</span><span class="when">2h</span></li>
+        <li><span class="who">K. Mensah</span><span>Chased Coventry on your file — they reply within the week, usually.</span><span class="when">1d</span></li>
+        <li><span class="who">System</span><span>Invoice INV-2026-0184 marked paid. Your files were lodged with all three schools.</span><span class="when">12d</span></li>
+      </ul>
+      <p style="margin-top:.6rem"><a class="jlink" href="#">Open the journey map →</a></p>
+    </div>
+
+    <!-- the rail — money, people, calendar -->
+    <div class="rail">
+      <div class="sharp-card sharp-card--key">
+        <p class="eyebrow">Money</p>
+        <div class="kv"><span class="k">Paid to date</span><span class="v"><strong>GH₵8,900</strong></span></div>
+        <div class="kv"><span class="k">Due now</span><span class="v">—</span></div>
+        <div class="kv"><span class="k">Next fee</span><span class="v">Visa · on offer accept</span></div>
+        <p style="margin-top:.8rem"><a class="jlink" href="#" style="color:rgba(255,255,255,.85)">Open the ledger →</a></p>
+      </div>
+
+      <div class="sharp-card">
+        <p class="eyebrow">Next appointment</p>
+        <div class="appt-mini">
+          <div class="appt-mini__date"><b>18</b><span>Mar</span></div>
+          <div>
+            <p style="font-weight:600;font-size:var(--text-sm)">Offer review call</p>
+            <p class="mono muted" style="font-size:.62rem">10:00 · ONLINE · K. MENSAH</p>
+          </div>
+        </div>
+        <p style="margin-top:.8rem"><a class="jlink" href="#">Join / manage →</a></p>
+      </div>
+
+      <div class="sharp-card">
+        <p class="eyebrow">Your people</p>
+        <div class="kv"><span class="k">Consultant</span><span class="v">K. Mensah</span></div>
+        <div class="kv"><span class="k">Handler</span><span class="v">A. Osei</span></div>
+        <div class="kv"><span class="k">Travel officer</span><span class="v muted">assigned later</span></div>
+        <p class="muted" style="font-size:.72rem;margin-top:.6rem">Message any of them through the chat, bottom right.</p>
+      </div>
+
+      <div class="sharp-card">
+        <p class="eyebrow">Documents</p>
+        <div class="kv"><span class="k">On file</span><span class="v"><strong>7 of 10</strong></span></div>
+        <div class="kv"><span class="k">Needed</span><span class="v">Passport · photo · transcript</span></div>
+        <p style="margin-top:.8rem"><a class="jlink" href="#">Open the vault →</a></p>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

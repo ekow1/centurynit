@@ -7,7 +7,7 @@ import { useAppState } from "../context/AppState";
 import { useNotifier } from "./notifier/Notifier";
 
 /**
- * The first step of Enrolment: the client's one answer — Confirmed, On
+ * The first step of Enrolment: the client's one answer. Confirmed, On
  * hold, or Declined. Recorded as the application consent and mirrored on
  * the application (`proceedStatus`), which is what opens the case for a
  * consultant. Hold and decline take an optional reason; both can be
@@ -36,7 +36,7 @@ export function EnrolmentDecision({ onDecided }: { onDecided?: () => void }) {
 					? "Enrolment confirmed. Choose your package and plan below."
 					: decision === "hold"
 						? "Your enrolment is on hold. Come back whenever you're ready."
-						: "Noted — your enrolment is closed for this cycle. You can reopen it any time.",
+						: "Noted. Your enrolment is closed for this cycle. You can reopen it any time.",
 			);
 			setReasonFor(null);
 			setReason("");
@@ -108,7 +108,7 @@ export function EnrolmentDecision({ onDecided }: { onDecided?: () => void }) {
 					{busy ? "Saving…" : "Confirm enrolment"}
 				</Button>
 				<Button type="button" variant="secondary" disabled={busy} onClick={() => setReasonFor("hold")}>
-					Not now — put on hold
+					Not now. Put on hold
 				</Button>
 				<Button type="button" variant="ghost" disabled={busy} onClick={() => setReasonFor("opt_out")}>
 					Decline
@@ -136,10 +136,10 @@ function ReasonBox({
 }) {
 	return (
 		<div className="card card--pad mt-3" style={{ width: "100%" }}>
-			<p className="eyebrow">{kind === "hold" ? "On hold — reason (optional)" : "Decline — reason (optional)"}</p>
+			<p className="eyebrow">{kind === "hold" ? "On hold. Reason (optional)" : "Decline. Reason (optional)"}</p>
 			<p className="muted mt-1" style={{ fontSize: "0.85rem" }}>
 				{kind === "hold"
-					? "Anything you need time for — exams, finances, a family discussion."
+					? "Anything you need time for. Exams, finances, a family discussion."
 					: "Why you're closing your enrolment for this cycle."}
 			</p>
 			<textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} className="input mt-2" placeholder="Optional…" style={{ width: "100%" }} />

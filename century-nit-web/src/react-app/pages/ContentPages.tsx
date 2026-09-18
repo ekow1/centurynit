@@ -1245,7 +1245,7 @@ function VideoLightbox({
 				onClick={(e) => e.stopPropagation()}
 				role="dialog"
 				aria-modal="true"
-				aria-label={`${video.name} — video testimonial`}
+				aria-label={`${video.name}. Video testimonial`}
 			>
 				<button type="button" className="rs-lightbox__close" onClick={onClose} aria-label="Close">
 					✕

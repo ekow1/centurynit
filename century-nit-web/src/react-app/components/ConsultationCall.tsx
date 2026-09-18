@@ -5,14 +5,14 @@ import { ApiError, bookingsApi } from "century-nit-core/api";
 type CallState = "connecting" | "connected" | "ended" | "error";
 
 /**
- * The consultation's own call surface — LiveKit rooms joined in-app.
+ * The consultation's own call surface. LiveKit rooms joined in-app.
  *
  * There is no hosted meeting page for LiveKit, so this component is the
  * whole product: connect to the project's ws host with the join token
  * minted by /bookings/:id/join, publish camera + mic, and render the
  * remote participant's tracks into our own monochrome tiles.
  *
- * The token — not this UI — carries the authority: roomAdmin (host
+ * The token, not this UI, carries the authority: roomAdmin (host
  * controls) is decided server-side per caller, so "host" here is only a
  * label, never something the client can claim.
  */
@@ -159,7 +159,7 @@ export function ConsultationCall({
 					<CenterNote title="Connecting…" sub="Opening the meeting room" />
 				)}
 				{alone && (
-					<CenterNote title={`Waiting for ${waitingFor}`} sub="Stay here — the call starts when they join" />
+					<CenterNote title={`Waiting for ${waitingFor}`} sub="Stay here. The call starts when they join" />
 				)}
 				{state === "ended" && (
 					<CenterNote title="Call ended" sub="You can close this window" action={{ label: "Close", onClick: onClose }} />
@@ -282,7 +282,7 @@ function CallButton({
 	);
 }
 
-/* ── "Opens at" modal — the friendly face of the 409 MEETING_NOT_OPEN ────── */
+/* "Opens at" modal. The friendly face of the 409 MEETING_NOT_OPEN */
 
 export type MeetingWindowInfo = {
 	opensAt: string;
@@ -313,7 +313,7 @@ function useMinuteClock() {
 
 function countdownLabel(now: number, opensAt: number) {
 	const ms = opensAt - now;
-	if (ms <= 0) return "open now — press Join again";
+	if (ms <= 0) return "open now. Press Join again";
 	const min = Math.ceil(ms / 60_000);
 	if (min < 60) return `opens in ${min} min`;
 	const h = Math.floor(min / 60);
@@ -323,7 +323,7 @@ function countdownLabel(now: number, opensAt: number) {
 }
 
 /**
- * The modal that answers "The meeting room opens at 08:45" properly —
+ * The modal that answers "The meeting room opens at 08:45" properly,
  * the exact time in the booking's timezone, a live countdown, who gets in
  * when, and a calendar escape. Rendered by useJoinMeeting's overlay slot so
  * every Join surface gets it with no per-page wiring.
@@ -388,7 +388,7 @@ export function MeetingWindowModal({ info, onClose }: { info: MeetingWindowInfo;
 						{countdownLabel(now, opens.getTime())}
 					</p>
 					<p style={{ fontSize: "0.78rem", color: "#52525b", lineHeight: 1.55, marginTop: "0.9rem" }}>
-						{info.title} starts {startLabel}. The room opens {info.earlyMinutes} minutes early — you can join from {openTime}.
+						{info.title} starts {startLabel}. The room opens {info.earlyMinutes} minutes early. You can join from {openTime}.
 					</p>
 				</div>
 				<div style={{ borderTop: "1px solid #d4d4d8", padding: "0.8rem 1.1rem", display: "flex", gap: "0.5rem", justifyContent: "center", flexWrap: "wrap" }}>
@@ -400,23 +400,116 @@ export function MeetingWindowModal({ info, onClose }: { info: MeetingWindowInfo;
 	);
 }
 
+/* "Window passed" modal. The friendly face of the 409 MEETING_ENDED */
+
+export type MeetingEndedInfo = {
+	startsAt: string;
+	endsAt: string;
+	windowClosedAt?: string;
+	timezone: string | null;
+	reference?: string;
+	title: string;
+};
+
+function isEndedDetails(d: unknown): d is Omit<MeetingEndedInfo, "title"> {
+	return (
+		typeof d === "object" && d !== null &&
+		typeof (d as Record<string, unknown>).startsAt === "string" &&
+		typeof (d as Record<string, unknown>).endsAt === "string"
+	);
+}
+
 /**
- * The one join path for every surface — `POST /bookings/:id/join` decides
+ * The ended twin of MeetingWindowModal. Same shell, but the clock is the
+ * slot's end (struck through) and the CTA is reschedule instead of calendar.
+ * `onReschedule` is optional: surfaces with nowhere to reschedule to render
+ * dismiss-only.
+ */
+export function MeetingEndedModal({
+	info,
+	onClose,
+	onReschedule,
+}: {
+	info: MeetingEndedInfo;
+	onClose: () => void;
+	onReschedule?: () => void;
+}) {
+	const tz = info.timezone ?? undefined;
+	const start = new Date(info.startsAt);
+	const end = new Date(info.endsAt);
+	const day = start.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", timeZone: tz });
+	const endTime = end.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZone: tz });
+	const timeOpts: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit", timeZone: tz };
+	const range = `${start.toLocaleTimeString(undefined, timeOpts)} – ${endTime}`;
+	const closedLabel = info.windowClosedAt
+		? new Date(info.windowClosedAt).toLocaleTimeString(undefined, timeOpts)
+		: null;
+
+	return (
+		<div
+			role="dialog"
+			aria-modal="true"
+			aria-label="Meeting window has passed"
+			onClick={onClose}
+			style={{
+				position: "fixed", inset: 0, zIndex: 70, background: "rgba(0,0,0,0.45)",
+				display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem",
+			}}
+		>
+			<div
+				onClick={(e) => e.stopPropagation()}
+				style={{
+					background: "#fff", border: "1.5px solid #000", maxWidth: "26rem", width: "100%",
+					boxShadow: "6px 6px 0 rgba(0,0,0,0.25)", fontFamily: "inherit",
+				}}
+			>
+				<div style={{ borderBottom: "1.5px solid #000", padding: "0.7rem 1.1rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+					<span className="eyebrow" style={{ margin: 0 }}>{info.title}</span>
+					<button type="button" onClick={onClose} aria-label="Close" style={{ background: "none", border: 0, fontSize: "1.1rem", cursor: "pointer", lineHeight: 1 }}>×</button>
+				</div>
+				<div style={{ padding: "1.1rem", textAlign: "center" }}>
+					<p className="eyebrow" style={{ color: "#000" }}>This meeting window has passed</p>
+					<p style={{ fontFamily: "ui-monospace, monospace", fontSize: "2.4rem", letterSpacing: "-0.02em", margin: "0.3rem 0 0.1rem", textDecoration: "line-through" }}>{endTime}</p>
+					<p style={{ fontSize: "0.8rem", color: "#52525b" }}>{day}{tz ? ` · ${tz}` : ""}</p>
+					<p style={{ display: "inline-block", fontFamily: "ui-monospace, monospace", fontSize: "0.62rem", letterSpacing: "0.1em", textTransform: "uppercase", border: "1px solid #000", padding: "0.25rem 0.55rem", marginTop: "0.55rem" }}>
+						Window closed
+					</p>
+					<p style={{ fontSize: "0.78rem", color: "#52525b", lineHeight: 1.55, marginTop: "0.9rem" }}>
+						{info.title} was {day} · {range}.{closedLabel ? ` The join window stays open 2 hours after the slot. It closed at ${closedLabel}.` : ""}
+					</p>
+				</div>
+				<div style={{ borderTop: "1px solid #d4d4d8", padding: "0.8rem 1.1rem", display: "flex", gap: "0.5rem", justifyContent: "center", flexWrap: "wrap" }}>
+					{onReschedule && (
+						<button type="button" onClick={onReschedule} className="btn btn--primary btn--sm">Reschedule →</button>
+					)}
+					<button type="button" onClick={onClose} className={`btn btn--sm ${onReschedule ? "btn--ghost" : "btn--primary"}`}>Got it</button>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+/**
+ * The one join path for every surface. `POST /bookings/:id/join` decides
  * authz, mints the per-person credential, and returns either a token'd URL
  * to open (Daily, Google, manual links) or {ws host, token} for the in-app
- * LiveKit call. The stored meetingUrl is never opened directly — for
+ * LiveKit call. The stored meetingUrl is never opened directly. For
  * token'd providers it isn't a usable link at all.
  */
-export function useJoinMeeting() {
+export function useJoinMeeting(options?: { onReschedule?: () => void }) {
 	const [call, setCall] = useState<{ url: string; token: string; title: string } | null>(null);
 	const [notOpen, setNotOpen] = useState<MeetingWindowInfo | null>(null);
+	const [ended, setEnded] = useState<MeetingEndedInfo | null>(null);
 	const [joining, setJoining] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const onRescheduleRef = useRef(options?.onReschedule);
+	onRescheduleRef.current = options?.onReschedule;
 
 	const join = useCallback(async (bookingId: string, title = "Consultation") => {
 		setJoining(true);
 		setError(null);
 		setNotOpen(null);
+		setEnded(null);
 		try {
 			const res = await bookingsApi.joinMeeting(bookingId);
 			if (res?.provider === "livekit" && res.token) {
@@ -429,6 +522,8 @@ export function useJoinMeeting() {
 		} catch (err) {
 			if (err instanceof ApiError && err.code === "MEETING_NOT_OPEN" && isWindowDetails(err.details)) {
 				setNotOpen({ ...err.details, title });
+			} else if (err instanceof ApiError && err.code === "MEETING_ENDED" && isEndedDetails(err.details)) {
+				setEnded({ ...err.details, title });
 			} else {
 				setError(err instanceof Error ? err.message : "Could not join the meeting");
 			}
@@ -447,6 +542,12 @@ export function useJoinMeeting() {
 		/>
 	) : notOpen ? (
 		<MeetingWindowModal info={notOpen} onClose={() => setNotOpen(null)} />
+	) : ended ? (
+		<MeetingEndedModal
+			info={ended}
+			onClose={() => setEnded(null)}
+			onReschedule={onRescheduleRef.current ? () => { setEnded(null); onRescheduleRef.current?.(); } : undefined}
+		/>
 	) : null;
 
 	return { join, joining, error, overlay };

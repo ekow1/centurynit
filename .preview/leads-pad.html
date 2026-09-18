@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leads Pad — preview</title>
+<style>
+  /* ── real tokens from packages/core/styles/base.css ── */
+  :root{
+    --background:#ffffff; --foreground:#000000;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#000000; --border-light:#a3a3a3;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","Cascadia Mono","SF Mono",Menlo,Consolas,monospace;
+    --text-xs:.72rem; --text-sm:.875rem;
+    --hairline:1px solid var(--border-light); --thin:1px solid var(--border);
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:var(--background);color:var(--foreground);font-size:var(--text-sm)}
+  .page{max-width:1240px;margin:0 auto;padding:2rem 1.5rem 4rem}
+
+  .page-title{font-size:1.75rem;font-weight:700;letter-spacing:-.02em}
+  .lead{color:var(--muted-foreground);font-size:var(--text-sm);margin-top:.35rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--muted-foreground)}
+
+  /* header */
+  .head{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap;margin-bottom:1.25rem}
+  .head-actions{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+  .btn{border:var(--thin);background:var(--background);color:var(--foreground);font:inherit;font-size:var(--text-xs);
+    padding:.45rem .8rem;cursor:pointer;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+  .btn--primary{background:var(--foreground);color:var(--background)}
+  .btn--ghost{border-color:var(--border-light);font-weight:500}
+
+  /* KPI strip — the HELIX top band, but as a single mono line */
+  .strip{display:flex;gap:1.4rem;align-items:baseline;flex-wrap:wrap;
+    border-top:var(--thin);border-bottom:var(--thin);padding:.7rem .1rem;margin-bottom:1.1rem}
+  .strip .num{font-family:var(--font-mono);font-size:1.15rem;font-weight:700}
+  .strip .lbl{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);margin-left:.4rem}
+  .strip .sep{color:var(--border-light)}
+
+  /* chips — stage cuts with live counts */
+  .chips{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:1.1rem}
+  .chip{border:var(--thin);background:transparent;padding:.3rem .7rem;cursor:pointer;font:inherit;
+    font-size:var(--text-xs);font-weight:500;display:flex;gap:.45rem;align-items:center}
+  .chip .n{font-family:var(--font-mono);opacity:.6}
+  .chip.on{background:var(--foreground);color:var(--background)}
+  .chip.on .n{opacity:.85}
+  .chip.hot{font-weight:700}
+
+  /* toolbar */
+  .toolbar{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1.25rem}
+  .search{border:var(--thin);padding:.45rem .7rem;font:inherit;font-size:var(--text-sm);flex:1 1 16rem;max-width:22rem}
+  .filter{display:flex;align-items:center;gap:.45rem;font-family:var(--font-mono);font-size:var(--text-xs)}
+  .filter select{border:var(--hairline);padding:.35rem .5rem;font:inherit;font-size:var(--text-xs);background:var(--background)}
+  .filter .lbl{text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground)}
+
+  /* split: pad + rail */
+  .split{display:grid;grid-template-columns:1fr min(21rem,32%);gap:0;border-top:var(--hairline)}
+  .pad{padding:1.1rem 1.5rem 2rem 0;border-right:var(--hairline)}
+  .rail{padding:1.1rem 0 0 1.5rem}
+
+  /* lead card — the pad cell. Selected = inverted. */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));gap:.6rem}
+  .cell{border:var(--thin);padding:.75rem .85rem;cursor:pointer;background:var(--background);display:flex;flex-direction:column;gap:.4rem}
+  .cell:hover{box-shadow:inset 0 0 0 1px var(--foreground)}
+  .cell.sel{background:var(--foreground);color:var(--background)}
+  .cell.sel .muted,.cell.sel .eyebrow,.cell.sel .sub{color:rgba(255,255,255,.65)}
+  .cell-top{display:flex;justify-content:space-between;align-items:center}
+  .heat{font-family:var(--font-mono);font-size:.8rem;letter-spacing:.08em}
+  .heat .off{opacity:.28}
+  .stage{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;
+    border:1px solid currentColor;padding:.1rem .4rem}
+  .name{font-weight:700;font-size:.95rem}
+  .sub{font-size:var(--text-xs);color:var(--muted-foreground)}
+  .cell-foot{display:flex;justify-content:space-between;align-items:center;margin-top:.35rem;
+    border-top:var(--hairline);padding-top:.5rem;font-size:var(--text-xs)}
+  .cell.sel .cell-foot{border-top-color:rgba(255,255,255,.35)}
+  .mini{border:none;background:none;font:inherit;font-size:var(--text-xs);cursor:pointer;
+    text-decoration:underline;text-underline-offset:2px;padding:0;color:inherit}
+  .assignee{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.08em}
+
+  /* group band inside the pad */
+  .band{grid-column:1/-1;margin:.6rem 0 0;padding-top:.8rem;border-top:var(--hairline)}
+  .band .eyebrow{color:var(--foreground)}
+
+  /* rail — the selected lead */
+  .rail h2{font-size:1.2rem;margin:.2rem 0 .1rem}
+  .rail .kicker{display:flex;justify-content:space-between;align-items:center}
+  .stepper{display:flex;align-items:center;gap:.15rem;margin:.9rem 0 1.1rem;font-family:var(--font-mono);font-size:.7rem}
+  .stepper .dot{width:.55rem;height:.55rem;border:1px solid var(--foreground);border-radius:50%}
+  .stepper .dot.on{background:var(--foreground)}
+  .stepper .seg{flex:1;height:1px;background:var(--border-light)}
+  .kv{display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-bottom:var(--hairline);font-size:var(--text-xs)}
+  .kv .k{font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground);font-size:.65rem;padding-top:.1rem}
+  .kv .v{text-align:right}
+  .rail-actions{display:flex;gap:.5rem;margin:1.1rem 0;flex-wrap:wrap}
+  .note{font-size:var(--text-xs);color:var(--muted-foreground);border-left:2px solid var(--border);padding:.4rem .6rem;margin:.9rem 0}
+  .rail .eyebrow{margin-top:1rem;display:block}
+
+  @media (max-width:960px){.split{grid-template-columns:1fr}.pad{border-right:0;padding-right:0}.rail{padding-left:0}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- header -->
+  <div class="head">
+    <div>
+      <h1 class="page-title">Leads</h1>
+      <p class="lead">The pad — every enquiry on the desk, hottest first. Pick a card to work it.</p>
+    </div>
+    <div class="head-actions">
+      <button class="btn btn--ghost">↻ Refresh</button>
+      <button class="btn btn--ghost">All leads</button>
+      <button class="btn btn--primary">+ New lead</button>
+    </div>
+  </div>
+
+  <!-- KPI strip: one mono line, not tiles -->
+  <div class="strip">
+    <span><span class="num">142</span><span class="lbl">total</span></span>
+    <span class="sep">·</span>
+    <span><span class="num">38</span><span class="lbl">new</span></span>
+    <span class="sep">·</span>
+    <span><span class="num">17</span><span class="lbl">unworked 48h+</span></span>
+    <span class="sep">·</span>
+    <span><span class="num">12</span><span class="lbl">converted</span></span>
+    <span class="sep">·</span>
+    <span><span class="num">27%</span><span class="lbl">conversion</span></span>
+    <span class="sep">·</span>
+    <span><span class="num">9</span><span class="lbl">new this week</span></span>
+  </div>
+
+  <!-- chips: the stage cuts, counts on -->
+  <div class="chips">
+    <button class="chip on">All <span class="n">142</span></button>
+    <button class="chip hot">New <span class="n">38</span></button>
+    <button class="chip">Contacted <span class="n">24</span></button>
+    <button class="chip">Assessed <span class="n">18</span></button>
+    <button class="chip">Qualified <span class="n">9</span></button>
+    <button class="chip">Converted <span class="n">12</span></button>
+    <button class="chip">Lost <span class="n">41</span></button>
+    <span style="flex:1"></span>
+    <button class="chip">Unassigned <span class="n">21</span></button>
+    <button class="chip">Mine <span class="n">14</span></button>
+  </div>
+
+  <!-- toolbar -->
+  <div class="toolbar">
+    <input class="search" type="search" placeholder="Search name, email or country…">
+    <label class="filter"><span class="lbl">Sort</span>
+      <select><option>Hottest first</option><option>Newest first</option><option>Stale first</option></select>
+    </label>
+    <label class="filter"><span class="lbl">Source</span>
+      <select><option>All</option><option>Website</option><option>Referral</option><option>WhatsApp</option><option>Walk-in</option></select>
+    </label>
+    <label class="filter"><span class="lbl">Branch</span>
+      <select><option>All</option><option>Accra</option><option>Kumasi</option></select>
+    </label>
+  </div>
+
+  <!-- split -->
+  <div class="split">
+    <div class="pad">
+      <div class="grid">
+
+        <!-- band: hot -->
+        <div class="band"><span class="eyebrow">Hot — worked this week</span></div>
+
+        <div class="cell sel">
+          <div class="cell-top"><span class="heat">●●●<span class="off">●●</span></span><span class="stage">New</span></div>
+          <div class="name">Akosua Mensah</div>
+          <div class="sub">Canada · MSc Data Science, Toronto · Sept ’26</div>
+          <div class="sub mono muted" style="font-size:.65rem">Referral · touched 2d ago</div>
+          <div class="cell-foot"><span class="assignee">Ama K.</span>
+            <span><button class="mini">Call</button> · <button class="mini">Open →</button></span></div>
+        </div>
+
+        <div class="cell">
+          <div class="cell-top"><span class="heat">●●●<span class="off">●●</span></span><span class="stage">Assessed</span></div>
+          <div class="name">Kwame Osei</div>
+          <div class="sub">UK · MBA, Manchester · Jan ’26</div>
+          <div class="sub mono muted" style="font-size:.65rem">Website · touched 1d ago</div>
+          <div class="cell-foot"><span class="assignee">Daniel O.</span>
+            <span><button class="mini">Call</button> · <button class="mini">Open →</button></span></div>
+        </div>
+
+        <div class="cell">
+          <div class="cell-top"><span class="heat">●●●<span class="off">●●</span></span><span class="stage">Qualified</span></div>
+          <div class="name">Efua Agyemang</div>
+          <div class="sub">Germany · BEng Mechanical, TU Munich</div>
+          <div class="sub mono muted" style="font-size:.65rem">Walk-in · touched today</div>
+          <div class="cell-foot"><span class="assignee">Ama K.</span>
+            <span><button class="mini">Call</button> · <button class="mini">Open →</button></span></div>
+        </div>
+
+        <!-- band: warm -->
+        <div class="band"><span class="eyebrow">Warm — in conversation</span></div>
+
+        <div class="cell">
+          <div class="cell-top"><span class="heat">●●<span class="off">●●●</span></span><span class="stage">Contacted</span></div>
+          <div class="name">Yaw Darko</div>
+          <div class="sub">Canada · BSc Nursing, Manitoba</div>
+          <div class="sub mono muted" style="font-size:.65rem">WhatsApp · touched 4d ago</div>
+          <div class="cell-foot"><span class="assignee muted">Unassigned</span>
+            <span><button class="mini">Assign</button> · <button class="mini">Open →</button></span></div>
+        </div>
+
+        <div class="cell">
+          <div class="cell-top"><span class="heat">●●<span class="off">●●●</span></span><span class="stage">New</span></div>
+          <div class="name">Abena Boateng</div>
+          <div class="sub">USA · MSc Public Health, Georgia</div>
+          <div class="sub mono muted" style="font-size:.65rem">Instagram · touched 3d ago</div>
+          <div class="cell-foot"><span class="assignee">Kofi A.</span>
+            <span><button class="mini">Call</button> · <button class="mini">Open →</button></span></div>
+        </div>
+
+        <div class="cell">
+          <div class="cell-top"><span class="heat">●●<span class="off">●●●</span></span><span class="stage">Contacted</span></div>
+          <div class="name">Daniel Owusu</div>
+          <div class="sub">UK · LLM, Edinburgh</div>
+          <div class="sub mono muted" style="font-size:.65rem">Google · touched 5d ago</div>
+          <div class="cell-foot"><span class="assignee muted">Unassigned</span>
+            <span><button class="mini">Assign</button> · <button class="mini">Open →</button></span></div>
+        </div>
+
+        <!-- band: cold -->
+        <div class="band"><span class="eyebrow">Cold — no reply in 48h+</span></div>
+
+        <div class="cell">
+          <div class="cell-top"><span class="heat">●<span class="off">●●●●</span></span><span class="stage">New</span></div>
+          <div class="name">Kofi Asante</div>
+          <div class="sub">Netherlands · MSc Logistics</div>
+          <div class="sub mono muted" style="font-size:.65rem">Website · no touch, 6d old</div>
+          <div class="cell-foot"><span class="assignee muted">Unassigned</span>
+            <span><button class="mini">Assign</button> · <button class="mini">Open →</button></span></div>
+        </div>
+
+        <div class="cell">
+          <div class="cell-top"><span class="heat">●<span class="off">●●●●</span></span><span class="stage">New</span></div>
+          <div class="name">Ama Serwaa</div>
+          <div class="sub">Canada · PGDip Business</div>
+          <div class="sub mono muted" style="font-size:.65rem">Referral · no touch, 9d old</div>
+          <div class="cell-foot"><span class="assignee muted">Unassigned</span>
+            <span><button class="mini">Assign</button> · <button class="mini">Open →</button></span></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- rail: the selected lead -->
+    <div class="rail">
+      <div class="kicker"><span class="eyebrow">New lead · ●●●</span><span class="mono muted" style="font-size:.65rem">LD-0421</span></div>
+      <h2>Akosua Mensah</h2>
+      <p class="sub">Canada · MSc Data Science, Toronto · Sept ’26 intake</p>
+
+      <!-- stage stepper -->
+      <div class="stepper" title="New → Contacted → Assessed → Qualified → Converted">
+        <span class="dot on"></span><span class="seg"></span>
+        <span class="dot"></span><span class="seg"></span>
+        <span class="dot"></span><span class="seg"></span>
+        <span class="dot"></span><span class="seg"></span>
+        <span class="dot"></span>
+      </div>
+
+      <div class="rail-actions">
+        <button class="btn btn--primary">Log contact</button>
+        <button class="btn btn--ghost">Assign</button>
+        <button class="btn btn--ghost">Advance →</button>
+      </div>
+
+      <span class="eyebrow">Contact</span>
+      <div class="kv"><span class="k">Phone</span><span class="v mono">+233 24 555 0182</span></div>
+      <div class="kv"><span class="k">Email</span><span class="v">akosua.mensah@gmail.com</span></div>
+      <div class="kv"><span class="k">Source</span><span class="v">Referral — Kofi M. (client)</span></div>
+      <div class="kv"><span class="k">Branch</span><span class="v">Accra</span></div>
+
+      <span class="eyebrow">Signal</span>
+      <div class="kv"><span class="k">Interest</span><span class="v mono">●●● — documents ready</span></div>
+      <div class="kv"><span class="k">Budget</span><span class="v">Confirmed · self-funded</span></div>
+      <div class="kv"><span class="k">Last touch</span><span class="v">Call · 2d ago · Ama K.</span></div>
+      <div class="kv"><span class="k">Next step</span><span class="v">Book consultation</span></div>
+
+      <p class="note">“Sister graduated through us — wants the same school list. Transcripts scanned already.”</p>
+
+      <button class="btn btn--ghost" style="width:100%">Convert to applicant →</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

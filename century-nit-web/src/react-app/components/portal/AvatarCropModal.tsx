@@ -14,7 +14,7 @@ const AVATAR_ACCEPT = "image/jpeg,image/png";
  *
  * Selecting a file opens a crop stage (react-easy-crop) on top of the existing
  * avatar. Saving crops to a square canvas, re-encodes it small, then runs the
- * normal signed-URL upload — with the same progress modal the vault uses.
+ * normal signed-URL upload. With the same progress modal the vault uses.
  */
 export function AvatarCropModal({
 	open,

@@ -50,7 +50,6 @@ const SECTIONS: NavSection[] = [
 			{ to: "/workspace", module: "dashboard", label: "Workspace", blurb: "Action queue & today's work", icon: "dashboard" },
 			{ to: "/inbox", module: "dashboard", label: "Inbox", blurb: "What happened", icon: "inbox" },
 			{ to: "/helpdesk", module: "helpdesk", label: "Helpdesk", blurb: "Client conversations", icon: "helpdesk" },
-			{ to: "/chat", module: "chat", label: "Chat", blurb: "Team & case messaging", icon: "helpdesk" },
 			{ to: "/documents", module: "documents", label: "Documents", blurb: "Review queue", icon: "documents" },
 		],
 	},

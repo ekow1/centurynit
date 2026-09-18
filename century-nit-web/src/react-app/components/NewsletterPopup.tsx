@@ -131,7 +131,7 @@ export function NewsletterPopup() {
 						<h3>Check your inbox</h3>
 						<p>
 							We sent a confirmation link to <strong>{email}</strong>. Click it to finish
-							subscribing — and watch for intake updates, scholarship alerts, and study abroad tips.
+							subscribing. And watch for intake updates, scholarship alerts, and study abroad tips.
 						</p>
 					</div>
 				) : (

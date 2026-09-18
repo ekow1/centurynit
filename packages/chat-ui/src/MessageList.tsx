@@ -12,11 +12,11 @@ export interface MessageListProps {
 	typing?: { name?: string } | null;
 	/** Identifies the current viewer's own messages for alignment + ticks. */
 	isOwn: (m: ChatMessage) => boolean;
-	/** Show author labels — true in group chats, false in 1:1. */
+	/** Show author labels. True in group chats, false in 1:1. */
 	showAuthor?: (m: ChatMessage) => boolean;
 	/** Per-message action config + callbacks. */
 	bubbleProps?: Omit<MessageBubbleProps, "message" | "isOwn" | "showAuthor">;
-	/** Scroll-to-message handler — typically scroll the target into view + highlight. */
+	/** Scroll-to-message handler. Typically scroll the target into view + highlight. */
 	onQuoteClick?: (messageId: string) => void;
 	/** Optional header shown above the list (e.g. "Load older messages" button). */
 	header?: React.ReactNode;

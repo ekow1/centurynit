@@ -25,7 +25,7 @@ export function Carousel({
 	const sync = useCallback(() => {
 		const el = railRef.current;
 		if (!el) return;
-		// 2px slack — sub-pixel scroll widths never land exactly on the boundary
+		// 2px slack. Sub-pixel scroll widths never land exactly on the boundary
 		setAtStart(el.scrollLeft <= 2);
 		setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 2);
 	}, []);
@@ -50,7 +50,7 @@ export function Carousel({
 		el.scrollBy({ left: dir * el.clientWidth, behavior: "smooth" });
 	}
 
-	const idle = atStart && atEnd; // everything fits — no controls needed
+	const idle = atStart && atEnd; // everything fits. No controls needed
 
 	return (
 		<div className="carousel" style={{ ["--per-view" as string]: perView }}>

@@ -21,7 +21,7 @@ import {
 import { getAuthSettings, type AuthSettingsResponse } from "../lib/api";
 import { CHAPTERS } from "century-nit-shared";
 
-/** Monochrome "G" — the four-color logo was the only color on the page. */
+/** Monochrome "G". The four-color logo was the only color on the page. */
 function GoogleMark() {
 	return (
 		<span className="auth-social__mark" aria-hidden>
@@ -31,7 +31,7 @@ function GoogleMark() {
 }
 
 /**
- * Six boxed cells — typing auto-advances, paste splits across boxes, the
+ * Six boxed cells. Typing auto-advances, paste splits across boxes, the
  * caller's auto-submit effect fires when the string reaches six digits.
  */
 function OtpInput({
@@ -108,7 +108,7 @@ function OtpInput({
 }
 
 /**
- * The password checklist — appears only where a password is CHOSEN (signup,
+ * The password checklist. Appears only where a password is CHOSEN (signup,
  * reset), never on sign-in. Only length is enforced server-side
  * (`minPasswordLength: 12`); the other rows are suggestions that fill when
  * met but never block submit.
@@ -122,7 +122,7 @@ function PwChecklist({ password, email, name }: { password: string; email: strin
 	const rows: { met: boolean; label: string; required?: boolean }[] = [
 		{ met: password.length >= 12, label: "12+ characters", required: true },
 		{ met: password.length > 0 && !personal, label: "Not your name or email" },
-		{ met: words >= 3, label: "A passphrase — 3+ words beats symbols" },
+		{ met: words >= 3, label: "A passphrase. 3+ words beats symbols" },
 	];
 	return (
 		<div className="pwcheck">
@@ -159,7 +159,7 @@ export function StartJourney() {
 	 * Which second factor the user is answering with, and which they enrolled.
 	 *
 	 * The challenge window has no session, but the server can still read the
-	 * signed two-factor cookie and report the enrolled method (mfaMethod) —
+	 * signed two-factor cookie and report the enrolled method (mfaMethod),
 	 * null when the lookup fails, in which case every route stays reachable.
 	 * mfaMode is the input currently on screen; it starts on the enrolled
 	 * method and moves only through the escape links.
@@ -172,13 +172,13 @@ export function StartJourney() {
 	const [mfaBackupCode, setMfaBackupCode] = useState("");
 	const [trustDevice, setTrustDevice] = useState(false);
 	/*
-	 * "password" | "code" — the email-code sign-in is an inline alternative on
+	 * "password" | "code". The email-code sign-in is an inline alternative on
 	 * the same panel, not a tab. Code mode only exists for sign-in; signup
 	 * always needs a password (the OTP verifies the email afterwards).
 	 */
 	const [emailMode, setEmailMode] = useState<"password" | "code">("password");
 
-	// Debounced real-time email existence check — shown on signup only; an
+	// Debounced real-time email existence check. Shown on signup only; an
 	// existing account is exactly who signs in, so sign-in paths don't flag it.
 	useEffect(() => {
 		const mail = email.trim().toLowerCase();
@@ -236,8 +236,8 @@ export function StartJourney() {
 
 	/*
 	 * Deep-link params on /start:
-	 *   ?verified=true / ?error=… — the email-verification redirect.
-	 *   ?token=…                  — the password-reset LINK carries the token;
+	 *   ?verified=true / ?error=…. The email-verification redirect.
+	 *   ?token=…                 . The password-reset LINK carries the token;
 	 *                               land straight on "choose a new password"
 	 *                               instead of asking the user to paste a token
 	 *                               the email never shows them.
@@ -259,7 +259,7 @@ export function StartJourney() {
 		}
 	}, [searchParams, setSearchParams]);
 
-	// Auto-verify the email OTP as soon as the user types the 6th digit — no
+	// Auto-verify the email OTP as soon as the user types the 6th digit. No
 	// need to click "Continue". Skips while loading or after a prior error.
 	useEffect(() => {
 		if (otpCode.length !== 6 || !codeSentTo || loading) return;
@@ -275,7 +275,7 @@ export function StartJourney() {
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [signupOtp]);
 
-	// Resend cooldown ticker — counts down 30s to 0 so the button re-enables.
+	// Resend cooldown ticker. Counts down 30s to 0 so the button re-enables.
 	useEffect(() => {
 		if (resendCooldown <= 0) return;
 		const t = window.setTimeout(() => setResendCooldown((s) => s - 1), 1_000);
@@ -342,7 +342,7 @@ export function StartJourney() {
 				const data = await signInWithEmail({ email: mail, password });
 
 				// Check if MFA is required via the Better Auth twoFactorRedirect.
-				// Better Auth issues no session here — the user must provide a TOTP /
+				// Better Auth issues no session here. The user must provide a TOTP /
 				// email-OTP code before they can continue. Transition to the mfa_otp
 				// step so they can enter it, rather than dead-ending on an error.
 				if ((data as Record<string, unknown>)?.twoFactorRedirect) {
@@ -371,8 +371,8 @@ export function StartJourney() {
 			// Sign-up: do NOT call signUpEmail yet. That would create a zombie
 			// user row with emailVerified=false the moment the user submits the
 			// form, before they've proven they own the inbox. Instead, send a
-			// sign-in type OTP to the email — the emailOTP plugin delivers it
-			// even when no account exists — and move to the OTP entry step. The
+			// sign-in type OTP to the email. The emailOTP plugin delivers it
+			// even when no account exists. And move to the OTP entry step. The
 			// account is only created in onSignupOtpSubmit after the OTP is
 			// verified, via /api/auth/complete-email-signup.
 			setSignupEmail(mail);
@@ -480,7 +480,7 @@ export function StartJourney() {
 				otp: signupOtp,
 			});
 			if (!created) throw new Error("Could not create account");
-			// Account is created and emailVerified — sign in with the credentials.
+			// Account is created and emailVerified. Sign in with the credentials.
 			const data = await signInWithEmail({ email: signupEmail, password });
 			const user = data?.user;
 			if (!user) throw new Error("No user returned");
@@ -498,7 +498,7 @@ export function StartJourney() {
 		setError("");
 		setLoading(true);
 		try {
-			// Resend the sign-in type OTP — no account exists yet to verify.
+			// Resend the sign-in type OTP. No account exists yet to verify.
 			await sendEmailCode(signupEmail);
 			setResendCooldown(30);
 		} catch (err) {
@@ -511,8 +511,8 @@ export function StartJourney() {
 	/**
 	 * Ask the server which second factor this sign-in enrolled.
 	 *
-	 * There is no session yet — the signed two-factor cookie is the only proof
-	 * the password passed — so this reads the method from `/api/auth/mfa/method`
+	 * There is no session yet. The signed two-factor cookie is the only proof
+	 * the password passed. So this reads the method from `/api/auth/mfa/method`
 	 * rather than an authenticated settings endpoint. An email-OTP enrollee then
 	 * lands straight on the email challenge with the code already sent; anything
 	 * unresolved keeps the authenticator input with every escape route intact.
@@ -528,12 +528,12 @@ export function StartJourney() {
 				setMfaMaskedEmail(info.email ?? null);
 			}
 		} catch {
-			// Endpoint unreachable — fall back to the advertised routes below.
+			// Endpoint unreachable. Fall back to the advertised routes below.
 		}
 		/*
 		 * When the endpoint can't say, the sign-in response still tells us
-		 * which verify routes exist: an email-OTP enrollee gets ["otp"] only —
-		 * their TOTP secret was armed but never verified — while a TOTP
+		 * which verify routes exist: an email-OTP enrollee gets ["otp"] only,
+		 * their TOTP secret was armed but never verified. While a TOTP
 		 * enrollee gets ["totp","otp"].
 		 */
 		if (!enrolled) {
@@ -547,17 +547,17 @@ export function StartJourney() {
 				await sendMfaEmailCode();
 				setResendCooldown(30);
 			} catch {
-				// Delivery failed — the resend link below stays available.
+				// Delivery failed. The resend link below stays available.
 			}
 		}
 	}
 
-	/** Whether an authenticator exists to answer with — gates that escape link. */
+	/** Whether an authenticator exists to answer with. Gates that escape link. */
 	const mfaCanTotp = mfaMethod
 		? mfaMethod === "totp"
 		: mfaRoutes.length === 0 || mfaRoutes.includes("totp");
 
-	/** Verify the second factor — authenticator, emailed code, or recovery code. */
+	/** Verify the second factor. Authenticator, emailed code, or recovery code. */
 	async function onMfaSubmit(e: FormEvent) {
 		e.preventDefault();
 		if (mfaMode === "backup") {
@@ -571,7 +571,7 @@ export function StartJourney() {
 			if (mfaMode === "backup") await verifyMfaBackupCode(mfaBackupCode.trim(), trustDevice);
 			else if (mfaMode === "email") await verifyMfaEmailCode(mfaCode, trustDevice);
 			else await verifyTotp(mfaCode, trustDevice);
-			// After MFA verification the session is established — reload so
+			// After MFA verification the session is established. Reload so
 			// probeSession() picks up the cookie and RequireAuth admits us.
 			window.location.href = "/portal";
 		} catch (err) {
@@ -695,7 +695,7 @@ export function StartJourney() {
 				</Link>
 				<div className="start-journey__brand-content">
 					<h2 className="start-journey__brand-title">
-						Your entire application journey — <em>in one place.</em>
+						Your entire application journey. <em>in one place.</em>
 					</h2>
 					<p className="start-journey__brand-lead">
 						One account tracks you from first consultation to departure. This is what the portal holds:
@@ -711,7 +711,7 @@ export function StartJourney() {
 					</div>
 				</div>
 				<p className="start-journey__brand-footer mono">
-					Licensed consultancy — Accra · Kumasi · Takoradi · Tamale · Tema
+					Licensed consultancy · Accra · Kumasi · Takoradi · Tamale · Tema
 				</p>
 			</div>
 
@@ -722,7 +722,7 @@ export function StartJourney() {
 						<h1 className="start-journey__title">{stepTitle}</h1>
 						{step === "signin" ? (
 							<p className="start-journey__sub">
-								{authMode === "signin" ? "Sign in to pick up where you left off." : "One account for the whole journey — consultation to departure."}
+								{authMode === "signin" ? "Sign in to pick up where you left off." : "One account for the whole journey. Consultation to departure."}
 							</p>
 						) : step === "forgot" ? (
 							<p className="start-journey__sub">
@@ -730,19 +730,19 @@ export function StartJourney() {
 							</p>
 						) : step === "verify" ? (
 							<p className="start-journey__sub">
-								We emailed <strong>{resetEmail}</strong> a reset link — it opens this page ready for a new password. No link? Paste the token manually below.
+								We emailed <strong>{resetEmail}</strong> a reset link. It opens this page ready for a new password. No link? Paste the token manually below.
 							</p>
 						) : step === "set" ? (
 							<p className="start-journey__sub">
-								The link in your email carried the token — you're straight to the step that matters{resetEmail ? <>, for <strong>{resetEmail}</strong></> : null}.
+								The link in your email carried the token. You're straight to the step that matters{resetEmail ? <>, for <strong>{resetEmail}</strong></> : null}.
 							</p>
 						) : step === "verify_email" ? (
 							<p className="start-journey__sub">
-								We sent a 6-digit code to <strong>{signupEmail}</strong>. It expires shortly — the account only exists once the code checks out.
+								We sent a 6-digit code to <strong>{signupEmail}</strong>. It expires shortly. The account only exists once the code checks out.
 							</p>
 						) : step === "mfa_otp" ? null : (
 							<p className="start-journey__sub">
-								You're all set — sign back in with your new password.
+								You're all set. Sign back in with your new password.
 							</p>
 						)}
 					</div>
@@ -846,7 +846,7 @@ export function StartJourney() {
 										<Field
 											label="Email"
 											htmlFor="sj-otp-email"
-											hint="We'll email you a one-time code — no password needed."
+											hint="We'll email you a one-time code. No password needed."
 										>
 											<Input
 												id="sj-otp-email"
@@ -885,7 +885,7 @@ export function StartJourney() {
 											/>
 										</Field>
 									)}
-									<Field label="Email" htmlFor="sj-email" error={authMode === "signup" && emailExists ? "This email is already registered — switch to Sign in." : undefined}>
+									<Field label="Email" htmlFor="sj-email" error={authMode === "signup" && emailExists ? "This email is already registered. Switch to Sign in." : undefined}>
 										<Input
 											id="sj-email"
 											type="email"
@@ -910,7 +910,7 @@ export function StartJourney() {
 											<>
 												<PwChecklist password={password} email={email} name={name} />
 												<span className="hint" style={{ display: "block", marginTop: "0.4rem" }}>
-													A passphrase is easiest — "lamp boat cedar nine" beats "P@ssw0rd1".
+													A passphrase is easiest. "lamp boat cedar nine" beats "P@ssw0rd1".
 												</span>
 											</>
 										) : null}
@@ -968,7 +968,7 @@ export function StartJourney() {
 					{step === "verify" ? (
 						<form className="auth-form" onSubmit={onVerifySubmit} noValidate>
 							<Field
-								label="Reset token — manual entry"
+								label="Reset token. Manual entry"
 								htmlFor="sj-reset-code"
 								hint="Only needed if the email link didn't open this page for you."
 							>
@@ -1004,7 +1004,7 @@ export function StartJourney() {
 								/>
 								<PwChecklist password={newPassword} email={resetEmail} name="" />
 								<span className="hint" style={{ display: "block", marginTop: "0.4rem" }}>
-									Same bar as signup — 12 characters minimum.
+									Same bar as signup. 12 characters minimum.
 								</span>
 							</Field>
 							<Field
@@ -1115,12 +1115,12 @@ export function StartJourney() {
 									<span className="hint">
 										{mfaMode === "email" ? (
 											<>
-												Code sent the moment you signed in — check{" "}
+												Code sent the moment you signed in. Check{" "}
 												<strong>{mfaMaskedEmail ?? "your inbox"}</strong>. It expires in a
 												few minutes.
 											</>
 										) : (
-											"Open your authenticator app — the code refreshes every 30 seconds."
+											"Open your authenticator app. The code refreshes every 30 seconds."
 										)}
 									</span>
 								</div>
@@ -1149,7 +1149,7 @@ export function StartJourney() {
 							</label>
 
 							{/*
-							 * Escape routes sit below the action — the methods you're NOT
+							 * Escape routes sit below the action. The methods you're NOT
 							 * answering with, framed as recovery. "Use authenticator" only
 							 * appears when an authenticator exists to use.
 							 */}

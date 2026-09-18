@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portal Journey — preview</title>
+<style>
+  /* portal tokens — same family as packages/core/styles/base.css */
+  :root{
+    --background:#ffffff; --foreground:#0a0a0a;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#0a0a0a; --border-light:#d4d4d8;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --text-xs:.72rem; --text-sm:.875rem;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:#fafafa;color:var(--foreground);font-size:var(--text-sm)}
+  .page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 4rem}
+
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .page-title{font-size:1.9rem;font-weight:700;letter-spacing:-.02em}
+  .lead{color:var(--muted-foreground)}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--muted-foreground)}
+
+  .sharp-card{background:var(--background);border:1px solid var(--border-light);padding:1.25rem}
+  .btn{border:1px solid var(--border);background:var(--background);color:var(--foreground);font:inherit;
+    font-size:var(--text-xs);font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+    padding:.55rem .9rem;cursor:pointer;text-decoration:none;display:inline-block}
+  .btn--primary{background:var(--foreground);color:var(--background)}
+  .btn--ghost{border-color:var(--border-light)}
+  .btn--sm{padding:.4rem .7rem;font-size:.68rem}
+  .portal-pill{display:inline-block;border:1px solid var(--border);padding:.2rem .6rem;
+    font-family:var(--font-mono);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em}
+  .portal-pill--solid{background:var(--foreground);color:var(--background)}
+  .portal-pill--hollow{color:var(--muted-foreground);border-color:var(--border-light)}
+
+  /* header */
+  .head{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem}
+
+  /* the "you are here" band */
+  .here{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;
+    background:var(--foreground);color:var(--background);padding:1.1rem 1.25rem;margin-bottom:2rem}
+  .here .eyebrow{color:rgba(255,255,255,.6)}
+  .here h2{font-size:1.15rem;margin:.2rem 0 .15rem}
+  .here p{color:rgba(255,255,255,.7);font-size:var(--text-sm)}
+  .here .btn{background:var(--background);color:var(--foreground);border-color:var(--background)}
+
+  /* the map: six chapters */
+  .map{display:grid;grid-template-columns:1fr 20rem;gap:1.5rem;align-items:start}
+  .chapter{display:flex;gap:1.1rem;border:1px solid var(--border-light);background:var(--background);
+    padding:1.1rem 1.25rem;margin-bottom:.6rem}
+  .chapter--done{border-color:var(--border-light)}
+  .chapter--current{border:1.5px solid var(--border);box-shadow:inset 4px 0 0 var(--foreground)}
+  .chapter--locked{color:var(--muted-foreground)}
+
+  /* the seal — roman numeral in a square, filled when done, ringed when current */
+  .seal{width:2.4rem;height:2.4rem;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    border:1px solid var(--border-light);font-family:var(--font-mono);font-size:.8rem;font-weight:700}
+  .chapter--done .seal{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+  .chapter--current .seal{border:2px solid var(--border);color:var(--foreground)}
+  .chapter--locked .seal{border-style:dashed;color:var(--border-light)}
+
+  .chapter__body{flex:1;min-width:0}
+  .chapter__head{display:flex;justify-content:space-between;align-items:baseline;gap:1rem}
+  .chapter__name{font-weight:700;font-size:1rem}
+  .chapter__name .mono{color:var(--muted-foreground);font-weight:400;font-size:var(--text-xs);margin-right:.5rem}
+  .chapter__state{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;white-space:nowrap}
+  .chapter--done .chapter__state{color:var(--muted-foreground)}
+  .chapter--current .chapter__state{color:var(--foreground);font-weight:700}
+  .chapter__blurb{font-size:var(--text-xs);color:var(--muted-foreground);margin-top:.15rem}
+
+  /* fine steps inside the open chapter */
+  .steps{list-style:none;padding:0;margin:.9rem 0 0;border-top:1px solid var(--border-light)}
+  .step{display:flex;align-items:center;gap:.7rem;padding:.55rem 0;border-bottom:1px solid var(--border-light);font-size:var(--text-sm)}
+  .step:last-child{border-bottom:none}
+  .step__mark{width:1.15rem;height:1.15rem;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    border:1px solid var(--border-light);border-radius:50%;font-size:.6rem;font-family:var(--font-mono)}
+  .step--done .step__mark{background:var(--foreground);border-color:var(--foreground);color:var(--background)}
+  .step--skipped .step__mark{border-style:dashed;color:var(--muted-foreground)}
+  .step--skipped .step__name{text-decoration:line-through;color:var(--muted-foreground)}
+  .step--current{font-weight:600}
+  .step--current .step__mark{background:var(--foreground);border-color:var(--foreground);color:var(--background);box-shadow:0 0 0 3px var(--muted)}
+  .step--locked{color:var(--muted-foreground)}
+  .step--locked .step__mark{border-color:var(--border-light);color:var(--border-light)}
+  .step__note{margin-left:auto;font-family:var(--font-mono);font-size:.65rem;color:var(--muted-foreground);white-space:nowrap}
+  .step--current .step__note{color:var(--foreground)}
+
+  .chapter__go{margin-top:.9rem;display:flex;gap:.5rem;flex-wrap:wrap}
+  .chapter__hint{font-size:var(--text-xs);margin-top:.6rem;color:var(--muted-foreground)}
+
+  /* collapsed done steps */
+  .done-line{margin-top:.6rem;font-family:var(--font-mono);font-size:.68rem;color:var(--muted-foreground);letter-spacing:.03em}
+  .done-line b{color:var(--foreground);font-weight:600}
+
+  /* right rail */
+  .rail{display:flex;flex-direction:column;gap:1rem;position:sticky;top:1rem}
+  .rail .sharp-card p{font-size:var(--text-sm)}
+  .kv{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--border-light);font-size:var(--text-xs)}
+  .kv:last-child{border-bottom:none}
+  .kv .k{font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground);font-size:.62rem;padding-top:.1rem}
+  .kv .v{text-align:right}
+
+  .legend{display:flex;gap:1.1rem;flex-wrap:wrap;margin:1.75rem 0 0;padding-top:1rem;border-top:1px solid var(--border-light)}
+  .legend span{font-family:var(--font-mono);font-size:.65rem;color:var(--muted-foreground);letter-spacing:.05em}
+
+  @media (max-width:900px){.map{grid-template-columns:1fr}.rail{position:static}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- page head -->
+  <div class="head">
+    <div>
+      <p class="eyebrow">Dashboard · Journey</p>
+      <h1 class="page-title">Your journey</h1>
+      <p class="lead" style="margin-top:.35rem">Six chapters, start to departure. This is the map — every card opens its page.</p>
+    </div>
+    <div>
+      <span class="portal-pill">CNS-2026-0042</span>
+    </div>
+  </div>
+
+  <!-- you are here -->
+  <div class="here">
+    <div>
+      <p class="eyebrow">Chapter III · Applications — you are here</p>
+      <h2>Pay the application fee</h2>
+      <p>GH₵2,450 due · covers submissions to your 3 selected schools</p>
+    </div>
+    <a class="btn" href="#">Pay application fee →</a>
+  </div>
+
+  <div class="map">
+    <!-- the chapter map -->
+    <div>
+
+      <div class="chapter chapter--done">
+        <div class="seal">✓</div>
+        <div class="chapter__body">
+          <div class="chapter__head">
+            <span class="chapter__name"><span class="mono">I</span>Consultation</span>
+            <span class="chapter__state">Done</span>
+          </div>
+          <p class="chapter__blurb">Meet, assess, verify documents</p>
+          <p class="done-line">Consultation <b>✓</b> · Assessment &amp; recommendation <b>✓</b> — Eligible · Canada recommended</p>
+        </div>
+      </div>
+
+      <div class="chapter chapter--done">
+        <div class="seal">✓</div>
+        <div class="chapter__body">
+          <div class="chapter__head">
+            <span class="chapter__name"><span class="mono">II</span>Enrolment</span>
+            <span class="chapter__state">Done</span>
+          </div>
+          <p class="chapter__blurb">Confirm, package, plan, deposit</p>
+          <p class="done-line">Enrolment confirmed <b>✓</b> · Full package, deposit paid <b>✓</b> · Consultant assigned <b>✓</b> — Ama K.</p>
+        </div>
+      </div>
+
+      <div class="chapter chapter--current">
+        <div class="seal">III</div>
+        <div class="chapter__body">
+          <div class="chapter__head">
+            <span class="chapter__name"><span class="mono">III</span>Applications</span>
+            <span class="chapter__state">You are here</span>
+          </div>
+          <p class="chapter__blurb">Schools, submissions, offers</p>
+          <ul class="steps">
+            <li class="step step--done"><span class="step__mark">✓</span><span class="step__name">Choose your schools</span><span class="step__note">3 selected · Toronto, McGill, Manitoba</span></li>
+            <li class="step step--skipped"><span class="step__mark">↷</span><span class="step__name">Application fee being prepared</span><span class="step__note">issued early</span></li>
+            <li class="step step--current"><span class="step__mark">●</span><span class="step__name">Pay the application fee</span><span class="step__note">GH₵2,450 due</span></li>
+            <li class="step step--locked"><span class="step__mark">4</span><span class="step__name">Submissions &amp; offers</span><span class="step__note">opens when the fee clears</span></li>
+          </ul>
+          <div class="chapter__go">
+            <a class="btn btn--primary btn--sm" href="#">Open Applications →</a>
+            <a class="btn btn--ghost btn--sm" href="#">Review school choices</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="chapter chapter--locked">
+        <div class="seal">IV</div>
+        <div class="chapter__body">
+          <div class="chapter__head">
+            <span class="chapter__name"><span class="mono">IV</span>Visa</span>
+            <span class="chapter__state">Locked</span>
+          </div>
+          <p class="chapter__blurb">Fee, biometrics, decision</p>
+          <p class="chapter__hint">Opens when a school admits you. The visa fee is paid here, then your file goes to the visa officer.</p>
+        </div>
+      </div>
+
+      <div class="chapter chapter--locked">
+        <div class="seal">V</div>
+        <div class="chapter__body">
+          <div class="chapter__head">
+            <span class="chapter__name"><span class="mono">V</span>Departure</span>
+            <span class="chapter__state">Locked</span>
+          </div>
+          <p class="chapter__blurb">Fee milestone, flight, checklist</p>
+          <p class="chapter__hint">The pre-departure milestone is due once your visa is approved — your ticket is issued after it, never before.</p>
+        </div>
+      </div>
+
+      <div class="chapter chapter--locked">
+        <div class="seal">VI</div>
+        <div class="chapter__body">
+          <div class="chapter__head">
+            <span class="chapter__name"><span class="mono">VI</span>Complete</span>
+            <span class="chapter__state">Locked</span>
+          </div>
+          <p class="chapter__blurb">Departed; post-arrival plan</p>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span>✓ done</span><span>● current</span><span>↷ skipped (already covered)</span><span>1–4 locked</span>
+      </div>
+    </div>
+
+    <!-- right rail -->
+    <div class="rail">
+      <div class="sharp-card">
+        <p class="eyebrow">Your consultant</p>
+        <p style="font-weight:700;margin-top:.5rem">Ama Kwarteng</p>
+        <p class="muted" style="font-size:var(--text-xs);margin-top:.15rem">Senior consultant · Accra</p>
+        <div style="margin-top:.8rem;display:flex;gap:.5rem">
+          <a class="btn btn--ghost btn--sm" href="#">Message</a>
+          <a class="btn btn--ghost btn--sm" href="#">Book call</a>
+        </div>
+      </div>
+
+      <div class="sharp-card">
+        <p class="eyebrow">Money</p>
+        <div class="kv" style="margin-top:.4rem"><span class="k">Deposit</span><span class="v">Paid ✓</span></div>
+        <div class="kv"><span class="k">Application fee</span><span class="v" style="font-weight:700">GH₵2,450 due</span></div>
+        <div class="kv"><span class="k">Visa fee</span><span class="v muted">Not yet</span></div>
+        <div class="kv"><span class="k">Fee milestone</span><span class="v muted">After the visa</span></div>
+        <div style="margin-top:.8rem"><a class="btn btn--ghost btn--sm" href="#">Open Money →</a></div>
+      </div>
+
+      <div class="sharp-card">
+        <p class="eyebrow">While you wait</p>
+        <p class="muted" style="margin-top:.5rem">Your admission letter and visa documents are released when the pre-departure milestone is paid — that's the agreement, so nothing surprises you later.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -67,11 +67,11 @@ import {
 
 /**
  * Notification `type` values addressed only to staff. The client portal must
- * never surface them — not from the `/me/notifications` read (the API filters
+ * never surface them. Not from the `/me/notifications` read (the API filters
  * these) nor from the live SSE stream. Defined here (not imported from shared)
  * so the portal build does not depend on a freshly-built shared `dist/`.
  *
- * `chat.message` is staff-to-staff chat — applicants get `chat.reply` instead.
+ * `chat.message` is staff-to-staff chat. Applicants get `chat.reply` instead.
  */
 const STAFF_ONLY_NOTIFICATION_TYPES = [
 	"lead.new",
@@ -86,23 +86,40 @@ function isStaffOnlyNotification(type: string): boolean {
 }
 
 /**
- * Notification types that mean "your case changed on the server". Receiving
- * one over SSE triggers an immediate `syncFromServer` so the portal reflects
- * a handler assignment, stage move, or invoice event without waiting for the
- * periodic poll — and without the pages having to poll on their own.
+ * Event types that mean "your case changed on the server". Receiving one
+ * over SSE triggers an immediate `syncFromServer` so the portal reflects a
+ * handler assignment, stage move, school outcome, consent decision, travel
+ * update, or invoice event without waiting for the periodic poll. And
+ * without the pages having to poll on their own.
+ *
+ * Covers both real notifications (`invoice_issued`, `consent_decided`) and
+ * id-less domain events (`case.updated`, `payment.recorded`) — event type
+ * is normalized (`_` → `.`) so both naming styles match one prefix.
  */
-const JOURNEY_NOTIFICATION_PREFIXES = [
+const JOURNEY_EVENT_PREFIXES = [
 	"stage.",
 	"assignment.",
 	"assessment.",
 	"case.",
+	"application.",
+	"consultation.",
 	"invoice.",
+	"payment.",
 	"visa.",
 	"document.",
 	"booking.",
+	"school.",
+	"handoff.",
+	"consent.",
+	"travel.",
+	"owner.",
+	"status.",
+	"consultant.",
+	"roles.",
 ] as const;
 function isJourneyNotification(type: string): boolean {
-	return JOURNEY_NOTIFICATION_PREFIXES.some((p) => type.startsWith(p));
+	const t = type.replace(/_/g, ".");
+	return JOURNEY_EVENT_PREFIXES.some((p) => t.startsWith(p));
 }
 
 /**
@@ -132,7 +149,7 @@ export type AuthUser = {
 	signedInAt: string;
 	/**
 	 * Whether an avatar is on file (the provider URL or a storage key). The
-	 * value is never rendered directly — it is signed per request by the API —
+	 * value is never rendered directly. It is signed per request by the API,
 	 * so components treat it as "show the photo, falling back to initials".
 	 */
 	image?: string | null;
@@ -198,7 +215,7 @@ export type SchoolApplicationTrack = {
 	/**
 	 * Offer terms, set when the institution makes an offer.
 	 *
-	 * This is the university's money, not Century NIT's — kept structured
+	 * This is the university's money, not Century NIT's. Kept structured
 	 * rather than buried in `financialNote` so the deposit deadline can be
 	 * surfaced and counted down. Missing a deposit deadline loses the place,
 	 * which makes it the highest-stakes date in the whole journey.
@@ -263,7 +280,7 @@ export type ApplicationData = {
 	packageSelectedAt: string | null;
 	/** Installment vs full - after admitted, before visa/travel */
 	paymentPlanId: PaymentPlanId | "";
-	/** The post-arrival schedule chosen — months and frequency; null until chosen. */
+	/** The post-arrival schedule chosen. Months and frequency; null until chosen. */
 	postArrivalMonths: number | null;
 	postArrivalFrequency: string | null;
 	paymentPlanChosenAt: string | null;
@@ -283,15 +300,15 @@ export type ApplicationData = {
 	visaDetails: VisaDetails;
 	/** The Departure chapter's facts, as the officer records them. */
 	departureDetails: DepartureDetails;
-	/** The visa-stage documents — asked once the chapter opens. */
+	/** The visa-stage documents. Asked once the chapter opens. */
 	visaDocumentChecklist: DocumentChecklistItem[];
-	/** Case history the consultant marked for the client — milestones, decisions, notes. */
+	/** Case history the consultant marked for the client. Milestones, decisions, notes. */
 	comments: CaseComment[];
 	visaUpdatedAt: string | null;
 	/** Set to true once the Travel invoice (flights/ticketing) is fully paid */
 	travelInvoicePaid: boolean;
 	completedAt: string | null;
-	/** Set once every pre-departure task is ticked — the travel stage's done signal */
+	/** Set once every pre-departure task is ticked. The travel stage's done signal */
 	preDepartureCompletedAt: string | null;
 	counselorNote: string | null;
 	visaCounselorNote: string | null;
@@ -301,7 +318,7 @@ export type ApplicationData = {
 	referralSource: string;
 	/**
 	 * Coarse journey stage read from `applications.stage` on the server
-	 * (the shared `JourneyStage` enum) — what ops calls the case. Display
+	 * (the shared `JourneyStage` enum). What ops calls the case. Display
 	 * only: the portal step comes from `/me/journey`, never derived here.
 	 */
 	journeyStage: JourneyStage | "";
@@ -329,7 +346,7 @@ export type ApplicationData = {
 	 */
 	travelAssistance: TravelAssistanceRequest | null;
 	/**
-	 * Stage consent — the applicant's explicit decision to start, hold, or
+	 * Stage consent. The applicant's explicit decision to start, hold, or
 	 * opt out of each major journey stage. `null` when no consent record exists.
 	 */
 	applicationConsent: { decision: "pending" | "continue" | "hold" | "opt_out" } | null;
@@ -384,7 +401,7 @@ export type AssessmentData = {
 	englishDate: string;
 	// Study preferences: up to three choices, each a country, school,
 	// programme, field and intake picked together. The scalars are the first
-	// choice flattened — the API and the ops console read those.
+	// choice flattened. The API and the ops console read those.
 	studyChoices: StudyChoice[];
 	preferredCountries: string;
 	preferredLevel: string;
@@ -422,10 +439,10 @@ export type BookingData = {
 	// Step 8
 	confirmationId: string | null;
 	meetingLink: string | null;
-	/** The server booking row — join calls mint a token'd URL against it. */
+	/** The server booking row. Join calls mint a token'd URL against it. */
 	bookingId: string | null;
 	/** A client-asked reschedule awaiting the consultant's decision. The held
-	 *  slot stays live until ops approves — the card shows both times. */
+	 *  slot stays live until ops approves. The card shows both times. */
 	rescheduleRequestedAt: string | null;
 	rescheduleRequestedStartsAt: string | null;
 	rescheduleRequestReason: string | null;
@@ -707,7 +724,7 @@ function loadJSON<T>(key: string, fallback: T): T {
  *
  * Precedence, deliberately: a stored user wins until Better Auth returns a real
  * session, which then overwrites it. A `getCurrentSession()` that succeeds but
- * returns *no* user does **not** clear this — the app is localStorage-backed and
+ * returns *no* user does **not** clear this. The app is localStorage-backed and
  * has to keep working with no server at all, which is also what makes the
  * two-window demo run offline. The cost is that a session revoked server-side
  * survives locally until sign-out. That is the right trade only for as long as
@@ -808,7 +825,7 @@ export function isAgencySettled(app: ApplicationData) {
 }
 
 /**
- * The pre-departure service fee milestone — the same rule as the server's
+ * The pre-departure service fee milestone. The same rule as the server's
  * `preDepartureFeePaid`: on a full plan the balance is settled; on
  * instalments the second milestone (the deposit was the first) is paid. Due
  * once the flight is booked (or the client books their own); releases the
@@ -821,7 +838,7 @@ export function hasSettledPlan(app: ApplicationData) {
 
 /**
  * The flight comes first: the fee milestone stays locked until travel is
- * settled — the flight booked, or the client booking their own. On hold
+ * settled. The flight booked, or the client booking their own. On hold
  * keeps it locked too. Portal-side only; the server gates nothing on it.
  */
 export function milestoneUnlockedFor(app: ApplicationData): boolean {
@@ -834,15 +851,15 @@ export function milestoneLockReasonFor(app: ApplicationData): string | null {
 	if (milestoneUnlockedFor(app)) return null;
 	return app.travelAssistance?.status === "on_hold"
 		? "Travel assistance is on hold. Resume it, or choose to book your own flight, to unlock this milestone."
-		: "Unlocks once your flight is booked — or once you've told us you're booking your own.";
+		: "Unlocks once your flight is booked. Or once you've told us you're booking your own.";
 }
 
-/** The travel documents — admission letter, visa papers, e-ticket — open once the milestone is paid, or a manager released them early. The flight is booked regardless. */
+/** The travel documents (admission letter, visa papers, e-ticket) open once the milestone is paid, or a manager released them early. The flight is booked regardless. */
 export function documentsReleasedFor(app: ApplicationData): boolean {
 	return hasSettledPlan(app) || Boolean(app.departureDetails?.releaseOverrideAt);
 }
 export function documentHoldReasonFor(app: ApplicationData): string {
-	if (!hasPaymentPlan(app)) return "Your admission letter, visa documents and e-ticket are released once your pre-departure fee milestone is paid — choose a plan and settle it. Your flight is booked first; this milestone follows it.";
+	if (!hasPaymentPlan(app)) return "Your admission letter, visa documents and e-ticket are released once your pre-departure fee milestone is paid. Choose a plan and settle it. Your flight is booked first; this milestone follows it.";
 	return app.paymentPlanId === "installment"
 		? "Your admission letter, visa documents and e-ticket are released once the pre-departure instalment of your service fee is paid. Your flight is booked first; this milestone follows it."
 		: "Your admission letter, visa documents and e-ticket are released once your service fee balance is paid. Your flight is booked first; this milestone follows it.";
@@ -968,7 +985,7 @@ export function getPendingAction(
 		};
 	}
 
-	// Several offers, none chosen — the visa and departure are for one school.
+	// Several offers, none chosen. The visa and departure are for one school.
 	const admitted = schools.filter((s) => s.outcome === "Admitted");
 	if (admitted.length > 1 && !app.acceptedSchoolId) {
 		return {
@@ -1014,7 +1031,7 @@ export function getPendingAction(
 				kind: "visa_documents",
 				label: "Upload",
 				title: `Upload your visa documents · ${missing.length} outstanding`,
-				detail: `${missing.slice(0, 3).map((d) => d.name).join(", ")}${missing.length > 3 ? "…" : ""} — your officer needs these to lodge the application.`,
+				detail: `${missing.slice(0, 3).map((d) => d.name).join(", ")}${missing.length > 3 ? "…" : ""}. Your officer needs these to lodge the application.`,
 				to: "/portal/documents",
 			};
 		}
@@ -1032,7 +1049,7 @@ export function getPendingAction(
 		};
 	}
 
-	// Departure — one order for both Departure pages: the flight first, the
+	// Departure. One order for both Departure pages: the flight first, the
 	// fee milestone after it (it releases the papers), then the checklist
 	// and completion.
 	if (stage === "payment_execution" || stage === "travel_assistance") {
@@ -1043,7 +1060,7 @@ export function getPendingAction(
 }
 
 /**
- * The Departure next action — shared by the `payment_execution` and
+ * The Departure next action. Shared by the `payment_execution` and
  * `travel_assistance` stages so the band never disagrees with the page it
  * points into. The flight comes first; the milestone unlocks once travel
  * is settled (booked or own booking).
@@ -1057,7 +1074,7 @@ function departurePendingAction(app: ApplicationData): PendingAction {
 			kind: "travel",
 			label: "Choose how you fly",
 			title: "Tell us how you'd like to fly",
-			detail: "Book with us, book your own, or hold — your flight comes before the fee milestone.",
+			detail: "Book with us, book your own, or hold. Your flight comes before the fee milestone.",
 			to: "/portal/pre-departure",
 		};
 	}
@@ -1066,7 +1083,7 @@ function departurePendingAction(app: ApplicationData): PendingAction {
 			kind: "travel",
 			label: "See your flight",
 			title: "Your travel officer is finding your flight",
-			detail: "Your flight is being found and the ticket invoice prepared — you pay it on your departure page.",
+			detail: "Your flight is being found and the ticket invoice prepared. You pay it on your departure page.",
 			to: "/portal/pre-departure",
 		};
 	}
@@ -1078,7 +1095,7 @@ function departurePendingAction(app: ApplicationData): PendingAction {
 			detail:
 				status === "invoiced"
 					? "The airline fare, at cost. Your officer books the seat as soon as it's paid."
-					: "Paid — your travel officer is booking the flight and will post the confirmation on your departure page.",
+					: "Paid. Your travel officer is booking the flight and will post the confirmation on your departure page.",
 			to: "/portal/pre-departure",
 		};
 	}
@@ -1096,7 +1113,7 @@ function departurePendingAction(app: ApplicationData): PendingAction {
 			kind: "payment_execution",
 			label: "Choose plan",
 			title: "Choose your payment plan",
-			detail: "Your travel is settled. Choose a plan, then settle the pre-departure milestone — it releases your documents once paid.",
+			detail: "Your travel is settled. Choose a plan, then settle the pre-departure milestone. It releases your documents once paid.",
 			to: "/portal/payment-execution",
 		};
 	}
@@ -1338,7 +1355,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	toastRef.current = toast;
 
 	/**
-	 * Silent Web Push subscription — active whenever the user is signed in.
+	 * Silent Web Push subscription. Active whenever the user is signed in.
 	 * The permission prompt is never shown automatically; this only resubscribes
 	 * returning users who previously granted permission. `subscribe()` is
 	 * exposed (via the hook return) for an explicit "enable notifications" UI.
@@ -1380,7 +1397,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
 	/**
 	 * Notifications are now server-driven (polling + SSE). The server is the
-	 * source of truth — no localStorage seeding or persistence. `syncFromServer`
+	 * source of truth. No localStorage seeding or persistence. `syncFromServer`
 	 * hydrates the list on mount and every 30s; the SSE `EventSource` (below)
 	 * prepends new notifications in real time.
 	 */
@@ -1817,7 +1834,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				postArrivalPaymentIndex: planId === "installment" ? prev.postArrivalPaymentIndex : 0,
 				counselorNote:
 					planId === "full"
-						? "Full payment plan selected. Settle the remaining balance when ready — can continue after departure."
+						? "Full payment plan selected. Settle the remaining balance when ready. Can continue after departure."
 						: "Installment plan selected. Pay the pre-departure milestone once your flight is booked, then spread the rest after you arrive.",
 			};
 		});
@@ -1837,13 +1854,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	 *
 	 * The server resolves the agency invoice and outstanding balance from the
 	 * session, returns a Paystack `authorizationUrl`, and we redirect the
-	 * browser there — same pattern as `paystackCheckout` for stage invoices.
+	 * browser there. Same pattern as `paystackCheckout` for stage invoices.
 	 * On return, `PortalPayCallback` detects `?type=agency` and re-syncs
 	 * the authoritative agency invoice state from the server via
 	 * `syncFromServer`, which maps the invoice's `paidCents`/`balanceCents`
 	 * onto `agencyPaid` / `agencyDepositPaid` / `agencyStageIndex` /
 	 * `agencySettledAt`. Local-only settlement (the old `setApplication` step
-	 * math) is gone — the server is now the source of truth.
+	 * math) is gone. The server is now the source of truth.
 	 *
 	 * Errors (e.g. "No agency invoice found") propagate to the caller so the
 	 * Financial page can surface them instead of silently mutating state.
@@ -1997,7 +2014,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			setAuthUser(null);
 			safeRemoveItem(AUTH_STORAGE_KEY);
 			setSessionStatus("unauthenticated");
-			// Clear journey state too — stale localStorage from a previous session
+			// Clear journey state too. Stale localStorage from a previous session
 			// (or a wiped DB) must not survive sign-out.
 			resetJourney();
 			syncCountRef.current = 0;
@@ -2063,7 +2080,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 						return;
 					}
 				} catch {
-					/* identity endpoint may be unavailable until API redeploy — allow */
+					/* identity endpoint may be unavailable until API redeploy. Allow */
 				}
 			} else {
 				setAuthUser(null);
@@ -2139,7 +2156,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		// If the consultant hasn't posted one yet, we surface "Pending" instead.
 		let outcome: EligibilityOutcome = "pending";
 		let note =
-			"Pending — your consultant has not posted an eligibility outcome yet.";
+			"Pending. Your consultant has not posted an eligibility outcome yet.";
 		try {
 			const res = await meApi.application();
 			const result = res.consultation?.assessmentResult;
@@ -2158,7 +2175,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				if (result.notes) note = result.notes;
 			}
 		} catch {
-			/* keep the "Pending" defaults — do not force a value */
+			/* keep the "Pending" defaults. Do not force a value */
 		}
 		setBooking((prev) => {
 			if (prev.consultationPhase !== "assessment_complete") return prev;
@@ -2172,7 +2189,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		});
 	}, []);
 
-	/** Tick or untick one of the client's own items — written to the case, read back from it. */
+	/** Tick or untick one of the client's own items. Written to the case, read back from it. */
 	const togglePreDepartureTask = useCallback(
 		(id: string) => {
 			const task = preDepartureTasks.find((t) => t.id === id);
@@ -2200,10 +2217,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		}
 	}, []);
 
-	// ── Server-driven journey stage ───────────────────────────────────────
+	// Server-driven journey stage
 	/**
 	 * The journey as the server derived it (`deriveJourney`). This is the only
-	 * source for the portal stage, chapter unlocks and step statuses — the
+	 * source for the portal stage, chapter unlocks and step statuses. The
 	 * portal never guesses. The last answer is cached per user so a reload or
 	 * a dropped connection shows what the server last said, not a blank.
 	 */
@@ -2277,7 +2294,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 							: "pending";
 				setBooking((prev) => c.status === "CANCELLED"
 					? {
-							// Dead case — clear the paid-booking markers so the
+							// Dead case. Clear the paid-booking markers so the
 							// consultation page renders the rebook sheet instead of a
 							// closed case view, but keep the filled assessment and the
 							// branch/type for prefill.
@@ -2328,7 +2345,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 							: prev.time,
 					});
 			} else if (res.application) {
-			// No consultation row, but an application exists — ops created it
+			// No consultation row, but an application exists. Ops created it
 			// directly (or consultation creation failed silently after payment).
 			// Either way, the applicant's journey has moved past the consultation
 			// fee page. Mark it done so they're not stranded re-paying $75.
@@ -2347,7 +2364,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		} else {
 			// Server has no active case for this signed-in user. The
 			// application state (proceedStatus, eligibilityOutcome, etc.) is
-			// purely server-derived, so clear it on every sync — a stale
+			// purely server-derived, so clear it on every sync. A stale
 			// "invited" proceedStatus must not survive a server that has no
 			// data. The booking form is preserved only while it's unpaid and
 			// in-progress; a booking that claims paymentStatus "success" with
@@ -2396,7 +2413,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			}
 			if (res.application) {
 				const a = res.application;
-				// The pre-departure checklist is the case's — never the browser's.
+				// The pre-departure checklist is the case's. Never the browser's.
 				setPreDepartureTasks((a.preDepartureTasks ?? []) as PreDepartureTask[]);
 				setApplication((prev) => ({
 					...prev,
@@ -2458,22 +2475,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				}));
 			}
 		} catch {
-			/* server state fallback — keep local values */
+			/* server state fallback. Keep local values */
 		}
 
-		/* ── Sync travel assistance request (direct-invoice flow) ──────── */
-		// Only fetch if the applicant has an application — the endpoint 404s
+		/* Sync travel assistance request (direct-invoice flow) */
+		// Only fetch if the applicant has an application. The endpoint 404s
 		// otherwise, which spams the console with noise on every 30s poll.
 		if (hasApplication) {
 			try {
 				const ta = await meApi.travelAssistance();
 				setApplication((prev) => ({ ...prev, travelAssistance: ta ?? null }));
 			} catch {
-				/* server state fallback — keep local values */
+				/* server state fallback. Keep local values */
 			}
 		}
 
-		/* ── Sync portal state (pre-departure tasks, post-arrival schedules) ── */
+		/* Sync portal state (pre-departure tasks, post-arrival schedules) */
 		try {
 			const ps = await meApi.portalState();
 			if (ps && typeof ps === "object") {
@@ -2500,7 +2517,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			/* keep local values */
 		}
 
-		/* ── Sync in-app notifications from server ── */
+		/* Sync in-app notifications from server */
 		try {
 			const notifRes = await meApi.notifications();
 			const serverNotifs: AppNotification[] = (notifRes?.notifications ?? []).map((n) => ({
@@ -2517,7 +2534,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			/* keep local values */
 		}
 
-		/* ── Sync agency service-fee invoice (Stage IV settlement) ──
+		/* Sync agency service-fee invoice (Stage IV settlement)
 		 * The agency invoice is the server's record of truth for the service
 		 * fee. Map its paid/balance cents onto the local agency state so the
 		 * Financial page reflects real settlement progress after a Paystack
@@ -2548,7 +2565,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				}));
 			}
 		} catch {
-			/* keep local values — server may be unreachable */
+			/* keep local values. Server may be unreachable */
 		}
 		setSyncTick((n) => n + 1);
 	}, [authUser, resetJourney, setServerJourney]);
@@ -2570,10 +2587,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	 * delivery channel; the 30s `syncFromServer` poll (above) is a fallback
 	 * that catches anything missed while the stream is disconnected. The
 	 * `EventSource` is same-origin against the portal's `/api/v1` proxy, so
-	 * it rides the existing auth cookie — no headers needed.
+	 * it rides the existing auth cookie. No headers needed.
 	 */
 
-	// Latest sync function without making it an effect dependency — a changed
+	// Latest sync function without making it an effect dependency. A changed
 	// identity must not tear down and reopen the stream.
 	const syncRef = useRef(syncFromServer);
 	syncRef.current = syncFromServer;
@@ -2590,34 +2607,41 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		es.addEventListener("notification", (event) => {
 			try {
 				const data = JSON.parse((event as MessageEvent).data) as {
-					id: string;
-					type: string;
-					title: string;
-					body: string;
-					link: string | null;
-					createdAt: string;
+					id?: string;
+					type?: string;
+					title?: string;
+					body?: string;
+					link?: string | null;
+					createdAt?: string;
 				};
+				const type = data.type ?? "";
+				// Staff-only notifications (lead.new, booking.new, etc.) are never
+				// shown in the client portal. Drop them here too, not just on the
+				// REST read, so a dual-role account never sees a live staff push.
+				if (isStaffOnlyNotification(type)) return;
+				// The server just told us the case moved. Pull the new state now —
+				// for real notifications and for id-less domain events alike
+				// (case.updated, payment.recorded, school.updated…).
+				if (isJourneyNotification(type)) void syncRef.current();
+				// Domain events are pure refresh signals: no notification row, no
+				// toast, no bell entry. Everything below assumes a real
+				// notification payload.
+				if (!data.id || !data.title) return;
 				const notif: AppNotification = {
 					id: data.id,
-					type: data.type as AppNotification["type"],
+					type: type as AppNotification["type"],
 					title: data.title,
-					body: data.body,
-					at: data.createdAt,
+					body: data.body ?? "",
+					at: data.createdAt ?? new Date().toISOString(),
 					read: false,
 					link: data.link ?? undefined,
 				};
-			// Staff-only notifications (lead.new, booking.new, etc.) are never
-			// shown in the client portal — drop them here too, not just on the
-			// REST read, so a dual-role account never sees a live staff push.
-			if (isStaffOnlyNotification(data.type)) return;
-			setNotifications((prev) =>
-				prev.some((n) => n.id === notif.id) ? prev : [notif, ...prev],
-			);
-			if (document.visibilityState === "visible") {
-				toastRef.current.info(notif.body, { title: notif.title });
-			}
-			// The server just told us the case moved — pull the new state now.
-			if (isJourneyNotification(data.type)) void syncRef.current();
+				setNotifications((prev) =>
+					prev.some((n) => n.id === notif.id) ? prev : [notif, ...prev],
+				);
+				if (document.visibilityState === "visible") {
+					toastRef.current.info(notif.body, { title: notif.title });
+				}
 			} catch {
 				/* ignore malformed payloads */
 			}
@@ -2625,7 +2649,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
 		es.addEventListener("error", () => {
 			// EventSource auto-reconnects; just log for debugging.
-			console.warn("[SSE] notifications stream error — reconnecting");
+			console.warn("[SSE] notifications stream error. Reconnecting");
 		});
 
 		return () => {
@@ -2644,7 +2668,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		return Math.round((done / preDepartureTasks.length) * 100);
 	}, [preDepartureTasks]);
 
-	// ── The journey ───────────────────────────────────────────────────────
+	// The journey
 	// `syncFromServer` (mount + 30s + every SSE journey event) fetches
 	// `/me/journey`; until the first answer arrives the cached one is shown,
 	// and a brand-new user gets the empty journey. On sign-out it resets.

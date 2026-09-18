@@ -59,6 +59,7 @@ import type { StaffContext } from "../middleware/auth.js";
 import * as mail from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
 import { notify, notifyMany, getStaffUserId, getManagerAndCoordinatorUserIds } from "./notify.js";
+import { emitDomain } from "../worker/pubsub.js";
 import { listSchoolsForApplication } from "./schools.js";
 import { applicationFeeLinesFor, createInvoice, type InvoiceRow } from "./invoice.js";
 import { activeFeeItem, serviceFeeSplit } from "./fees.js";
@@ -1166,31 +1167,29 @@ export async function referApplicationBranch(input: {
 
 export type PatchApplicationInput = z.infer<typeof patchApplicationSchema>;
 
+/**
+ * Refresh signal for a case mutation — a domain event, not a notification.
+ *
+ * Replaces the old notifyMany() fan-out: it wrote a bell row and queued a
+ * web push for every manager on every field edit, so the bell filled with
+ * "Case updated" noise whose only real purpose was moving screens. Now it
+ * publishes once to `ops:events` (every open console refetches) and to the
+ * applicant's own channel (the portal re-syncs its journey). Anything that
+ * deserves a bell entry calls notify() explicitly at its own site.
+ */
 async function broadcastCaseUpdate(application: ApplicationRow, actor: Actor): Promise<void> {
 	try {
-		const [applicant, assignedStaffUserId, managers] = await Promise.all([
-			getApplicant(application.applicantId),
-			application.assignedStaffId ? getStaffUserId(application.assignedStaffId) : null,
-			getManagerAndCoordinatorUserIds(),
-		]);
-		const recipientIds = new Set<string>();
-		if (assignedStaffUserId) recipientIds.add(assignedStaffUserId);
-		for (const m of managers) {
-			if (m.userId) recipientIds.add(m.userId);
-		}
-		if (recipientIds.size === 0) return;
-
-		const events = Array.from(recipientIds).map((userId) => ({
-			recipientUserId: userId,
-			type: "case.updated",
-			title: "Case updated",
-			body: `${applicant?.name ?? "A client"}'s case ${application.appNumber} has been updated by ${actor.name}.`,
-			entityType: "case",
-			entityId: application.id,
-			caseId: application.id,
-			link: `/applications`,
-		}));
-		await notifyMany(events);
+		const applicant = await getApplicant(application.applicantId);
+		emitDomain(
+			"case.updated",
+			{
+				caseId: application.id,
+				appNumber: application.appNumber,
+				stage: application.stage,
+				actor: actor.name,
+			},
+			{ ops: true, userId: applicant?.userId ?? null },
+		);
 	} catch (err) {
 		console.warn("[cases] Failed to broadcast case update:", err);
 	}
@@ -2064,6 +2063,7 @@ export async function updateDepartureDetails(id: string, patch: DepartureDetails
 			}).catch(() => {});
 		}
 	}
+	await broadcastCaseUpdate(updated, actor);
 	return updated;
 }
 
@@ -2098,6 +2098,7 @@ export async function updateVisaDetails(id: string, patch: VisaDetails, actor: A
 			}).catch(() => {});
 		}
 	}
+	await broadcastCaseUpdate(updated, actor);
 	return updated;
 }
 
@@ -2212,6 +2213,7 @@ export async function setApplicationVisaStage(
 		await seedPreDepartureTasks(id);
 	}
 
+	await broadcastCaseUpdate(updated, actor);
 	return updated;
 }
 
@@ -2453,6 +2455,7 @@ export async function setApplicationPaymentPlan(input: {
 		text: `Payment plan chosen: ${input.paymentPlanId}`,
 		authorName: "Applicant",
 	});
+	await broadcastCaseUpdate(updated, { opsUserId: "", name: "Applicant", email: "" });
 	return updated;
 }
 

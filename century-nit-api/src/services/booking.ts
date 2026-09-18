@@ -26,6 +26,7 @@ import { permissionsOfRole } from "./roles.js";
 import * as mail from "./notifications.js";
 import { notify, notifyMany, getManagerAndCoordinatorUserIds, getStaffUserIdByEmail } from "./notify.js";
 import { queueCalendar, queueEmails, queueReminder, cancelQueued, releaseCalendarJob } from "../worker/queues.js";
+import { emitDomain } from "../worker/pubsub.js";
 
 /**
  * Booking lifecycle.
@@ -105,6 +106,20 @@ async function audit(
 async function loadEmployee(employeeId: string) {
 	const [row] = await db.select().from(opsUsers).where(eq(opsUsers.id, employeeId)).limit(1);
 	return row ?? null;
+}
+
+/**
+ * Refresh signal for a booking mutation — a domain event, not a
+ * notification. `ops:events` refreshes the work queue, unassigned list and
+ * live-meeting views on every console; the client's channel syncs the
+ * portal's appointment screens. Bell entries stay with notify().
+ */
+function emitBookingEvent(row: BookingRow, type: string, extra?: Record<string, unknown>): void {
+	emitDomain(
+		type,
+		{ bookingId: row.id, reference: row.reference, status: row.status, ...extra },
+		{ ops: true, userId: row.clientUserId },
+	);
 }
 
 export async function notificationContext(
@@ -287,6 +302,7 @@ export async function createBooking(input: {
 		)
 		.catch(() => {});
 
+	emitBookingEvent(booking, "booking.created");
 	return booking;
 }
 
@@ -418,6 +434,7 @@ export async function assignBooking(input: {
 	const { syncConsultationAssignment } = await import("./consultations.js");
 	await syncConsultationAssignment(updated.id, employeeId, actor);
 
+	emitBookingEvent(updated, "booking.assigned", { employeeId });
 	return updated;
 }
 
@@ -758,7 +775,20 @@ export async function joinBookingMeeting(
 		);
 	}
 	if (now > window_.expiresAt.getTime()) {
-		throw new HttpError(409, "MEETING_ENDED", "This meeting window has passed.");
+		throw new HttpError(
+			409,
+			"MEETING_ENDED",
+			"This meeting window has passed.",
+			// Same machine-readable shape as MEETING_NOT_OPEN — the clients
+			// render an "ended" modal from this that names the missed slot.
+			{
+				startsAt: booking.startsAt.toISOString(),
+				endsAt: booking.endsAt.toISOString(),
+				windowClosedAt: window_.expiresAt.toISOString(),
+				timezone: booking.timezone,
+				reference: booking.reference,
+			},
+		);
 	}
 
 	if (booking.meetingProvider === "livekit") {
@@ -998,6 +1028,7 @@ export async function rescheduleBooking(input: {
 			.catch(() => {});
 	}
 
+	emitBookingEvent(updated, "booking.rescheduled");
 	return updated;
 }
 
@@ -1064,6 +1095,7 @@ export async function requestRescheduleBooking(
 
 	// Optionally we could send an email to ops here
 
+	emitBookingEvent(updated, "booking.reschedule_requested");
 	return updated;
 }
 
@@ -1189,6 +1221,7 @@ export async function decideRescheduleBooking(
 				.catch(() => {});
 		}
 
+		emitBookingEvent(updated, "booking.rescheduled");
 		return updated;
 	} else {
 		// reject: just clear the request fields
@@ -1208,6 +1241,7 @@ export async function decideRescheduleBooking(
 		await audit(booking.id, "reschedule_rejected", actor.email);
 		
 		// Optionally we could send an email about rejection to client
+		emitBookingEvent(cleared, "booking.rescheduled");
 		return cleared;
 	}
 }
@@ -1389,6 +1423,7 @@ export async function cancelBooking(input: {
 			.catch(() => {});
 	}
 
+	emitBookingEvent(updated, "booking.cancelled");
 	return updated;
 }
 
@@ -1440,6 +1475,7 @@ export async function completeBooking(input: {
 
 	await cancelQueued(`notify:reminder:client:${booking.id}`);
 	await cancelQueued(`notify:reminder:employee:${booking.id}`);
+	emitBookingEvent(updated, "booking.updated");
 	return updated;
 }
 
@@ -1473,6 +1509,7 @@ export async function markNoShow(input: {
 	await audit(booking.id, "no_show", input.actor.email);
 	await cancelQueued(`notify:reminder:client:${booking.id}`);
 	await cancelQueued(`notify:reminder:employee:${booking.id}`);
+	emitBookingEvent(updated, "booking.updated");
 	return updated;
 }
 

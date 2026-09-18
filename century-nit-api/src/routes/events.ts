@@ -5,9 +5,10 @@ import { streamSSE } from "hono/streaming";
 import { Redis } from "ioredis";
 import { eq, desc, and, count } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { notifications } from "../db/schema.js";
+import { notifications, opsUsers } from "../db/schema.js";
 import { env } from "../env.js";
 import { requireAuth, type AuthVariables } from "../middleware/auth.js";
+import { OPS_EVENTS_CHANNEL } from "../worker/pubsub.js";
 
 /**
  * Real-time notification delivery via Server-Sent Events.
@@ -37,6 +38,18 @@ eventsRouter.get("/stream", requireAuth, async (c) => {
 	const user = c.get("user");
 	const channel = `user:${user.id}:events`;
 
+	// Staff streams also carry the ops broadcast channel: every domain event
+	// (case moved, invoice paid, lead landed…) is published there once and
+	// reaches every open console — no per-user fan-out, nobody stale. A
+	// client account has no ops_users row, so the extra subscription simply
+	// never happens for portal streams.
+	const [staffRow] = await db
+		.select({ id: opsUsers.id })
+		.from(opsUsers)
+		.where(and(eq(opsUsers.userId, user.id), eq(opsUsers.active, true)))
+		.limit(1);
+	const channels = staffRow ? [channel, OPS_EVENTS_CHANNEL] : [channel];
+
 	return streamSSE(c, async (stream) => {
 		let aborted = false;
 		stream.onAbort(() => {
@@ -61,13 +74,14 @@ eventsRouter.get("/stream", requireAuth, async (c) => {
 			console.error(`[sse] redis subscriber error (user ${user.id}): ${err.message}`);
 		});
 		try {
-			await subscriber.subscribe(channel);
+			await subscriber.subscribe(...channels);
 		} catch (err) {
 			console.error(`[sse] subscribe failed (user ${user.id}):`, err);
 		}
 
+		const channelSet = new Set(channels);
 		subscriber.on("message", (ch, message) => {
-			if (!aborted && ch === channel) {
+			if (!aborted && channelSet.has(ch)) {
 				stream.writeSSE({ event: "notification", data: message }).catch(() => {
 					aborted = true;
 				});
@@ -98,7 +112,7 @@ eventsRouter.get("/stream", requireAuth, async (c) => {
 		}
 
 		// Cleanup
-		subscriber.unsubscribe(channel).catch(() => {});
+		subscriber.unsubscribe(...channels).catch(() => {});
 		subscriber.quit().catch(() => {});
 	});
 });

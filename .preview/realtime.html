@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Realtime everywhere — the live-data proposal</title>
+<style>
+  :root{
+    --background:#ffffff; --foreground:#0a0a0a;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#0a0a0a; --border-light:#d4d4d8;
+    --ok:#0d7a3f;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --text-xs:.72rem; --text-sm:.875rem;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:#fafafa;color:var(--foreground);font-size:var(--text-sm)}
+  .page{max-width:1240px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .page-title{font-size:1.9rem;font-weight:700;letter-spacing:-.02em}
+  .lead{color:var(--muted-foreground)}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--muted-foreground)}
+  h3.sec{font-size:1.05rem;font-weight:700;margin:0 0 .15rem}
+  .sec-sub{font-size:var(--text-xs);color:var(--muted-foreground);margin-bottom:1rem}
+
+  .sharp-card{background:var(--background);border:1px solid var(--border-light);padding:1.1rem 1.25rem}
+  .btn{border:1px solid var(--border);background:var(--background);color:var(--foreground);font:inherit;
+    font-size:var(--text-xs);font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+    padding:.55rem .9rem;cursor:pointer;display:inline-block}
+  .btn--primary{background:var(--foreground);color:var(--background)}
+  .btn--ghost{border-color:var(--border-light)}
+  .btn--sm{padding:.4rem .7rem;font-size:.66rem}
+  .btn:disabled{opacity:.35;cursor:default}
+  .pill{display:inline-block;border:1px solid var(--border);padding:.15rem .55rem;
+    font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.06em}
+  .pill--solid{background:var(--foreground);color:var(--background)}
+  .pill--hollow{color:var(--muted-foreground);border-color:var(--border-light)}
+  .pill--live{background:var(--ok);border-color:var(--ok);color:#fff}
+
+  .head{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem}
+
+  /* ── architecture strip ── */
+  .arch{display:grid;grid-template-columns:1fr auto 1fr auto 1fr auto 1.4fr;gap:.5rem;align-items:stretch;
+    margin:1.5rem 0 2rem}
+  .arch .box{border:1px solid var(--border-light);background:var(--background);padding:.8rem .9rem}
+  .arch .box b{display:block;font-size:.8rem;margin:.15rem 0}
+  .arch .box .mono{font-size:.62rem;color:var(--muted-foreground)}
+  .arch .arrow{align-self:center;font-family:var(--font-mono);font-size:1rem;color:var(--muted-foreground)}
+  .arch .box--emit{border:1.5px solid var(--border)}
+  @media (max-width:900px){.arch{grid-template-columns:1fr}.arch .arrow{transform:rotate(90deg);justify-self:center}}
+
+  /* ── live demo stage ── */
+  .stage{display:grid;grid-template-columns:1fr 15rem 1fr;gap:1rem;align-items:start}
+  @media (max-width:1020px){.stage{grid-template-columns:1fr}}
+
+  .screen{border:1.5px solid var(--border);background:var(--background)}
+  .screen__bar{display:flex;justify-content:space-between;align-items:center;gap:.5rem;
+    border-bottom:1px solid var(--border);padding:.5rem .8rem}
+  .screen__title{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em}
+  .screen__body{padding:.8rem}
+
+  /* conn badge */
+  .conn{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--font-mono);font-size:.6rem;
+    text-transform:uppercase;letter-spacing:.08em;color:var(--ok)}
+  .conn .dot{width:.5rem;height:.5rem;border-radius:50%;background:var(--ok)}
+  .conn--down{color:#a33}
+  .conn--down .dot{background:#a33}
+  .conn--poll{color:#96660a}
+  .conn--poll .dot{background:#96660a}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .conn .dot{animation:pulse 1.6s infinite}
+
+  /* ops actions */
+  .actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.8rem}
+
+  /* pipeline columns */
+  .pipe{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem}
+  .col{border:1px solid var(--border-light);padding:.45rem;min-height:9rem}
+  .col h5{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;
+    color:var(--muted-foreground);margin-bottom:.45rem}
+  .card{border:1px solid var(--border-light);background:var(--background);padding:.45rem .55rem;margin-bottom:.4rem;
+    transition:border-color .3s}
+  .card b{display:block;font-size:.75rem}
+  .card .mono{font-size:.58rem;color:var(--muted-foreground)}
+
+  /* invoice row */
+  .inv{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border-light);
+    padding:.5rem .6rem;margin-top:.6rem;font-size:.75rem}
+  .inv .st{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.06em}
+  .inv .st--due{color:#a33}.inv .st--paid{color:var(--ok);font-weight:700}
+
+  /* journey */
+  .jrow{display:flex;align-items:center;gap:.6rem;border:1px solid var(--border-light);padding:.5rem .6rem;margin-bottom:.35rem}
+  .jrow .seal{width:1.5rem;height:1.5rem;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    border:1px solid var(--border-light);font-family:var(--font-mono);font-size:.6rem;font-weight:700}
+  .jrow--done .seal{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+  .jrow--cur{border:1.5px solid var(--border)}
+  .jrow--cur .seal{border:2px solid var(--border)}
+  .jrow--lock{color:var(--muted-foreground)}
+  .jrow--lock .seal{border-style:dashed;color:var(--border-light)}
+  .jrow b{font-size:.75rem}
+  .jrow .mono{margin-left:auto;font-size:.58rem;color:var(--muted-foreground)}
+
+  /* chat */
+  .chat{border:1px solid var(--border-light);margin-top:.6rem;padding:.55rem;height:8.5rem;overflow-y:auto}
+  .msg{max-width:80%;padding:.35rem .55rem;margin-bottom:.3rem;font-size:.72rem;border:1px solid var(--border-light)}
+  .msg--me{margin-left:auto;background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+  .msg .t{display:block;font-family:var(--font-mono);font-size:.55rem;opacity:.6;margin-top:.15rem}
+  .typing{font-family:var(--font-mono);font-size:.6rem;color:var(--muted-foreground)}
+
+  /* event bus column */
+  .bus{border:1px solid var(--border);background:var(--foreground);color:var(--background);padding:.7rem .8rem}
+  .bus h4{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;
+    color:rgba(255,255,255,.6);margin-bottom:.5rem}
+  .buslog{height:26rem;overflow-y:auto;font-family:var(--font-mono);font-size:.62rem;line-height:1.7}
+  .ev{opacity:0;animation:evin .35s forwards;margin-bottom:.35rem}
+  @keyframes evin{to{opacity:1}}
+  .ev .ty{color:#8fd3a8}
+  .ev .ch{color:rgba(255,255,255,.55);display:block;font-size:.55rem}
+  .ev--poll .ty{color:#e8c76a}
+  .reloads{margin-top:.6rem;border-top:1px solid rgba(255,255,255,.2);padding-top:.5rem;
+    font-family:var(--font-mono);font-size:.6rem;color:rgba(255,255,255,.7)}
+  .reloads b{font-size:1rem;color:#8fd3a8}
+
+  /* flash on update */
+  @keyframes flash{0%{background:#eaf7ef;border-color:var(--ok)}100%{background:var(--background)}}
+  .flash{animation:flash 1.4s}
+
+  /* gap table */
+  table.gaps{border-collapse:collapse;width:100%;margin:.5rem 0 1rem;font-size:.78rem}
+  .gaps th,.gaps td{border:1px solid var(--border-light);padding:.4rem .6rem;text-align:left;vertical-align:top}
+  .gaps th{background:var(--foreground);color:var(--background);font-family:var(--font-mono);font-size:.6rem;
+    text-transform:uppercase;letter-spacing:.08em}
+  .gaps td .mono{font-size:.68rem}
+  .st-yes{color:var(--ok);font-weight:700}.st-no{color:#a33;font-weight:700}.st-part{color:#96660a;font-weight:700}
+
+  .checklist{list-style:none;padding:0;margin:.5rem 0}
+  .checklist li{padding:.45rem 0 .45rem 1.5rem;border-bottom:1px solid var(--border-light);position:relative;font-size:.82rem}
+  .checklist li::before{content:"";position:absolute;left:.2rem;top:.7rem;width:.55rem;height:.55rem;border:1.5px solid var(--border)}
+  .checklist .mono{font-size:.68rem;color:var(--muted-foreground);display:block}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="head">
+    <div>
+      <p class="eyebrow">Proposal · Realtime data</p>
+      <h1 class="page-title">Everything live, nothing reloaded</h1>
+      <p class="lead" style="margin-top:.35rem;max-width:44rem">
+        The pipes already exist — SSE over Redis pub/sub. This is how the journey,
+        chat and the whole ops pipeline go fully live, and what it feels like.
+        Try it: click actions on the left, watch the portal on the right update itself.
+      </p>
+    </div>
+    <span class="pill pill--solid">mock preview</span>
+  </div>
+
+  <!-- architecture -->
+  <div class="arch">
+    <div class="box box--emit">
+      <span class="eyebrow">1 · mutation</span>
+      <b>Any service writes a row</b>
+      <span class="mono">cases.ts · invoice.ts · chat.ts…</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box">
+      <span class="eyebrow">2 · publish</span>
+      <b>emitDomain(type, payload)</b>
+      <span class="mono">ephemeral — no bell row, no push</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box">
+      <span class="eyebrow">3 · fan-out</span>
+      <b>Redis pub/sub</b>
+      <span class="mono">user:{id}:events + ops:events</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box">
+      <span class="eyebrow">4 · screens update</span>
+      <b>One SSE stream per tab</b>
+      <span class="mono">portal syncs · ops refetches (debounced)</span>
+    </div>
+  </div>
+
+  <p class="eyebrow" style="margin-bottom:.6rem">Live simulation — the ops console drives, the portal follows. No reload.</p>
+  <div class="stage">
+
+    <!-- ── OPS ── -->
+    <div class="screen" id="opsScreen">
+      <div class="screen__bar">
+        <span class="screen__title">console.centurynit.com — workspace</span>
+        <span class="conn" id="opsConn"><span class="dot"></span>sse · ops:events</span>
+      </div>
+      <div class="screen__body">
+        <div class="actions">
+          <button class="btn btn--primary btn--sm" id="actStage">Move case → Visa prep</button>
+          <button class="btn btn--ghost btn--sm" id="actPay">Record payment</button>
+          <button class="btn btn--ghost btn--sm" id="actAssign">Assign handler</button>
+          <button class="btn btn--ghost btn--sm" id="actChat">Advisor sends message</button>
+          <button class="btn btn--ghost btn--sm" id="actDrop">Simulate SSE drop</button>
+        </div>
+
+        <div class="pipe">
+          <div class="col"><h5>Applications</h5>
+            <div class="card" id="caseA"><b>Ama Serwaa</b><span class="mono">APP-1042 · School apps</span></div>
+            <div class="card"><b>Kofi Mensah</b><span class="mono">APP-1038 · School apps</span></div>
+          </div>
+          <div class="col"><h5>Offers</h5>
+            <div class="card"><b>Efua Boateng</b><span class="mono">APP-1031 · 2 offers</span></div>
+          </div>
+          <div class="col"><h5>Visa prep</h5>
+            <div class="card"><b>Yaw Darko</b><span class="mono">APP-1027 · Docs pending</span></div>
+          </div>
+        </div>
+
+        <div class="inv" id="invRow">
+          <span><b>INV-2026-0118</b> <span class="mono muted">Ama Serwaa · visa package</span></span>
+          <span class="st st--due" id="invStatus">awaiting payment</span>
+        </div>
+
+        <div class="chat" id="opsChat">
+          <div class="msg">Hi Ama, your offer letter just arrived.<span class="t">K. Owusu · 14:02</span></div>
+          <div class="msg msg--me">That's great news!<span class="t">Ama · 14:03</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── EVENT BUS ── -->
+    <div class="bus">
+      <h4>event bus · redis pub/sub</h4>
+      <div class="buslog" id="buslog"></div>
+      <div class="reloads">page reloads needed: <b id="reloadCount">0</b></div>
+    </div>
+
+    <!-- ── PORTAL ── -->
+    <div class="screen" id="portalScreen">
+      <div class="screen__bar">
+        <span class="screen__title">centurynit.com — your journey</span>
+        <span class="conn" id="portalConn"><span class="dot"></span>sse · user:u_8f2:events</span>
+      </div>
+      <div class="screen__body">
+        <div id="journey">
+          <div class="jrow jrow--done"><span class="seal">I</span><b>Consultation</b><span class="mono">done</span></div>
+          <div class="jrow jrow--done"><span class="seal">II</span><b>Enrolment</b><span class="mono">done</span></div>
+          <div class="jrow jrow--cur" id="jrowApps"><span class="seal">III</span><b>Applications</b><span class="mono" id="jrowAppsNote">current · 3 of 5 schools</span></div>
+          <div class="jrow jrow--lock" id="jrowVisa"><span class="seal">IV</span><b>Visa</b><span class="mono">locked</span></div>
+          <div class="jrow jrow--lock"><span class="seal">V</span><b>Departure</b><span class="mono">locked</span></div>
+          <div class="jrow jrow--lock"><span class="seal">VI</span><b>Arrival</b><span class="mono">locked</span></div>
+        </div>
+
+        <div class="inv" id="pInvRow" style="margin-bottom:.6rem">
+          <span><b>Invoice INV-2026-0118</b> <span class="mono muted">visa package</span></span>
+          <span class="st st--due" id="pInvStatus">unpaid</span>
+        </div>
+
+        <div class="chat" id="portalChat">
+          <div class="msg">Hi Ama, your offer letter just arrived.<span class="t">K. Owusu · 14:02</span></div>
+          <div class="msg msg--me">That's great news!<span class="t">you · 14:03</span></div>
+          <div class="typing" id="typing" style="display:none">K. Owusu is typing…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- gaps -->
+  <div style="margin-top:3rem">
+    <h3 class="sec">What is live today, and what isn't</h3>
+    <p class="sec-sub">The stream and the publisher exist. Three wiring gaps keep some screens on the 30-second poll.</p>
+    <table class="gaps">
+      <tr><th style="width:16rem">Surface</th><th style="width:7rem">Today</th><th>Why / what changes</th></tr>
+      <tr><td>Chat (both apps)</td><td class="st-yes">live</td><td><span class="mono">chat.*</span> events on the shared stream — messages, typing, reads, reactions.</td></tr>
+      <tr><td>Ops pipeline · Workspace · Cases</td><td class="st-part">mostly</td><td>SSE → debounced refetch, but the whitelist misses ~15 event types (<span class="mono">invoice_*, payment_recorded, school_*, consent_decided, handoff_opened…</span>). Switch to prefix matching.</td></tr>
+      <tr><td>Portal journey</td><td class="st-part">mostly</td><td>SSE → <span class="mono">syncFromServer()</span>, but only fires when a <em>notification</em> exists. Silent field updates wait for the 30s poll. Domain events fix this.</td></tr>
+      <tr><td>Ops invoices / payments</td><td class="st-no">fetch once</td><td><span class="mono">useInvoiceApi</span> has no SSE listener — a Paystack webhook payment stays invisible until reload.</td></tr>
+      <tr><td>Ops work queue · leads · bookings</td><td class="st-no">fetch once</td><td><span class="mono">useWorkQueue</span> loads leads/bookings on mount; <span class="mono">lead.new</span> / <span class="mono">booking.new</span> never reach it.</td></tr>
+      <tr><td>Second console open, same case</td><td class="st-no">stale</td><td>Streams are per-user (<span class="mono">user:{id}:events</span>); updates only reach staff the code enumerated. Add the <span class="mono">ops:events</span> broadcast channel so every open console hears every case event.</td></tr>
+      <tr><td>Notification bell noise</td><td class="st-part">side effect</td><td><span class="mono">broadcastCaseUpdate</span> uses <span class="mono">notify()</span> as a transport — every field edit writes a bell row + web push. Split refresh signals from notifications.</td></tr>
+    </table>
+  </div>
+
+  <!-- plan -->
+  <div style="margin-top:2rem">
+    <h3 class="sec">The build, in order</h3>
+    <p class="sec-sub">Smallest change that makes everything live — no new infra, no websockets, no new deps.</p>
+    <ul class="checklist">
+      <li><b>Split signal from notification.</b> New <span class="mono">emitDomain(type, payload, {userId?, ops:true})</span> in <span class="mono">worker/pubsub.ts</span> — pure Redis publish, no DB row, no push. <span class="mono">notify()</span> keeps doing bells+push+email; refresh signals stop piggybacking on it.
+        <span class="mono">century-nit-api/src/worker/pubsub.ts</span></li>
+      <li><b>Add the ops broadcast channel.</b> The ops stream subscribes to <span class="mono">ops:events</span> alongside the user's own channel (role check already on the stream). One publish reaches every open console.
+        <span class="mono">century-nit-api/src/routes/events.ts</span></li>
+      <li><b>Emit from every mutation.</b> Call sites in cases / applications / invoice / payments (incl. the Paystack webhook) / schools / documents / bookings / journey publish a domain event after the write — <span class="mono">case.updated</span> stops writing bell rows, becomes a pure signal.
+        <span class="mono">century-nit-api/src/services/*</span></li>
+      <li><b>One stream per tab, both apps.</b> Fold <span class="mono">useOpsNotifications</span> onto the <span class="mono">useOpsSSE</span> singleton — today ops opens two EventSources.
+        <span class="mono">century-nit-ops/src/hooks/useOpsNotifications.ts</span></li>
+      <li><b>Prefix matching, not whitelists.</b> Ops: refresh on <span class="mono">case.|application.|stage.|invoice.|payment.|booking.|lead.|school.|document.|handoff.|travel.|consent.</span> Portal: journey prefixes already exist — extend to the new domain events.
+        <span class="mono">useCasesApi.ts · AppState.tsx</span></li>
+      <li><b>Wire the dead surfaces.</b> <span class="mono">useInvoiceApi</span> and <span class="mono">useWorkQueue</span> (leads + bookings) subscribe to <span class="mono">useOpsSSE</span> with the same 1.5s debounce.
+        <span class="mono">useInvoiceApi.ts · useWorkQueue.ts</span></li>
+      <li><b>Keep the 30s polls as the fallback.</b> They already exist — SSE drop, sleeping tab, Redis outage all degrade gracefully, exactly like today.</li>
+    </ul>
+  </div>
+
+</div>
+
+<script>
+const log = document.getElementById('buslog');
+const now = () => new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+function ev(type, chans, poll){
+  const d = document.createElement('div');
+  d.className = 'ev' + (poll ? ' ev--poll' : '');
+  d.innerHTML = `<span class="ty">${type}</span><span class="ch">→ ${chans}</span>`;
+  log.prepend(d);
+  while (log.children.length > 40) log.lastChild.remove();
+}
+function flash(el){ el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+
+let dropped = false;
+const opsConn = document.getElementById('opsConn');
+const portalConn = document.getElementById('portalConn');
+
+function afterDeliver(fn, type, chans){
+  if (dropped){
+    ev(type + ' (missed — stream down)', '— held —', true);
+    setTimeout(()=>{ ev(type + ' (30s fallback poll)', 'syncFromServer()', true); fn(); }, 2200);
+  } else {
+    ev(type, chans);
+    setTimeout(fn, 650);
+  }
+}
+
+/* Move stage: ops card moves + portal chapter flips */
+document.getElementById('actStage').onclick = () => {
+  afterDeliver(() => {
+    const visaCol = document.querySelectorAll('.col')[2];
+    const card = document.getElementById('caseA');
+    card.querySelector('.mono').textContent = 'APP-1042 · Visa prep';
+    visaCol.prepend(card); flash(card);
+    const apps = document.getElementById('jrowApps');
+    apps.className = 'jrow jrow--done'; apps.querySelector('.mono').textContent = 'done'; flash(apps);
+    const visa = document.getElementById('jrowVisa');
+    visa.className = 'jrow jrow--cur'; visa.querySelector('.mono').textContent = 'current · just unlocked'; flash(visa);
+  }, 'stage.changed', 'user:u_8f2:events · ops:events');
+};
+
+/* Payment: invoice flips on BOTH screens */
+document.getElementById('actPay').onclick = () => {
+  afterDeliver(() => {
+    const a = document.getElementById('invStatus'); a.textContent='paid · webhook'; a.className='st st--paid'; flash(document.getElementById('invRow'));
+    const b = document.getElementById('pInvStatus'); b.textContent='paid'; b.className='st st--paid'; flash(document.getElementById('pInvRow'));
+  }, 'payment_recorded', 'user:u_8f2:events · ops:events');
+};
+
+/* Assign: card note + portal note */
+document.getElementById('actAssign').onclick = () => {
+  afterDeliver(() => {
+    const c = document.getElementById('caseA');
+    c.querySelector('.mono').textContent = c.querySelector('.mono').textContent.replace(/ · .*/, '') + ' · K. Owusu';
+    flash(c);
+    const apps = document.getElementById('jrowApps');
+    apps.querySelector('.mono').textContent = 'current · K. Owusu assigned'; flash(apps);
+  }, 'case.assigned', 'user:u_8f2:events · ops:events');
+};
+
+/* Chat: typing then message on both */
+document.getElementById('actChat').onclick = () => {
+  if (dropped){ ev('chat.message (missed — stream down)','— held —',true); return; }
+  ev('chat.typing','user:u_8f2:events · ops:events');
+  document.getElementById('typing').style.display='block';
+  setTimeout(() => {
+    ev('chat.message','user:u_8f2:events · ops:events');
+    setTimeout(() => {
+      document.getElementById('typing').style.display='none';
+      for (const id of ['portalChat','opsChat']){
+        const m = document.createElement('div');
+        m.className = 'msg' + (id==='opsChat' ? '' : '');
+        m.innerHTML = `Documents are in — we're moving you to visa prep.<span class="t">K. Owusu · ${now()}</span>`;
+        const c = document.getElementById(id);
+        c.insertBefore(m, c.querySelector('.typing')?.nextSibling ? null : null);
+        c.appendChild(m); c.scrollTop = c.scrollHeight; flash(m);
+      }
+    }, 500);
+  }, 1200);
+};
+
+/* SSE drop simulation */
+document.getElementById('actDrop').onclick = (e) => {
+  dropped = !dropped;
+  for (const el of [opsConn, portalConn]){
+    el.className = 'conn' + (dropped ? ' conn--poll' : '');
+    el.innerHTML = `<span class="dot"></span>${dropped ? 'sse down · 30s poll fallback' : el.id==='opsConn' ? 'sse · ops:events' : 'sse · user:u_8f2:events'}`;
+  }
+  e.target.textContent = dropped ? 'Reconnect SSE' : 'Simulate SSE drop';
+  ev(dropped ? 'stream disconnected' : 'stream reconnected', dropped ? '—' : 'resumed', true);
+};
+</script>
+</body>
+</html>

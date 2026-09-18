@@ -42,6 +42,7 @@ import {
 	getStaffUserId,
 } from "../services/notify.js";
 import { env } from "../env.js";
+import { emitDomain } from "../worker/pubsub.js";
 import { checkAndAdvanceDocumentStage } from "../services/cases.js";
 
 /**
@@ -403,6 +404,14 @@ documentsRouter.openapi(
 			});
 		}
 
+		// Refresh signal: every console's document queue and the owner's own
+		// portal screens refetch — no bell row, the notify() below handles that.
+		emitDomain(
+			"document.uploaded",
+			{ documentId: updated.id, ownerUserId: updated.ownerUserId, documentType: updated.documentType },
+			{ ops: true, userId: updated.ownerUserId },
+		);
+
 		// In-app: let the assigned consultant know a document was uploaded, or
 		// fall back to managers/coordinators when nobody is assigned yet. The
 		// owner decides whose upload this is — staff artifacts land on the
@@ -751,6 +760,13 @@ documentsRouter.openapi(
 				"No uploaded document with that id",
 			);
 		}
+
+		// Refresh signal: the review queue and the owner's portal both refetch.
+		emitDomain(
+			"document.updated",
+			{ documentId: updated.id, ownerUserId: updated.ownerUserId, documentType: updated.documentType, status: updated.status },
+			{ ops: true, userId: updated.ownerUserId },
+		);
 
 		// In-app + email: tell the document owner their document was approved or rejected.
 		const approved = body.status === "VERIFIED";

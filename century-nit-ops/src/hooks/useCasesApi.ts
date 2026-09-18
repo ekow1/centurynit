@@ -40,6 +40,38 @@ import type {
 	MockConsultation,
 } from "century-nit-core/ops";
 
+/**
+ * Event-type prefixes that mean "the case data on screen may have moved".
+ * Types are normalized (`_` → `.`) before matching, so `invoice_issued`,
+ * `payment.recorded`, `consent_decided` and `handoff.opened` all match.
+ */
+const OPS_CASE_EVENT_PREFIXES = [
+	"case.",
+	"application.",
+	"consultation.",
+	"stage.",
+	"assignment.",
+	"assessment.",
+	"booking.",
+	"lead.",
+	"visa.",
+	"document.",
+	"handoff.",
+	"travel.",
+	"consent.",
+	"school.",
+	"invoice.",
+	"payment.",
+	"coordinator.",
+	"coordination.",
+	"owner.",
+	"status.",
+	"consultant.",
+	"auto.",
+	"staff.",
+	"roles.",
+] as const;
+
 function toConsultation(row: ApiConsultation): MockConsultation {
 	const p = row.profile ?? {};
 	return {
@@ -344,33 +376,19 @@ export function useCasesApi() {
 	}, [refresh]);
 
 	// Real-time refresh: listen to the shared SSE singleton for case-relevant
-	// notifications and debounce-refresh so a burst of events only triggers
-	// one API call.
+	// events and debounce-refresh so a burst only triggers one API call.
+	//
+	// Matching is by prefix, not a whitelist — the API emits both bell
+	// notifications (booking.new, invoice_issued, consent_decided) and
+	// ephemeral domain events (case.updated, payment.recorded,
+	// handoff.opened, school.updated, consultation.updated) and new event
+	// types land constantly. Normalizing `_` to `.` makes both naming styles
+	// one family, so nothing meaningful is ever missed.
 	const refreshRef = useRef(refresh);
 	refreshRef.current = refresh;
 	useOpsSSE((event) => {
-		const t = event.type;
-		if (
-			t === "booking.new" ||
-			t === "booking.assigned" ||
-			t === "booking.rescheduled" ||
-			t === "booking.cancelled" ||
-			t === "lead.new" ||
-			t === "consultation.assigned" ||
-			t === "assessment.complete" ||
-			t === "case.assigned" ||
-			t === "case.updated" ||
-			t === "stage.changed" ||
-			t === "stage.needs_handler" ||
-			t === "assignment.handoff_resolved" ||
-			t === "visa.stage_changed" ||
-			t === "coordinator_delegated" ||
-			t === "coordinator_reassigned" ||
-			t === "status_changed" ||
-			t === "consultant_assigned" ||
-			t === "auto_escalated" ||
-			t === "document.uploaded"
-		) {
+		const t = String(event.type ?? "").replace(/_/g, ".");
+		if (OPS_CASE_EVENT_PREFIXES.some((p) => t.startsWith(p))) {
 			if (refreshTimer.current) clearTimeout(refreshTimer.current);
 			refreshTimer.current = setTimeout(() => void refreshRef.current(), 1500);
 		}

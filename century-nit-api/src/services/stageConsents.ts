@@ -7,6 +7,7 @@ import type {
 import { db } from "../db/index.js";
 import { applications, stageConsents, applicants } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
+import { emitDomain } from "../worker/pubsub.js";
 
 /**
  * Stage consent — the applicant's explicit decision to start, hold, or opt
@@ -76,6 +77,13 @@ export async function upsertStageConsent(input: {
 	const now = new Date();
 	const reason = input.decision === "continue" ? null : (input.reason ?? null);
 
+	const emitConsent = (consentId: string) =>
+		emitDomain(
+			"consent.decided",
+			{ consentId, applicationId: input.applicationId, stage: input.stage, decision: input.decision },
+			{ ops: true, userId: input.decidedByClientUserId ?? null },
+		);
+
 	if (existing) {
 		const [updated] = await db
 			.update(stageConsents)
@@ -88,6 +96,7 @@ export async function upsertStageConsent(input: {
 			})
 			.where(eq(stageConsents.id, existing.id))
 			.returning();
+		emitConsent(updated.id);
 		return serialize(updated);
 	}
 
@@ -102,6 +111,7 @@ export async function upsertStageConsent(input: {
 			decidedByClientUserId: input.decidedByClientUserId ?? null,
 		})
 		.returning();
+	emitConsent(created.id);
 	return serialize(created);
 }
 

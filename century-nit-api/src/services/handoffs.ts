@@ -18,6 +18,7 @@ import {
 } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import { notify, notifyMany, getStaffUserId, getManagerAndCoordinatorUserIds } from "./notify.js";
+import { emitDomain } from "../worker/pubsub.js";
 
 // Owner classes and the boundary rule live in century-nit-shared (journey.ts)
 // so the ops console applies the same rule when it offers "keep".
@@ -129,6 +130,15 @@ export async function createOrGetHandoff(input: {
 				fromOpsUserId: input.fromOpsUserId ?? null,
 			})
 			.returning();
+		// A new item in the handoff queue — every console refetches. When this
+		// runs inside a transaction (the deposit/visa payment paths) the event
+		// may land a beat early; the caller's own committed event (e.g.
+		// payment.recorded) covers the refresh either way.
+		emitDomain(
+			"handoff.opened",
+			{ handoffId: created.id, applicationId: input.applicationId, stage: input.stage, source: input.source },
+			{ ops: true },
+		);
 		return created;
 	} catch (err) {
 		// Partial unique index race — a concurrent writer won; return theirs.
@@ -591,6 +601,14 @@ export async function resolveStageHandoff(input: {
 		}).catch(() => {});
 	}
 
+	// Every console's handoff queue + case list and the portal's journey all
+	// follow this resolution — a domain event, not a bell row.
+	emitDomain(
+		"handoff.resolved",
+		{ handoffId: row.id, applicationId: row.applicationId, stage: row.stage, officerId: resolvedOpsUserId },
+		{ ops: true, userId: clientUserId },
+	);
+
 	return serializeHandoff(resolved);
 }
 
@@ -645,6 +663,12 @@ export async function deferStageHandoff(input: {
 			caseId: row.applicationId,
 		})),
 	).catch(() => {});
+
+	emitDomain(
+		"handoff.updated",
+		{ handoffId: row.id, applicationId: row.applicationId, stage: row.stage, deferred: true },
+		{ ops: true },
+	);
 
 	return serializeHandoff(updated);
 }

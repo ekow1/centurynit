@@ -3,6 +3,7 @@ import { db } from "../db/index.js";
 import { applicants, applications, invoices, leads, leadEvents, opsUsers, staffInvitations } from "../db/schema.js";
 import { notifyMany, getManagerAndCoordinatorContacts, getCustomerServiceContacts } from "./notify.js";
 import { queueEmails } from "../worker/queues.js";
+import { emitDomain } from "../worker/pubsub.js";
 import { leadCreatedForManager } from "./notifications.js";
 import { HttpError } from "../middleware/error.js";
 import {
@@ -327,6 +328,10 @@ async function notifyManagersOfNewLead(
 	const contacts = [...mgrContacts, ...csContacts];
 	if (contacts.length === 0) return;
 
+	// Refresh signal: every console's lead list and work queue refetches —
+	// this is a domain event, not a bell row (notifyMany covers the bell).
+	emitDomain("lead.created", { leadId, name, source }, { ops: true });
+
 	// In-app + SSE + Web Push
 	await notifyMany(
 		contacts.map((c) => ({
@@ -530,11 +535,13 @@ export async function updateLead(
 		assignedStaffName = staff?.name ?? null;
 	}
 
+	emitDomain("lead.updated", { leadId: id, stage: updated.stage ?? null }, { ops: true });
 	return serializeLead(updated, assignedStaffName);
 }
 
 export async function deleteLead(id: string): Promise<boolean> {
 	const res = await db.delete(leads).where(eq(leads.id, id)).returning({ id: leads.id });
+	if (res.length > 0) emitDomain("lead.updated", { leadId: id, deleted: true }, { ops: true });
 	return res.length > 0;
 }
 

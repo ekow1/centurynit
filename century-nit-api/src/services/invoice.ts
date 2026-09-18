@@ -27,6 +27,7 @@ import { activeFeeItem } from "./fees.js";
 import { formatGhs, formatUsd } from "./receiptEmail.js";
 import { invoiceRaisedForClient } from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
+import { emitDomain } from "../worker/pubsub.js";
 
 /**
  * Invoice lifecycle — commands, not CRUD (API_MIGRATION_PLAN.md §4).
@@ -311,6 +312,28 @@ async function notifyClientInvoice(row: InvoiceRow, kind: "issued" | "paid"): Pr
 	}
 }
 
+/**
+ * Refresh signal for an invoice mutation — a domain event, not a
+ * notification. Published to `ops:events` so every console's invoice list,
+ * payments log and work queue refetch, and to the client's own channel so
+ * the portal's finance screens sync without waiting on the poll. Bell
+ * entries stay with notifyClientInvoice — this only moves screens.
+ */
+function emitInvoiceEvent(row: InvoiceRow, type: string, extra?: Record<string, unknown>): void {
+	emitDomain(
+		type,
+		{
+			invoiceId: row.id,
+			invoiceNumber: row.invoiceNumber,
+			invoiceType: row.type,
+			status: row.status,
+			applicationId: row.applicationId ?? null,
+			...extra,
+		},
+		{ ops: true, userId: row.clientUserId ?? null },
+	);
+}
+
 /** Invoice types that belong to a case and drive the applicant's journey. */
 export const JOURNEY_INVOICE_TYPES: ReadonlySet<string> = new Set(["application", "visa", "agency", "travel"]);
 
@@ -400,6 +423,7 @@ export async function createInvoice(input: {
 		: await db.transaction(async (tx) => doCreate(tx as unknown as typeof db));
 
 	if (row.status === "issued") await notifyClientInvoice(row, "issued");
+	emitInvoiceEvent(row, "invoice.updated");
 
 	// Notify the client that an invoice is outstanding.
 	if (row.status === "issued" && row.applicantEmail) {
@@ -733,6 +757,14 @@ export async function recordPayment(input: {
 		return updated;
 	}).then(async (updated) => {
 		if (updated.status === "paid") await notifyClientInvoice(updated, "paid");
+		// Every console's invoice list / payments log / work queue and the
+		// client's own finance screen refetch on this — webhook or manual
+		// entry, the settlement path all lands here.
+		emitInvoiceEvent(updated, "payment.recorded", {
+			amountCents: input.amountCents,
+			method: input.method,
+			gateway: input.gateway ?? null,
+		});
 		// The deposit is the moment the client enrolled — the lead follows it.
 		if (updated.type === "agency") {
 			const { markLeadEnrolledForInvoice } = await import("./leads.js");
@@ -791,6 +823,7 @@ export async function voidInvoice(input: {
 	});
 	// A declined proforma goes back to the raiser with the reason.
 	if (voided.status === "void" && voided.invoiceNumber.startsWith("PRO-")) await notifyRaiser(voided, "declined", input.reason).catch(() => {});
+	emitInvoiceEvent(voided, "invoice.updated");
 	return voided;
 }
 
@@ -838,6 +871,9 @@ export async function creditInvoice(input: {
 			`${input.amountCents} cents — ${input.reason}`,
 			txDb,
 		);
+		return updated;
+	}).then((updated) => {
+		emitInvoiceEvent(updated, "invoice.updated");
 		return updated;
 	});
 }
@@ -1189,6 +1225,7 @@ export async function issueProforma(input: {
 		return updated;
 	}).then(async (updated) => {
 		await notifyClientInvoice(updated, "issued");
+		emitInvoiceEvent(updated, "invoice.updated");
 		return updated;
 	});
 	await notifyRaiser(issued, "issued").catch(() => {});
@@ -1297,6 +1334,7 @@ export async function issueProformaByOps(input: {
 		return updated;
 	}).then(async (updated) => {
 		await notifyClientInvoice(updated, "issued");
+		emitInvoiceEvent(updated, "invoice.updated");
 		return updated;
 	});
 }
@@ -1348,6 +1386,7 @@ export async function issueInvoiceByOps(input: {
 		return updated;
 	}).then(async (updated) => {
 		await notifyClientInvoice(updated, "issued");
+		emitInvoiceEvent(updated, "invoice.updated");
 		return updated;
 	});
 }

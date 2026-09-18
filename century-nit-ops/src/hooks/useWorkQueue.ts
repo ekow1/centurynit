@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, bookingsApi } from "century-nit-core/api";
 import type { Booking } from "century-nit-shared";
 import type { Lead } from "century-nit-core";
 import { API_PREFIX } from "century-nit-shared";
 import { useOpsAuth } from "../pages/OpsAuthContext";
 import { useCases } from "./useCases";
+import { useOpsSSE } from "./useChatStream";
 import { useInvoiceApi } from "./useInvoiceApi";
 import { apiFetch } from "../lib/api";
 import {
@@ -65,12 +66,10 @@ export function useWorkQueue(branchFilter = "all") {
 
 	useEffect(loadBookings, [loadBookings]);
 
-	useEffect(() => {
-		let cancelled = false;
+	const loadLeads = useCallback(() => {
 		void (async () => {
 			try {
 				const res = await apiFetch<{ leads: (Lead & { targetCountry?: string; assignedStaffName?: string; updatedAt?: string; createdAt?: string })[] }>(`${API_PREFIX}/leads`);
-				if (cancelled) return;
 				setLeads(
 					(res.leads || []).map((l) => ({
 						...l,
@@ -81,13 +80,12 @@ export function useWorkQueue(branchFilter = "all") {
 					})),
 				);
 			} catch {
-				if (!cancelled) setLeads([]);
+				setLeads([]);
 			}
 		})();
-		return () => {
-			cancelled = true;
-		};
 	}, []);
+
+	useEffect(loadLeads, [loadLeads]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -106,6 +104,26 @@ export function useWorkQueue(branchFilter = "all") {
 			clearInterval(id);
 		};
 	}, []);
+
+	// Live refresh for the queue's own data: unassigned bookings and leads.
+	// (Consultations, applications, handoffs, travel and invoices refresh
+	// themselves inside useCasesApi / useInvoiceApi.) Debounced so a burst
+	// of events is one refetch.
+	const queueRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const pendingQueueReloads = useRef({ bookings: false, leads: false });
+	useOpsSSE((event) => {
+		const t = String(event.type ?? "").replace(/_/g, ".");
+		if (t.startsWith("booking.")) pendingQueueReloads.current.bookings = true;
+		else if (t.startsWith("lead.")) pendingQueueReloads.current.leads = true;
+		else return;
+		if (queueRefreshTimer.current) clearTimeout(queueRefreshTimer.current);
+		queueRefreshTimer.current = setTimeout(() => {
+			const pending = pendingQueueReloads.current;
+			pendingQueueReloads.current = { bookings: false, leads: false };
+			if (pending.bookings) loadBookings();
+			if (pending.leads) loadLeads();
+		}, 1500);
+	});
 
 	const liveIds = useMemo(() => new Set(liveBookings.map((b) => b.id)), [liveBookings]);
 

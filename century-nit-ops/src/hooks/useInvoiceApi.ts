@@ -5,8 +5,9 @@
  * (floats). This hook handles the conversion and provides reactive state that
  * components can drop in place of the mock `invoices` from OpsStateContext.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useOpsAuth } from "../pages/OpsAuthContext";
+import { useOpsSSE } from "./useChatStream";
 import {
 	type Invoice,
 	type InvoiceStatus,
@@ -117,6 +118,20 @@ export function useInvoiceApi() {
 	useEffect(() => {
 		refresh();
 	}, [refresh]);
+
+	// Live refresh on invoice/payment events — issued, paid, voided, credited,
+	// payment.recorded from webhooks — debounced so a settlement burst is one
+	// refetch.
+	const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const refreshRef = useRef(refresh);
+	refreshRef.current = refresh;
+	useOpsSSE((event) => {
+		const t = String(event.type ?? "").replace(/_/g, ".");
+		if (t.startsWith("invoice.") || t.startsWith("payment.")) {
+			if (refreshTimer.current) clearTimeout(refreshTimer.current);
+			refreshTimer.current = setTimeout(() => void refreshRef.current(), 1500);
+		}
+	});
 
 	const createInvoice = useCallback(
 		async (input: {

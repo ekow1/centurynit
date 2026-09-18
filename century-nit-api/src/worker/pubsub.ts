@@ -33,4 +33,44 @@ export function publishToUser(userId: string, payload: unknown): void {
 	});
 }
 
+/**
+ * Broadcast channel every connected ops console subscribes to.
+ *
+ * Domain events (case moved, invoice paid, lead landed…) are published here
+ * once instead of being fanned out to a computed list of staff user
+ * channels — the SSE stream in routes/events.ts subscribes staff
+ * connections to this channel alongside their personal one, so every open
+ * console sees every workspace change without the publisher needing to know
+ * who is watching.
+ */
+export const OPS_EVENTS_CHANNEL = "ops:events";
+
+export function publishToOps(payload: unknown): void {
+	publisher.publish(OPS_EVENTS_CHANNEL, JSON.stringify(payload)).catch((err) => {
+		console.error(`[pubsub] publish to ${OPS_EVENTS_CHANNEL} failed:`, err);
+	});
+}
+
+/**
+ * A domain event is a refresh signal — "this thing changed on the server,
+ * refetch it". Unlike notify() it writes no notification row, queues no
+ * push and sends no email: it exists purely to move screens.
+ *
+ * Audiences:
+ *   - `userId` — the applicant's personal channel (portal screens sync)
+ *   - `ops: true` — every connected ops console
+ *
+ * Fire-and-forget like the rest of this module: the 30s client-side polls
+ * remain the fallback for anything missed.
+ */
+export function emitDomain(
+	type: string,
+	payload: Record<string, unknown>,
+	audience: { userId?: string | null; ops?: boolean },
+): void {
+	const body = { type, at: new Date().toISOString(), ...payload };
+	if (audience.userId) publishToUser(audience.userId, body);
+	if (audience.ops) publishToOps(body);
+}
+
 export { publisher as pubsubConnection };

@@ -18,6 +18,7 @@ import {
 import { HttpError } from "../middleware/error.js";
 import { createInvoice } from "./invoice.js";
 import { notify } from "./notify.js";
+import { emitDomain } from "../worker/pubsub.js";
 import { upsertStageConsent } from "./stageConsents.js";
 import * as mail from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
@@ -289,6 +290,11 @@ export async function recordDecision(input: {
 		} else if (input.decision === "no") {
 			await settleTravel(input.applicationId, "applicant is booking their own flight", applicant.name ?? "Applicant");
 		}
+		emitDomain(
+			"travel.updated",
+			{ requestId: updated.id, applicationId: input.applicationId, status: updated.status, decision: input.decision },
+			{ ops: true, userId: applicant.userId },
+		);
 		return serialize(updated);
 	}
 
@@ -332,6 +338,11 @@ export async function recordDecision(input: {
 		}).catch(() => {});
 	}
 
+	emitDomain(
+		"travel.updated",
+		{ requestId: created.id, applicationId: input.applicationId, status: created.status, decision: input.decision },
+		{ ops: true, userId: applicant.userId },
+	);
 	return serialize(created);
 }
 
@@ -460,6 +471,16 @@ export async function assignHandler(input: {
 		console.error("[travelAssistance] failed to queue handler assignment emails:", err);
 	}
 
+	const [taApplicant] = await db
+		.select({ userId: applicants.userId })
+		.from(applicants)
+		.where(eq(applicants.id, updated.applicantId))
+		.limit(1);
+	emitDomain(
+		"travel.updated",
+		{ requestId: updated.id, applicationId: updated.applicationId, status: updated.status, assignedOpsUserId: input.opsUserId },
+		{ ops: true, userId: taApplicant?.userId ?? null },
+	);
 	return serialize(updated);
 }
 
@@ -598,6 +619,11 @@ export async function raiseTicketInvoice(input: {
 		.from(travelAssistanceRequests)
 		.where(eq(travelAssistanceRequests.id, existing.id))
 		.limit(1);
+	emitDomain(
+		"travel.updated",
+		{ requestId: existing.id, applicationId: existing.applicationId, status: updated?.status ?? "invoiced" },
+		{ ops: true, userId: applicant.userId ?? null },
+	);
 	return serialize(updated);
 }
 
@@ -652,6 +678,17 @@ export async function markTicketPaid(requestId: string): Promise<void> {
 			}).catch(() => {});
 		}
 	}
+
+	const [paidApplicant] = await db
+		.select({ userId: applicants.userId })
+		.from(applicants)
+		.where(eq(applicants.id, existing.applicantId))
+		.limit(1);
+	emitDomain(
+		"travel.updated",
+		{ requestId: existing.id, applicationId: existing.applicationId, status: "ticket_paid" },
+		{ ops: true, userId: paidApplicant?.userId ?? null },
+	);
 }
 
 /** Ops records the booking confirmation after the ticket is paid and issued. */
@@ -705,6 +742,11 @@ export async function recordBooking(input: {
 			link: "/portal/pre-departure",
 		}).catch(() => {});
 	}
+	emitDomain(
+		"travel.updated",
+		{ requestId: existing.id, applicationId: existing.applicationId, status: "booked" },
+		{ ops: true, userId: applicant?.userId ?? null },
+	);
 	return serialize(updated);
 }
 

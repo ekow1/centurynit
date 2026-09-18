@@ -29,6 +29,7 @@ import {
 import { applicationFeeLinesFor, createProforma, syncApplicationProformaLines } from "./invoice.js";
 import { HttpError } from "../middleware/error.js";
 import { queueEmail } from "../worker/queues.js";
+import { emitDomain } from "../worker/pubsub.js";
 import { renderSchoolOfferEmail } from "../lib/email-templates.js";
 import { formatUsd } from "./receiptEmail.js";
 import { getDocumentStorage } from "./storage/index.js";
@@ -403,6 +404,16 @@ export async function acceptOffer(
 		authorName: actor.name,
 		authorOpsUserId: actor.opsUserId ?? null,
 	});
+	const [acceptApplicant] = await db
+		.select({ userId: applicants.userId })
+		.from(applicants)
+		.where(eq(applicants.id, target.applicantId))
+		.limit(1);
+	emitDomain(
+		"school.updated",
+		{ schoolId: target.id, applicationId: app.id, universityName: target.universityName ?? null, accepted: true },
+		{ ops: true, userId: acceptApplicant?.userId ?? null },
+	);
 	return serializeSchool(target);
 }
 
@@ -568,6 +579,25 @@ export async function updateSchoolStatus(
 			console.warn("[schools] Failed to send update email to applicant:", err);
 		}
 	}
+
+	// Screens on both sides follow the track: the ops pipeline card and the
+	// portal's school list refetch on this event.
+	const [applicantRow] = await db
+		.select({ userId: applicants.userId })
+		.from(applicants)
+		.where(eq(applicants.id, target.applicantId))
+		.limit(1);
+	emitDomain(
+		"school.updated",
+		{
+			schoolId,
+			applicationId: target.applicationId ?? null,
+			universityName: target.universityName ?? null,
+			status: input.status,
+			outcome: input.outcome ?? null,
+		},
+		{ ops: true, userId: applicantRow?.userId ?? null },
+	);
 
 	return serializeSchool(updated);
 }

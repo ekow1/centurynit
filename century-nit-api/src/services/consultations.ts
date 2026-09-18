@@ -54,6 +54,7 @@ import { permissionsOfRole } from "./roles.js";
 import * as mail from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
 import { notify, notifyMany, getStaffUserId, getManagerAndCoordinatorUserIds } from "./notify.js";
+import { emitDomain } from "../worker/pubsub.js";
 
 
 import {
@@ -274,7 +275,10 @@ export async function ensureCaseForBooking(booking: {
 		.onConflictDoNothing({ target: consultations.bookingId })
 		.returning();
 
-	if (created) return created;
+	if (created) {
+		emitConsultationEvent(created, "consultation.created").catch(() => {});
+		return created;
+	}
 
 	const [again] = await db
 		.select()
@@ -471,6 +475,9 @@ export async function cancelConsultation(
 			// The consultation itself is already cancelled, which is what matters.
 		}
 	}
+
+	const [cancelled] = await db.select().from(consultations).where(eq(consultations.id, row.id)).limit(1);
+	if (cancelled) await emitConsultationEvent(cancelled, "consultation.updated");
 }
 
 /**
@@ -786,6 +793,7 @@ export async function assignConsultation(input: {
 		}
 	}
 
+	await emitConsultationEvent(updated, "consultation.updated");
 	return updated;
 }
 
@@ -887,6 +895,7 @@ export async function confirmConsultationSlot(id: string, actor: Actor): Promise
 		console.error(`[cases] failed to queue slot-confirmed email for ${row.reference}:`, err);
 	}
 
+	await emitConsultationEvent(updated, "consultation.updated");
 	return updated;
 }
 
@@ -913,6 +922,7 @@ export async function startConsultationAssessment(id: string, actor: Actor): Pro
 		authorName: actor.name,
 		authorOpsUserId: actor.opsUserId,
 	});
+	await emitConsultationEvent(updated, "consultation.updated");
 	return updated;
 }
 
@@ -940,6 +950,7 @@ export async function returnConsultationToConfirmed(id: string, actor: Actor): P
 		authorName: actor.name,
 		authorOpsUserId: actor.opsUserId,
 	});
+	await emitConsultationEvent(updated, "consultation.updated");
 	return updated;
 }
 
@@ -1037,6 +1048,10 @@ export async function completeConsultationAssessment(input: {
 			link: "/portal/tracking",
 		}).catch(() => {});
 	}
+
+	// Covers every exit below — eligible or not, the consultation is now
+	// COMPLETED and an eligible outcome may also have opened an application.
+	await emitConsultationEvent(updated, "consultation.updated");
 
 	if (!eligible) return { consultation: updated, application: null };
 
@@ -1191,6 +1206,7 @@ export async function referConsultationBranch(input: {
 		})),
 	).catch(() => {});
 
+	await emitConsultationEvent(updated, "consultation.updated");
 	return updated;
 }
 
@@ -1202,6 +1218,21 @@ export async function applicantUserIdOfConsultation(id: string): Promise<string 
 		.where(eq(consultations.id, id))
 		.limit(1);
 	return row?.userId ?? null;
+}
+
+/**
+ * Refresh signal for a consultation mutation — a domain event, not a
+ * notification. `ops:events` refreshes every console's consultation list,
+ * pipeline and work queue; the applicant's channel syncs the portal's
+ * consultation chapter. Bell entries stay with notify().
+ */
+async function emitConsultationEvent(row: ConsultationRow, type: string, extra?: Record<string, unknown>): Promise<void> {
+	const clientUserId = await applicantUserIdOfConsultation(row.id);
+	emitDomain(
+		type,
+		{ consultationId: row.id, reference: row.reference, status: row.status, ...extra },
+		{ ops: true, userId: clientUserId },
+	);
 }
 
 export async function latestConsultationForApplicant(

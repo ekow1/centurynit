@@ -2,7 +2,7 @@ import { and, desc, eq, lt } from "drizzle-orm";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { AUTH_ERROR_CODES, ROLE_RANKS, roleHasCapability, roleSchema, type OpsRole, type UpdateStaff } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { opsUsers, staffInvitations, users } from "../db/schema.js";
+import { leads, opsUsers, staffInvitations, users } from "../db/schema.js";
 import { env } from "../env.js";
 import { HttpError } from "../middleware/error.js";
 import { isUniqueViolation } from "../lib/db-errors.js";
@@ -335,6 +335,10 @@ export async function acceptInvitation(input: {
 	// Without hours they are never assignable, so a new consultant would appear
 	// permanently busy.
 	await ensureDefaultWorkingHours(opsUser.id);
+
+	// A lead captured when this address was still a client account is stale now
+	// — staff do not belong in the client pipeline.
+	await db.delete(leads).where(eq(leads.email, invitation.email.toLowerCase().trim()));
 
 	await db
 		.update(staffInvitations)

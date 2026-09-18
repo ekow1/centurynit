@@ -1,4 +1,4 @@
-import { desc, eq, ilike, or } from "drizzle-orm";
+import { and, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { applicants, applications, invoices, leads, leadEvents, opsUsers, staffInvitations } from "../db/schema.js";
 import { notifyMany, getManagerAndCoordinatorContacts, getCustomerServiceContacts } from "./notify.js";
@@ -156,14 +156,22 @@ export async function captureLeadFromUser(
 			where: eq(opsUsers.email, normalizedEmail),
 		});
 		if (isStaff) {
+			// A lead captured before the account became staff (portal signup
+			// first, invite later) is stale forever — drop it rather than leave
+			// a consultant sitting in the client pipeline.
+			await db.delete(leads).where(eq(leads.email, normalizedEmail));
 			return;
 		}
 
-		// 1b. Also check for pending staff invitations — staff are invited before opsUsers row exists
+		// 1b. Also check for pending staff invitations — staff are invited before
+		// the opsUsers row exists. Query the status directly: findFirst by email
+		// alone returns an arbitrary row, and an older REVOKED or ACCEPTED invite
+		// hiding the live PENDING one was exactly how a staff signup landed in
+		// the pipeline.
 		const pendingInvite = await db.query.staffInvitations.findFirst({
-			where: eq(staffInvitations.email, normalizedEmail),
+			where: and(eq(staffInvitations.email, normalizedEmail), eq(staffInvitations.status, "PENDING")),
 		});
-		if (pendingInvite && pendingInvite.status === "PENDING") {
+		if (pendingInvite) {
 			return;
 		}
 

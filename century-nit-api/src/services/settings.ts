@@ -219,7 +219,7 @@ export const SETTING_DEFS: Record<
 	},
 	PAYSTACK_SECRET_KEY: {
 		label: "Paystack Secret Key",
-		group: "Payments",
+		group: "Payment Gateways",
 		secret: true,
 		description:
 			"Server-side Paystack key used to open and verify applicant invoice checkouts. Starts with sk_live_ or sk_test_.",
@@ -275,7 +275,7 @@ export const SETTING_DEFS: Record<
 	},
 	STRIPE_SECRET_KEY: {
 		label: "Stripe Secret Key",
-		group: "Payments",
+		group: "Payment Gateways",
 		secret: true,
 		description:
 			"Server-side Stripe key used for international USD/GBP card checkouts. Starts with sk_live_ or sk_test_.",

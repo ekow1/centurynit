@@ -8,18 +8,18 @@ import { roleSchema } from "./ops.js";
  * plugins and are documented by them; nothing here re-declares those. What lives
  * here is the part that is ours: how staff accounts come into existence.
  *
- * Clients self-register. Staff never do — a staff account exists only because
+ * Clients self-register. Staff never do. A staff account exists only because
  * somebody with the authority invited it, which is why there is no staff
  * sign-up endpoint anywhere in this API.
  */
 
-/* ── Phone numbers ───────────────────────────────────────────────────────── */
+/* Phone numbers */
 
 /**
  * E.164, e.g. `+233241234567`.
  *
  * Stored canonically so the same phone cannot register twice under two
- * spellings — `0241234567` and `+233241234567` are one person, and a unique
+ * spellings. `0241234567` and `+233241234567` are one person, and a unique
  * index only helps if the value is normalised before it reaches the database.
  */
 export const phoneNumberSchema = z
@@ -43,7 +43,7 @@ export function toE164(input: string, defaultCountryCode = "233"): string {
 	return trimmed;
 }
 
-/* ── Staff invitations ───────────────────────────────────────────────────── */
+/* Staff invitations */
 
 export const createInvitationSchema = z.object({
 	email: z.string().email(),
@@ -55,7 +55,7 @@ export type CreateInvitation = z.infer<typeof createInvitationSchema>;
 
 /**
  * Accepting an invitation is where the account is actually created, so the
- * invitee — not the inviter — chooses the password. Nobody else ever knows it.
+ * invitee, not the inviter, chooses the password. Nobody else ever knows it.
  * The invitee also enters their own name (unless the inviter already provided one).
  */
 export const acceptInvitationSchema = z
@@ -96,7 +96,7 @@ export type Invitation = z.infer<typeof invitationSchema>;
 /**
  * Returned once, to the person who created the invitation.
  *
- * The link is normally emailed, but email delivery is optional in this system —
+ * The link is normally emailed, but email delivery is optional in this system,
  * without it an invitation would be undeliverable and the whole flow unusable.
  * Handing the link back to the authorised inviter lets them pass it on
  * themselves, and costs nothing: they are the one person who is already allowed
@@ -111,7 +111,7 @@ export const createdInvitationSchema = invitationSchema.extend({
 
 export type CreatedInvitation = z.infer<typeof createdInvitationSchema>;
 
-/** What an invitee is shown before choosing a password — never the token itself. */
+/** What an invitee is shown before choosing a password. Never the token itself. */
 export const invitationPreviewSchema = z.object({
 	email: z.string().email(),
 	name: z.string().nullable(),
@@ -119,7 +119,7 @@ export const invitationPreviewSchema = z.object({
 	branch: z.string().nullable(),
 	organisation: z.string(),
 	expiresAt: z.string().datetime(),
-	/** The email already has a login — accept verifies that password instead of creating one. */
+	/** The email already has a login. Accept verifies that password instead of creating one. */
 	hasExistingLogin: z.boolean(),
 });
 export type InvitationPreview = z.infer<typeof invitationPreviewSchema>;
@@ -137,14 +137,14 @@ export const updateStaffSchema = z
 	);
 export type UpdateStaff = z.infer<typeof updateStaffSchema>;
 
-/* ── Two-factor ──────────────────────────────────────────────────────────── */
+/* Two-factor */
 
 /**
  * Whether the caller has MFA, and whether their role obliges them to have it.
  *
  * `required && !enabled` is the state the ops app blocks on: staff hold other
  * people's data, so they enrol before reaching any case screen. Clients may
- * enable it but are never forced — a consultancy that makes applicants install
+ * enable it but are never forced. A consultancy that makes applicants install
  * an authenticator app before booking loses bookings.
  */
 export const twoFactorStatusSchema = z.object({
@@ -169,7 +169,7 @@ export function mfaRequiredForRole(role: string | null | undefined): boolean {
 	return Boolean(role) && (MFA_REQUIRED_ROLES as readonly string[]).includes(role!);
 }
 
-/* ── Error codes the frontend branches on ────────────────────────────────── */
+/* Error codes the frontend branches on */
 
 export const AUTH_ERROR_CODES = {
 	INVITATION_INVALID: "INVITATION_INVALID",
@@ -184,7 +184,7 @@ export const AUTH_ERROR_CODES = {
 
 export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[keyof typeof AUTH_ERROR_CODES];
 
-/* ── Auth settings ───────────────────────────────────────────────────────── */
+/* Auth settings */
 
 /** MFA method options. */
 export const mfaMethodSchema = z.enum(["totp", "email_otp"]);
@@ -216,17 +216,18 @@ export const authSettingsSchema = z.object({
 });
 export type AuthSettingsResponse = z.infer<typeof authSettingsSchema>;
 
-/** Update auth settings — partial, any field can be sent. */
+/** Update auth settings. Partial, any field can be sent. */
 export const updateAuthSettingsSchema = z.object({
 	portal: portalAuthSettingsSchema.partial().optional(),
 	ops: opsAuthSettingsSchema.partial().optional(),
 });
 export type UpdateAuthSettings = z.infer<typeof updateAuthSettingsSchema>;
 
-/** MFA enrollment — user picks their method. */
+/** MFA enrollment. User picks their method. Password is required only for
+ * accounts that have one; passwordless (social) accounts enrol without it. */
 export const enrollMfaSchema = z.object({
 	method: mfaMethodSchema,
-	password: z.string().min(12),
+	password: z.string().min(12).optional(),
 });
 export type EnrollMfa = z.infer<typeof enrollMfaSchema>;
 
@@ -237,12 +238,25 @@ export const mfaEnrollmentSchema = z.object({
 	required: z.boolean(),
 	availableMethods: z.array(mfaMethodSchema),
 	/**
-	 * Whether a second factor would protect anything.
+	 * Whether the account has a stored credential password. Social-only
+	 * accounts do not, which decides which enrolment paths are open to them:
+	 * email-otp needs none, TOTP demands one.
+	 */
+	hasPassword: z.boolean(),
+	/**
+	 * Whether the session must still pass the email-code gate before the API
+	 * answers. True for passwordless accounts enrolled in email-otp that have
+	 * not yet verified this session. The plugin's own challenge never fires
+	 * on OAuth callbacks.
+	 */
+	challengeRequired: z.boolean(),
+	/**
+	 * Whether a second factor can protect this account at all.
 	 *
-	 * False for users with no stored password — Google accounts, and
-	 * passwordless email-code sign-ins whose only factor is already the inbox.
-	 * Callers should hide the enrolment prompts entirely rather than offering a
-	 * step that cannot help (and, for those users, cannot even complete).
+	 * False only when nothing offered can apply. A passwordless account when
+	 * email-otp is switched off. Passwordless accounts stay applicable while
+	 * email-otp is available; enrolled accounts always stay applicable so the
+	 * controls to change an active second factor never vanish.
 	 */
 	applicable: z.boolean(),
 });

@@ -124,12 +124,12 @@ export function PortalMfaSetup() {
 		}
 	}
 
-	async function beginOtp(e: React.FormEvent) {
-		e.preventDefault();
+	async function beginOtp(e?: React.FormEvent) {
+		e?.preventDefault();
 		setBusy(true);
 		setError(null);
 		try {
-			await enrollMfa("email_otp", password);
+			await enrollMfa("email_otp", password || undefined);
 			setOtpSent(true);
 			setStep("otp-verify");
 		} catch (err) {
@@ -143,7 +143,7 @@ export function PortalMfaSetup() {
 		setBusy(true);
 		setError(null);
 		try {
-			await enrollMfa("email_otp", password);
+			await enrollMfa("email_otp", password || undefined);
 			setOtpSent(true);
 			setCode("");
 		} catch (err) {
@@ -185,9 +185,9 @@ export function PortalMfaSetup() {
 
 	/*
 	 * This page is reachable by direct URL, so the guard belongs here and not
-	 * only on the links into it. Without a stored password there is nothing for
-	 * a second factor to protect — and enrolment asks for that very password, so
-	 * the wizard could never complete. Explain rather than show a dead end.
+	 * only on the links into it. `applicable` is false only when the account
+	 * holds no password AND email-code MFA is switched off. The one account
+	 * shape with no factor to offer.
 	 *
 	 * Anyone already enrolled keeps the full page regardless, so a second factor
 	 * can always be inspected and changed by the person who set it up.
@@ -205,14 +205,16 @@ export function PortalMfaSetup() {
 						This doesn't apply to your account
 					</p>
 					<p className="muted" style={{ fontSize: "var(--text-sm)" }}>
-						You sign in without a Century NIT password, so there is no password here
-						for a second step to protect. Your account is secured by whichever
-						provider you sign in with — add two-factor authentication there instead.
+						You sign in without a Century NIT password and email-code verification is
+						switched off, so there is no second factor available here. Message us if
+						you want one turned on.
 					</p>
 				</div>
 			</div>
 		);
 	}
+
+	const passwordless = status?.hasPassword === false;
 
 	return (
 		<div className="portal-section" style={{ maxWidth: 560 }}>
@@ -222,7 +224,7 @@ export function PortalMfaSetup() {
 			<p className="eyebrow">Security</p>
 			<h1 className="page-title mt-1">Two-factor authentication</h1>
 			<p className="lead mt-2" style={{ marginBottom: "1.5rem" }}>
-				Add a second layer of security to your account. We recommend it — your application documents and
+				Add a second layer of security to your account. We recommend it. Your application documents and
 				payment history are sensitive, and MFA stops anyone else from signing in even if they learn your
 				password.
 			</p>
@@ -246,11 +248,14 @@ export function PortalMfaSetup() {
 				<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
 					<button
 						type="button"
+						disabled={passwordless}
 						onClick={() => {
 							setMethod("totp");
 							setStep("totp-password");
 						}}
 						className="portal-mfa-option"
+						style={passwordless ? { opacity: 0.45, cursor: "default" } : undefined}
+						title={passwordless ? "An authenticator app needs an account password. Set one first." : undefined}
 					>
 						<span className="portal-mfa-option__icon" aria-hidden>
 							<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -260,14 +265,19 @@ export function PortalMfaSetup() {
 						</span>
 						<span className="portal-mfa-option__body">
 							<span className="portal-mfa-option__title">Authenticator app</span>
-							<span className="portal-mfa-option__sub">Google Authenticator, Authy, 1Password — scan a QR code</span>
+							<span className="portal-mfa-option__sub">
+								{passwordless
+									? "Needs an account password. Set one in Profile → Security first"
+									: "Google Authenticator, Authy, 1Password. Scan a QR code"}
+							</span>
 						</span>
 					</button>
 					<button
 						type="button"
 						onClick={() => {
 							setMethod("email_otp");
-							setStep("otp-password");
+							if (passwordless) void beginOtp();
+							else setStep("otp-password");
 						}}
 						className="portal-mfa-option"
 					>
@@ -389,7 +399,7 @@ export function PortalMfaSetup() {
 							{copied ? "Copied!" : "Copy all codes"}
 						</button>
 						<button type="button" className="btn btn--primary" onClick={() => setStep("done")}>
-							I have saved them — Continue
+							I have saved them. Continue
 						</button>
 					</div>
 				</div>

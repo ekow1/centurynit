@@ -134,7 +134,7 @@ export function PortalProfile() {
 
 	/**
 	 * Documents are server-backed (R2 via presigned URLs). The profile shows a
-	 * read-only summary, so a light fetch-on-mount is enough — the vault screen
+	 * read-only summary, so a light fetch-on-mount is enough. The vault screen
 	 * is where uploads happen.
 	 */
 	const [liveDocs, setLiveDocs] = useState<Map<string, ApplicantDocument> | null>(null);
@@ -146,7 +146,7 @@ export function PortalProfile() {
 				if (active) setLiveDocs(new Map(res.documents.map((d) => [d.documentType, d])));
 			})
 			.catch(() => {
-				/* leave null — the summary shows "-" until it can load */
+				/* leave null. The summary shows "-" until it can load */
 			});
 		return () => {
 			active = false;
@@ -161,7 +161,7 @@ export function PortalProfile() {
 				if (active) setMfaStatus(s);
 			})
 			.catch(() => {
-				/* leave null — section shows "-" until it can load */
+				/* leave null. Section shows "-" until it can load */
 			});
 		return () => {
 			active = false;
@@ -361,13 +361,13 @@ export function PortalProfile() {
 					<p className="eyebrow">Profile</p>
 					<h1 className="page-title mt-1">Your file</h1>
 					<p className="lead mt-2">
-						What Century NIT holds on you — identity, qualifications, aspirations, documents.
+						What Century NIT holds on you. Identity, qualifications, aspirations, documents.
 						Edit in place; your consultant sees the same record.
 					</p>
 				</div>
 			</header>
 
-			{/* The cover — who this file is, references at a glance */}
+			{/* The cover. Who this file is, references at a glance */}
 			<section className="pcover mt-4">
 				<div className="profile-avatar" style={{ position: "relative" }}>
 					<Avatar name={fullName} image={authUser?.image} className="profile-monogram" />
@@ -406,8 +406,8 @@ export function PortalProfile() {
 				<div className="pcover__refs">
 					<div><p className="pcover__k">Application</p><p className="pcover__v">{a.appNumber ?? "Not issued"}</p></div>
 					<div><p className="pcover__k">Consultation</p><p className="pcover__v">{booking.confirmationId ?? "Not booked"}</p></div>
-					<div><p className="pcover__k">Documents</p><p className="pcover__v">{liveDocs ? `${uploadedDocs}/${totalDocs}` : "—"}</p></div>
-					<div><p className="pcover__k">Intake</p><p className="pcover__v">{titleCase(a.intake || ass.intakePreference) || "—"}</p></div>
+					<div><p className="pcover__k">Documents</p><p className="pcover__v">{liveDocs ? `${uploadedDocs}/${totalDocs}` : "N/A"}</p></div>
+					<div><p className="pcover__k">Intake</p><p className="pcover__v">{titleCase(a.intake || ass.intakePreference) || "N/A"}</p></div>
 				</div>
 			</section>
 
@@ -440,7 +440,7 @@ export function PortalProfile() {
 			) : null}
 
 			<div className="psplit psplit--profile mt-4">
-				{/* The index — jump, don't scroll */}
+				{/* The index. Jump, don't scroll */}
 				<nav className="pindex" aria-label="File sections">
 					<a href="#p-identity"><span>Identity</span><span className="pindex__n">01</span></a>
 					<a href="#p-passport"><span>Passport</span><span className="pindex__n">02</span></a>
@@ -472,7 +472,7 @@ export function PortalProfile() {
 						</div>
 					) : (
 						<>
-							{/* 01 — identity & contact */}
+							{/* 01. Identity & contact */}
 							<div className="dossier-card" id="p-identity">
 								<div className="dossier-card__head">
 									<h2 className="dossier-card__title">Identity &amp; contact</h2>
@@ -506,7 +506,7 @@ export function PortalProfile() {
 								</div>
 							</div>
 
-							{/* 02 — passport */}
+							{/* 02. Passport */}
 							<div className="dossier-card" id="p-passport">
 								<div className="dossier-card__head">
 									<h2 className="dossier-card__title">Passport &amp; travel ID</h2>
@@ -520,7 +520,7 @@ export function PortalProfile() {
 								</div>
 							</div>
 
-							{/* 03 — academics & work */}
+							{/* 03. Academics & work */}
 							<div className="dossier-card" id="p-academics">
 								<div className="dossier-card__head">
 									<h2 className="dossier-card__title">Academics &amp; work</h2>
@@ -544,7 +544,7 @@ export function PortalProfile() {
 						</>
 					)}
 
-					{/* 04 — aspirations & funding */}
+					{/* 04. Aspirations & funding */}
 					<div className="dossier-card" id="p-aspirations">
 						<div className="dossier-card__head">
 							<h2 className="dossier-card__title">Aspirations &amp; funding</h2>
@@ -607,11 +607,11 @@ export function PortalProfile() {
 						)}
 					</div>
 
-					{/* 05 — on record: the merged read-only card (was four repeating cards) */}
+					{/* 05. On record: the merged read-only card (was four repeating cards) */}
 					<div className="dossier-card" id="p-record">
 						<div className="dossier-card__head">
 							<h2 className="dossier-card__title">On record</h2>
-							<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>SET BY YOUR FILE — READ ONLY</span>
+							<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>SET BY YOUR FILE. READ ONLY</span>
 						</div>
 						<div className="dossier-grid">
 							<DossierField label="Service Package" value={packageName || "Standard Advisory"} />
@@ -636,7 +636,7 @@ export function PortalProfile() {
 						</div>
 					</div>
 
-					{/* 06 — documents */}
+					{/* 06. Documents */}
 					<div className="dossier-card" id="p-documents">
 						<div className="dossier-card__head">
 							<h2 className="dossier-card__title">Documents</h2>
@@ -712,7 +712,7 @@ export function PortalProfile() {
 						</ul>
 					</div>
 
-					{/* 07 — security */}
+					{/* 07. Security */}
 					<div className="dossier-card" id="p-security">
 						<div className="dossier-card__head">
 							<h2 className="dossier-card__title">Security</h2>
@@ -750,8 +750,8 @@ export function PortalProfile() {
 									) : (
 										<span className="muted">
 											{authUser?.method === "google"
-												? "Managed by your Google account — password not required"
-												: "Managed by your sign-in provider — password not required"}
+												? "Managed by your Google account. Password not required"
+												: "Managed by your sign-in provider. Password not required"}
 										</span>
 									)
 								}
@@ -769,9 +769,9 @@ export function PortalProfile() {
 												: ""}
 										</span>
 									) : mfaStatus.applicable === false ? (
-										<span className="muted">Not applicable</span>
+										<span className="muted">Unavailable. Email codes are switched off</span>
 									) : (
-										<span className="muted">Not set — recommended</span>
+										<span className="muted">Not set. Recommended</span>
 									)
 								}
 							/>
@@ -785,7 +785,7 @@ export function PortalProfile() {
 						<p className="muted mt-3" style={{ fontSize: "var(--text-sm)", maxWidth: "42rem", padding: "0 1.25rem 1.25rem" }}>
 							{authUser?.method === "email"
 								? "Add a second step at sign-in to keep your application documents and payment history safe. If you use a password, keep it strong and change it if you ever suspect it has been compromised."
-								: "You sign in using a single sign-on provider. Your account password and security settings are managed directly by that provider."}
+								: "You sign in with a provider. Protect this account with an email code at each sign-in. Setting a password also unlocks the authenticator-app option."}
 						</p>
 					</div>
 
@@ -993,21 +993,21 @@ const JMAP_UNLOCK: Record<ChapterId, keyof JourneyChapterUnlocks> = {
 	done: "complete",
 };
 
-/** What opens a locked chapter — the hint under its blurb. */
+/** What opens a locked chapter. The hint under its blurb. */
 const JMAP_HINT: Record<ChapterId, string> = {
 	consult: "Book your consultation to begin.",
 	enrol: "Opens once your assessment says you can proceed.",
 	apply: "Opens once your enrolment is confirmed and the deposit is paid.",
 	visa: "Opens when a school admits you. The visa fee is paid here, then your file goes to the visa officer.",
-	depart: "Your flight is booked first — the pre-departure milestone follows it and releases your documents.",
-	done: "The last chapter — reached when the flight is booked and the checklist is done.",
+	depart: "Your flight is booked first. The pre-departure milestone follows it and releases your documents.",
+	done: "The last chapter. Reached when the flight is booked and the checklist is done.",
 };
 
 /**
- * Journey — six chapters with the fine steps nested inside the live one.
+ * Journey. Six chapters with the fine steps nested inside the live one.
  * Done chapters collapse to one mono line of facts; locked chapters explain
  * what opens them. Everything is derived from `stageStatuses` /
- * `chapterUnlocks` (`/me/journey`) — the page never guesses.
+ * `chapterUnlocks` (`/me/journey`). The page never guesses.
  */
 export function PortalJourney() {
 	const { journeyPhase, application, schoolApplications, stageStatuses, chapterUnlocks, booking } = useAppState();
@@ -1054,7 +1054,7 @@ export function PortalJourney() {
 		return sts.every((s) => s === "done" || s === "skipped") ? "done" : "locked";
 	};
 
-	// Done chapters collapse to one mono line — the facts, not the steps.
+	// Done chapters collapse to one mono line. The facts, not the steps.
 	const doneLine = (ch: ChapterId): ReactNode => {
 		const parts = stepsFor(ch).map((s) => `${PORTAL_STEP[s as PortalStepId].short} ✓`);
 		let tail: string | null = null;
@@ -1065,17 +1065,17 @@ export function PortalJourney() {
 		return (
 			<>
 				{parts.join(" · ")}
-				{tail ? <> — <b>{tail}</b></> : null}
+				{tail ? <>. <b>{tail}</b></> : null}
 			</>
 		);
 	};
 
-	// Money snapshot for the rail — from the case record, no extra fetch.
+	// Money snapshot for the rail. From the case record, no extra fetch.
 	const depositState = application.agencyDepositPaid
 		? "Paid ✓"
 		: application.agencyTotal > 0
 			? "Due"
-			: "—";
+			: "N/A";
 	const appFeeState = isAppInvoicePaid(application)
 		? "Paid ✓"
 		: application.applicationInvoice.status === "raised"
@@ -1095,7 +1095,7 @@ export function PortalJourney() {
 					<p className="eyebrow">Dashboard · Journey</p>
 					<h1 className="page-title mt-1">Your journey</h1>
 					<p className="lead mt-2">
-						Six chapters, start to departure. This is the map — every card opens its page.
+						Six chapters, start to departure. This is the map. Every card opens its page.
 					</p>
 				</div>
 			</header>
@@ -1104,7 +1104,7 @@ export function PortalJourney() {
 			<div className="journey-now mt-4">
 				<div>
 					<p className="eyebrow">
-						Chapter {chapterMeta?.numeral} · {chapterMeta?.label} — you are here
+						Chapter {chapterMeta?.numeral} · {chapterMeta?.label}. You are here
 					</p>
 					<p className="display journey-now__title">{journeyPhase.label}</p>
 					{journeyPhase.nextUnlock ? (
@@ -1187,7 +1187,7 @@ export function PortalJourney() {
 					</div>
 				</div>
 
-				{/* the rail — consultant, money, the release terms */}
+				{/* the rail. Consultant, money, the release terms */}
 				<div className="prail">
 					<div className="sharp-card">
 						<p className="eyebrow">Your consultant</p>
@@ -1205,7 +1205,7 @@ export function PortalJourney() {
 							</>
 						) : (
 							<p className="muted" style={{ fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
-								Assigned after your enrolment deposit — usually within 1–2 business days.
+								Assigned after your enrolment deposit. Usually within 1–2 business days.
 							</p>
 						)}
 					</div>
@@ -1241,7 +1241,7 @@ export function PortalJourney() {
 						<p className="eyebrow">While you wait</p>
 						<p className="muted" style={{ marginTop: "0.5rem", fontSize: "var(--text-sm)" }}>
 							Your admission letter and visa documents are released when the pre-departure milestone
-							is paid — that's the agreement, so nothing surprises you later.
+							is paid. That's the agreement, so nothing surprises you later.
 						</p>
 					</div>
 				</div>
@@ -1252,15 +1252,15 @@ export function PortalJourney() {
 
 /* ========== Financial ========== */
 
-/** Payment execution — confirm the plan, settle the service fee, cover travel. */
+/** Payment execution. Confirm the plan, settle the service fee, cover travel. */
 /** The Fees chapter lives in PortalFeesChapter; the ledger stays here. */
 
 /** Financial - every payment, settlement, and what's still outstanding.
  *
  * Two surfaces share this component:
- *  • `view="ledger"` (the /portal/financial page) — a read-only statement of
+ *  • `view="ledger"` (the /portal/financial page). A read-only statement of
  *    every invoice, receipt and university deposit.
- *  • `view="plan"` (the /portal/payment-execution chapter) — the payment
+ *  • `view="plan"` (the /portal/payment-execution chapter). The payment
  *    plan picker, service-fee milestones and the travel invoice position. */
 export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" } = {}) {
 	const { application, booking, schoolApplications, choosePaymentPlan, choosePostArrivalSchedule, payAgencyInstallment, enabledPostArrivalSchedules, customPostArrivalSchedules, fees, syncFromServer } = useAppState();
@@ -1281,7 +1281,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 		try {
 			await meApi.completeApplication();
 			await syncFromServer();
-			toast.success("Your journey is complete — welcome to Century NIT.");
+			toast.success("Your journey is complete. Welcome to Century NIT.");
 			nav("/portal/home");
 		} catch (err) {
 			toast.error(
@@ -1293,7 +1293,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 		}
 	}
 
-	// ── Invoice fetching from the real API ───────────────────────────────
+	// Invoice fetching from the real API
 	const [invoices, setInvoices] = useState<ApiInvoice[]>([]);
 	const [invoicesLoaded, setInvoicesLoaded] = useState(false);
 
@@ -1339,7 +1339,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 		load();
 	}, []);
 
-	// ── Derived from fetched invoices (fallback to AppState + hardcoded) ──
+	// Derived from fetched invoices (fallback to AppState + hardcoded)
 	const consultationPaid = booking.paymentStatus === "success";
 
 	// Find the application‑type and visa‑type invoice from the API list
@@ -1385,14 +1385,14 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 		}
 	}
 
-	// Fees the applicant will owe but that have not been raised yet — without
+	// Fees the applicant will owe but that have not been raised yet. Without
 	// these the top band reads GH₵0 / GH₵0 for most of the journey
 	// Application fees are the universities' own and unknown until raised; visa costs are the destination's from the catalogue.
 	const appNotRaised = 0;
 	const visaNotRaised = a.visaInvoice.status === "none" ? usdFromCents(visaCostsCentsFor(fees?.catalogue, a.destinationId)) : 0;
 	const notYetRaised = (consultationPaid ? 0 : usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents)) + appNotRaised + visaNotRaised;
 
-	// "Due now" vs "still to come" — the position band splits outstanding by
+	// "Due now" vs "still to come". The position band splits outstanding by
 	// whether it's actually payable yet. The agency balance isn't due while it
 	// waits on its milestone order (deposit → pre-departure → post-arrival).
 	const depositAmt = Math.round(a.agencyTotal * AGENCY_DEPOSIT_PORTION);
@@ -1423,7 +1423,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 				? "/portal/package"
 				: "/portal/payment-execution";
 
-	// Every recorded payment across all invoices, newest first — shown as the
+	// Every recorded payment across all invoices, newest first. Shown as the
 	// "Payment receipts" section so the applicant can see what they've paid.
 	const receipts = invoicesLoaded
 		? invoices
@@ -1471,7 +1471,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 					</h1>
 					<p className="lead mt-2">
 						{planView
-							? "Your visa is approved. Your flight is booked first; then this milestone releases your admission letter and visa documents — the balance on a full plan, the pre-departure instalment otherwise. Any post-arrival remainder follows on your schedule."
+							? "Your visa is approved. Your flight is booked first; then this milestone releases your admission letter and visa documents. The balance on a full plan, the pre-departure instalment otherwise. Any post-arrival remainder follows on your schedule."
 							: "Every fee, invoice, and balance - what's paid and what's outstanding."}
 					</p>
 				</div>
@@ -1479,7 +1479,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 
 			{!planView ? (
 				<>
-				{/* the position — paid / due now / still to come */}
+				{/* the position. Paid / due now / still to come */}
 				<div className="pposition mt-4">
 					<div>
 						<p className="eyebrow">Paid to date</p>
@@ -1511,7 +1511,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 
 				<div className="psplit">
 					<div>
-						{/* the ledger — every fee as a chapter-numbered row */}
+						{/* the ledger. Every fee as a chapter-numbered row */}
 						<section>
 							<h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.75rem" }}>The ledger</h2>
 							<table className="ptable">
@@ -1572,10 +1572,10 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 												<span className="ptable__sub">{agencyInvoiceType.invoiceNumber}</span>
 											) : null}
 										</td>
-										<td>Enrolment — assigns your consultant</td>
+										<td>Enrolment. Assigns your consultant</td>
 										<td>At enrolment</td>
 										<td className="ptable__amt">
-											{a.agencyTotal > 0 ? <Money usd={depositAmt} /> : "—"}
+											{a.agencyTotal > 0 ? <Money usd={depositAmt} /> : "N/A"}
 										</td>
 										<td>
 											<span
@@ -1618,9 +1618,9 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 											) : null}
 										</td>
 										<td>Submissions to your selected schools</td>
-										<td>{appPaid ? "—" : appOutstanding > 0 ? "Now" : "After school selection"}</td>
+										<td>{appPaid ? "N/A" : appOutstanding > 0 ? "Now" : "After school selection"}</td>
 										<td className="ptable__amt">
-											{appInvoiceAmount > 0 ? <Money usd={appInvoiceAmount} /> : "—"}
+											{appInvoiceAmount > 0 ? <Money usd={appInvoiceAmount} /> : "N/A"}
 										</td>
 										<td>
 											<span
@@ -1660,7 +1660,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 										<td>Your visa file</td>
 										<td>When a school admits you</td>
 										<td className="ptable__amt">
-											{visaInvoiceAmount > 0 ? <Money usd={visaInvoiceAmount} /> : "—"}
+											{visaInvoiceAmount > 0 ? <Money usd={visaInvoiceAmount} /> : "N/A"}
 										</td>
 										<td>
 											<span
@@ -1712,7 +1712,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 													}
 												/>
 											) : (
-												"—"
+												"N/A"
 											)}
 										</td>
 										<td>
@@ -1799,7 +1799,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 								</tbody>
 							</table>
 						</section>
-						{/* Second ledger — deliberately never merged with the one above.
+						{/* Second ledger. Deliberately never merged with the one above.
 						    Century NIT does not collect tuition, and a combined total would
 						    imply that it does. */}
 						{offers.length > 0 ? (
@@ -1809,7 +1809,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 									<div>
 										<p className="eyebrow">University tuition</p>
 										<p className="uni-ledger__sub">
-											Paid directly to the institution — not to Century NIT
+											Paid directly to the institution. Not to Century NIT
 										</p>
 									</div>
 								</header>
@@ -1838,7 +1838,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 								))}
 
 								<p className="uni-ledger__note">
-									You pay tuition for the <strong>one</strong> institution you take up — these
+									You pay tuition for the <strong>one</strong> institution you take up. These
 									figures are not cumulative, and none of them is billed by Century NIT.
 								</p>
 							</div>
@@ -1850,12 +1850,12 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 							Each invoice is itemised by your consultant and may add handling fees, so the
 							amounts above are the base figures. The application invoice grows by{" "}
 							<MoneyInline usd={usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents)} /> for each school you add. Cedi amounts
-							convert at GH₵{GHS_RATE} to $1. University tuition is never billed here — it is paid
+							convert at GH₵{GHS_RATE} to $1. University tuition is never billed here. It is paid
 							directly to the institution.
 						</p>
 					</section>
 
-					{/* Payment receipts — every recorded payment across all invoices */}
+					{/* Payment receipts. Every recorded payment across all invoices */}
 					{receipts.length > 0 ? (
 						<section className="mt-6">
 							<h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.75rem" }}>Receipts</h2>
@@ -1909,7 +1909,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 					) : null}
 					</div>
 
-					{/* the rail — next payment, plan, the fixed order */}
+					{/* the rail. Next payment, plan, the fixed order */}
 					<div className="prail">
 						<div className="sharp-card sharp-card--key">
 							<p className="eyebrow">Next payment</p>
@@ -1924,7 +1924,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 								</>
 							) : (
 								<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.5 }}>
-									Nothing due right now — the next fee arrives with its chapter.
+									Nothing due right now. The next fee arrives with its chapter.
 								</p>
 							)}
 						</div>
@@ -1963,8 +1963,8 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 						<div className="sharp-card">
 							<p className="eyebrow">Two pots of money</p>
 							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
-								<strong>Ledger</strong> — fees to Century NIT, in a fixed chapter order.<br /><br />
-								<strong>Universities</strong> — tuition and deposits paid to the school itself, on
+								<strong>Ledger</strong>. Fees to Century NIT, in a fixed chapter order.<br /><br />
+								<strong>Universities</strong>. Tuition and deposits paid to the school itself, on
 								the offer's terms. We never hold university money.
 							</p>
 						</div>
@@ -1973,7 +1973,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 							<p className="eyebrow">The order is fixed</p>
 							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
 								Deposit at enrolment · application fee at submissions · visa fee after an offer · the
-								milestone once your flight is booked — your letter, visa documents and e-ticket
+								milestone once your flight is booked. Your letter, visa documents and e-ticket
 								are released with it.
 							</p>
 						</div>
@@ -1982,12 +1982,12 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 				</>
 			) : null}
 
-			{/* Payment plan — full width */}
+			{/* Payment plan. Full width */}
 			{planView ? (
 				<section className="mt-6">
 				<p className="eyebrow mb-3">Payment plan</p>
 
-				{/* Step 1: Deposit — must be paid before plan selection */}
+				{/* Step 1: Deposit. Must be paid before plan selection */}
 				{!depositPaid && a.agencyTotal > 0 ? (
 					<div className="agency-deposit-gate">
 						<p className="agency-deposit-gate__title">Pay your service fee deposit first</p>
@@ -2000,7 +2000,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 					</div>
 				) : null}
 
-				{/* Step 2: Plan picker — locked until deposit is paid */}
+				{/* Step 2: Plan picker. Locked until deposit is paid */}
 				{depositPaid ? (
 					<>
 						<div className="plan-picker plan-picker--row">
@@ -2032,7 +2032,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 						</div>
 						<p className="muted mt-3" style={{ fontSize: "0.9rem" }}>
 							{plan
-								? `Chosen ${a.paymentPlanChosenAt ? new Date(a.paymentPlanChosenAt).toLocaleDateString() : ""} — switch any time before the balance falls due.`
+								? `Chosen ${a.paymentPlanChosenAt ? new Date(a.paymentPlanChosenAt).toLocaleDateString() : ""}. Switch any time before the balance falls due.`
 								: "Deposit paid! Pick how you'd like to settle the remaining balance."}
 						</p>
 					</>
@@ -2040,7 +2040,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 			</section>
 			) : null}
 
-			{/* Service fee milestones — full width */}
+			{/* Service fee milestones. Full width */}
 			{a.agencyTotal > 0 && planView ? (
 				<section className="mt-6">
 					<p className="eyebrow mb-3">Service fee · milestones</p>
@@ -2093,7 +2093,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 										</div>
 									</div>
 
-									{/* Remaining balance — only after deposit + plan chosen */}
+									{/* Remaining balance. Only after deposit + plan chosen */}
 									{depositPaid && plan ? (
 										a.paymentPlanId === "full" ? (
 											<div className="ledger-item">
@@ -2266,7 +2266,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 																	: (() => {
 																			const sched = POST_ARRIVAL_SCHEDULES.find((s) => s.id === a.postArrivalSchedule);
 																			const remaining = sched ? sched.payments - a.postArrivalPaymentIndex : 0;
-																			return `${Math.round((a.agencyPaid / a.agencyTotal) * 100)}% paid — ${remaining} ${sched?.label ?? ""} payment${remaining === 1 ? "" : "s"} remaining.`;
+																			return `${Math.round((a.agencyPaid / a.agencyTotal) * 100)}% paid · ${remaining} ${sched?.label ?? ""} payment${remaining === 1 ? "" : "s"} remaining.`;
 																		})()
 											}
 										</p>
@@ -2278,7 +2278,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 
 			{planView ? (
 				<p className="muted mt-5" style={{ maxWidth: "36rem" }}>
-					Your full invoice ledger — consultation, application, visa and the travel invoice —
+					Your full invoice ledger (consultation, application, visa and the travel invoice)
 					is always on the{" "}
 					<Link className="link" to="/portal/financial">Financial</Link> page.
 				</p>
@@ -2288,7 +2288,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 					{a.preDepartureCompletedAt ? (
 						<>
 							<p className="mt-0 mb-2">
-								Your plan is settled. Finish the last step — complete your journey and
+								Your plan is settled. Finish the last step. Complete your journey and
 								your consultant picks you up for the post-arrival plan.
 							</p>
 							<Button
@@ -2303,7 +2303,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 						<>
 							<p className="mt-0 mb-2">
 								Your plan is settled. Finish your pre-departure checklist so your
-								handler can clear you — then you can complete your journey.
+								handler can clear you. Then you can complete your journey.
 							</p>
 							<Button className="btn btn--primary" to="/portal/pre-departure">
 								Open travel checklist

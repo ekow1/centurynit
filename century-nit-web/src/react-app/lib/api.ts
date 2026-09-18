@@ -59,17 +59,24 @@ export async function getAuthSettings(): Promise<AuthSettingsResponse> {
 	return apiFetch<AuthSettingsResponse>("/api/v1/auth-settings/portal");
 }
 
-/* ── MFA enrollment (optional for clients) ───────────────────────────────── */
+/* MFA enrollment (optional for clients) */
 
 export type MfaEnrollmentStatus = {
 	enrolled: boolean;
 	method: string | null;
 	required: boolean;
 	availableMethods: string[];
+	/** Whether the account holds a credential password. Drives which enrol paths are open. */
+	hasPassword?: boolean;
 	/**
-	 * Whether a second factor would protect anything for this user. False for
-	 * Google and passwordless sign-ins, which hold no password here — offering
-	 * them MFA would add a step that secures nothing and cannot complete.
+	 * Passwordless accounts enrolled in email-otp MFA must pass a code per
+	 * session. The plugin's own challenge never fires on OAuth callbacks.
+	 */
+	challengeRequired?: boolean;
+	/**
+	 * Whether a second factor can be set up for this account. False only for
+	 * passwordless accounts when email-otp MFA is switched off. A password
+	 * account can always enrol, and a social account can via email code.
 	 */
 	applicable: boolean;
 };
@@ -80,7 +87,7 @@ export function getMfaEnrollment(): Promise<MfaEnrollmentStatus> {
 
 export function enrollMfa(
 	method: "totp" | "email_otp",
-	password: string,
+	password?: string,
 ): Promise<{
 	totpURI?: string;
 	backupCodes?: string[];
@@ -89,7 +96,7 @@ export function enrollMfa(
 }> {
 	return apiFetch("/api/v1/auth-settings/mfa/enroll", {
 		method: "POST",
-		body: JSON.stringify({ method, password }),
+		body: JSON.stringify(password ? { method, password } : { method }),
 	});
 }
 
@@ -102,4 +109,12 @@ export function confirmMfaOtp(code: string): Promise<{ success: boolean }> {
 
 export function sendMfaOtp(): Promise<{ sent: boolean }> {
 	return apiFetch("/api/v1/auth-settings/mfa/send-otp", { method: "POST" });
+}
+
+/** Verify the per-session email code that gates passwordless MFA sign-ins. */
+export function verifyMfaOtp(code: string): Promise<{ success: boolean }> {
+	return apiFetch("/api/v1/auth-settings/mfa/verify-otp", {
+		method: "POST",
+		body: JSON.stringify({ code }),
+	});
 }

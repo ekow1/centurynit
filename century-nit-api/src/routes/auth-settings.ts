@@ -12,6 +12,8 @@ import { getAuthInstance } from "./auth.js";
 import {
 	getAuthSettings,
 	updateAuthSetting,
+	markMfaSessionOk,
+	mfaSessionOk,
 } from "../services/auth-settings.js";
 import { sendEmail } from "../lib/resend.js";
 import { renderOtpEmail } from "../lib/email-templates.js";
@@ -184,15 +186,29 @@ authSettings.get(
 			.where(and(eq(accounts.userId, user.id), eq(accounts.providerId, "credential")));
 		const hasPassword = credentials.some((a) => Boolean(a.password));
 
+		// A passwordless email-otp enrolment is challenged per session by the
+		// mfa-ok gate — the plugin's own challenge never fires on OAuth
+		// callbacks, so "enrolled" alone doesn't mean "verified this session".
+		let challengeRequired = false;
+		if (enrolled && method === "email_otp" && !hasPassword) {
+			const auth = await getAuthInstance();
+			const sess = await auth.api.getSession({ headers: c.req.raw.headers });
+			const token = sess?.session?.token;
+			challengeRequired = token ? !(await mfaSessionOk(token)) : false;
+		}
+
 		return c.json({
 			enrolled,
 			method,
 			required: mfaRequired,
 			availableMethods,
-			// Already-enrolled users always stay applicable. Hiding the controls
-			// on an active second factor would strand them with no way to see or
-			// change it.
-			applicable: hasPassword || enrolled,
+			hasPassword,
+			challengeRequired,
+			// Passwordless accounts can enrol via email code — "applicable" only
+			// stays false when that method is switched off and they hold no
+			// credential. Already-enrolled users always stay applicable so the
+			// controls to change an active second factor never vanish.
+			applicable: hasPassword || enrolled || availableMethods.includes("email_otp"),
 		});
 	},
 );
@@ -215,11 +231,33 @@ authSettings.post(
 		// Verify password by attempting a Better Auth operation
 		const authInstance = await getAuthInstance();
 
+		// Password verification is required when the account has one. Social-only
+		// accounts have no credential row, so Better Auth's allowPasswordless
+		// skips the check for them — and only them.
+		const credentialRows = await db
+			.select({ password: accounts.password })
+			.from(accounts)
+			.where(and(eq(accounts.userId, user.id), eq(accounts.providerId, "credential")));
+		const hasPassword = credentialRows.some((a) => Boolean(a.password));
+
+		if (hasPassword && !password) {
+			throw new HttpError(400, "VALIDATION_ERROR", "Enter your account password to continue.");
+		}
+		if (method === "totp" && !hasPassword) {
+			// The plugin's challenge never fires on OAuth callbacks, so TOTP for a
+			// passwordless account would arm a factor that is never asked for.
+			throw new HttpError(
+				400,
+				"MFA_NEEDS_PASSWORD",
+				"An authenticator app needs an account password — set one first, or choose email code.",
+			);
+		}
+
 		if (method === "totp") {
 			// Enable TOTP via Better Auth's twoFactor plugin
 			// First verify password by enabling 2FA (it requires password)
 			const result = await authInstance.api.enableTwoFactor({
-				body: { password },
+				body: password ? { password } : {},
 				headers: c.req.raw.headers,
 			});
 
@@ -252,7 +290,7 @@ authSettings.post(
 			 * unused, because the code is emailed rather than generated on-device.
 			 */
 			const armed = await authInstance.api.enableTwoFactor({
-				body: { password },
+				body: password ? { password } : {},
 				headers: c.req.raw.headers,
 			});
 
@@ -436,8 +474,15 @@ authSettings.post(
 			throw new HttpError(400, "MFA_FAILED", "Incorrect code. Try again.");
 		}
 
-		// Code verified — delete it and return success
+		// Code verified — delete it and mark this session as having passed the
+		// passwordless MFA gate, for as long as the session itself lives.
 		await db.delete(verifications).where(eq(verifications.identifier, identifier));
+
+		const auth = await getAuthInstance();
+		const sess = await auth.api.getSession({ headers: c.req.raw.headers });
+		if (sess?.session?.token) {
+			await markMfaSessionOk(sess.session.token, sess.session.expiresAt);
+		}
 
 		return c.json({ success: true });
 	},

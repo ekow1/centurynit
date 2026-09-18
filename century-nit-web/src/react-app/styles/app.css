@@ -1,5 +1,5 @@
 /*
- century-nit-web only — public marketing site and applicant portal.
+ century-nit-web only. Public marketing site and applicant portal.
  Classes referenced by this app and never by the Operations Center.
  Load after century-nit-core/styles/base.css.
  */
@@ -233,7 +233,7 @@
 }
 
 /*
- * Stepper — CSS grid with stage names.
+ * Stepper. CSS grid with stage names.
  * Wraps in place; overflow hidden so no horizontal scrollbar.
  */
 
@@ -673,7 +673,7 @@
 	background: var(--background);
 }
 
-/* Every slide stays absolute forever — only opacity/z-index change */
+/* Every slide stays absolute forever. Only opacity/z-index change */
 
 .hero-slide {
 	position: absolute;
@@ -684,7 +684,7 @@
 	opacity: 0;
 	z-index: 0;
 	pointer-events: none;
-	/* Smooth crossfade — no layout properties animated */
+	/* Smooth crossfade. No layout properties animated */
 	transition: opacity 700ms ease;
 	will-change: opacity;
 	background: var(--background);
@@ -748,7 +748,7 @@
 	height: 100%;
 	object-fit: cover;
 	filter: grayscale(90%);
-	/* Subtle zoom only while active — GPU-friendly transform */
+	/* Subtle zoom only while active. GPU-friendly transform */
 	transform: scale(1.03);
 	transition: transform 6s linear, filter 500ms ease;
 	backface-visibility: hidden;
@@ -1264,7 +1264,7 @@
 	transform: scale(1.07);
 }
 
-/* Gradient scrim — readable text over photo */
+/* Gradient scrim. Readable text over photo */
 
 .media-card--cover .media-card__cover-img::after {
 	content: "";
@@ -1753,7 +1753,7 @@ body.nav-open {
 }
 
 /* =========================================================
-   Applicant Portal — progressive chapter unlocks
+   Applicant Portal. Progressive chapter unlocks
    ========================================================= */
 
 .page--portal {
@@ -1843,7 +1843,7 @@ body.nav-open {
 	align-items: start;
 }
 
-/* ── Case view: the journey and outcome, with facts and next steps beside ── */
+/* Case view: the journey and outcome, with facts and next steps beside */
 .portal-case { display: grid; gap: 1.25rem; align-items: start; }
 .portal-case__main, .portal-case__side { display: flex; flex-direction: column; gap: 1.25rem; min-width: 0; }
 @media (min-width: 900px) {
@@ -2744,7 +2744,7 @@ img.profile-monogram {
 	}
 }
 
-/* Status words rather than figures — they don't need the full display size */
+/* Status words rather than figures. They don't need the full display size */
 
 .stat-cell__value--sm {
 	font-size: 1.5rem;
@@ -2980,7 +2980,7 @@ img.profile-monogram {
 	color: var(--muted-foreground);
 }
 
-/* Journey — current stage accent band */
+/* Journey. Current stage accent band */
 
 .journey-now {
 	background: var(--foreground);
@@ -3005,7 +3005,7 @@ img.profile-monogram {
 	max-width: 38rem;
 }
 
-/* Home dashboard — "what must I do now" band, above the journey band */
+/* Home dashboard. "what must I do now" band, above the journey band */
 
 .action-now {
 	border: 2px solid var(--foreground);
@@ -3030,7 +3030,7 @@ img.profile-monogram {
 	max-width: 38rem;
 }
 
-/* Journey — tracking cells */
+/* Journey. Tracking cells */
 
 .journey-track {
 	display: grid;
@@ -3599,7 +3599,7 @@ img.profile-monogram {
 	max-width: 28rem;
 }
 
-/* Brand-panel chapter preview — the six chapters the account unlocks,
+/* Brand-panel chapter preview. The six chapters the account unlocks,
    in the portal's real vocabulary. */
 .start-journey__chapters {
 	margin-top: 2rem;
@@ -3741,7 +3741,7 @@ img.profile-monogram {
 	cursor: not-allowed;
 }
 
-/* The monochrome provider mark — a bordered square holding the letter. */
+/* The monochrome provider mark. A bordered square holding the letter. */
 .auth-social__mark {
 	display: grid;
 	place-items: center;
@@ -3796,7 +3796,7 @@ img.profile-monogram {
 	margin-top: 1.25rem;
 }
 
-/* A status note (e.g. "email verified") — bordered, not the error block. */
+/* A status note (e.g. "email verified"). Bordered, not the error block. */
 .auth-note {
 	font-family: var(--font-mono);
 	font-size: 0.72rem;
@@ -3809,7 +3809,7 @@ img.profile-monogram {
 	margin-top: 1.25rem;
 }
 
-/* "or with email" — hairlines flanking a mono label. */
+/* "or with email". Hairlines flanking a mono label. */
 .auth-divider {
 	display: flex;
 	align-items: center;
@@ -3830,7 +3830,7 @@ img.profile-monogram {
 	background: var(--border-light);
 }
 
-/* Six boxed OTP cells — typing auto-advances, a filled cell inverts. */
+/* Six boxed OTP cells. Typing auto-advances, a filled cell inverts. */
 .otp-input {
 	display: flex;
 	gap: 0.5rem;
@@ -3861,7 +3861,7 @@ img.profile-monogram {
 	border-color: var(--foreground);
 }
 
-/* Password checklist — only where a password is chosen. The required row
+/* Password checklist. Only where a password is chosen. The required row
    inks its box when met; suggestions stay hollow and never block. */
 .pwcheck {
 	border: 1px solid var(--border);
@@ -3917,7 +3917,7 @@ img.profile-monogram {
 	border-style: solid;
 }
 
-/* MFA identity strip — who is being verified and where in the flow. */
+/* MFA identity strip. Who is being verified and where in the flow. */
 .mfa-ident {
 	display: flex;
 	align-items: center;
@@ -3953,7 +3953,7 @@ img.profile-monogram {
 	white-space: nowrap;
 }
 
-/* Trust-device checkbox — subordinate to the verify action. */
+/* Trust-device checkbox. Subordinate to the verify action. */
 .mfa-trust {
 	display: flex;
 	align-items: center;
@@ -3987,7 +3987,7 @@ img.profile-monogram {
 	outline-offset: 2px;
 }
 
-/* Escape-route divider — labels the alternatives as recovery routes. */
+/* Escape-route divider. Labels the alternatives as recovery routes. */
 .mfa-escrow {
 	display: flex;
 	align-items: center;
@@ -4231,7 +4231,7 @@ img.profile-monogram {
 }
 
 /* Assessment form: one page top to bottom, with a table of contents beside
-   it on wide screens — not a second tab strip under the flow's own. */
+   it on wide screens. Not a second tab strip under the flow's own. */
 .assess-layout {
 	display: grid;
 	gap: 1.5rem;
@@ -4601,7 +4601,7 @@ img.profile-monogram {
 	overflow-wrap: anywhere;
 }
 
-/* Pending is a state, not a missing value — never render a bare em-dash */
+/* Pending is a state, not a missing value. Never render a bare em-dash */
 
 .appt__value--pending {
 	color: var(--muted-foreground);
@@ -4614,7 +4614,7 @@ img.profile-monogram {
 	line-height: 1.4;
 }
 
-/* Deliberately not .mono — that class uppercases, which corrupts a URL */
+/* Deliberately not .mono. That class uppercases, which corrupts a URL */
 
 .appt__link {
 	font-family: var(--font-mono);
@@ -4757,7 +4757,7 @@ img.profile-monogram {
 }
 
 /* On the black hover state every figure has to invert, including the
-   muted secondary lines — otherwise they sit near-invisible on black. */
+   muted secondary lines. Otherwise they sit near-invisible on black. */
 
 .scholar-card.card--hover:hover .scholar-card__qualifier,
 .scholar-card.card--hover:hover .scholar-card__usd,
@@ -4811,7 +4811,7 @@ img.profile-monogram {
 	position: relative;
 }
 
-/* Scroll-snap rail rather than a transform track — swipe, trackpad and keyboard
+/* Scroll-snap rail rather than a transform track. Swipe, trackpad and keyboard
    scrolling all come free, and items-per-view is one custom property. */
 
 .carousel__rail {
@@ -5180,7 +5180,7 @@ img.profile-monogram {
 	padding-right: 0;
 }
 
-/* The numeral sits on a rule running to the next stage — one spine, rather
+/* The numeral sits on a rule running to the next stage. One spine, rather
    than four detached columns */
 
 .method__marker {
@@ -5280,7 +5280,7 @@ img.profile-monogram {
 }
 
 /* =========================================================
-   Support — applicant side
+   Support. Applicant side
    ========================================================= */
 
 .sup-cats {
@@ -5473,7 +5473,7 @@ img.profile-monogram {
 	}
 }
 
-/* ── Newsletter popup ── */
+/* Newsletter popup */
 
 .newsletter-overlay {
 	position: fixed;
@@ -5653,7 +5653,7 @@ img.profile-monogram {
 	border-radius: 6px;
 }
 
-/* ── /newsletter/confirm and /newsletter/unsubscribe pages ──────────────── */
+/* /newsletter/confirm and /newsletter/unsubscribe pages */
 
 .newsletter-status-page {
 	min-height: 70vh;
@@ -5772,7 +5772,7 @@ img.profile-monogram {
 	}
 }
 
-/* Support — split view (list | conversation) */
+/* Support. Split view (list | conversation) */
 
 .sup-header {
 	display: flex;
@@ -6060,7 +6060,7 @@ img.profile-monogram {
 	background: var(--muted);
 }
 
-/* ========== University tuition — never Century NIT's money ========== *//* Peek shown in the picker, before a school is added */
+/* ========== University tuition. Never Century NIT's money ========== *//* Peek shown in the picker, before a school is added */
 
 .tuition-peek {
 	display: flex;
@@ -6115,7 +6115,7 @@ img.profile-monogram {
 	color: var(--muted-foreground);
 }
 
-/* Shortlist tally — deliberately outlined, not solid, so it never reads
+/* Shortlist tally. Deliberately outlined, not solid, so it never reads
    as an invoice from Century NIT */
 
 .tuition-tally {
@@ -6175,7 +6175,7 @@ img.profile-monogram {
 	}
 }
 
-/* ========== Offer terms — the institution's money ========== */
+/* ========== Offer terms. The institution's money ========== */
 
 .offer-terms {
 	margin-top: 1.25rem;
@@ -6226,7 +6226,7 @@ img.profile-monogram {
 	font-size: 0.62rem;
 }
 
-/* The deadline gets the weight — missing it forfeits the place */
+/* The deadline gets the weight. Missing it forfeits the place */
 
 .offer-terms__due {
 	display: flex;
@@ -6352,7 +6352,7 @@ img.profile-monogram {
 	}
 }
 
-/* ========== Financial · ledger and plan refinements ========== *//* The amount is the reason the row exists — it was rendering at ~0.7rem
+/* ========== Financial · ledger and plan refinements ========== *//* The amount is the reason the row exists. It was rendering at ~0.7rem
    stranded at the far edge while the title carried all the visual weight. */
 
 .ledger-item__head {
@@ -6381,7 +6381,7 @@ img.profile-monogram {
 	gap: 0.5rem;
 }
 
-/* Horizontal variant — plan options side-by-side on wider screens */
+/* Horizontal variant. Plan options side-by-side on wider screens */
 
 .plan-picker--row {
 	flex-direction: row;
@@ -6449,7 +6449,7 @@ img.profile-monogram {
 	font-size: 1.1rem;
 }
 
-/* Sentence case — this is prose, not a label */
+/* Sentence case. This is prose, not a label */
 
 .plan-opt__blurb {
 	font-size: var(--text-sm);
@@ -6569,7 +6569,7 @@ img.profile-monogram {
 	color: var(--foreground);
 }
 
-/* Deposit gate — shown before plan selection */
+/* Deposit gate. Shown before plan selection */
 
 .agency-deposit-gate {
 	padding: 1.25rem;
@@ -6582,7 +6582,7 @@ img.profile-monogram {
 	font-size: 1.1rem;
 }
 
-/* Schedule picker plan options — horizontal on wider screens */
+/* Schedule picker plan options. Horizontal on wider screens */
 
 .agency-deposit-gate .plan-picker--row {
 	flex-wrap: wrap;
@@ -6592,7 +6592,7 @@ img.profile-monogram {
 	min-width: 10rem;
 }
 
-/* Progress stepper — allow long labels to wrap cleanly */
+/* Progress stepper. Allow long labels to wrap cleanly */
 
 .agency-progress__label {
 	word-break: break-word;
@@ -6610,7 +6610,7 @@ img.profile-monogram {
 	}
 }
 
-/* ========== Equal-height cards in a grid ========== *//* Rows size to the tallest card in the whole grid, not per row — otherwise a
+/* ========== Equal-height cards in a grid ========== *//* Rows size to the tallest card in the whole grid, not per row. Otherwise a
    short second row sits visibly higher than the first. */
 
 .card-grid {
@@ -6629,7 +6629,7 @@ img.profile-monogram {
 }
 
 /* =========================================================
-   Notifier — toast stack + confirm modal (see components/notifier/Notifier.tsx)
+   Notifier. Toast stack + confirm modal (see components/notifier/Notifier.tsx)
    Inlined via portal to document.body; only the things inline styles
    cannot express live here (positioning, slide-in, body-lock helpers).
    ========================================================= */
@@ -6686,7 +6686,7 @@ img.profile-monogram {
 	}
 }
 
-/* ── MFA recommendation banner + setup page ────────────────────────────── */
+/* MFA recommendation banner + setup page */
 
 .mfa-prompt {
 	display: flex;
@@ -6726,6 +6726,19 @@ img.profile-monogram {
 	margin: 0 0 0.75rem;
 	color: var(--muted-foreground);
 	font-size: var(--text-sm);
+}
+
+.mfa-prompt__count {
+	align-self: center;
+	margin-left: auto;
+	font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+	font-size: 0.58rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--muted, #52525b);
+	border: 1px solid var(--border);
+	padding: 0.3rem 0.55rem;
+	white-space: nowrap;
 }
 
 .mfa-prompt__actions {
@@ -6772,7 +6785,7 @@ img.profile-monogram {
 }
 
 /* =========================================================
-   Portal chapter grammar — journey map, enrolment rail,
+   Portal chapter grammar. Journey map, enrolment rail,
    money ledger, booking rail, visa page. Ink carries state:
    solid = live, filled = done, hollow = not yet.
    ========================================================= */
@@ -6825,7 +6838,7 @@ img.profile-monogram {
 	border-width: 1.5px;
 }
 
-/* the rail's lead card reads inverted — black face, white text */
+/* the rail's lead card reads inverted. Black face, white text */
 .sharp-card--invert {
 	background: var(--foreground);
 	color: var(--accent-foreground);
@@ -6902,7 +6915,7 @@ img.profile-monogram {
 	font-size: 0.9rem;
 }
 
-/* numbered section heads — one sequence per page */
+/* numbered section heads. One sequence per page */
 
 .psec {
 	margin-bottom: 1.75rem;
@@ -6937,7 +6950,7 @@ img.profile-monogram {
 	margin: 0.35rem 0 0.75rem;
 }
 
-/* monochrome choice cards + chips — selected inverts, never accent-blue */
+/* monochrome choice cards + chips. Selected inverts, never accent-blue */
 
 .pcards {
 	display: grid;
@@ -7006,7 +7019,7 @@ img.profile-monogram {
 	margin-bottom: 0.15rem;
 }
 
-/* chip rows fill the column like the cards do — one row, equal cells */
+/* chip rows fill the column like the cards do. One row, equal cells */
 .pchips {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
@@ -7067,7 +7080,7 @@ img.profile-monogram {
 	}
 }
 
-/* checkpoint ledger — done/current/queued rows for waiting-state pages */
+/* checkpoint ledger. Done/current/queued rows for waiting-state pages */
 
 .seq {
 	display: flex;
@@ -7166,7 +7179,7 @@ img.profile-monogram {
 	border-style: dashed;
 }
 
-/* the live "checking" dot — existing inline usages referenced a `pulse`
+/* the live "checking" dot. Existing inline usages referenced a `pulse`
    keyframe that was never defined, so nothing actually pulsed */
 @keyframes pulse {
 	0%,
@@ -7188,7 +7201,7 @@ img.profile-monogram {
 	flex-shrink: 0;
 }
 
-/* step pill row — wizard sub-steps with done/current/later states */
+/* step pill row. Wizard sub-steps with done/current/later states */
 
 .psteps {
 	display: flex;
@@ -7215,7 +7228,7 @@ img.profile-monogram {
 	color: var(--accent-foreground);
 }
 
-/* journey map — six chapters, seals carry state */
+/* journey map. Six chapters, seals carry state */
 
 .jmap__chapter {
 	display: flex;
@@ -7434,7 +7447,7 @@ img.profile-monogram {
 	letter-spacing: 0.05em;
 }
 
-/* money — the position band and the chapter ledger */
+/* money. The position band and the chapter ledger */
 
 .pposition {
 	display: grid;
@@ -7577,7 +7590,7 @@ img.profile-monogram {
 	text-decoration: underline;
 }
 
-/* ========== Complete — the closed file ========== */
+/* ========== Complete. The closed file ========== */
 
 .jclosed {
 	background: var(--foreground);
@@ -7641,7 +7654,7 @@ img.profile-monogram {
 	margin-top: 0.2rem;
 }
 
-/* the journey recap — six sealed rows */
+/* the journey recap. Six sealed rows */
 .recap {
 	border: 1px solid var(--border-light);
 	background: var(--background);
@@ -7716,7 +7729,7 @@ img.profile-monogram {
 	}
 }
 
-/* ========== Overview — chapter strip, now list, feed ========== */
+/* ========== Overview. Chapter strip, now list, feed ========== */
 
 .jmini {
 	display: grid;
@@ -7786,7 +7799,7 @@ img.profile-monogram {
 	color: var(--micro-foreground);
 }
 
-/* stacked money — one figure, one footnote */
+/* stacked money. One figure, one footnote */
 .mline { text-align: right; }
 .mline__big { display: block; font-size: 1.05rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .mline__alt { display: block; font-family: var(--font-mono); font-size: 0.62rem; opacity: 0.6; margin-top: 0.1rem; }
@@ -7839,7 +7852,7 @@ img.profile-monogram {
 	margin-top: 0.15rem;
 }
 
-/* ========== Profile — cover + index ========== */
+/* ========== Profile. Cover + index ========== */
 
 .pcover {
 	background: var(--foreground);
@@ -7888,7 +7901,7 @@ img.profile-monogram {
 
 .psplit--profile { grid-template-columns: 11rem 1fr; }
 
-/* ========== Appointments — next-up hero, request box ========== */
+/* ========== Appointments. Next-up hero, request box ========== */
 
 .pnext {
 	border: 1.5px solid var(--border);
@@ -7975,7 +7988,7 @@ img.profile-monogram {
 	margin-bottom: 0.2rem;
 }
 
-/* table rows that are finished — past / cancelled */
+/* table rows that are finished. Past / cancelled */
 .ptable tr.ptable__over td { opacity: 0.55; }
 
 @media (max-width: 900px) {
@@ -7989,7 +8002,7 @@ img.profile-monogram {
 	.pnext { flex-direction: column; align-items: flex-start; }
 }
 
-/* ========== Document vault — count band, chapter-grouped rows ========== */
+/* ========== Document vault. Count band, chapter-grouped rows ========== */
 
 .dcount {
 	display: flex;
@@ -8058,7 +8071,7 @@ img.profile-monogram {
 
 .portal-pill--act { border-width: 1.5px; text-decoration: underline; text-underline-offset: 3px; }
 
-/* ========== Booking — the pay step as an order ========== */
+/* ========== Booking. The pay step as an order ========== */
 
 .order { border: 1.5px solid var(--border); background: var(--background); }
 .order__row {
@@ -8086,7 +8099,7 @@ img.profile-monogram {
 	.drow { grid-template-columns: 1.8rem 1fr; row-gap: 0.5rem; }
 }
 
-/* ========== Assessment form — numbered heads + counted TOC ========== */
+/* ========== Assessment form. Numbered heads + counted TOC ========== */
 
 .assess-section__title {
 	display: flex;
@@ -8103,9 +8116,9 @@ img.profile-monogram {
 .assess-nav a { display: flex; justify-content: space-between; gap: 0.6rem; }
 .assess-nav__n { font-size: 0.6rem; color: var(--muted-foreground); }
 
-/* ── The portal shell: the journey as the sidebar, the page named by its chapter ──
-   Ink on the black aside as before. The six chapters are the spine — done,
-   current, locked — the files sit under them, one row of you at the foot,
+/* The portal shell: the journey as the sidebar, the page named by its chapter
+   Ink on the black aside as before. The six chapters are the spine. Done,
+   current, locked. The files sit under them, one row of you at the foot,
    and the top bar says where you are and what is next. */
 
 .portal-nav__section {
@@ -8457,7 +8470,7 @@ a.portal-ch--on:hover {
 	font-weight: 600;
 }
 
-/* Two options side by side — type and branch steps. Equal halves, roomier. */
+/* Two options side by side. Type and branch steps. Equal halves, roomier. */
 .pcards--pair {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 0.8rem;
@@ -8473,8 +8486,8 @@ a.portal-ch--on:hover {
 	.pcards--pair { grid-template-columns: 1fr; }
 }
 
-/* ── Chapter III · Applications — the day line, the four steps, school cards,
-   the picker, the folded sections, the rail. Ink carries state. ── */
+/* Chapter III · Applications. The day line, the four steps, school cards,
+   the picker, the folded sections, the rail. Ink carries state. */
 
 .pref {
 	font-family: var(--font-mono);
@@ -8796,7 +8809,7 @@ a.portal-ch--on:hover {
 	color: var(--muted-foreground);
 }
 
-/* the pipeline on a card — preparing · submitted · decided */
+/* the pipeline on a card. Preparing · submitted · decided */
 .pipe {
 	display: grid;
 	grid-template-columns: repeat(3, 1fr);
@@ -8902,7 +8915,7 @@ a.portal-ch--on:hover {
 	border-top: 1px dashed var(--border-light);
 }
 
-/* the picker — one row, square */
+/* the picker. One row, square */
 .picker {
 	border: 1px solid var(--border);
 	padding: 1.1rem 1.15rem;
@@ -9108,7 +9121,7 @@ a.portal-ch--on:hover {
 	}
 }
 
-/* ── Chapter V · Fees — the milestone card, the schedule ── */
+/* Chapter V · Fees. The milestone card, the schedule */
 .sharp-card--soft {
 	border-color: var(--border-light);
 }

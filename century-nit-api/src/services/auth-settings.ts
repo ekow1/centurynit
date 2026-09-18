@@ -1,5 +1,6 @@
 import { db } from "../db/index.js";
-import { authSettings } from "../db/schema.js";
+import { authSettings, verifications } from "../db/schema.js";
+import { eq } from "drizzle-orm";
 
 /**
  * Auth configuration settings.
@@ -105,4 +106,37 @@ export async function isOpsGoogleSsoEnabled(): Promise<boolean> {
 export async function getOpsMfaMethods(): Promise<string[]> {
 	const settings = await getAuthSettings();
 	return settings["ops.mfa_methods"] as string[];
+}
+
+/* ── Passwordless MFA session gate ─────────────────────────────────────────
+ *
+ * A social-only account (no credential row) enrolled in email-otp MFA can
+ * never be challenged by the twoFactor plugin — its sign-in hook only matches
+ * credential paths (`/sign-in/email` et al), never OAuth callbacks. The gate
+ * is therefore ours: requireAuth demands an `mfa-ok:{token}` record before a
+ * passwordless session with email-otp enrolled may call the API. The record
+ * dies with the session, so every new sign-in asks for a fresh code.
+ */
+
+const mfaOkIdentifier = (sessionToken: string) => `mfa-ok:${sessionToken}`;
+
+/** Whether this session token has already passed the email-code gate. */
+export async function mfaSessionOk(sessionToken: string): Promise<boolean> {
+	const [row] = await db
+		.select({ expiresAt: verifications.expiresAt })
+		.from(verifications)
+		.where(eq(verifications.identifier, mfaOkIdentifier(sessionToken)))
+		.limit(1);
+	return Boolean(row && new Date(row.expiresAt) > new Date());
+}
+
+/** Mark the session as having passed the gate — valid until it expires. */
+export async function markMfaSessionOk(sessionToken: string, expiresAt: Date): Promise<void> {
+	await db.delete(verifications).where(eq(verifications.identifier, mfaOkIdentifier(sessionToken)));
+	await db.insert(verifications).values({
+		id: crypto.randomUUID(),
+		identifier: mfaOkIdentifier(sessionToken),
+		value: "1",
+		expiresAt,
+	});
 }

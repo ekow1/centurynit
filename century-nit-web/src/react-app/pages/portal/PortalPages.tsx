@@ -29,29 +29,24 @@ import {
 } from "../../context/AppState";
 import { usdFromCents, feePlanSentences, DEFAULT_SERVICE_FEE_SPLIT, DEFAULT_POST_ARRIVAL_CATALOGUE } from "century-nit-shared";
 import {
-	destinations,
 	formatDualCurrency,
 	getDestination,
 	getProgram,
 	getUniversity,
-	programs,
-	programsForUniversity,
 	SCHOOL_DEGREE_LEVELS,
 	SCHOOL_FUNDING_TRACKS,
 	PAYMENT_PLANS,
 	type PaymentPlanId,
 	serviceFeeForPackage,
 	filterProgramsForPackage,
-	universitiesForPrograms,
 	SCHOOL_TRACK_STATUS_LABELS,
 	SCHOOL_TRACK_STAGES,
 	SCHOOL_OUTCOME_LABELS,
 	schoolDecisionNote,
+	type Program,
 	type SchoolDegreeLevel,
 	type SchoolFundingTrack,
 	type SchoolTrackStatus,
-	universities,
-	universitiesForDestination,
 	CONSULTATION_DURATIONS,
 	getBranchName,
 	branches,
@@ -92,7 +87,7 @@ export function PortalAwaitingHandler() {
 		journeyPhase.stage !== "eligibility") ||
 		(!application.pendingHandoff && application.agencyDepositPaid);
 
-	// The checklist fills the wait usefully — a complete file lets the handler
+	// The checklist fills the wait usefully. A complete file lets the handler
 	// start on school selection the day they land.
 	useEffect(() => {
 		let active = true;
@@ -126,8 +121,8 @@ export function PortalAwaitingHandler() {
 
 	const fundMeta = SCHOOL_FUNDING_TRACKS.find((t) => t.id === application.schoolFundingTrack);
 	const levelMeta = SCHOOL_DEGREE_LEVELS.find((d) => d.id === normaliseDegreeLevel(application.schoolDegreeLevel));
-	const packageLabel = [fundMeta?.name, levelMeta?.short].filter(Boolean).join(" × ") || "—";
-	const planLabel = application.paymentPlanId ? (PAYMENT_PLAN_LABELS[application.paymentPlanId] ?? "—") : "—";
+	const packageLabel = [fundMeta?.name, levelMeta?.short].filter(Boolean).join(" × ") || "N/A";
+	const planLabel = application.paymentPlanId ? (PAYMENT_PLAN_LABELS[application.paymentPlanId] ?? "N/A") : "N/A";
 	const branchName = getBranchName(booking.branchId || null);
 	const depositUsd = application.agencyTotal > 0 ? Math.round(application.agencyTotal * AGENCY_DEPOSIT_PORTION) : null;
 	const docsDue = docList.filter((d) => d.status === "PENDING_UPLOAD" || d.status === "REJECTED");
@@ -185,8 +180,8 @@ export function PortalAwaitingHandler() {
 				</h1>
 				<p className="lead" style={{ fontSize: "var(--text-sm)" }}>
 					{hasHandler
-						? "Your handler has landed — school selection is open."
-						: "Deposit received — the office is assigning your handler. School selection opens the moment they land."}
+						? "Your handler has landed. School selection is open."
+						: "Deposit received. The office is assigning your handler. School selection opens the moment they land."}
 				</p>
 			</header>
 
@@ -202,8 +197,8 @@ export function PortalAwaitingHandler() {
 							<div className="sharp-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
 								<p className="muted" style={{ fontSize: "var(--text-sm)" }}>
 									{application.assignedStaffName
-										? `${application.assignedStaffName} is on your file — pick your schools and programmes.`
-										: "Your consultant is on your file — pick your schools and programmes."}
+										? `${application.assignedStaffName} is on your file. Pick your schools and programmes.`
+										: "Your consultant is on your file. Pick your schools and programmes."}
 								</p>
 								<Link to="/portal/application" className="btn btn--primary">
 									Continue to school selection →
@@ -216,7 +211,7 @@ export function PortalAwaitingHandler() {
 							<div className="sharp-card">
 								{docsDue.length > 0 ? (
 									<p className="muted" style={{ fontSize: "var(--text-sm)", marginBottom: "0.9rem" }}>
-										Your handler starts faster when your file is complete —{" "}
+										Your handler starts faster when your file is complete.{" "}
 										<strong style={{ color: "var(--foreground)" }}>
 											{docsDue.length} document{docsDue.length === 1 ? "" : "s"}
 										</strong>{" "}
@@ -224,7 +219,7 @@ export function PortalAwaitingHandler() {
 									</p>
 								) : (
 									<p className="muted" style={{ fontSize: "var(--text-sm)", marginBottom: "0.9rem" }}>
-										Your file is complete — every document verified.
+										Your file is complete. Every document verified.
 									</p>
 								)}
 								<div>
@@ -260,7 +255,7 @@ export function PortalAwaitingHandler() {
 							<div className="sharp-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
 								<p className="muted" style={{ fontSize: "var(--text-xs)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
 									<span className="pulse-dot" />
-									This page advances itself — checking the assignment every 20 seconds. No need to refresh or call.
+									This page advances itself. Checking the assignment every 20 seconds. No need to refresh or call.
 								</p>
 								<Link to="/portal/journey" className="btn btn--ghost">
 									View full journey
@@ -273,13 +268,13 @@ export function PortalAwaitingHandler() {
 				<div className="prail">
 					<div className="sharp-card sharp-card--key">
 						<p className="eyebrow">Your case</p>
-						<p className="prail__title">{application.appNumber ?? "—"}</p>
+						<p className="prail__title">{application.appNumber ?? "N/A"}</p>
 						<div className="pkv"><span className="pkv__k">Package</span><span className="pkv__v">{packageLabel}</span></div>
-						<div className="pkv"><span className="pkv__k">Schools</span><span className="pkv__v">{application.targetSchoolCount ? `${application.targetSchoolCount} targets` : "—"}</span></div>
+						<div className="pkv"><span className="pkv__k">Schools</span><span className="pkv__v">{application.targetSchoolCount ? `${application.targetSchoolCount} targets` : "N/A"}</span></div>
 						<div className="pkv"><span className="pkv__k">Plan</span><span className="pkv__v">{planLabel}</span></div>
 						<div className="pkv"><span className="pkv__k">Deposit</span><span className="pkv__v">{depositUsd ? <MoneyInline usd={depositUsd} /> : "Paid"}</span></div>
 						<div className="pkv"><span className="pkv__k">Handling branch</span><span className="pkv__v">{branchName}</span></div>
-						<div className="pkv"><span className="pkv__k">Consultant</span><span className="pkv__v">{application.assignedStaffName ?? <span className="muted">— assigning</span>}</span></div>
+						<div className="pkv"><span className="pkv__k">Consultant</span><span className="pkv__v">{application.assignedStaffName ?? <span className="muted">Assigning</span>}</span></div>
 						<div style={{ marginTop: "0.9rem" }}>
 							<Link to="/portal/money" className="btn btn--ghost" style={{ width: "100%", textAlign: "center" }}>
 								Deposit receipt
@@ -292,14 +287,14 @@ export function PortalAwaitingHandler() {
 						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.65 }}>
 							They introduce themselves by email and in-app message, school selection opens in{" "}
 							<strong style={{ color: "var(--foreground)" }}>Chapter III</strong>, and this page moves you
-							forward automatically — you will not miss it.
+							forward automatically. You will not miss it.
 						</p>
 					</div>
 
 					<div className="sharp-card">
 						<p className="eyebrow">Questions meanwhile</p>
 						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.65 }}>
-							Anything about your package, deposit or timeline — message the desk.
+							Anything about your package, deposit or timeline. Message the desk.
 						</p>
 						<button
 							type="button"
@@ -322,7 +317,7 @@ export function PortalAwaitingInvoice() {
 	const { syncFromServer, syncTick } = useAppState();
 	const navigate = useNavigate();
 	// The invoice waits on the standard documents (collected at consultation);
-	// if any is still outstanding, say so — it is the client's move, not ours.
+	// if any is still outstanding, say so. It is the client's move, not ours.
 	const [outstandingDocs, setOutstandingDocs] = useState<{ name: string; status: string }[]>([]);
 	useEffect(() => {
 		let active = true;
@@ -340,8 +335,8 @@ export function PortalAwaitingInvoice() {
 	}, [syncTick]);
 	const toUpload = outstandingDocs.filter((d) => d.status === "PENDING_UPLOAD" || d.status === "REJECTED");
 
-	// Re-check whenever AppState syncs — which happens on the `invoice.issued`
-	// SSE event — plus a slow fallback interval.
+	// Re-check whenever AppState syncs. Which happens on the `invoice.issued`
+	// SSE event. Plus a slow fallback interval.
 	useEffect(() => {
 		let active = true;
 		const checkInvoice = async () => {
@@ -392,11 +387,11 @@ export function PortalAwaitingInvoice() {
 				) : (
 					<p className="muted mt-2">
 						Your consultant is reviewing your selected schools and programmes. The application
-						fee will be raised shortly — you'll be able to pay it once it's issued.
+						fee will be raised shortly. You'll be able to pay it once it's issued.
 					</p>
 				)}
 				<p className="muted mt-2" style={{ fontSize: "var(--text-sm)" }}>
-					You don't need to do anything right now — checking status automatically in the background.
+					You don't need to do anything right now. Checking status automatically in the background.
 				</p>
 				<div className="mt-4 row" style={{ gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
 					<span
@@ -434,7 +429,7 @@ export function PortalPackage() {
 	);
 }
 
-/** The stored level is free text on the API — read it back to one of ours. */
+/** The stored level is free text on the API. Read it back to one of ours. */
 function normaliseDegreeLevel(raw: string | null | undefined): SchoolDegreeLevel | null {
 	if (!raw) return null;
 	const v = raw.toLowerCase();
@@ -619,7 +614,7 @@ function SchoolPackageInner() {
 		}
 	}
 
-	// The plans in the client's words — from the configured split, never a typed number.
+	// The plans in the client's words. From the configured split, never a typed number.
 	const planWords = feePlanSentences(fees?.catalogue.serviceFeeSplit ?? DEFAULT_SERVICE_FEE_SPLIT, fees?.catalogue.postArrival ?? DEFAULT_POST_ARRIVAL_CATALOGUE);
 
 	const scopeFeatures =
@@ -641,7 +636,7 @@ function SchoolPackageInner() {
 					<p className="eyebrow">Chapter II · Enrolment</p>
 					<h1 className="page-title mt-1">Enrol with Century NIT</h1>
 					<p className="lead mt-2">
-						Confirm you're enrolling, choose your package and plan, pay the deposit — your
+						Confirm you're enrolling, choose your package and plan, pay the deposit. Your
 						consultant is assigned when it lands.
 					</p>
 				</div>
@@ -767,7 +762,7 @@ function SchoolPackageInner() {
 									<span className="psec__title">Payment plan</span>
 								</p>
 								<p className="psec__hint">
-									The deposit is due now either way — the plan decides how the rest follows.
+									The deposit is due now either way. The plan decides how the rest follows.
 								</p>
 								<div className="pcards pcards--pair">
 									{PAYMENT_PLANS.map((pl) => {
@@ -791,7 +786,7 @@ function SchoolPackageInner() {
 								</div>
 								{isLocked && (
 									<p className="muted" style={{ fontSize: "0.85rem", marginTop: "0.6rem" }}>
-										Plan: <strong>{PAYMENT_PLAN_LABELS[application.paymentPlanId] ?? "—"}</strong>. To
+										Plan: <strong>{PAYMENT_PLAN_LABELS[application.paymentPlanId] ?? "N/A"}</strong>. To
 										change it, message your consultant.
 									</p>
 								)}
@@ -829,10 +824,10 @@ function SchoolPackageInner() {
 									)}
 									<ul style={{ listStyle: "none", padding: 0, margin: "0.6rem 0 0", fontSize: "var(--text-xs)" }}>
 										<li className="muted" style={{ padding: "0.3rem 0" }}>
-											✗ University application fees — billed per school selected
+											✗ University application fees. Billed per school selected
 										</li>
 										<li className="muted" style={{ padding: "0.3rem 0" }}>
-											✗ Tuition — paid to the university that admits you
+											✗ Tuition. Paid to the university that admits you
 										</li>
 									</ul>
 								</div>
@@ -841,7 +836,7 @@ function SchoolPackageInner() {
 					)}
 				</div>
 
-				{/* right: the composed package — the money never scrolls away */}
+				{/* right: the composed package. The money never scrolls away */}
 				<div className="prail">
 					<div className="sharp-card sharp-card--key">
 						<p className="eyebrow">Your package</p>
@@ -871,7 +866,7 @@ function SchoolPackageInner() {
 									</span>
 								</div>
 								<div className="pkv">
-									<span className="pkv__k">— due</span>
+									<span className="pkv__k">Due</span>
 									<span className="pkv__v muted">once your flight is booked</span>
 								</div>
 								<p
@@ -879,7 +874,7 @@ function SchoolPackageInner() {
 									style={{ fontSize: "0.68rem", lineHeight: 1.5, margin: "0.8rem 0" }}
 								>
 									By paying the deposit you agree: your admission letter, visa documents and e-ticket
-									are released after the pre-departure milestone — which unlocks once your flight is booked.
+									are released after the pre-departure milestone. Which unlocks once your flight is booked.
 									School application fees and tuition are the institutions', not ours.
 								</p>
 								{isDepositPaid ? (
@@ -922,7 +917,7 @@ function SchoolPackageInner() {
 							</>
 						) : (
 							<p className="muted" style={{ fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
-								Pick a funding track and degree level — the fee and deposit compose here.
+								Pick a funding track and degree level. The fee and deposit compose here.
 							</p>
 						)}
 					</div>
@@ -948,7 +943,7 @@ function SchoolPackageInner() {
  * Replaces a bare `<input type="date">` plus six hard-coded times that checked
  * nothing: an applicant could book a date in the past, a day the branch is
  * closed, or a slot another applicant already had. It now applies the same
- * rules the Operations Center's reschedule panel does, from the same module —
+ * rules the Operations Center's reschedule panel does, from the same module,
  * when the two drifted, one side offered slots the other considered taken.
  */
 function upcomingDates(count = 21): { value: string; weekday: string; dayMonth: string }[] {
@@ -1125,31 +1120,54 @@ const ASSESSMENT_DOC_FIELDS: { id: string; label: string; hint: string }[] = [
 type AssessmentCatalog = {
 	lookups: LookupValue[];
 	universities: { id: string; name: string; destinationId?: string | null }[];
-	destinations: { id: string; name: string }[];
-	programs: { id: string; name: string; universityId?: string | null; level?: string | null; field?: string | null; intake?: string[] | null }[];
+	destinations: { id: string; name: string; flag?: string | null }[];
+	programs: {
+		id: string;
+		name: string;
+		universityId?: string | null;
+		level?: string | null;
+		field?: string | null;
+		intake?: string[] | null;
+		tuition?: string | null;
+		tuitionUsd?: number | null;
+	}[];
 };
 
 const EMPTY_CATALOG: AssessmentCatalog = { lookups: [], universities: [], destinations: [], programs: [] };
 
 /**
  * Fetched once by the flow, not by the form: the form used to load all four
- * on every mount, and it mounted again on every tab switch.
+ * on every mount, and it mounted again on every tab switch. The school picker
+ * reads the same live catalogue. The bundled `universities`/`programs` lists
+ * in content.ts are a build-time snapshot that can never see ops's edits.
  */
-function useAssessmentCatalog(): AssessmentCatalog {
+function useAssessmentCatalog(): { catalog: AssessmentCatalog; loaded: boolean; failed: boolean } {
 	const [catalog, setCatalog] = useState<AssessmentCatalog>(EMPTY_CATALOG);
+	const [loaded, setLoaded] = useState(false);
+	const [failed, setFailed] = useState(false);
 	useEffect(() => {
 		let active = true;
 		void Promise.all([
-			apiFetch<{ lookups: LookupValue[] }>(`${API_PREFIX}/lookups`).then((r) => r?.lookups ?? []).catch(() => []),
-			apiFetch<{ universities: AssessmentCatalog["universities"] }>(`${API_PREFIX}/catalog/universities`).then((r) => r?.universities ?? []).catch(() => []),
-			apiFetch<{ destinations: AssessmentCatalog["destinations"] }>(`${API_PREFIX}/catalog/destinations`).then((r) => r?.destinations ?? []).catch(() => []),
-			apiFetch<{ programs: AssessmentCatalog["programs"] }>(`${API_PREFIX}/catalog/programs`).then((r) => r?.programs ?? []).catch(() => []),
-		]).then(([lookups, universities, destinations, programs]) => {
-			if (active) setCatalog({ lookups, universities, destinations, programs });
-		});
+			apiFetch<{ lookups: LookupValue[] }>(`${API_PREFIX}/lookups`).then((r) => r?.lookups ?? []),
+			apiFetch<{ universities: AssessmentCatalog["universities"] }>(`${API_PREFIX}/catalog/universities`).then((r) => r?.universities ?? []),
+			apiFetch<{ destinations: AssessmentCatalog["destinations"] }>(`${API_PREFIX}/catalog/destinations`).then((r) => r?.destinations ?? []),
+			apiFetch<{ programs: AssessmentCatalog["programs"] }>(`${API_PREFIX}/catalog/programs`).then((r) => r?.programs ?? []),
+		])
+			.then(([lookups, universities, destinations, programs]) => {
+				if (active) {
+					setCatalog({ lookups, universities, destinations, programs });
+					setLoaded(true);
+				}
+			})
+			.catch(() => {
+				if (active) {
+					setLoaded(true);
+					setFailed(true);
+				}
+			});
 		return () => { active = false; };
 	}, []);
-	return catalog;
+	return { catalog, loaded, failed };
 }
 
 /**
@@ -1232,7 +1250,7 @@ function StudyChoicesEditor({
 									}}
 									disabled={!school}
 								>
-									<option value="">{school ? (programmes.length ? "Select" : "No programmes listed — pick a field") : "Choose a school first"}</option>
+									<option value="">{school ? (programmes.length ? "Select" : "No programmes listed. Pick a field") : "Choose a school first"}</option>
 									{programmes.map((p) => (<option key={p.id} value={p.name}>{p.name}{p.level ? ` · ${p.level}` : ""}</option>))}
 								</select>
 							</div>
@@ -1320,7 +1338,7 @@ function AssessmentForm({
 	const [uploading, setUploading] = useState<Record<string, number>>({});
 	const [pickDocId, setPickDocId] = useState<string | null>(null);
 
-	// Filled/total per section — drives the counts in the TOC and each head.
+	// Filled/total per section. Drives the counts in the TOC and each head.
 	function sectionProgress(id: string, fields: readonly string[]): { done: number; total: number } {
 		if (id === "documents") {
 			const total = ASSESSMENT_DOC_FIELDS.length;
@@ -1392,7 +1410,7 @@ function AssessmentForm({
 				Complete all sections. Your consultant will review this before your meeting.
 			</p>
 
-			{/* One page, top to bottom — the flow's tabs are the only tabs. The nav
+			{/* One page, top to bottom. The flow's tabs are the only tabs. The nav
 			    is a table of contents, not a second stepper. */}
 			<div className="assess-layout mt-3">
 				<nav className="assess-nav" aria-label="Assessment sections">
@@ -1568,7 +1586,7 @@ function AssessmentForm({
 						</div>
 					</div>
 					<p className="muted mt-3" style={{ fontSize: "0.85rem" }}>
-						Where would you like to study? Pick the country, school, programme and intake together — add a second and third choice if you have them.
+						Where would you like to study? Pick the country, school, programme and intake together. Add a second and third choice if you have them.
 					</p>
 					<StudyChoicesEditor
 						choices={assessment.studyChoices}
@@ -1674,18 +1692,18 @@ function AssessmentForm({
 	);
 }
 
-/** Consultations run at the two Ghana offices — partner desks don't take bookings. */
+/** Consultations run at the two Ghana offices. Partner desks don't take bookings. */
 const BOOKABLE_BRANCHES = branches.filter((b) => b.id === "accra-hq" || b.id === "kumasi");
 
-// The branch is the office that handles your file — its slots, its
-// consultants — so it is picked for online meetings too, not just in-person.
+// The branch is the office that handles your file. Its slots, its
+// consultants. So it is picked for online meetings too, not just in-person.
 
 export function PortalConsultationBookingFlow({ embedded = false, freeRebooking = false, prefill }: {
-	/** Render only the two-column flow — no page chrome (used inside the cancelled-case layout). */
+	/** Render only the two-column flow. No page chrome (used inside the cancelled-case layout). */
 	embedded?: boolean;
-	/** A free-rebooking credit covers the fee — no Paystack hop, no fee line. */
+	/** A free-rebooking credit covers the fee. No Paystack hop, no fee line. */
 	freeRebooking?: boolean;
-	/** Carry branch/type over from the cancelled case — never clobbers a choice already made. */
+	/** Carry branch/type over from the cancelled case. Never clobbers a choice already made. */
 	prefill?: { branchId?: string; consultationType?: string };
 } = {}) {
 	const {
@@ -1695,9 +1713,9 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 		updateAssessmentDoc,
 	} = useAppState();
 	const { toast } = useNotifier();
-	const catalog = useAssessmentCatalog();
+	const { catalog } = useAssessmentCatalog();
 
-	// Rebook prefill — the cancelled case's branch/type, applied only to
+	// Rebook prefill. The cancelled case's branch/type, applied only to
 	// fields the client hasn't already picked.
 	useEffect(() => {
 		const patch: { branchId?: string; consultationType?: ConsultationType } = {};
@@ -1708,7 +1726,7 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 		if (Object.keys(patch).length > 0) updateBooking(patch);
 	}, [prefill?.branchId, prefill?.consultationType, booking.branchId, booking.consultationType, updateBooking]);
 
-	// Live consultation fee (USD) from platform_settings — what ops configured,
+	// Live consultation fee (USD) from platform_settings. What ops configured,
 	// not the hardcoded default. Falls back to FALLBACK_FEE_SCHEDULE on error.
 	const { fees } = useAppState();
 	const [consultationFeeUsd, setConsultationFeeUsd] = useState<number>(
@@ -1730,7 +1748,7 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 		booking.confirmationId ? "paid" : "method",
 	);
 
-	// Earliest open day per branch — the branch card doubles as a date hint.
+	// Earliest open day per branch. The branch card doubles as a date hint.
 	const [nextSlots, setNextSlots] = useState<Record<string, string | null>>({});
 	useEffect(() => {
 		const from = upcomingDates(1)[0]?.value;
@@ -1764,7 +1782,7 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 
 	async function startPayment() {
 		if (payState === "paid" || payState === "processing" || payState === "success") return;
-		// Gate payment on the required booking fields — Paystack will reject
+		// Gate payment on the required booking fields. Paystack will reject
 		// an incomplete booking anyway, so fail fast with a clear message.
 		const missing: string[] = [];
 		if (!booking.branchId) missing.push("a branch");
@@ -1820,11 +1838,11 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 				return;
 			}
 			if (res.booking) {
-				// Free rebooking — the credit covered the fee; the booking is
+				// Free rebooking. The credit covered the fee; the booking is
 				// already made, no Paystack hop.
 				updateBooking({ confirmationId: res.booking.reference });
 				setPayState("paid");
-				toast.success("Booked — your slot is confirmed. No payment was needed.");
+				toast.success("Booked. Your slot is confirmed. No payment was needed.");
 				return;
 			}
 			throw new Error("Checkout returned neither a payment link nor a booking");
@@ -1847,8 +1865,8 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 						<div className="pcards pcards--pair">
 							{(
 								[
-									["online", "Video call", "Online consultation", "Meet from anywhere — you still pick which office handles your file."],
-									["in_person", "At a branch", "In-person consultation", "Accra or Kumasi — the office you visit."],
+									["online", "Video call", "Online consultation", "Meet from anywhere. You still pick which office handles your file."],
+									["in_person", "At a branch", "In-person consultation", "Accra or Kumasi. The office you visit."],
 								] as const
 							).map(([id, kicker, name, blurb]) => (
 								<button
@@ -1871,7 +1889,7 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 						<div className="psec__h">
 							<span className="psec__no">2</span>
 							<span className="psec__title">Which office handles you</span>
-							<span className="psec__hint">your file sits with one office — even for a video call</span>
+							<span className="psec__hint">your file sits with one office. Even for a video call</span>
 						</div>
 						<div className="pcards pcards--pair">
 							{BOOKABLE_BRANCHES.map((b) => (
@@ -1911,7 +1929,7 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 								onDocUpdate={updateAssessmentDoc}
 							/>
 							<p className="muted mt-3" style={{ fontSize: "0.85rem" }}>
-								Passport details, budget and study choices — the same form as your profile. Filled once; it feeds both.
+								Passport details, budget and study choices. The same form as your profile. Filled once; it feeds both.
 							</p>
 						</div>
 					</section>
@@ -1920,7 +1938,7 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 					<section className="psec" id="pick-a-time">
 						<div className="psec__h">
 							<span className="psec__no">4</span>
-							<span className="psec__title">Pick a time{booking.branchId ? ` — ${getBranchName(booking.branchId)}` : ""}</span>
+							<span className="psec__title">Pick a time{booking.branchId ? ` · ${getBranchName(booking.branchId)}` : ""}</span>
 							<span className="psec__hint">45 min · branch time · struck days are full</span>
 						</div>
 						<div className="sharp-card">
@@ -1949,8 +1967,8 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 									<div className="order__row">
 										<span>
 											{freeRebooking
-												? "Consultation — free rebooking"
-												: `${booking.consultationType === "online" ? "Online consultation" : "In-person consultation"} — 45 min`}
+												? "Consultation. Free rebooking"
+												: `${booking.consultationType === "online" ? "Online consultation" : "In-person consultation"}. 45 min`}
 											<small>
 												{[booking.date, booking.time, booking.branchId ? `${getBranchName(booking.branchId)} handles the file` : null]
 													.filter(Boolean)
@@ -1961,9 +1979,9 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 									</div>
 									<div className="order__row">
 										<span className="muted" style={{ fontSize: "var(--text-xs)" }}>
-											Includes — eligibility review, route recommendation, document checklist, named consultant
+											Includes. Eligibility review, route recommendation, document checklist, named consultant
 										</span>
-										<span className="order__amt muted">—</span>
+										<span className="order__amt muted"></span>
 									</div>
 									<div className="order__total">
 										<span>Due now</span>
@@ -1971,7 +1989,7 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 									</div>
 								</div>
 								<p className="muted mt-3" style={{ fontSize: "var(--text-xs)", lineHeight: 1.6, maxWidth: "30rem" }}>
-									Free reschedule up to 24h before · if we cancel on you, the fee carries to a free rebooking — you never pay twice for our cancellation · receipt lands in your Money ledger.
+									Free reschedule up to 24h before · if we cancel on you, the fee carries to a free rebooking. You never pay twice for our cancellation · receipt lands in your Money ledger.
 								</p>
 								<div className="row mt-4">
 									<Button type="button" onClick={startPayment} arrow>
@@ -1981,7 +1999,7 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 								</div>
 								{!freeRebooking ? (
 									<p className="mono muted mt-2" style={{ fontSize: "0.62rem" }}>
-										Card · MTN MoMo · Vodafone Cash — processed by Paystack
+										Card · MTN MoMo · Vodafone Cash. Processed by Paystack
 									</p>
 								) : null}
 							</>
@@ -2026,7 +2044,7 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 					</section>
 				</div>
 
-				{/* the booking rail — what you're about to pay for, always visible */}
+				{/* the booking rail. What you're about to pay for, always visible */}
 				<div className="prail">
 					<div className="sharp-card sharp-card--key">
 						<p className="eyebrow">Your booking</p>
@@ -2067,7 +2085,7 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 						<p className="mono" style={{ fontSize: "0.68rem", marginTop: "0.8rem" }}>
 							{payState === "paid"
 								? `Booked · Ref ${booking.confirmationId}`
-								: "Fill each section — the Pay button is on the last one."}
+								: "Fill each section. The Pay button is on the last one."}
 						</p>
 						<p className="muted" style={{ fontSize: "0.66rem", marginTop: "0.7rem", lineHeight: 1.5 }}>
 							The fee confirms the slot. Reschedule free up to 24h before.
@@ -2094,7 +2112,7 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 					<p className="eyebrow">Chapter I · Consultation</p>
 					<h1 className="page-title mt-1">Book your consultation</h1>
 					<p className="lead mt-2">
-						One session — video or at a branch — 45 minutes, {formatDualCurrency(consultationFeeUsd)}. Your consultant reviews your
+						One session, video or at a branch, 45 minutes, {formatDualCurrency(consultationFeeUsd)}. Your consultant reviews your
 						background, tells you if the route is viable, and hands you a document checklist and a named consultant for the rest of the journey.
 					</p>
 				</div>
@@ -2108,11 +2126,12 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 
 export function PortalConsultation() {
 	const { booking, fees, revealOutcome } = useAppState();
+	const nav = useNavigate();
 
 	const [liveConsultation, setLiveConsultation] = useState<ApiConsultation | null>(null);
 	const [liveApplication, setLiveApplication] = useState<ApiApplication | null>(null);
 	const [loading, setLoading] = useState(true);
-	const { join, joining, error: joinError, overlay } = useJoinMeeting();
+	const { join, joining, error: joinError, overlay } = useJoinMeeting({ onReschedule: () => nav("/portal/appointments") });
 
 	const refreshLiveCase = useCallback(async () => {
 		try {
@@ -2139,7 +2158,7 @@ export function PortalConsultation() {
 	// silent consultation-creation failure after payment shouldn't strand the
 	// applicant on the fee page when their application is already in flight.
 	// A CLOSED workflow with no live application and no paid booking is a dead
-	// case — render the booking sheet again. (The old case view linked out to
+	// case. Render the booking sheet again. (The old case view linked out to
 	// Appointments to rebook, whose own Book CTA loops right back here.)
 	const closedCase = workflowStatus === "CLOSED" && !liveApplication && !booking.confirmationId;
 	const hasActiveCase = Boolean(liveConsultation || liveApplication || booking.confirmationId) && !closedCase;
@@ -2170,7 +2189,7 @@ export function PortalConsultation() {
 
 	if (!hasActiveCase) {
 		if (closedCase) {
-			// Cancelled case — state the money plainly and offer the free
+			// Cancelled case. State the money plainly and offer the free
 			// rebooking when ops issued one. The booking sheet sits in the
 			// same page, prefilled from the cancelled case.
 			const isFree = liveConsultation?.freeRebooking ?? false;
@@ -2192,13 +2211,13 @@ export function PortalConsultation() {
 							<p className="eyebrow">You are here</p>
 							<p className="display journey-now__title" style={{ fontSize: "1.3rem" }}>
 								{isFree
-									? "Book a new slot — the fee is covered"
-									: "Book a new slot — or move, don't cancel, next time"}
+									? "Book a new slot. The fee is covered"
+									: "Book a new slot. Or move, don't cancel, next time"}
 							</p>
 							<p className="journey-now__detail">
 								{isFree
-									? "A free rebooking was issued on your case. Your assessment and documents carry over — only the appointment is new."
-									: `A new booking carries the consultation fee again (${formatDualCurrency(cancelledFeeUsd)}). If we cancelled on you, message us first — you shouldn't pay twice. Your assessment and documents carry over; only the appointment is new.`}
+									? "A free rebooking was issued on your case. Your assessment and documents carry over. Only the appointment is new."
+									: `A new booking carries the consultation fee again (${formatDualCurrency(cancelledFeeUsd)}). If we cancelled on you, message us first. You shouldn't pay twice. Your assessment and documents carry over; only the appointment is new.`}
 							</p>
 						</div>
 						<a className="btn btn--inverted" href="#rebook">Book a new slot ↓</a>
@@ -2208,7 +2227,7 @@ export function PortalConsultation() {
 						<p className="eyebrow">What carries over</p>
 						<div className="pkv">
 							<span className="pkv__k">Assessment</span>
-							<span className="pkv__v">Kept — no need to refill</span>
+							<span className="pkv__v">Kept. No need to refill</span>
 						</div>
 						<div className="pkv">
 							<span className="pkv__k">Documents</span>
@@ -2221,7 +2240,7 @@ export function PortalConsultation() {
 						<div className="pkv">
 							<span className="pkv__k">Fee</span>
 							<span className="pkv__v">
-								{isFree ? "Covered — free rebooking" : `${formatDualCurrency(cancelledFeeUsd)} again`}
+								{isFree ? "Covered. Free rebooking" : `${formatDualCurrency(cancelledFeeUsd)} again`}
 							</span>
 						</div>
 					</div>
@@ -2285,7 +2304,7 @@ export function PortalConsultation() {
 	const bookedDay = startsAt ? startsAt.toLocaleDateString(undefined, { day: "numeric", month: "short" }) : booking.date || null;
 	const branchName = getBranchName(liveConsultation?.branch ?? booking.branchId);
 	const meetingUrl = workflowStatus !== "CLOSED" ? (liveConsultation?.meetingUrl ?? null) : null;
-	// The stored meetingUrl is never opened raw — for token'd providers it
+	// The stored meetingUrl is never opened raw. For token'd providers it
 	// isn't a usable link. Joins mint a per-person credential through /join.
 	const meetingBookingId = liveConsultation?.bookingId ?? booking.bookingId ?? null;
 	const appointmentDone = workflowStatus === "COMPLETED" || workflowStatus === "CLOSED" || Boolean(activeOutcome);
@@ -2311,12 +2330,12 @@ export function PortalConsultation() {
 	];
 	const onStep = steps.findIndex((s) => !s.done);
 
-	// The band — the one thing this chapter needs right now.
+	// The band. The one thing this chapter needs right now.
 	const band: { title: string; detail: string; cta: ReactNode } =
 		workflowStatus === "CLOSED"
 			? {
 					title: "This consultation was cancelled",
-					detail: "Book a new slot to continue — check-ins are free once you're enrolled, the first consultation carries the fee.",
+					detail: "Book a new slot to continue. Check-ins are free once you're enrolled, the first consultation carries the fee.",
 					cta: (
 						<a className="btn btn--inverted" href="/portal/appointments">
 							Manage appointments →
@@ -2325,7 +2344,7 @@ export function PortalConsultation() {
 				}
 			: decisionOpen
 				? {
-						title: `${activeOutcome} — decide whether to proceed`,
+						title: `${activeOutcome}. Decide whether to proceed`,
 						detail: "Proceeding opens Chapter II · Enrolment: the package, your plan, and the deposit that starts your file moving.",
 						cta: (
 							<a className="btn btn--inverted" href="#assessment-outcome">
@@ -2335,7 +2354,7 @@ export function PortalConsultation() {
 					}
 				: meetingUrl && startsInFuture
 					? {
-							title: `${whenShort} — your link is ready`,
+							title: `${whenShort}. Your link is ready`,
 							detail: "Join opens the video call right here. Your consultant reads your assessment before you meet.",
 							cta: meetingBookingId ? (
 								<button type="button" className="btn btn--inverted" disabled={joining} onClick={() => void join(meetingBookingId, `Consultation · ${activeRef ?? ""}`)}>
@@ -2346,7 +2365,7 @@ export function PortalConsultation() {
 					: assessmentGaps.length > 0
 						? {
 								title: "Complete your assessment form",
-								detail: "Your consultant reads this before you meet — your background, passport, education and what you're aiming for.",
+								detail: "Your consultant reads this before you meet. Your background, passport, education and what you're aiming for.",
 								cta: (
 									<Button to="/portal/profile" variant="inverted" arrow>
 										Complete form
@@ -2355,7 +2374,7 @@ export function PortalConsultation() {
 							}
 						: toUpload.length > 0
 							? {
-									title: `Upload your documents — ${toUpload.map((d) => d.name).join(" · ")}`,
+									title: `Upload your documents · ${toUpload.map((d) => d.name).join(" · ")}`,
 									detail: "The standard set, checked off here so nothing waits on paperwork later.",
 									cta: (
 										<Button to="/portal/documents" variant="inverted" arrow>
@@ -2366,15 +2385,15 @@ export function PortalConsultation() {
 							: {
 									title:
 										workflowStatus === "AWAITING_ASSIGNMENT"
-											? `${whenShort} — a consultant is being assigned`
+											? `${whenShort}. A consultant is being assigned`
 											: workflowStatus === "IN_PROGRESS"
-												? "Session done — your outcome is being prepared"
+												? "Session done. Your outcome is being prepared"
 												: "Consultation in progress",
 									detail:
 										workflowStatus === "AWAITING_ASSIGNMENT"
 											? `${branchName} assigns your consultant within a day. Upload your standard documents meanwhile so nothing waits on paperwork.`
 											: workflowStatus === "IN_PROGRESS"
-												? "Your consultant writes up the outcome and route recommendation — it lands in Your assessment below."
+												? "Your consultant writes up the outcome and route recommendation. It lands in Your assessment below."
 												: "Your branch updates this page as the case moves.",
 									cta: null,
 								};
@@ -2390,7 +2409,7 @@ export function PortalConsultation() {
 					<p className="lead mt-2">
 						{activeOutcome
 							? "Your consultant has reviewed your file. One decision ends this chapter."
-							: "Your session is paid and on the calendar. This page is your case file — the appointment, the outcome, and anything your consultant asks for."}
+							: "Your session is paid and on the calendar. This page is your case file. The appointment, the outcome, and anything your consultant asks for."}
 					</p>
 				</div>
 			</header>
@@ -2407,7 +2426,7 @@ export function PortalConsultation() {
 				{band.cta}
 			</div>
 
-			{/* the strip — booked → consultant → outcome → your call */}
+			{/* the strip. Booked → consultant → outcome → your call */}
 			<div className="psteps4">
 				{steps.map((s, i) => {
 					const st = s.done ? "done" : i === onStep ? "on" : "pending";
@@ -2423,7 +2442,7 @@ export function PortalConsultation() {
 
 			<div className="psplit mt-5">
 				<div>
-					{/* 1 · the appointment — open card until it's held, then a mono line */}
+					{/* 1 · the appointment. Open card until it's held, then a mono line */}
 					<section className="psec">
 						<div className="psec__h">
 							<span className={`psec__no${appointmentDone ? " psec__no--done" : ""}`}>{appointmentDone ? "✓" : "1"}</span>
@@ -2438,7 +2457,7 @@ export function PortalConsultation() {
 						</div>
 						{appointmentDone ? (
 							<p className="mono muted" style={{ fontSize: "0.75rem" }}>
-								{liveConsultation?.type === "in_person" ? "In person" : "Video call"} · {branchName} · held {whenShort} — ref {activeRef}
+								{liveConsultation?.type === "in_person" ? "In person" : "Video call"} · {branchName} · held {whenShort}. Ref {activeRef}
 							</p>
 						) : (
 							<div className="sharp-card sharp-card--key">
@@ -2486,7 +2505,7 @@ export function PortalConsultation() {
 										}}
 									>
 										<span className="mono" style={{ fontSize: "0.62rem", letterSpacing: "0.12em", textTransform: "uppercase", display: "block", marginBottom: "0.15rem" }}>
-											Reschedule requested — awaiting your consultant
+											Reschedule requested. Awaiting your consultant
 										</span>
 										You asked to move to{" "}
 										<b>
@@ -2514,7 +2533,7 @@ export function PortalConsultation() {
 						)}
 					</section>
 
-					{/* 2 · the assessment outcome — the decision lives on the card */}
+					{/* 2 · the assessment outcome. The decision lives on the card */}
 					<section className="psec" id="assessment-outcome">
 						<div className="psec__h">
 							<span className={`psec__no${activeOutcome ? " psec__no--done" : ""}`}>{activeOutcome ? "✓" : "2"}</span>
@@ -2537,7 +2556,7 @@ export function PortalConsultation() {
 						) : (
 							<>
 								<p className="mono muted" style={{ fontSize: "0.75rem" }}>
-									YOUR CONSULTANT REVIEWS YOUR BACKGROUND, DOCUMENTS AND GOALS — THE OUTCOME AND ROUTE RECOMMENDATION APPEAR HERE.
+									YOUR CONSULTANT REVIEWS YOUR BACKGROUND, DOCUMENTS AND GOALS. THE OUTCOME AND ROUTE RECOMMENDATION APPEAR HERE.
 								</p>
 								{booking.consultationPhase === "assessment_complete" ? (
 									<div className="mt-3">
@@ -2550,7 +2569,7 @@ export function PortalConsultation() {
 						)}
 					</section>
 
-					{/* 3 · the standard documents — collected here so nothing waits later */}
+					{/* 3 · the standard documents. Collected here so nothing waits later */}
 					{checklist.length > 0 ? (
 						<section className="psec">
 							<div className="psec__h">
@@ -2596,7 +2615,7 @@ export function PortalConsultation() {
 						</section>
 					) : null}
 
-					{/* 4 · messages — only when the consultant has written */}
+					{/* 4 · messages. Only when the consultant has written */}
 					{liveConsultation?.comments && liveConsultation.comments.length > 0 ? (
 						<section className="psec">
 							<div className="psec__h">
@@ -2623,7 +2642,7 @@ export function PortalConsultation() {
 					) : null}
 				</div>
 
-				{/* the rail — countdown, money, consultant, next chapter */}
+				{/* the rail. Countdown, money, consultant, next chapter */}
 				<aside className="prail">
 					{startsInFuture && workflowStatus !== "CLOSED" ? (
 						<div className="sharp-card sharp-card--key sharp-card--invert">
@@ -2670,7 +2689,7 @@ export function PortalConsultation() {
 							</>
 						) : (
 							<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.5rem" }}>
-								Being assigned at {branchName} — usually same day.
+								Being assigned at {branchName}. Usually same day.
 							</p>
 						)}
 					</div>
@@ -2679,8 +2698,8 @@ export function PortalConsultation() {
 						<p className="eyebrow">{activeOutcome ? "Next chapter" : "After the session"}</p>
 						<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.4rem", lineHeight: 1.6 }}>
 							{activeOutcome
-								? "Proceeding opens Chapter II · Enrolment — the package and plan, then the deposit that starts your file moving."
-								: "Your outcome and recommendation land here, then Chapter II · Enrolment opens — the package and your plan."}
+								? "Proceeding opens Chapter II · Enrolment. The package and plan, then the deposit that starts your file moving."
+								: "Your outcome and recommendation land here, then Chapter II · Enrolment opens. The package and your plan."}
 						</p>
 					</div>
 				</aside>
@@ -2716,7 +2735,7 @@ export function PortalApplicationHub() {
 	);
 }
 
-/** The most schools one list can hold — the package's spread. */
+/** The most schools one list can hold. The package's spread. */
 const MAX_TARGET_SCHOOLS = 5;
 
 function ApplicationHubInner() {
@@ -2733,7 +2752,7 @@ function ApplicationHubInner() {
 	} = useAppState();
 	const [serverInvoice, setServerInvoice] = useState<ApiInvoice | null>(null);
 	// Schools added after the first invoice went out are billed on a
-	// supplementary one — every application invoice past the first.
+	// supplementary one. Every application invoice past the first.
 	const [extraInvoices, setExtraInvoices] = useState<ApiInvoice[]>([]);
 	const [destId, setDestId] = useState("");
 	const [uniId, setUniId] = useState("");
@@ -2745,8 +2764,8 @@ function ApplicationHubInner() {
 	const hasPkg = hasSchoolPackage(application);
 	const depositPaid = application.agencyDepositPaid;
 
-	// Refetched on every AppState sync — the `invoice.issued` / `invoice.paid`
-	// SSE events trigger one — so no page-level polling is needed.
+	// Refetched on every AppState sync. The `invoice.issued` / `invoice.paid`
+	// SSE events trigger one. So no page-level polling is needed.
 	useEffect(() => {
 		let cancelled = false;
 		meApi
@@ -2815,7 +2834,7 @@ function ApplicationHubInner() {
 	const paid = effectiveInv.status === "paid" || inv.status === "paid";
 
 	// Poll the server for the authoritative school application statuses once
-	// the invoice is paid — handlers post updates as institutions respond.
+	// the invoice is paid. Handlers post updates as institutions respond.
 	// (Moved here from the old Tracking page; the hub is the chapter now.)
 	useEffect(() => {
 		if (!paid) return;
@@ -2872,16 +2891,26 @@ function ApplicationHubInner() {
 	const offersCount = schoolApplications.filter((s) => s.outcome === "Admitted").length;
 	const decidedCount = schoolApplications.filter((s) => s.status === "Decision Reached").length;
 
+	// The live catalogue. The same /catalog/* rows ops maintains. The bundled
+	// content.ts lists this picker used to render are a build-time snapshot:
+	// a school added or deactivated in ops would never appear (or would keep
+	// appearing) here, and the freeze-snapshot on the server would silently
+	// null out the university name on submit.
+	const { catalog, loaded: catalogLoaded, failed: catalogFailed } = useAssessmentCatalog();
+	const livePrograms = catalog.programs as unknown as Program[];
+	const liveUniversities = catalog.universities;
+	const liveDestinations = catalog.destinations;
+
 	const selectedLevel = application.schoolDegreeLevel || undefined;
 	const selectedTrack = application.schoolFundingTrack || undefined;
 
 	const packagePrograms = useMemo(() => {
-		return filterProgramsForPackage(programs, selectedLevel, selectedTrack);
-	}, [selectedLevel, selectedTrack]);
+		return filterProgramsForPackage(livePrograms, selectedLevel, selectedTrack);
+	}, [livePrograms, selectedLevel, selectedTrack]);
 
 	const packageUniversities = useMemo(() => {
-		return universitiesForPrograms(packagePrograms, universities);
-	}, [packagePrograms]);
+		return liveUniversities.filter((u) => packagePrograms.some((p) => p.universityId === u.id));
+	}, [packagePrograms, liveUniversities]);
 
 	const uniList = destId
 		? packageUniversities.filter((u) => u.destinationId === destId)
@@ -2889,11 +2918,11 @@ function ApplicationHubInner() {
 	const progList = uniId
 		? packagePrograms.filter((p) => p.universityId === uniId)
 		: packagePrograms;
-	const program = getProgram(progId);
-	const intakes = program?.intake ?? ["September 2026", "January 2027"];
+	const program = livePrograms.find((p) => p.id === progId);
+	const intakes = program?.intake?.length ? program.intake : ["September 2026", "January 2027"];
 
 	// If the applicant already locked their school selection (or has a server
-	// invoice), they are past the package/deposit gate — show the invoice
+	// invoice), they are past the package/deposit gate. Show the invoice
 	// instead of bouncing them back to package selection. The redirects below
 	// only apply to applicants who haven't started school selection yet.
 	if (!selectionDone && !hasPkg) {
@@ -2945,11 +2974,17 @@ function ApplicationHubInner() {
 
 	function addSchool(e: FormEvent) {
 		e.preventDefault();
-		const d = destId || destinations[0]?.id || "uk";
-		const uList = universitiesForDestination(d);
-		const u = uniId || uList[0]?.id || universities[0]?.id || "";
-		const pList = programsForUniversity(u);
-		const p = progId || pList[0]?.id || programs[0]?.id || "";
+		const d = destId || liveDestinations[0]?.id || "";
+		const uList = liveUniversities.filter((u) => u.destinationId === d);
+		const u = uniId || uList[0]?.id || "";
+		const pList = livePrograms.filter((p) => p.universityId === u);
+		const p = progId || pList[0]?.id || "";
+		// Without a real catalogue row the server freeze-snapshot would land
+		// nulls. Refuse rather than file a school with no name.
+		if (!d || !u || !p) {
+			toast.error("Pick a destination, university and programme first.");
+			return;
+		}
 		const i = intake || "September 2026";
 		addSchoolApplication({
 			destinationId: d,
@@ -3000,14 +3035,14 @@ function ApplicationHubInner() {
 	const fund = SCHOOL_FUNDING_TRACKS.find((f) => f.id === application.schoolFundingTrack);
 	const deg = SCHOOL_DEGREE_LEVELS.find((d) => d.id === application.schoolDegreeLevel);
 	const handler = application.assignedStaffName ?? null;
-	// Staff names arrive in caps ("ENOCH ENU") — a first name reads better in sentence case.
+	// Staff names arrive in caps ("ENOCH ENU"). A first name reads better in sentence case.
 	const handlerFirst = handler
 		? handler.split(" ")[0].charAt(0).toUpperCase() + handler.split(" ")[0].slice(1).toLowerCase()
 		: "your consultant";
 	const n = schoolApplications.length;
 	const filedCount = schoolApplications.filter((r) => r.status !== "Preparing Application").length;
 	const acceptedRow = schoolApplications.find((r) => r.id === application.acceptedSchoolId) ?? null;
-	const acceptedName = acceptedRow ? (getUniversity(acceptedRow.universityId)?.name ?? acceptedRow.universityName ?? null) : null;
+	const acceptedName = acceptedRow ? (liveUniversities.find((u) => u.id === acceptedRow.universityId)?.name ?? acceptedRow.universityName ?? null) : null;
 	const visaConsent = application.visaConsent?.decision ?? null;
 	const invoiceDue = effectiveInv.status === "raised" && (serverInvoice?.balanceCents ?? 0) > 0;
 	const dueLabel = invoiceDue ? formatMoney(serverInvoice?.balanceCents ?? 0, "ghs") : null;
@@ -3033,11 +3068,11 @@ function ApplicationHubInner() {
 		await syncFromServer();
 	};
 
-	// The band — the one thing this chapter needs right now.
+	// The band. The one thing this chapter needs right now.
 	const band: { title: string; detail: string; cta: ReactNode } = !selectionDone
 		? {
-				title: `Choose your target schools — ${n} of ${MAX_TARGET_SCHOOLS} picked`,
-				detail: `Add up to five; the catalogue filters to your package. When the list is right, send it — ${handlerFirst} raises one invoice for all of them.`,
+				title: `Choose your target schools · ${n} of ${MAX_TARGET_SCHOOLS} picked`,
+				detail: `Add up to five; the catalogue filters to your package. When the list is right, send it · ${handlerFirst} raises one invoice for all of them.`,
 				cta: (
 					<a className="btn btn--inverted" href="#target-list">
 						Review your list ↓
@@ -3057,13 +3092,13 @@ function ApplicationHubInner() {
 			: !paid
 				? {
 						title: `Your school list is with ${handlerFirst}`,
-						detail: "The invoice is being prepared — you'll be notified the moment it is ready to pay.",
+						detail: "The invoice is being prepared. You'll be notified the moment it is ready to pay.",
 						cta: null,
 					}
 				: application.acceptedSchoolId && visaConsent === "continue"
 					? {
 							title: "Visa processing requested",
-							detail: "Your visa specialist is being assigned and the invoice prepared — follow it on the visa hub.",
+							detail: "Your visa specialist is being assigned and the invoice prepared. Follow it on the visa hub.",
 							cta: (
 								<Button to="/portal/visa" variant="inverted" arrow>
 									Next · Visa &amp; travel
@@ -3072,7 +3107,7 @@ function ApplicationHubInner() {
 						}
 					: application.acceptedSchoolId
 						? {
-								title: "Offer accepted — decide on visa processing",
+								title: "Offer accepted. Decide on visa processing",
 								detail: "Your destination is confirmed. The visa decision below opens Chapter IV.",
 								cta: (
 									<a className="btn btn--inverted" href="#decision">
@@ -3082,7 +3117,7 @@ function ApplicationHubInner() {
 							}
 						: offersCount > 0
 							? {
-									title: `${plural(offersCount, "offer")} in — pick your school`,
+									title: `${plural(offersCount, "offer")} in. Pick your school`,
 									detail: "Accepting one confirms your destination; the visa file and departure are prepared for that school.",
 									cta: (
 										<a className="btn btn--inverted" href="#decision">
@@ -3091,7 +3126,7 @@ function ApplicationHubInner() {
 									),
 								}
 							: {
-									title: `${plural(filedCount, "file")} lodged — universities reply in 2–6 weeks`,
+									title: `${plural(filedCount, "file")} lodged. Universities reply in 2–6 weeks`,
 									detail: `Nothing to do. ${handlerFirst} chases replies weekly; a decision lands on the school's card the moment it arrives.`,
 									cta: null,
 								};
@@ -3115,7 +3150,7 @@ function ApplicationHubInner() {
 						You paused your application
 					</h2>
 					<p className="lead mt-2" style={{ maxWidth: "44rem" }}>
-						Everything stays on hold. We can re-open your application whenever you are ready — just reach out to your consultant.
+						Everything stays on hold. We can re-open your application whenever you are ready. Just reach out to your consultant.
 					</p>
 					<div className="row mt-4">
 						<Button to="/portal/home" variant="ghost">
@@ -3188,7 +3223,16 @@ function ApplicationHubInner() {
 
 							{n < MAX_TARGET_SCHOOLS ? (
 								<form className="picker" onSubmit={addSchool}>
-									<fieldset className="picker__row">
+									{catalogFailed ? (
+										<p className="picker__peek">
+											<span className="picker__s">Couldn't load the school list. Refresh to try again, or message us.</span>
+										</p>
+									) : !catalogLoaded ? (
+										<p className="picker__peek">
+											<span className="picker__s">Loading the school catalogue…</span>
+										</p>
+									) : null}
+									<fieldset className="picker__row" disabled={!catalogLoaded}>
 										<Field label="Destination" htmlFor="s-dest">
 											<Select
 												id="s-dest"
@@ -3202,9 +3246,9 @@ function ApplicationHubInner() {
 												fullBorder
 											>
 												<option value="">Choose a country</option>
-												{destinations.map((d) => (
+												{liveDestinations.map((d) => (
 													<option key={d.id} value={d.id}>
-														{d.flag} {d.name}
+														{d.flag ? `${d.flag} ` : ""}{d.name}
 													</option>
 												))}
 											</Select>
@@ -3239,7 +3283,7 @@ function ApplicationHubInner() {
 												fullBorder
 											>
 												<option value="">Choose a programme</option>
-												{(progList.length ? progList : programs).map((pr) => (
+												{progList.map((pr) => (
 													<option key={pr.id} value={pr.id}>
 														{pr.name}
 													</option>
@@ -3263,8 +3307,18 @@ function ApplicationHubInner() {
 									{program ? (
 										<p className="picker__peek">
 											<span className="picker__k">Tuition</span>
-											<b>{program.tuition}</b>
-											<span className="picker__s">≈ {formatDualCurrency(program.tuitionUsd)} · paid to the university, not to us</span>
+											<b>{program.tuition ?? "N/A"}</b>
+											<span className="picker__s">
+												{program.tuitionUsd != null ? `≈ ${formatDualCurrency(program.tuitionUsd)} · ` : ""}paid to the university, not to us
+											</span>
+										</p>
+									) : destId && !uniList.length && catalogLoaded ? (
+										<p className="picker__peek">
+											<span className="picker__s">No universities listed for this destination yet. Message us and we'll add one.</span>
+										</p>
+									) : uniId && !progList.length && catalogLoaded ? (
+										<p className="picker__peek">
+											<span className="picker__s">No programmes listed for this university yet. Message us and we'll add one.</span>
 										</p>
 									) : (
 										<p className="picker__peek">
@@ -3281,7 +3335,7 @@ function ApplicationHubInner() {
 								<span className="pfoot__note">
 									{n === 0
 										? "Add at least one school to continue."
-										: `${handlerFirst} prices the application fees from this list. You can add schools later — they go on a supplementary invoice.`}
+										: `${handlerFirst} prices the application fees from this list. You can add schools later. They go on a supplementary invoice.`}
 								</span>
 							</div>
 						</section>
@@ -3316,7 +3370,7 @@ function ApplicationHubInner() {
 						</section>
 					)}
 
-					{/* 2 · Invoice — the real invoice once issued, an awaiting line while proforma */}
+					{/* 2 · Invoice. The real invoice once issued, an awaiting line while proforma */}
 					<section className={`psec${!selectionDone ? " psec--later" : ""}`} id="invoice">
 						<div className="psec__h">
 							<span className={`psec__no${paid ? " psec__no--done" : !selectionDone ? " psec__no--later" : ""}`}>{paid ? "✓" : "2"}</span>
@@ -3327,15 +3381,15 @@ function ApplicationHubInner() {
 						</div>
 						{!selectionDone ? (
 							<p className="psec__later">
-								Raised by {handlerFirst} once your list is confirmed — each university's own application fee, paid on your behalf at cost.
+								Raised by {handlerFirst} once your list is confirmed. Each university's own application fee, paid on your behalf at cost.
 							</p>
 						) : paid && extraInvoices.every((x) => x.status === "paid" || x.balanceCents <= 0) ? (
 							<p className="psec__later">
-								{serverInvoice ? formatMoney(serverInvoice.subtotalCents, "ghs") : formatDualCurrency(inv.amount)} settled in full — receipt in your Money ledger.
+								{serverInvoice ? formatMoney(serverInvoice.subtotalCents, "ghs") : formatDualCurrency(inv.amount)} settled in full. Receipt in your Money ledger.
 							</p>
 						) : effectiveInv.status === "estimated" || !serverInvoice ? (
 							<p className="psec__later">
-								Your school list is with {handlerFirst}, who is preparing the invoice — you'll be notified the moment it is ready to pay. The payment card appears here once it is issued.
+								Your school list is with {handlerFirst}, who is preparing the invoice. You'll be notified the moment it is ready to pay. The payment card appears here once it is issued.
 							</p>
 						) : (
 							<div className={`sharp-card${paid ? "" : " sharp-card--key"}`}>
@@ -3384,7 +3438,7 @@ function ApplicationHubInner() {
 						)}
 					</section>
 
-					{/* 3 · Your decision — the prompt and the visa consent in one card */}
+					{/* 3 · Your decision. The prompt and the visa consent in one card */}
 					{offersCount > 0 || application.acceptedSchoolId ? (
 						<section className="psec" id="decision">
 							<div className="psec__h">
@@ -3410,8 +3464,8 @@ function ApplicationHubInner() {
 											</p>
 											<p className="muted mt-2">
 												{application.pendingHandoff
-													? `We're assigning your ${JOURNEY_STAGE_LABELS[application.pendingHandoff.stage as JourneyStage] ?? application.pendingHandoff.stage} specialist and preparing the visa invoice — you'll be notified once your consultant is confirmed.`
-													: "Your visa specialist is being assigned and the invoice prepared — follow it on the visa hub."}
+													? `We're assigning your ${JOURNEY_STAGE_LABELS[application.pendingHandoff.stage as JourneyStage] ?? application.pendingHandoff.stage} specialist and preparing the visa invoice. You'll be notified once your consultant is confirmed.`
+													: "Your visa specialist is being assigned and the invoice prepared. Follow it on the visa hub."}
 											</p>
 										</div>
 										<Button to="/portal/visa" arrow>
@@ -3425,7 +3479,7 @@ function ApplicationHubInner() {
 										<div className="sharp-card sharp-card--key mb-3">
 											<p className="eyebrow">Admitted · {plural(offersCount, "school")}</p>
 											<p className="display mt-1" style={{ fontSize: "1.2rem" }}>
-												You hold {offersCount} offers — which one are you going with?
+												You hold {offersCount} offers. Which one are you going with?
 											</p>
 											<p className="muted mt-2">
 												Use “Accept this offer” on the school's card above, then decide below.
@@ -3449,7 +3503,7 @@ function ApplicationHubInner() {
 						</section>
 					) : null}
 
-					{/* Updates — only when the consultant has written on this chapter */}
+					{/* Updates. Only when the consultant has written on this chapter */}
 					{application.comments.some((c) => !isVisaUpdate(c)) ? (
 						<section className="psec">
 							<div className="psec__h">
@@ -3464,7 +3518,7 @@ function ApplicationHubInner() {
 					) : null}
 				</div>
 
-				{/* the rail — position, the chapter's facts, one explainer for the state */}
+				{/* the rail. Position, the chapter's facts, one explainer for the state */}
 				<div className="prail">
 					<div className="prail__ink">
 						<p className="prail__ink-k">Your position</p>
@@ -3482,7 +3536,7 @@ function ApplicationHubInner() {
 						<div style={{ marginTop: "0.4rem" }}>
 							<div className="pkv">
 								<span className="pkv__k">Package</span>
-								<span className="pkv__v">{[fund?.name, deg?.short].filter(Boolean).join(" · ") || "—"}</span>
+								<span className="pkv__v">{[fund?.name, deg?.short].filter(Boolean).join(" · ") || "N/A"}</span>
 							</div>
 							<div className={`pkv${invoiceDue ? " pkv--due" : ""}`}>
 								<span className="pkv__k">Invoice</span>
@@ -3494,7 +3548,7 @@ function ApplicationHubInner() {
 							</div>
 							<div className={`pkv${offersCount > 0 && !application.acceptedSchoolId ? " pkv--due" : ""}`}>
 								<span className="pkv__k">Next unlock</span>
-								<span className="pkv__v">IV · Visa — {application.acceptedSchoolId ? (visaConsent === "continue" ? "chapter opens" : "your visa decision") : offersCount > 0 ? "accept an offer" : "when you're admitted"}</span>
+								<span className="pkv__v">IV · Visa · {application.acceptedSchoolId ? (visaConsent === "continue" ? "chapter opens" : "your visa decision") : offersCount > 0 ? "accept an offer" : "when you're admitted"}</span>
 							</div>
 						</div>
 					</div>
@@ -3510,21 +3564,21 @@ function ApplicationHubInner() {
 						<div className="sharp-card">
 							<p className="eyebrow">What you're paying for</p>
 							<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.4rem", lineHeight: 1.6 }}>
-								Each university's own application fee, passed on at cost — Century NIT adds nothing to it. Payment lodges every file within two business days.
+								Each university's own application fee, passed on at cost. Century NIT adds nothing to it. Payment lodges every file within two business days.
 							</p>
 						</div>
 					) : offersCount > 0 || application.acceptedSchoolId ? (
 						<div className="sharp-card">
 							<p className="eyebrow">How accepting works</p>
 							<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.4rem", lineHeight: 1.6 }}>
-								Accepting confirms your destination — the visa file and departure are prepared for that school. The university's own deposit is paid to the school directly; {handlerFirst} walks you through it.
+								Accepting confirms your destination. The visa file and departure are prepared for that school. The university's own deposit is paid to the school directly; {handlerFirst} walks you through it.
 							</p>
 						</div>
 					) : (
 						<div className="sharp-card">
 							<p className="eyebrow">While you wait</p>
 							<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.4rem", lineHeight: 1.6 }}>
-								{handlerFirst} chases every school weekly. A decision shows on its card first — an offer opens Chapter IV · Visa. Nothing is asked of you here.
+								{handlerFirst} chases every school weekly. A decision shows on its card first. An offer opens Chapter IV · Visa. Nothing is asked of you here.
 							</p>
 						</div>
 					)}
@@ -3534,7 +3588,7 @@ function ApplicationHubInner() {
 	);
 }
 
-/* ========== Tracking — folded into the Applications chapter ========== */
+/* ========== Tracking. Folded into the Applications chapter ========== */
 
 export function PortalTrackingPage() {
 	return <Navigate to="/portal/application" replace />;
@@ -3590,7 +3644,7 @@ function AdmissionLetterViewer({ schoolId, universityName, compact = false }: { 
 			const ticket = await schoolsApi.meAdmissionLetterDownloadUrl(schoolId);
 			setUrl(ticket.url);
 		} catch (err) {
-			// Held until the pre-departure fee milestone — the API says so; show it as it is.
+			// Held until the pre-departure fee milestone. The API says so; show it as it is.
 			setError(err instanceof ApiError && err.code === "RELEASE_HELD" ? `🔒 ${err.message}` : "Could not load the admission letter. Please try again.");
 		} finally {
 			setBusy(false);
@@ -3679,7 +3733,7 @@ function AdmissionLetterViewer({ schoolId, universityName, compact = false }: { 
 }
 
 /**
- * One school, one card — the same shape while the list is being built,
+ * One school, one card. The same shape while the list is being built,
  * once it is locked with the consultant, and while the file moves. The
  * pipeline (Preparing · Submitted · Decided) is a three-segment rule; the
  * outcome is a corner tag in the client's words; an admitted card is the
@@ -3702,7 +3756,7 @@ function SchoolCard({
 	onAskChange?: () => void;
 	/** This is the offer the client is going with. */
 	accepted?: boolean;
-	/** A different offer is already accepted — accepting this one replaces it. */
+	/** A different offer is already accepted. Accepting this one replaces it. */
 	anotherAccepted?: boolean;
 	/** Present once decisions are in and the client may choose. */
 	onAccept?: () => Promise<void>;
@@ -3734,7 +3788,7 @@ function SchoolCard({
 		iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : null;
 	const tracking = mode === "tracking";
 	const rawNote = tracking ? (row.handlerNote ?? (row.status === "Decision Reached" && row.outcome ? schoolDecisionNote({ outcome: row.outcome, universityName: uniName, programName: progName }) : null)) : null;
-	// The consent card below carries the congratulations — the card states the fact.
+	// The consent card below carries the congratulations. The card states the fact.
 	const note = rawNote?.replace(/^Congratulations!\s*/, "") ?? null;
 
 	return (
@@ -3790,7 +3844,7 @@ function SchoolCard({
 					<span className="offer__k">Your offer</span>
 					<div className="offer__row">
 						<span>Tuition</span>
-						<b>{row.offerTuitionLabel ?? program?.tuition ?? "—"}</b>
+						<b>{row.offerTuitionLabel ?? program?.tuition ?? "N/A"}</b>
 					</div>
 					{row.offerTuitionUsd ? (
 						<div className="offer__row offer__row--sub">
@@ -3960,7 +4014,7 @@ function VisaHubInner() {
 				estimatedAmount: usdFromCents(visaCostsCentsFor(fees?.catalogue, application.destinationId)),
 				estimateLines: [],
 				actualLines: [],
-				description: "Visa costs — paid on your behalf, at cost · being prepared",
+				description: "Visa costs. Paid on your behalf, at cost · being prepared",
 			};
 	const amount = cardInvoice.amount || usdFromCents(visaCostsCentsFor(fees?.catalogue, application.destinationId));
 
@@ -3984,7 +4038,7 @@ function VisaHubInner() {
 				);
 				return;
 			}
-			// Real Paystack checkout — redirect to hosted checkout
+			// Real Paystack checkout. Redirect to hosted checkout
 			const checkout = await meApi.paystackCheckout(backend.id);
 			if (checkout.authorizationUrl && checkout.authorizationUrl.startsWith("http")) {
 				window.location.href = checkout.authorizationUrl;
@@ -4026,11 +4080,11 @@ function VisaHubInner() {
 		: !isConsented && !paid
 			? "You've been admitted. Continue with visa processing so we can assign your visa officer and raise the visa fee."
 			: isAwaitingSpecialist
-				? "Consent recorded — operations is matching your case to a specialist. This page updates automatically."
+				? "Consent recorded. Operations is matching your case to a specialist. This page updates automatically."
 				: isPendingInvoice
-					? `${application.assignedStaffName ? `${application.assignedStaffName} is` : "Your consultant is"} finalising the fee — payment unlocks here the moment it's issued.`
+					? `${application.assignedStaffName ? `${application.assignedStaffName} is` : "Your consultant is"} finalising the fee. Payment unlocks here the moment it's issued.`
 					: paid
-						? "Your visa case opens on the tracking page — your officer updates it there."
+						? "Your visa case opens on the tracking page. Your officer updates it there."
 						: `Visa processing starts once this invoice is paid · ${formatDualCurrency(amount)}`;
 
 	return (
@@ -4044,7 +4098,7 @@ function VisaHubInner() {
 							? [chosen.universityName ?? getUniversity(chosen.universityId)?.name, chosen.programName ?? getProgram(chosen.programId)?.name, chosen.intake]
 									.filter(Boolean)
 									.join(" · ")
-							: "Application & processing — the visa chapter."}
+							: "Application & processing. The visa chapter."}
 					</p>
 				</div>
 			</header>
@@ -4106,7 +4160,7 @@ function VisaHubInner() {
 							{accepted.length > 1 && (
 								<p className="muted mt-3" style={{ fontSize: "0.85rem" }}>
 									You hold {accepted.length} offers. Accept the one you are going with on{" "}
-									<Link to="/portal/application">Applications</Link> — your visa is prepared for that school.
+									<Link to="/portal/application">Applications</Link>. Your visa is prepared for that school.
 								</p>
 							)}
 						</div>
@@ -4120,11 +4174,11 @@ function VisaHubInner() {
 							</h3>
 							<p className="muted mt-2" style={{ lineHeight: 1.6 }}>
 								Your consent to proceed has been received. Our operations team is assigning your
-								dedicated visa officer — once assigned, they'll prepare and issue your official visa
+								dedicated visa officer. Once assigned, they'll prepare and issue your official visa
 								application fee invoice.
 							</p>
 							<p className="muted mt-3" style={{ fontSize: "0.8rem" }}>
-								Nothing needed from you — this page updates in real time.
+								Nothing needed from you. This page updates in real time.
 							</p>
 						</div>
 					) : isPendingInvoice ? (
@@ -4175,7 +4229,7 @@ function VisaHubInner() {
 					</div>
 				</div>
 
-				{/* the rail — who and where the case stands */}
+				{/* the rail. Who and where the case stands */}
 				<div className="prail">
 					<div className="sharp-card sharp-card--key">
 						<p className="eyebrow">Your visa officer</p>
@@ -4215,7 +4269,7 @@ function VisaHubInner() {
 							<div className="pkv">
 								<span className="pkv__k">Visa fee</span>
 								<span className="pkv__v">
-									{paid ? "Paid ✓" : hasIssuedInvoice ? "Issued — due" : "Not yet"}
+									{paid ? "Paid ✓" : hasIssuedInvoice ? "Issued. Due" : "Not yet"}
 								</span>
 							</div>
 							<div className="pkv">
@@ -4255,11 +4309,11 @@ export function PortalVisaTracking() {
 
 const VISA_UPDATE_BY_STAGE: Record<string, string> = {
 	locked: "Visa case not started yet. Settle the visa invoice to open it.",
-	awaiting_handler: "Visa payment received. We are assigning your consultant — you'll be notified once your consultant is confirmed.",
-	pending: "Visa payment received — your consultant has opened your visa case.",
+	awaiting_handler: "Visa payment received. We are assigning your consultant. You'll be notified once your consultant is confirmed.",
+	pending: "Visa payment received. Your consultant has opened your visa case.",
 	biometrics: "Visa case in progress. Attend your biometrics / appointment when scheduled.",
 	decision: "Visa case in progress. Awaiting the authority's decision.",
-	complete: "Visa approved. Your visa is complete — continue to travel assistance.",
+	complete: "Visa approved. Your visa is complete. Continue to travel assistance.",
 };
 
 function VisaTrackingInner() {
@@ -4268,7 +4322,7 @@ function VisaTrackingInner() {
 	// Fetch the real server invoice so the paid check doesn't rely solely on
 	// the local `application.visaInvoice.status` (which is only synced when
 	// the `visaInvoicePaid` flag is set on the application row). The invoice
-	// table is the source of truth — see VisaHubInner for the same pattern.
+	// table is the source of truth. See VisaHubInner for the same pattern.
 	const [serverInv, setServerInv] = useState<{ status: string } | null>(null);
 	useEffect(() => {
 		let cancelled = false;
@@ -4290,20 +4344,20 @@ function VisaTrackingInner() {
 	const when = (iso: string | null | undefined) =>
 		iso ? new Date(iso).toLocaleString(undefined, { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
 	const refusedDetail =
-		application.visaStatus === "decision" && application.visaOutcome === "refused" ? "Refused — your consultant will advise" : "Awaiting the authority's decision";
+		application.visaStatus === "decision" && application.visaOutcome === "refused" ? "Refused. Your consultant will advise" : "Awaiting the authority's decision";
 	const lodgedDetail = [vd.visaType, vd.reference ? `Ref ${vd.reference}` : null, vd.submittedAt ? `Submitted ${day(vd.submittedAt)}` : null]
 		.filter(Boolean)
 		.join(" · ");
 	const appointmentDetail = vd.biometricsAt
 		? `Biometrics given ${day(vd.biometricsAt)}`
 		: vd.appointmentAt
-			? `${when(vd.appointmentAt)}${vd.appointmentCentre ? ` · ${vd.appointmentCentre}` : ""} — bring your passport and the documents your consultant listed`
+			? `${when(vd.appointmentAt)}${vd.appointmentCentre ? ` · ${vd.appointmentCentre}` : ""}. Bring your passport and the documents your consultant listed`
 			: "Your consultant will tell you when and where";
 	const decisionDetail = vd.decidedAt && application.visaStatus === "complete" ? `Approved ${day(vd.decidedAt)}` : refusedDetail;
 	const completeDetail =
 		vd.validFrom || vd.validTo
 			? `Valid ${day(vd.validFrom) ?? "…"} → ${day(vd.validTo) ?? "…"}${vd.collectedAt ? ` · collected ${day(vd.collectedAt)}` : ""}`
-			: "Passport back with the visa — then Departure";
+			: "Passport back with the visa. Then Departure";
 	const steps = [
 		{ id: "pending", label: "Application lodged", detail: lodgedDetail || "Your consultant opens your file and lodges the application" },
 		{ id: "biometrics", label: "Appointment & biometrics", detail: appointmentDetail },
@@ -4408,7 +4462,7 @@ function VisaTrackingInner() {
 				<div className="sharp-card mt-4">
 					<span className="portal-pill">Assigning your visa officer</span>
 					<p className="muted" style={{ fontSize: "0.95rem", lineHeight: 1.6, marginTop: "0.6rem" }}>
-						Your payment is confirmed. Century NIT is matching your case to a visa officer — you'll
+						Your payment is confirmed. Century NIT is matching your case to a visa officer. You'll
 						get a notification with their details once your case is open.
 					</p>
 				</div>
@@ -4444,7 +4498,7 @@ function VisaTrackingInner() {
 						})}
 					</ol>
 
-					{/* the checklist — the action item is the underlined one */}
+					{/* the checklist. The action item is the underlined one */}
 					{application.visaDocumentChecklist.length > 0 && (
 						<div className="sharp-card mt-4">
 							<div className="between">
@@ -4510,7 +4564,7 @@ function VisaTrackingInner() {
 							</>
 						) : (
 							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem" }}>
-								Being assigned — you'll be notified once your case is open.
+								Being assigned. You'll be notified once your case is open.
 							</p>
 						)}
 					</div>
@@ -4552,7 +4606,7 @@ function VisaTrackingInner() {
 						<p className="eyebrow">After the visa</p>
 						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
 							{application.visaStatus === "complete"
-								? "Chapter V · Departure is open — your flight first, then the pre-departure milestone."
+								? "Chapter V · Departure is open. Your flight first, then the pre-departure milestone."
 								: refused
 									? "Departure stays closed while the refusal is reviewed. Your consultant will let you know the next step."
 									: "Once approved, Chapter V · Departure opens: your flight first, then the pre-departure milestone. Your letter and visa documents release with the milestone."}
@@ -4634,7 +4688,7 @@ function CompleteInner() {
 	}
 
 	const day = (iso: string | null | undefined) =>
-		iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }).toUpperCase() : "—";
+		iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }).toUpperCase() : "N/A";
 
 	const vd = application.visaDetails ?? {};
 	const flight = application.travelAssistance?.booking ?? application.travelAssistance?.flight ?? null;
@@ -4652,7 +4706,7 @@ function CompleteInner() {
 		{ numeral: "III", name: "Applications", fact: `${schoolApplications.length} targeted · ${accepted.length} admitted${chosen ? ` · ${chosen.universityName ?? getUniversity(chosen.universityId)?.name} accepted` : ""}`, when: day(application.offerAcceptedAt ?? application.schoolSelectionDoneAt) },
 		{ numeral: "IV", name: "Visa", fact: vd.validFrom || vd.validTo ? `Granted · ${day(vd.validFrom)} → ${day(vd.validTo)}` : "Granted", when: day(vd.decidedAt) },
 		{ numeral: "V", name: "Departure", fact: [flightLine ? `${flightLine} booked` : "Travel settled", "milestone paid", "checklist done"].join(" · "), when: day(application.agencySettledAt) },
-		{ numeral: "VI", name: "Complete", fact: "File closed — post-arrival support open", when: day(application.completedAt) },
+		{ numeral: "VI", name: "Complete", fact: "File closed. Post-arrival support open", when: day(application.completedAt) },
 	];
 
 	return (
@@ -4712,7 +4766,7 @@ function CompleteInner() {
 						))}
 					</div>
 
-					{/* money, in full — the real invoices */}
+					{/* money, in full. The real invoices */}
 					<div className="psec">
 						<span className="psec__title">Money, in full</span>
 						<span className="psec__hint">{paidInvoices.length} receipt{paidInvoices.length === 1 ? "" : "s"}</span>
@@ -4748,14 +4802,14 @@ function CompleteInner() {
 					</div>
 					<div className="sharp-card">
 						<ul style={{ listStyle: "none", padding: 0, fontSize: "var(--text-sm)", lineHeight: 1.9, margin: 0 }}>
-							<li style={{ display: "flex", gap: "0.7rem" }}><span className="mono">→</span><span><strong>Check in when you land</strong> — message your officer through the portal chat; we confirm your arrival with the school.</span></li>
-							<li style={{ display: "flex", gap: "0.7rem" }}><span className="mono">→</span><span><strong>Enrolment week</strong> — report by {day(application.departureDetails?.reportBy) !== "—" ? day(application.departureDetails?.reportBy) : "your school's date"}. Your officer watches for issues in the first month.</span></li>
-							<li style={{ display: "flex", gap: "0.7rem" }}><span className="mono">→</span><span><strong>Your record stays</strong> — receipts, letters and the vault remain available here. Come back for a transcript request or a reference any time.</span></li>
+							<li style={{ display: "flex", gap: "0.7rem" }}><span className="mono">→</span><span><strong>Check in when you land</strong>. Message your officer through the portal chat; we confirm your arrival with the school.</span></li>
+							<li style={{ display: "flex", gap: "0.7rem" }}><span className="mono">→</span><span><strong>Enrolment week</strong>. Report by {day(application.departureDetails?.reportBy) !== "N/A" ? day(application.departureDetails?.reportBy) : "your school's date"}. Your officer watches for issues in the first month.</span></li>
+							<li style={{ display: "flex", gap: "0.7rem" }}><span className="mono">→</span><span><strong>Your record stays</strong>. Receipts, letters and the vault remain available here. Come back for a transcript request or a reference any time.</span></li>
 						</ul>
 					</div>
 				</div>
 
-				{/* the rail — destination, released documents, the people */}
+				{/* the rail. Destination, released documents, the people */}
 				<div className="prail">
 					{chosen ? (
 						<div className="sharp-card">
@@ -4794,7 +4848,7 @@ function CompleteInner() {
 					<div className="sharp-card">
 						<p className="eyebrow">The people on your file</p>
 						<div style={{ marginTop: "0.4rem" }}>
-							<div className="pkv"><span className="pkv__k">Consultant</span><span className="pkv__v">{booking.consultantName ?? application.assignedStaffName ?? "—"}</span></div>
+							<div className="pkv"><span className="pkv__k">Consultant</span><span className="pkv__v">{booking.consultantName ?? application.assignedStaffName ?? "N/A"}</span></div>
 							{application.travelAssistance?.assignedOpsUserName ? (
 								<div className="pkv"><span className="pkv__k">Travel officer</span><span className="pkv__v">{application.travelAssistance.assignedOpsUserName}</span></div>
 							) : null}
@@ -4850,7 +4904,7 @@ export function PortalPayCallback() {
 				}
 
 				// Agency service-fee payment (Stage IV). There is no invoice id
-				// in the URL — the server resolved it from the session. Re-sync
+				// in the URL. The server resolved it from the session. Re-sync
 				// the authoritative agency invoice state, which syncFromServer
 				// maps onto agencyPaid / agencyDepositPaid / agencyStageIndex /
 				// agencySettledAt, then route back to the Financial page.

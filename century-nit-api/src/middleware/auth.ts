@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from "hono";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
 	AUTH_ERROR_CODES,
 	mfaRequiredForRole,
@@ -7,10 +7,11 @@ import {
 	type Capability,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { opsUsers, users } from "../db/schema.js";
+import { accounts, opsUsers, users } from "../db/schema.js";
 import { getAuthInstance } from "../routes/auth.js";
 import { HttpError } from "./error.js";
 import { checkRoleCapability, checkRolePermission, permissionsOfRole } from "../services/roles.js";
+import { mfaSessionOk } from "../services/auth-settings.js";
 
 /**
  * Authentication and authorisation for the scheduling API.
@@ -62,7 +63,7 @@ export const requireAuth: MiddlewareHandler<{ Variables: AuthVariables }> = asyn
 	}
 
 	const [dbUser] = await db
-		.select({ banned: users.banned, banReason: users.banReason })
+		.select({ banned: users.banned, banReason: users.banReason, mfaEnrolled: users.mfaEnrolled, mfaMethod: users.mfaMethod })
 		.from(users)
 		.where(eq(users.id, session.user.id))
 		.limit(1);
@@ -117,6 +118,39 @@ export const requireAuth: MiddlewareHandler<{ Variables: AuthVariables }> = asyn
 				}
 			: null,
 	);
+
+	/*
+	 * Passwordless MFA gate. A social-only account (no credential row) enrolled
+	 * in email-otp MFA is never challenged by the twoFactor plugin — its
+	 * sign-in hook only matches credential paths, never OAuth callbacks — so
+	 * the session itself must prove it passed a code. Password accounts are
+	 * skipped entirely: the plugin already challenged their credential
+	 * sign-in, and challenging them again here would demand a second code.
+	 * Staff are skipped too — ops sign-ins go through the plugin challenge.
+	 * The /auth-settings/mfa subtree stays reachable or the gate could never
+	 * be answered.
+	 */
+	if (
+		!staff &&
+		dbUser?.mfaEnrolled &&
+		dbUser.mfaMethod === "email_otp" &&
+		!c.req.path.includes("/auth-settings/mfa")
+	) {
+		const credentialRows = await db
+			.select({ password: accounts.password })
+			.from(accounts)
+			.where(and(eq(accounts.userId, session.user.id), eq(accounts.providerId, "credential")));
+		if (!credentialRows.some((a) => Boolean(a.password))) {
+			const token = session.session?.token;
+			if (!token || !(await mfaSessionOk(token))) {
+				throw new HttpError(
+					403,
+					"MFA_CHALLENGE_REQUIRED",
+					"Enter the code sent to your email to finish signing in.",
+				);
+			}
+		}
+	}
 
 	await next();
 };
@@ -261,6 +295,33 @@ export function requireModule(
 			);
 		}
 		await next();
+	};
+}
+
+/**
+ * Passes when the role holds ANY of the listed modules — for surfaces like
+ * the shared chat backend, which serves both the Helpdesk page (client
+ * threads, `helpdesk`) and the staff CommunicationHub (`chat`).
+ */
+export function requireAnyModule(
+	...modules: OpsModule[]
+): MiddlewareHandler<{ Variables: AuthVariables }> {
+	return async (c, next) => {
+		const staff = c.get("staff");
+		if (!staff) {
+			throw new HttpError(403, "FORBIDDEN", "Staff access required");
+		}
+		for (const module of modules) {
+			if (await checkRolePermission(staff.role, module)) {
+				await next();
+				return;
+			}
+		}
+		throw new HttpError(
+			403,
+			"FORBIDDEN",
+			`Your role does not include any of: ${modules.join(", ")}`,
+		);
 	};
 }
 

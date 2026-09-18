@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { db } from "../db/index.js";
 import { destinations, catalogUniversities, catalogPrograms, catalogScholarships } from "../db/schema.js";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { requireStaff } from "../middleware/auth.js";
 import { randomUUID } from "node:crypto";
 import {
@@ -19,7 +19,7 @@ export const catalogRoutes = new Hono();
 
 // DESTINATIONS
 catalogRoutes.get("/destinations", async (c) => {
-	const all = await db.select().from(destinations);
+	const all = await db.select().from(destinations).where(eq(destinations.isActive, true));
 	return c.json({ destinations: all });
 });
 catalogRoutes.post("/destinations", requireStaff, async (c) => {
@@ -44,7 +44,16 @@ catalogRoutes.delete("/destinations/:id", requireStaff, async (c) => {
 
 // UNIVERSITIES
 catalogRoutes.get("/universities", async (c) => {
-	const all = await db.select().from(catalogUniversities);
+	const destinationId = c.req.query("destinationId");
+	const all = await db
+		.select()
+		.from(catalogUniversities)
+		.where(
+			and(
+				eq(catalogUniversities.isActive, true),
+				destinationId ? eq(catalogUniversities.destinationId, destinationId) : undefined,
+			),
+		);
 	return c.json({ universities: all });
 });
 catalogRoutes.post("/universities", requireStaff, async (c) => {
@@ -69,7 +78,16 @@ catalogRoutes.delete("/universities/:id", requireStaff, async (c) => {
 
 // PROGRAMS
 catalogRoutes.get("/programs", async (c) => {
-	const all = await db.select().from(catalogPrograms);
+	const universityId = c.req.query("universityId");
+	const all = await db
+		.select()
+		.from(catalogPrograms)
+		.where(
+			and(
+				eq(catalogPrograms.isActive, true),
+				universityId ? eq(catalogPrograms.universityId, universityId) : undefined,
+			),
+		);
 	return c.json({ programs: all });
 });
 catalogRoutes.post("/programs", requireStaff, async (c) => {

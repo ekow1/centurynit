@@ -30,7 +30,7 @@ const DOC_CSS = `
 	.doc{max-width:820px;margin:0 auto;padding:2.5rem 1.5rem 3rem}
 	.doc__head{background:#0a0a0a;color:#fff;padding:1.75rem 2.5rem;display:flex;justify-content:space-between;align-items:flex-end;gap:2rem}
 	.seal{display:inline-block;border:1.5px solid #fff;padding:.25rem .55rem;font-family:ui-monospace,Consolas,monospace;font-size:.62rem;font-weight:700;letter-spacing:.15em;text-transform:uppercase}
-	.co{font-family:Georgia,serif;font-size:1.35rem;font-weight:700;margin-top:.55rem}
+	.co{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:1.35rem;font-weight:700;letter-spacing:-.02em;margin-top:.55rem}
 	.addr{font-size:.68rem;opacity:.7;margin-top:.25rem;line-height:1.6}
 	.kind{text-align:right}
 	.kind .k{font-family:ui-monospace,Consolas,monospace;font-size:.62rem;letter-spacing:.15em;text-transform:uppercase;opacity:.65}
@@ -38,7 +38,7 @@ const DOC_CSS = `
 	.kind .st{display:inline-block;border:1.5px solid #fff;padding:.15rem .6rem;margin-top:.5rem;font-family:ui-monospace,Consolas,monospace;font-size:.62rem;letter-spacing:.1em;text-transform:uppercase}
 	.paid{display:flex;align-items:center;gap:1.25rem;padding:1.5rem 2.5rem;border-bottom:1.5px solid #0a0a0a}
 	.paid__seal{border:2px solid #0a0a0a;padding:.45rem .9rem;font-weight:800;letter-spacing:.2em;font-family:ui-monospace,Consolas,monospace;font-size:.8rem}
-	.paid__amt{font-family:Georgia,serif;font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
+	.paid__amt{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:1.5rem;font-weight:800;letter-spacing:-.02em}
 	.paid__when{font-size:.72rem;color:#52525b;margin-top:.2rem;font-family:ui-monospace,Consolas,monospace}
 	.meta{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1.5px solid #0a0a0a}
 	.meta>div{padding:1rem 1.25rem;border-right:1px solid #d4d4d8}
@@ -90,7 +90,7 @@ function masthead(kind: string, number: string, statusLabel: string): string {
 		<div>
 			<span class="seal">Century NIT</span>
 			<p class="co">Century NIT Consult</p>
-			<p class="addr">Accra, Ghana — London, United Kingdom</p>
+			<p class="addr">Accra, Ghana · London, United Kingdom</p>
 		</div>
 		<div class="kind">
 			<p class="k">${kind}</p>
@@ -115,7 +115,7 @@ function openDocument(title: string, body: string): void {
 	win.document.close();
 }
 
-/** The printable invoice — same document the API attaches to emails, rendered
+/** The printable invoice. Same document the API attaches to emails, rendered
  * client-side from the live invoice record. */
 export function downloadInvoice(invoice: ApiInvoice, title: string): void {
 	const status = INVOICE_STATUS_LABELS[invoice.status] ?? invoice.status;
@@ -123,13 +123,13 @@ export function downloadInvoice(invoice: ApiInvoice, title: string): void {
 	const chapter = CHAPTERS[invoice.type];
 
 	openDocument(
-		`Invoice ${invoice.invoiceNumber} — Century NIT`,
+		`Invoice ${invoice.invoiceNumber}. Century NIT`,
 		`${masthead("Invoice", invoice.invoiceNumber, status)}
 		<div class="meta">
 			${metaCell("Issued", dateFmt(issued))}
 			${metaCell("Due", invoice.dueAt ? dateFmt(invoice.dueAt) : "On issue")}
 			${metaCell("Billed to", invoice.applicantName, invoice.applicantEmail ?? undefined)}
-			${metaCell("Chapter", chapter ?? "—", title)}
+			${metaCell("Chapter", chapter ?? "N/A", title)}
 		</div>
 		${linesTable(invoice)}
 		<div class="totals"><div>
@@ -139,20 +139,20 @@ export function downloadInvoice(invoice: ApiInvoice, title: string): void {
 			<div class="trow trow--inv"><span class="k">Balance due</span><span class="amt">${formatMoney(invoice.balanceCents, "both")}</span></div>
 		</div></div>
 		<div class="terms">
-			<div><p class="h">How to pay</p><p>Pay through your portal — the Money ledger — or the secure link in your invoice email. Card and mobile money are accepted via Paystack. A receipt issues automatically on settlement.</p></div>
+			<div><p class="h">How to pay</p><p>Pay through your portal, the Money ledger, or the secure link in your invoice email. Card and mobile money are accepted via Paystack. A receipt issues automatically on settlement.</p></div>
 			<div><p class="h">Terms</p><p>Due by the date above. Pass-through charges (application, visa and travel costs) are non-refundable once submitted to the institution.</p></div>
 		</div>
 		<div class="foot"><span>CENTURY NIT CONSULT</span><span>${esc(invoice.invoiceNumber)}</span></div>`,
 	);
 }
 
-/** The printable receipt — the paid counterpart of the invoice document. */
+/** The printable receipt. The paid counterpart of the invoice document. */
 export function downloadReceipt(invoice: ApiInvoice, title: string): void {
 	const payment = invoice.payments[invoice.payments.length - 1];
 	const paidAt = payment?.at ?? invoice.updatedAt;
 	const chapter = CHAPTERS[invoice.type];
 	const settled = invoice.balanceCents <= 0;
-	// A partially-settled invoice is still the invoice document — the receipt
+	// A partially-settled invoice is still the invoice document. The receipt
 	// is for money actually received.
 	if (!payment) {
 		downloadInvoice(invoice, title);
@@ -160,7 +160,7 @@ export function downloadReceipt(invoice: ApiInvoice, title: string): void {
 	}
 
 	openDocument(
-		`Receipt ${invoice.invoiceNumber} — Century NIT`,
+		`Receipt ${invoice.invoiceNumber}. Century NIT`,
 		`${masthead("Official receipt", invoice.invoiceNumber, "Paid")}
 		<div class="paid">
 			<span class="paid__seal">Paid</span>
@@ -173,7 +173,7 @@ export function downloadReceipt(invoice: ApiInvoice, title: string): void {
 			${metaCell("Received from", invoice.applicantName, invoice.applicantEmail ?? undefined)}
 			${metaCell("Invoice", invoice.invoiceNumber, chapter)}
 			${metaCell("Method", payment.method.replace(/_/g, " ").toUpperCase())}
-			${metaCell("Reference", payment.reference ?? "—")}
+			${metaCell("Reference", payment.reference ?? "N/A")}
 		</div>
 		${linesTable(invoice)}
 		<div class="totals"><div>
@@ -182,7 +182,7 @@ export function downloadReceipt(invoice: ApiInvoice, title: string): void {
 			<div class="trow"><span class="muted">Balance remaining</span><span class="amt muted">${settled ? "settled in full" : formatMoney(invoice.balanceCents, "both")}</span></div>
 		</div></div>
 		<div class="terms">
-			<div><p class="h">Record</p><p>Verified against payment reference ${esc(payment.reference ?? "—")}. This receipt is proof of payment — keep it with your file.</p></div>
+			<div><p class="h">Record</p><p>Verified against payment reference ${esc(payment.reference ?? "N/A")}. This receipt is proof of payment. Keep it with your file.</p></div>
 			<div><p class="h">Century NIT Consult</p><p>Accra, Ghana · London, United Kingdom · support@centurynit.com</p></div>
 		</div>
 		<div class="foot"><span>CENTURY NIT CONSULT</span><span>${esc(invoice.invoiceNumber)} · ${esc(title)}</span></div>`,

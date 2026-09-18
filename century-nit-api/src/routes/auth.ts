@@ -247,6 +247,16 @@ function createAuth(config: GoogleSocialConfig) {
 		 */
 		twoFactor({
 			issuer: "Century NIT",
+			/**
+			 * Social-only accounts hold no credential row, so a password check
+			 * would permanently lock them out of enrolment. With this on, the
+			 * plugin skips the password only for accounts that have none —
+			 * password accounts still verify it. Sign-in challenges for
+			 * passwordless users are handled by the mfa-ok session gate in
+			 * requireAuth, because the plugin's hook only fires on credential
+			 * sign-in paths, never on OAuth callbacks.
+			 */
+			allowPasswordless: true,
 			otpOptions: {
 				async sendOTP({ user, otp }) {
 					const { html, text } = renderOtpEmail({

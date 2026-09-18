@@ -75,7 +75,7 @@ function linesTable(invoice: ApiInvoice): string {
 		.map(
 			(l) => `<tr>
 				<td>${esc(l.label)}${l.detail ? `<small>${esc(l.detail)}</small>` : ""}</td>
-				<td class="amt">${formatMoney(l.amountCents, "usd")}</td>
+				<td class="amt">${formatMoney(l.amountCents, "both")}</td>
 			</tr>`,
 		)
 		.join("");
@@ -133,10 +133,10 @@ export function downloadInvoice(invoice: ApiInvoice, title: string): void {
 		</div>
 		${linesTable(invoice)}
 		<div class="totals"><div>
-			<div class="trow"><span class="muted">Subtotal</span><span class="amt">${formatMoney(invoice.subtotalCents, "usd")}</span></div>
-			${invoice.creditedCents > 0 ? `<div class="trow"><span class="muted">Credited</span><span class="amt">−${formatMoney(invoice.creditedCents, "usd")}</span></div>` : ""}
-			${invoice.paidCents > 0 ? `<div class="trow"><span class="muted">Paid to date</span><span class="amt">${formatMoney(invoice.paidCents, "usd")}</span></div>` : ""}
-			<div class="trow trow--inv"><span class="k">Balance due</span><span class="amt">${formatMoney(invoice.balanceCents, "usd")}</span></div>
+			<div class="trow"><span class="muted">Subtotal</span><span class="amt">${formatMoney(invoice.subtotalCents, "both")}</span></div>
+			${invoice.creditedCents > 0 ? `<div class="trow"><span class="muted">Credited</span><span class="amt">−${formatMoney(invoice.creditedCents, "both")}</span></div>` : ""}
+			${invoice.paidCents > 0 ? `<div class="trow"><span class="muted">Paid to date</span><span class="amt">${formatMoney(invoice.paidCents, "both")}</span></div>` : ""}
+			<div class="trow trow--inv"><span class="k">Balance due</span><span class="amt">${formatMoney(invoice.balanceCents, "both")}</span></div>
 		</div></div>
 		<div class="terms">
 			<div><p class="h">How to pay</p><p>Pay through your portal — the Money ledger — or the secure link in your invoice email. Card and mobile money are accepted via Paystack. A receipt issues automatically on settlement.</p></div>
@@ -165,7 +165,7 @@ export function downloadReceipt(invoice: ApiInvoice, title: string): void {
 		<div class="paid">
 			<span class="paid__seal">Paid</span>
 			<div>
-				<p class="paid__amt">${formatMoney(invoice.paidCents, "usd")}</p>
+				<p class="paid__amt">${formatMoney(invoice.paidCents, "both")}</p>
 				<p class="paid__when">${dateFmt(paidAt)} · via ${esc(payment.gateway ?? payment.method)}</p>
 			</div>
 		</div>
@@ -177,9 +177,9 @@ export function downloadReceipt(invoice: ApiInvoice, title: string): void {
 		</div>
 		${linesTable(invoice)}
 		<div class="totals"><div>
-			<div class="trow"><span class="muted">Invoice total</span><span class="amt">${formatMoney(invoice.subtotalCents, "usd")}</span></div>
-			<div class="trow trow--inv"><span class="k">Amount paid</span><span class="amt">${formatMoney(invoice.paidCents, "usd")}</span></div>
-			<div class="trow"><span class="muted">Balance remaining</span><span class="amt muted">${settled ? "settled in full" : formatMoney(invoice.balanceCents, "usd")}</span></div>
+			<div class="trow"><span class="muted">Invoice total</span><span class="amt">${formatMoney(invoice.subtotalCents, "both")}</span></div>
+			<div class="trow trow--inv"><span class="k">Amount paid</span><span class="amt">${formatMoney(invoice.paidCents, "both")}</span></div>
+			<div class="trow"><span class="muted">Balance remaining</span><span class="amt muted">${settled ? "settled in full" : formatMoney(invoice.balanceCents, "both")}</span></div>
 		</div></div>
 		<div class="terms">
 			<div><p class="h">Record</p><p>Verified against payment reference ${esc(payment.reference ?? "—")}. This receipt is proof of payment — keep it with your file.</p></div>

@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Helpdesk + portal chat - Century NIT</title>
+<style>
+:root { --bg:#f4f4f4; --ink:#0d0d0d; --paper:#fff; --muted:#5c5c5c; --line:#d8d8d8; --soft:#efefef; --inset:#f7f7f7; --warn:#8b1a1a; }
+html,body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; font-size:15px; }
+*, *::before, *::after { box-sizing:border-box; }
+button { font:inherit; cursor:pointer; }
+.mono { font-family:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace; }
+.wrap { display:flex; flex-direction:column; gap:22px; max-width:1240px; margin:0 auto; padding:24px 20px 48px; }
+.kicker { font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+h1 { font-size:26px; margin:8px 0 4px; }
+.sub { font-size:13.5px; color:var(--muted); margin:0; }
+.card { background:var(--paper); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+.card .hd { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--inset); font-weight:700; font-size:14px; }
+.card .bd { padding:14px 16px; }
+.bugs { display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:10px; }
+.bug { border:1px solid var(--line); border-left:3px solid var(--warn); border-radius:6px; padding:10px 12px; background:var(--paper); font-size:12.5px; line-height:1.5; }
+.bug b { display:block; font-size:11px; text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px; }
+.bug .fix { display:block; margin-top:5px; color:var(--muted); }
+.bug .fix b { color:var(--ink); display:inline; font-size:inherit; text-transform:none; letter-spacing:0; }
+.grid2 { display:grid; grid-template-columns:400px 1fr; gap:22px; align-items:start; }
+@media (max-width:980px){ .grid2{ grid-template-columns:1fr; } }
+
+/* ── portal widget ── */
+.widget { width:360px; max-width:100%; border:1.5px solid var(--ink); border-radius:10px; overflow:hidden; background:var(--paper); box-shadow:6px 6px 0 rgba(0,0,0,.12); margin:0 auto; }
+.w-head { background:var(--ink); color:#fff; padding:10px 14px; display:flex; align-items:center; justify-content:space-between; }
+.w-head .t { font-weight:800; font-size:12px; letter-spacing:.08em; }
+.w-head .presence { font-size:10px; font-family:ui-monospace,monospace; color:#cfcfcf; display:flex; align-items:center; gap:6px; }
+.w-head .dot { width:7px;height:7px;border-radius:50%;background:#fff; }
+.w-tabs { display:flex; border-bottom:1px solid var(--line); }
+.w-tab { flex:1; background:none;border:none;padding:9px 4px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border-bottom:2.5px solid transparent; }
+.w-tab.on { color:var(--ink); border-bottom-color:var(--ink); }
+.w-tab .sub2 { display:block;font-size:9px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted); }
+.w-body { height:340px; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; background:#fbfbfb; }
+.msg { max-width:82%; padding:8px 11px; border-radius:9px; font-size:12.5px; line-height:1.45; }
+.msg .who { font-size:9px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; margin-bottom:3px; }
+.msg .tm { font-size:9px; margin-top:4px; opacity:.6; font-family:ui-monospace,monospace; }
+.msg.me { align-self:flex-end; background:var(--ink); color:#fff; border-bottom-right-radius:2px; }
+.msg.them { align-self:flex-start; background:var(--soft); border:1px solid var(--line); border-bottom-left-radius:2px; }
+.divider { display:flex; align-items:center; gap:8px; font-size:9.5px; font-family:ui-monospace,monospace; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+.divider::before,.divider::after { content:""; flex:1; border-top:1px solid var(--line); }
+.divider.new { color:var(--ink); font-weight:700; }
+.divider.new::before,.divider.new::after { border-top:1.5px solid var(--ink); }
+.resolved-bar { text-align:center; font-size:11px; color:var(--muted); padding:7px; border-top:1px dashed var(--line); }
+.composer { display:flex; gap:8px; padding:10px; border-top:1px solid var(--line); }
+.composer input { flex:1; border:1px solid var(--line); border-radius:6px; padding:8px 10px; font:inherit; font-size:12.5px; }
+.composer button { border:1.5px solid var(--ink); background:var(--ink); color:#fff; font-weight:700; font-size:11px; padding:0 14px; border-radius:6px; }
+.launcher { margin:14px auto 0; width:46px; height:46px; border-radius:10px; background:var(--ink); color:#fff; display:flex; align-items:center; justify-content:center; position:relative; }
+.launcher .badge { position:absolute; top:-6px; right:-6px; min-width:18px; height:18px; border-radius:9px; background:var(--warn); color:#fff; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center; padding:0 4px; border:2px solid var(--bg); }
+.skel { border:1px dashed var(--line); border-radius:6px; padding:8px 10px; font-size:11px; color:var(--muted); text-align:center; }
+
+/* ── ops queue ── */
+.q-stats { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+.stat { border:1px solid var(--line); border-radius:6px; padding:8px 12px; background:var(--paper); min-width:104px; }
+.stat .n { font-size:20px; font-weight:800; font-family:ui-monospace,monospace; }
+.stat .l { font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); }
+.stat.alert .n { color:var(--warn); }
+.band { margin-bottom:6px; }
+.band .bhd { display:flex; justify-content:space-between; align-items:baseline; padding:8px 4px 5px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.07em; }
+.band .bhd .note { font-weight:500; text-transform:none; letter-spacing:0; color:var(--muted); font-size:10.5px; }
+.qrow { display:grid; grid-template-columns:3px 1fr auto; border:1px solid var(--line); border-bottom:none; background:var(--paper); cursor:pointer; }
+.qrow:last-child { border-bottom:1px solid var(--line); }
+.qrow .bar { background:transparent; }
+.qrow.unread .bar { background:var(--ink); }
+.qrow.sel { outline:2px solid var(--ink); outline-offset:-2px; }
+.qrow .c { padding:9px 12px; }
+.qrow .l1 { display:flex; align-items:baseline; gap:8px; font-size:13px; font-weight:700; }
+.qrow .l1 .case { font-family:ui-monospace,monospace; font-size:10.5px; font-weight:500; color:var(--muted); }
+.qrow .l2 { font-size:11.5px; color:#444; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:440px; }
+.qrow .meta { text-align:right; padding:9px 12px 9px 4px; display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
+.chip { font-family:ui-monospace,monospace; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:1px 6px; border:1px solid var(--line); border-radius:3px; color:var(--muted); }
+.chip.wait { border-color:var(--ink); color:var(--ink); }
+.chip.claim { border-color:var(--warn); color:var(--warn); cursor:pointer; }
+.qrow .wt { font-size:10px; font-family:ui-monospace,monospace; color:var(--warn); font-weight:700; }
+.qrow .ud { width:16px; height:16px; border-radius:50%; background:var(--ink); color:#fff; font-size:9px; font-weight:800; display:flex;align-items:center;justify-content:center; }
+/* thread */
+.thread { border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--paper); }
+.thread .thd { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--line); background:var(--inset); }
+.thread .thd .who { font-weight:800; font-size:13.5px; }
+.thread .thd .who .case { font-family:ui-monospace,monospace; font-size:10.5px; font-weight:500; color:var(--muted); margin-left:6px; }
+.thread .thd .acts { display:flex; gap:6px; }
+.mini { border:1px solid var(--ink); background:var(--paper); font-size:10.5px; font-weight:700; padding:4px 9px; border-radius:4px; }
+.mini.solid { background:var(--ink); color:#fff; }
+.t-body { height:300px; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
+.note-banner { border:1px dashed var(--warn); background:#fdf6f6; color:var(--warn); font-size:11px; padding:6px 10px; border-radius:6px; margin-bottom:8px; font-weight:600; }
+.msg.internal { align-self:stretch; max-width:100%; background:#fdf6f6; border:1px dashed var(--warn); border-radius:6px; font-size:12px; }
+.msg.internal .who { color:var(--warn); }
+.ctx { border-top:1px solid var(--line); padding:10px 14px; font-size:11.5px; color:var(--muted); display:flex; gap:14px; flex-wrap:wrap; }
+.ctx b { color:var(--ink); font-weight:700; }
+.legend { font-size:12px; color:var(--muted); line-height:1.7; }
+.legend b { color:var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+	<div>
+		<div class="kicker">Helpdesk + portal chat - bugs found in the live code</div>
+		<h1>One thread model, three broken seams</h1>
+		<p class="sub">Click things - the portal widget and the ops queue are live mock state.</p>
+	</div>
+
+	<div class="card">
+		<div class="hd"><span>What the code actually does today</span><span class="chip">5 confirmed</span></div>
+		<div class="bd bugs">
+			<div class="bug"><b>1 · Staff replies never reach the open chat</b>
+				The API publishes <span class="mono">chat.message</span> to <i>staff</i> participants only - the client gets a <span class="mono">chat.reply</span> notification the widget doesn't handle. Client must close + reopen to see replies.
+				<span class="fix"><b>Fix:</b> publish the message to <span class="mono">conv.userId</span> too - the existing SSE case renders it live.</span></div>
+			<div class="bug"><b>2 · "X replied" notification → dead page</b>
+				The client's in-app notification links <span class="mono">/portal/support</span> - a route that was deleted. Click → 404/fallback, chat doesn't even open.
+				<span class="fix"><b>Fix:</b> <span class="mono">/portal?chat=open</span> + the launcher reads the param and opens.</span></div>
+			<div class="bug"><b>3 · Client messages can black-hole</b>
+				Case/stage threads with zero staff participants are invisible in the queue (bypass is <span class="mono">support</span>-only) and notify nobody (fallback is <span class="mono">support</span>-only). A deleted consultant's case thread goes dark.
+				<span class="fix"><b>Fix:</b> queue + fallback cover every client-facing type.</span></div>
+			<div class="bug"><b>4 · "Awaiting reply" lies to queue staff</b>
+				<span class="mono">awaiting = clientLastMsg || myUnread&gt;0</span> - for non-participant queue roles unread = <i>entire history</i>, so everything shows awaiting forever, and a colleague's reply still counts. Wait-timers inherit the lie.
+				<span class="fix"><b>Fix:</b> awaiting = client wrote last. Unread is a separate badge.</span></div>
+			<div class="bug"><b>5 · Queue fetches every message ever sent</b>
+				<span class="mono">listConversations</span> selects <i>all</i> messages of <i>all</i> conversations to pick the latest per thread - O(history) per refresh.
+				<span class="fix"><b>Fix:</b> <span class="mono">DISTINCT ON</span> - one row per conversation.</span></div>
+		</div>
+	</div>
+
+	<div class="grid2">
+		<!-- ═══ PORTAL ═══ -->
+		<div>
+			<div class="kicker" style="margin-bottom:8px;">Portal - the client's widget</div>
+			<div class="widget">
+				<div class="w-head">
+					<span class="t">CHAT</span>
+					<span class="presence"><span class="dot"></span><span id="wPres">Support desk · replies ~1h</span></span>
+				</div>
+				<div class="w-tabs">
+					<button class="w-tab on" data-ch="support" onclick="wtab(this)">Support<span class="sub2">helpdesk</span></button>
+					<button class="w-tab" data-ch="officer" onclick="wtab(this)">My officer<span class="sub2">Kofi · case</span></button>
+					<button class="w-tab" data-ch="ai" onclick="wtab(this)">Ask AI<span class="sub2">instant</span></button>
+				</div>
+				<div class="w-body" id="wbody">
+					<div class="divider">Earlier</div>
+					<div class="msg me"><div class="who">You</div>Hi - my booking payment went through but I never got the receipt email.<div class="tm">18:21</div></div>
+					<div class="divider new">New</div>
+					<div class="msg them"><div class="who">Ama · Support</div>Sorry about that - I can see the payment settled. Resending your receipt now, it'll land within a minute. <span style="opacity:.7">(arrived live, no reopen needed)</span><div class="tm">18:26</div></div>
+					<div class="msg them"><div class="who">Ama · Support</div>Anything else on the booking I should check while I'm in here?<div class="tm">18:26</div></div>
+				</div>
+				<div class="resolved-bar" id="wres" style="display:none;">Resolved - send a message to reopen</div>
+				<div class="composer"><input placeholder="Type a message…" /><button>Send</button></div>
+			</div>
+			<div class="launcher" title="Launcher with live unread badge"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="badge" id="lbadge">2</span></div>
+			<div class="bd" style="padding:12px 4px;">
+				<div class="legend">
+					<b>Fixes shown:</b> staff message lands live (<span class="mono">chat.message</span> now published to the client), the unread badge counts before first open (context loads on mount), the notification deep-link opens this widget via <span class="mono">?chat=open</span>, and the header shows the honest presence line instead of "24/7".
+				</div>
+			</div>
+		</div>
+
+		<!-- ═══ OPS ═══ -->
+		<div>
+			<div class="kicker" style="margin-bottom:8px;">Ops - the helpdesk queue</div>
+			<div class="q-stats">
+				<div class="stat"><div class="n" id="stOpen">6</div><div class="l">Open</div></div>
+				<div class="stat alert"><div class="n" id="stWait">3</div><div class="l">Waiting on us</div></div>
+				<div class="stat"><div class="n" id="stUnread">4</div><div class="l">Your unread</div></div>
+				<div class="stat alert"><div class="n" id="stOrphan">1</div><div class="l">No staff participant</div></div>
+				<div class="stat"><div class="n">41 m</div><div class="l">Longest wait</div></div>
+			</div>
+
+			<div class="band">
+				<div class="bhd"><span>Waiting on us</span><span class="note">client wrote last · longest first</span></div>
+				<div class="qrow unread sel" onclick="selRow(this,'receipt')">
+					<div class="bar"></div>
+					<div class="c"><div class="l1">Ekow Firmino <span class="case">CNS-2026-0001 · Support</span></div><div class="l2">…booking payment went through but I never got the receipt email.</div></div>
+					<div class="meta"><span class="wt">41 m</span><span class="ud">2</span><span class="chip">Support</span></div>
+				</div>
+				<div class="qrow" onclick="selRow(this,'orphan')">
+					<div class="bar"></div>
+					<div class="c"><div class="l1">Ama Serwaa <span class="case">APP-2026-0142 · Visa</span></div><div class="l2">My biometrics letter has a different date than what you told me…</div></div>
+					<div class="meta"><span class="wt">2 h</span><span class="chip claim" onclick="event.stopPropagation();claim(this)">Claim</span><span class="chip" style="border-color:var(--warn);color:var(--warn)">No participant</span></div>
+				</div>
+				<div class="qrow unread">
+					<div class="bar"></div>
+					<div class="c"><div class="l1">Kofi Nyarkoh <span class="case">Support</span></div><div class="l2">Can I change my consultation to next Tuesday?</div></div>
+					<div class="meta"><span class="wt">6 m</span><span class="ud">1</span><span class="chip">Support</span></div>
+				</div>
+			</div>
+
+			<div class="band">
+				<div class="bhd"><span>In conversation</span><span class="note">we wrote last</span></div>
+				<div class="qrow">
+					<div class="bar"></div>
+					<div class="c"><div class="l1">Efua Mensah <span class="case">APP-2026-0138 · Applications</span></div><div class="l2">You: I've submitted both - Leeds should confirm by Friday.</div></div>
+					<div class="meta"><span class="chip">Mine</span></div>
+				</div>
+				<div class="qrow">
+					<div class="bar"></div>
+					<div class="c"><div class="l1">Yaw Darko <span class="case">Support</span></div><div class="l2">Ama: Portal shows the new fee schedule now.</div></div>
+					<div class="meta"><span class="chip">Ama</span></div>
+				</div>
+			</div>
+
+			<div class="band">
+				<div class="bhd"><span>Resolved</span><span class="note">2 · folded ▸</span></div>
+			</div>
+
+			<div class="thread" style="margin-top:14px;" id="thread">
+				<div class="thd">
+					<span class="who" id="thWho">Ekow Firmino <span class="case">CNS-2026-0001 · Support</span></span>
+					<span class="acts"><button class="mini" onclick="noteMode(this)">Internal note</button><button class="mini">Reassign</button><button class="mini solid" onclick="resolve(this)">Resolve</button></span>
+				</div>
+				<div class="t-body" id="tbody">
+					<div class="msg them"><div class="who">Ekow · client</div>Hi - my booking payment went through but I never got the receipt email.<div class="tm">17:41</div></div>
+					<div class="msg internal"><div class="who">Internal · You</div>Settlement failed silently - audit shows the invoice step threw. Fixing + resending receipt.</div>
+					<div class="msg me"><div class="who">You</div>Sorry about that - I can see the payment settled. Resending your receipt now.<div class="tm">18:26</div></div>
+				</div>
+				<div class="ctx"><span>Client <b>Ekow Firmino</b></span><span>Case <b>CNS-2026-0001</b></span><span>Stage <b>Consultation</b></span><span>Branch <b>Accra</b></span><span>Owner <b>You</b></span><span style="margin-left:auto"><a href="#" onclick="return false" style="color:var(--ink);font-weight:700;">Open case →</a></span></div>
+				<div class="composer"><input id="noteInput" placeholder="Type a message…" /><button>Send</button></div>
+			</div>
+			<div class="bd" style="padding:12px 4px;">
+				<div class="legend">
+					<b>Fixes shown:</b> "Waiting on us" = client wrote last (not your unread count), the orphan thread is <b>visible and alertable</b> instead of black-holed, internal notes are unmistakable (dashed, red, INTERNAL) and can't leak to the client, and the queue's last-message preview loads one row per thread - not the entire history.
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+<script>
+function wtab(el){ document.querySelectorAll('.w-tab').forEach(t=>t.classList.remove('on')); el.classList.add('on');
+	const ch=el.dataset.ch; const p=document.getElementById('wPres');
+	p.textContent = ch==='support'?'Support desk · replies ~1h':ch==='officer'?'Kofi · available · replies ~1h':'Instant answers';
+	const b=document.getElementById('wbody');
+	if(ch==='ai'){ b.innerHTML='<div class="skel">AI assistant - journey-aware answers, escalate to a human any time.</div>'; }
+	else if(ch==='officer'){ b.innerHTML='<div class="skel">Stage thread with your officer - created only when you first write, not on tab click.</div>'; }
+	else { location.hash=''; b.innerHTML=document.getElementById('supportHTML').innerHTML; }
+}
+function selRow(el,id){ document.querySelectorAll('.qrow').forEach(r=>r.classList.remove('sel')); el.classList.add('sel');
+	document.getElementById('thWho').innerHTML = id==='orphan'
+		? 'Ama Serwaa <span class="case">APP-2026-0142 · Visa</span>'
+		: 'Ekow Firmino <span class="case">CNS-2026-0001 · Support</span>';
+	document.getElementById('tbody').innerHTML = id==='orphan'
+		? '<div class="note-banner">No staff participant - this thread was invisible until the queue fix. First reply auto-claims it.</div><div class="msg them"><div class="who">Ama · client</div>My biometrics letter has a different date than what you told me - which is right?<div class="tm">2 h ago</div></div>'
+		: '<div class="msg them"><div class="who">Ekow · client</div>Hi - my booking payment went through but I never got the receipt email.<div class="tm">17:41</div></div><div class="msg internal"><div class="who">Internal · You</div>Settlement failed silently - audit shows the invoice step threw. Fixing + resending receipt.</div><div class="msg me"><div class="who">You</div>Sorry about that - I can see the payment settled. Resending your receipt now.<div class="tm">18:26</div></div>';
+}
+function claim(el){ el.outerHTML='<span class="chip">You</span>'; document.getElementById('stOrphan').textContent='0'; }
+function resolve(el){ const tb=document.getElementById('tbody'); tb.innerHTML+='<div class="divider">Resolved by you - client reply reopens</div>'; el.textContent='Reopen'; el.classList.remove('solid'); }
+let noting=false;
+function noteMode(el){ noting=!noting; el.classList.toggle('solid',noting);
+	document.getElementById('noteInput').placeholder = noting ? 'Internal note - staff only, never sent to the client…' : 'Type a message…';
+	document.getElementById('noteInput').style.borderColor = noting ? 'var(--warn)' : '';
+}
+</script>
+<template id="supportHTML"><div class="divider">Earlier</div><div class="msg me"><div class="who">You</div>Hi - my booking payment went through but I never got the receipt email.<div class="tm">18:21</div></div><div class="divider new">New</div><div class="msg them"><div class="who">Ama · Support</div>Sorry about that - I can see the payment settled. Resending your receipt now, it'll land within a minute.<div class="tm">18:26</div></div></template>
+</body>
+</html>

@@ -8,7 +8,7 @@
  *
  * The chat schema already supported `conversations.linkedEntityType` /
  * `linkedEntityId` (added in 0025_applicant_chat) but nothing populated them.
- * This service finally does — one conversation per (case, stage, type),
+ * This service finally does - one conversation per (case, stage, type),
  * created on demand, never duplicated.
  *
  * See the design doc for the full routing and permission model.
@@ -45,7 +45,7 @@ import {
 import { HttpError } from "../middleware/error.js";
 import type { SessionUser, StaffContext } from "../middleware/auth.js";
 import { canAccessApplication } from "./cases.js";
-import { publishChatEvent, notifyOfflineParticipants } from "./chat.js";
+import { publishChatEvent, publishChatEventToClient, notifyOfflineParticipants, sendMessage } from "./chat.js";
 import { notifyMany, getCustomerServiceUserIds, getManagerAndCoordinatorUserIds } from "./notify.js";
 import { serializeMessageRow, hydrateMessages } from "./message-serializer.js";
 
@@ -93,7 +93,7 @@ function availabilityNote(presence: StaffPresence): string | null {
 		case "busy":
 			return "Replies in ~4h";
 		case "on_leave":
-			return "On leave — covered by your case manager";
+			return "On leave - covered by your case manager";
 		case "offline":
 			return "Replies within 1 business day";
 	}
@@ -154,7 +154,7 @@ export async function recordEvent(input: {
  * Entity-based conversation access (§14). Customers may access only their own
  * customer-visible conversations; staff may access conversations they
  * participate in OR cases they can see. `INTERNAL` / `ESCALATION` conversations
- * are never visible via `/me/*` — this is the security boundary.
+ * are never visible via `/me/*` - this is the security boundary.
  */
 export async function canAccessConversation(
 	user: SessionUser,
@@ -340,11 +340,11 @@ function serializeMessage(row: typeof messages.$inferSelect): ChatMessage {
 	return serializeMessageRow(row);
 }
 
-/* ── Conversation routing — the no-duplicate gate (§22) ─────────────────── */
+/* ── Conversation routing - the no-duplicate gate (§22) ─────────────────── */
 
 export interface FindOrCreateInput {
 	type: "support" | "case" | "stage" | "internal" | "escalation";
-	/** Customer (applicant) user ID — required for customer-visible types. */
+	/** Customer (applicant) user ID - required for customer-visible types. */
 	userId?: string;
 	/** Staff who initiated (for internal/escalation) or who owns (for applicant creation). */
 	createdByOpsUserId?: string | null;
@@ -359,7 +359,7 @@ export interface FindOrCreateInput {
 /**
  * Find an existing conversation matching the natural identity
  * (linkedEntityType, linkedEntityId, stageKey, type) or create one. Repeated
- * clicks never duplicate — this is the structural fix for "don't fragment".
+ * clicks never duplicate - this is the structural fix for "don't fragment".
  */
 export async function findOrCreateConversation(
 	input: FindOrCreateInput,
@@ -467,7 +467,7 @@ async function ensureUserParticipant(conversationId: string, userId: string): Pr
 /* ── Current-contact resolver (§21) ────────────────────────────────────── */
 
 /**
- * Resolve the customer's current contact — the answer to "who can help me,
+ * Resolve the customer's current contact - the answer to "who can help me,
  * with what, and how do I contact them?" without navigating away.
  *
  *   IF active stage assignment exists  → stage_officer
@@ -744,7 +744,7 @@ export async function routeCustomerChat(
 	}
 
 	if (!caseId) {
-		// No case — open / create the SUPPORT conversation. Title it with
+		// No case - open / create the SUPPORT conversation. Title it with
 		// the applicant's name so staff can identify who they're talking to
 		// in the support queue, not a generic "Support" label.
 		const [applicant] = await db
@@ -814,7 +814,7 @@ export async function routeCustomerChat(
 		return serializeConversation(row, { userId });
 	}
 
-	// No stage officer — case-level thread with the assigned staff / case manager.
+	// No stage officer - case-level thread with the assigned staff / case manager.
 	const ownerId = app.assignedStaffId ?? (opts.createdByOpsUserId || null);
 	const { row } = await findOrCreateConversation({
 		type: "case",
@@ -827,6 +827,129 @@ export async function routeCustomerChat(
 		participantOpsUserIds: ownerId ? [ownerId] : [],
 	});
 	return serializeConversation(row, { userId });
+}
+
+/* ── Staff-initiated client threads (ops Helpdesk "New conversation") ────── */
+
+/**
+ * The ops-side mirror of routeCustomerChat: a staff member opens a thread
+ * with a client - support (no context), case, or stage-scoped. Reuses
+ * findOrCreateConversation so re-opening the same context joins the existing
+ * thread instead of forking a duplicate. The creator is made a participant
+ * (owner when creating) so they can reply immediately.
+ */
+export async function startClientConversation(
+	clientUserId: string,
+	creator: { id: string; name: string; email: string },
+	opts: {
+		linkedEntityType?: "application" | "consultation" | "booking" | null;
+		linkedEntityId?: string | null;
+		stageKey?: string | null;
+		initialMessage?: string;
+	} = {},
+): Promise<ChatConversation> {
+	const [applicant] = await db
+		.select({ id: applicants.id, name: applicants.name })
+		.from(applicants)
+		.where(eq(applicants.userId, clientUserId))
+		.limit(1);
+	if (!applicant) {
+		throw new HttpError(404, "CLIENT_NOT_FOUND", "No applicant on file for this client");
+	}
+
+	let type: FindOrCreateInput["type"] = "support";
+	let title = applicant.name;
+	let participantOpsUserIds: string[] = [];
+
+	if (opts.linkedEntityType === "application" && opts.linkedEntityId) {
+		const [app] = await db
+			.select({
+				id: applications.id,
+				appNumber: applications.appNumber,
+				stage: applications.stage,
+				assignedStaffId: applications.assignedStaffId,
+				applicantId: applications.applicantId,
+			})
+			.from(applications)
+			.where(eq(applications.id, opts.linkedEntityId))
+			.limit(1);
+		if (!app || app.applicantId !== applicant.id) {
+			throw new HttpError(404, "CASE_NOT_FOUND", "No such case for this client");
+		}
+
+		const stageKey = opts.stageKey ?? null;
+		if (stageKey) {
+			type = "stage";
+			title = `${app.appNumber} · ${STAGE_LABEL(stageKey) ?? stageKey}`;
+			const [assignment] = await db
+				.select({ opsUserId: stageAssignments.opsUserId })
+				.from(stageAssignments)
+				.where(
+					and(
+						eq(stageAssignments.applicationId, app.id),
+						eq(stageAssignments.stage, stageKey as JourneyStage),
+						eq(stageAssignments.status, "active"),
+					),
+				)
+				.limit(1);
+			if (assignment && assignment.opsUserId !== creator.id) {
+				participantOpsUserIds = [assignment.opsUserId];
+			}
+		} else {
+			type = "case";
+			title = `${app.appNumber}`;
+			if (app.assignedStaffId && app.assignedStaffId !== creator.id) {
+				participantOpsUserIds = [app.assignedStaffId];
+			}
+		}
+	} else if (opts.linkedEntityType === "consultation" && opts.linkedEntityId) {
+		// "entity" is not in CUSTOMER_VISIBLE_TYPES - a consultation-scoped
+		// thread must stay `support` (with the link recorded) or the client
+		// would never see it.
+		type = "support";
+		title = `${applicant.name} · Consultation`;
+	}
+
+	const { row, created } = await findOrCreateConversation({
+		type,
+		userId: clientUserId,
+		createdByOpsUserId: creator.id,
+		linkedEntityType: opts.linkedEntityType ?? null,
+		linkedEntityId: opts.linkedEntityId ?? null,
+		stageKey: opts.stageKey ?? null,
+		title,
+		participantOpsUserIds,
+	});
+
+	// The creator must be a participant even when the thread already existed
+	// (findOrCreate only inserts the creator on the create path).
+	const [membership] = await db
+		.select({ opsUserId: conversationParticipants.opsUserId })
+		.from(conversationParticipants)
+		.where(
+			and(
+				eq(conversationParticipants.conversationId, row.id),
+				eq(conversationParticipants.opsUserId, creator.id),
+			),
+		)
+		.limit(1);
+	if (!membership) {
+		await db.insert(conversationParticipants).values({
+			conversationId: row.id,
+			opsUserId: creator.id,
+			role: "member",
+		});
+	}
+
+	if (created) {
+		publishChatEvent(row.id, { type: "chat.conversation.created", conversationId: row.id });
+	}
+
+	if (opts.initialMessage?.trim()) {
+		await sendMessage(row.id, creator, { content: opts.initialMessage });
+	}
+
+	return serializeConversation(row, { opsUserId: creator.id });
 }
 
 /* ── Messages (customer-facing) ─────────────────────────────────────────── */
@@ -885,7 +1008,7 @@ export async function sendCustomerMessage(
 		.where(eq(conversations.id, conversationId))
 		.limit(1);
 
-	// A new client message re-opens a resolved conversation — "resolved" is a
+	// A new client message re-opens a resolved conversation - "resolved" is a
 	// state, not a wall. Staff see the divider, the queue surfaces it again.
 	if (conv?.status === "closed") {
 		await db
@@ -894,9 +1017,14 @@ export async function sendCustomerMessage(
 			.where(eq(conversations.id, conversationId));
 		await appendSystemMessage(
 			conversationId,
-			"Conversation reopened — new message from the client",
+			"Conversation reopened - new message from the client",
 		);
 		publishChatEvent(conversationId, {
+			type: "chat.conversation.updated",
+			conversationId,
+			status: "open",
+		});
+		publishChatEventToClient(conversationId, {
 			type: "chat.conversation.updated",
 			conversationId,
 			status: "open",
@@ -919,7 +1047,7 @@ export async function sendCustomerMessage(
 		.set({ updatedAt: new Date(), lastMessageAt: new Date() })
 		.where(eq(conversations.id, conversationId));
 
-	// Bind pre-staged uploads — scoped to this customer's unbound rows so one
+	// Bind pre-staged uploads - scoped to this customer's unbound rows so one
 	// client can't attach another's staged file by guessing ids.
 	if (attachmentIds?.length) {
 		await db
@@ -948,6 +1076,13 @@ export async function sendCustomerMessage(
 		conversationId,
 		message: serializeMessage(created),
 	});
+	// Client channel too: the sender's own tab dedupes by id, and their other
+	// devices stay in sync.
+	publishChatEventToClient(conversationId, {
+		type: "chat.message",
+		conversationId,
+		message: serializeMessage(created),
+	});
 
 	// In-app + push: alert the staff participants that the customer replied.
 	// Fire-and-forget so a notification hiccup never blocks the send.
@@ -969,15 +1104,15 @@ export async function sendCustomerMessage(
 			.filter((id): id is string => id != null);
 
 		if (recipients.length === 0) {
-			// No staff participants — for support conversations, fall back to
-			// alerting customer_service + managers/coordinators so the message
-			// isn't stranded.
+			// No staff participants - alert the triage queue for ANY client-facing
+			// thread, not just support. An orphaned case/stage conversation
+			// (deleted or unassigned officer) would otherwise black-hole.
 			const [convRow] = await db
 				.select({ type: conversations.type })
 				.from(conversations)
 				.where(eq(conversations.id, conversationId))
 				.limit(1);
-			if (convRow?.type === "support") {
+			if (convRow && (CUSTOMER_VISIBLE_TYPES as readonly string[]).includes(convRow.type)) {
 				const [csAgents, mgrCoordinators] = await Promise.all([
 					getCustomerServiceUserIds(),
 					getManagerAndCoordinatorUserIds(),
@@ -991,9 +1126,9 @@ export async function sendCustomerMessage(
 						fallbackRecipients.map((recipientUserId) => ({
 							recipientUserId,
 							type: "chat.message",
-							title: `${user.name ?? "A client"} sent a support message`,
+							title: `${user.name ?? "A client"} sent a message`,
 							body: preview,
-							link: `/chat?conversation=${conversationId}`,
+							link: `/helpdesk?id=${conversationId}`,
 						})),
 					);
 				}
@@ -1007,7 +1142,7 @@ export async function sendCustomerMessage(
 					type: "chat.message",
 					title: `${user.name ?? "A client"} sent a message`,
 					body: preview,
-					link: `/chat?conversation=${conversationId}`,
+					link: `/helpdesk?id=${conversationId}`,
 				})),
 			);
 
@@ -1078,7 +1213,7 @@ export async function assignStageOfficer(input: {
 	reason?: string;
 	scope?: "stage" | "all";
 }): Promise<StageAssignment> {
-	// "All stages" — the whole-case owner. Goes through setCaseOwner so
+	// "All stages" - the whole-case owner. Goes through setCaseOwner so
 	// applications.assignedStaffId, the applicant's point of contact and the
 	// case_assignments history change together (see caseOwnership.ts).
 	if (input.scope === "all") {
@@ -1120,7 +1255,7 @@ export async function assignStageOfficer(input: {
 		};
 	}
 
-	// End any existing active assignment for this (case, stage) — reassignment.
+	// End any existing active assignment for this (case, stage) - reassignment.
 	const existing = await db
 		.select()
 		.from(stageAssignments)
@@ -1301,7 +1436,7 @@ export async function onStageCompleted(input: {
 				);
 			await appendSystemMessage(
 				stageConv.id,
-				`The ${label} stage is complete — thanks for handling it.`,
+				`The ${label} stage is complete - thanks for handling it.`,
 				{ assignmentId: row.id, reason, stage: input.stage },
 			);
 		}
@@ -1373,7 +1508,7 @@ export async function updatePresence(opsUserId: string, status: StaffPresence): 
 
 export async function heartbeat(opsUserId: string): Promise<void> {
 	const now = new Date();
-	// Insert with status='available' (the DB default is 'offline' — a fresh
+	// Insert with status='available' (the DB default is 'offline' - a fresh
 	// user who is clearly online because they're heartbeating should not show
 	// as offline). On conflict, only flip offline→available; a user who
 	// explicitly set busy/on_leave keeps that status.

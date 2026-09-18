@@ -4,6 +4,7 @@ import { useOpsAuth, type OpsRole } from "./OpsAuthContext";
 import {
 	useChatConversations,
 	useChatMessages,
+	useCreateConversation,
 	useStaffDirectory,
 } from "../hooks/useChatApi";
 import { roleCanAccess, type ChatConversation, type ChatMessage, type QuotedMessage } from "century-nit-shared";
@@ -14,20 +15,25 @@ import {
 	type MessageActionsConfig,
 } from "century-nit-chat-ui";
 import {
+	listClientUsers,
 	setChatConversationStatus,
 	setChatConversationOwner,
 	getChatConversationContext,
 	stageChatAttachment,
 	uploadStagedAttachment,
 	type ChatConversationContext,
+	type ClientUser,
 } from "../lib/api";
+import { Sheet } from "century-nit-core/ui";
+import { useCases } from "../hooks/useCases";
+import { useUrlParam } from "../hooks/useUrlParam";
 
 /**
- * Helpdesk — client conversation queue.
+ * Helpdesk - client conversation queue.
  *
  * Client requests (support / case / stage / applicant conversations) raised
  * from the portal land in the same chat system the OPS console uses for
- * messaging, so there is one thread model platform-wide — no separate ticket
+ * messaging, so there is one thread model platform-wide - no separate ticket
  * store. This page is the triage surface: every client-facing conversation,
  * unread-first, with inline replying via the shared MessageList + Composer.
  *
@@ -47,13 +53,19 @@ const TYPE_LABELS: Record<string, string> = {
 	entity: "Conversation",
 };
 
-type Filter = "all" | "awaiting" | "unread" | "mine" | "unclaimed" | "support" | "case" | "stage" | "applicant";
-const CHIPS: { id: Filter; label: string }[] = [
-	{ id: "all", label: "All" },
-	{ id: "awaiting", label: "Awaiting reply" },
-	{ id: "unread", label: "Unread" },
-	{ id: "unclaimed", label: "Unclaimed" },
-	{ id: "mine", label: "Mine" },
+type Filter = "all" | "awaiting" | "unclaimed" | "mine";
+type TypeFacet = "" | "support" | "case" | "stage" | "applicant";
+type SortMode = "recent" | "waiting";
+
+const FILTERS: Filter[] = ["all", "awaiting", "unclaimed", "mine"];
+const FILTER_LABELS: Record<Filter, string> = {
+	all: "All",
+	awaiting: "Awaiting reply",
+	unclaimed: "Unclaimed",
+	mine: "Mine",
+};
+const TYPE_FACETS: { id: TypeFacet; label: string }[] = [
+	{ id: "", label: "Any type" },
 	{ id: "support", label: "Support" },
 	{ id: "case", label: "Case" },
 	{ id: "stage", label: "Stage" },
@@ -61,15 +73,20 @@ const CHIPS: { id: Filter; label: string }[] = [
 ];
 
 const SNIPPETS: { id: string; label: string; body: string }[] = [
-	{ id: "ack", label: "Acknowledge", body: "Thanks for reaching out — I'm looking into this now and will come back to you shortly." },
-	{ id: "docs", label: "Request documents", body: "Could you upload the requested document here? A clear photo or PDF works — I'll confirm receipt as soon as it lands." },
+	{ id: "ack", label: "Acknowledge", body: "Thanks for reaching out - I'm looking into this now and will come back to you shortly." },
+	{ id: "docs", label: "Request documents", body: "Could you upload the requested document here? A clear photo or PDF works - I'll confirm receipt as soon as it lands." },
 	{ id: "payment", label: "Payment received", body: "Your payment has been received and allocated to your invoice. The updated receipt is in your portal under Money." },
 	{ id: "visa", label: "Visa update", body: "Your application is with the visa team. We'll message you the moment there's a decision or if anything further is needed." },
-	{ id: "close", label: "Resolve + close", body: "Glad we could get this sorted. I'll mark this request resolved — reply here any time and it reopens automatically." },
+	{ id: "close", label: "Resolve + close", body: "Glad we could get this sorted. I'll mark this request resolved - reply here any time and it reopens automatically." },
 ];
 
-/** The client wrote last and nobody has answered. */
-const awaitingReply = (c: ChatConversation) => Boolean(c.lastMessage?.senderUserId) || (c.unreadCount || 0) > 0;
+/**
+ * "Awaiting reply" means exactly one thing: the last PUBLIC message came
+ * from the client. The server computes it (an internal note must not clear
+ * it, and the viewer's unread cursor must not set it); the local check is a
+ * fallback for payloads that predate the field.
+ */
+const awaitingReply = (c: ChatConversation) => c.awaitingReply ?? Boolean(c.lastMessage?.senderUserId);
 const isClosed = (c: ChatConversation) => c.status === "closed" || c.status === "archived";
 
 /** The owner participant, when one has claimed/been assigned the thread. */
@@ -91,7 +108,7 @@ function clientName(c: ChatConversation): string {
 	if (c.type === "support" || c.type === "applicant") return c.title || "Client";
 	return c.title || "Conversation";
 }
-/** "Support · APP-2026-0142", "Stage · Consultation" — the thread's subject without opening it. */
+/** "Support · APP-2026-0142", "Stage · Consultation" - the thread's subject without opening it. */
 function kickerOf(c: ChatConversation): string {
 	const type = TYPE_LABELS[c.type] ?? c.type;
 	if (c.type === "case" || c.type === "stage") return `${type} · ${c.title}`;
@@ -109,24 +126,37 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export function EnterpriseHelpdesk() {
 	const { opsUser, opsRole } = useOpsAuth();
-	const [searchParams] = useSearchParams();
-	const canChat = roleCanAccess(opsRole as OpsRole, "chat");
+	const [searchParams, setSearchParams] = useSearchParams();
+	// The page lives under the `helpdesk` module; the shared chat backend
+	// accepts either `helpdesk` or `chat`, so gate the queue on whichever the
+	// role holds rather than dead-ending helpdesk-only roles on a 403.
+	const canChat = roleCanAccess(opsRole as OpsRole, "helpdesk") || roleCanAccess(opsRole as OpsRole, "chat");
 
 	// The conversation id is the URL's source of truth, so /helpdesk?id=… deep
 	// links (e.g. from the Team Assignments board) open a thread directly.
 	// Anything that isn't a UUID (stale /chat?id=<ref> links, case refs pasted
-	// into the bar) must not reach the API — it validates the path as uuid and
+	// into the bar) must not reach the API - it validates the path as uuid and
 	// would 400 every messages/context/read call against it.
 	const rawConvId = searchParams.get("id") || null;
 	const activeConvId = rawConvId && UUID_RE.test(rawConvId) ? rawConvId : null;
-	// /helpdesk?client=<clientUserId> — deep link from the client directory
+	// /helpdesk?client=<clientUserId> - deep link from the client directory
 	// record pane; narrows the queue to that account's threads.
 	const clientFilter = searchParams.get("client") || null;
 
-	const { conversations, loading: convsLoading, refresh: refreshConvs } = useChatConversations(canChat);
+	const { conversations, loading: convsLoading, error: convsError, forbidden: convsForbidden, refresh: refreshConvs } = useChatConversations(canChat);
 	const directory = useStaffDirectory();
-	const [filter, setFilter] = useState<Filter>("all");
+	const { applications } = useCases();
+	const { create, creating } = useCreateConversation();
+
+	// Filter state lives in the URL - a filtered queue is a shareable link.
+	const [filter, setFilter] = useUrlParam<Filter>("f", { allowed: FILTERS, fallback: "all" });
+	const [typeFacet, setTypeFacet] = useUrlParam<TypeFacet>("type", { allowed: ["", "support", "case", "stage", "applicant"], fallback: "" });
+	const [unreadOnly, setUnreadOnly] = useUrlParam<"" | "1">("unread", { allowed: ["", "1"], fallback: "" });
+	const [sortMode, setSortMode] = useUrlParam<SortMode>("sort", { allowed: ["recent", "waiting"], fallback: "recent" });
+	// ?new=1 opens the start-a-thread sheet; ?client= pre-fills its picker.
+	const [newOpen, setNewOpen] = useUrlParam<"" | "1">("new", { allowed: ["", "1"], fallback: "" });
 	const [showClosed, setShowClosed] = useState(false);
+	const [drawerOpen, setDrawerOpen] = useState(false);
 	const [search, setSearch] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [draft, setDraft] = useState("");
@@ -194,23 +224,18 @@ export function EnterpriseHelpdesk() {
 		return {
 			all: open.length,
 			awaiting: open.filter(awaitingReply).length,
-			unread: open.filter((c) => (c.unreadCount || 0) > 0).length,
 			unclaimed: open.filter(isUnclaimed).length,
 			mine: open.filter(isMine).length,
-			support: open.filter((c) => c.type === "support").length,
-			case: open.filter((c) => c.type === "case").length,
-			stage: open.filter((c) => c.type === "stage").length,
-			applicant: open.filter((c) => c.type === "applicant").length,
 		};
 	}, [queue, isMine, isUnclaimed]);
 
 	const filtered = useMemo(() => {
 		let list = queue;
-		if (filter === "unread") list = list.filter((c) => (c.unreadCount || 0) > 0);
-		else if (filter === "awaiting") list = list.filter(awaitingReply);
+		if (filter === "awaiting") list = list.filter(awaitingReply);
 		else if (filter === "mine") list = list.filter(isMine);
 		else if (filter === "unclaimed") list = list.filter(isUnclaimed);
-		else if (filter !== "all") list = list.filter((c) => c.type === filter);
+		if (typeFacet) list = list.filter((c) => c.type === typeFacet);
+		if (unreadOnly === "1") list = list.filter((c) => (c.unreadCount || 0) > 0);
 		if (search.trim()) {
 			const q = search.toLowerCase();
 			list = list.filter(
@@ -221,8 +246,12 @@ export function EnterpriseHelpdesk() {
 					c.participants.some((p) => p.name.toLowerCase().includes(q)),
 			);
 		}
+		if (sortMode === "waiting") {
+			list = [...list].sort((a, b) => waitingHours(b, now) - waitingHours(a, now));
+		}
 		return list;
-	}, [queue, filter, search, isMine, isUnclaimed]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- `now` is this render's clock
+	}, [queue, filter, typeFacet, unreadOnly, sortMode, search, isMine, isUnclaimed]);
 
 	/** Bands by who owes the next word: waiting on you (longest first), in conversation, resolved (folded). */
 	const bands = useMemo(() => {
@@ -240,6 +269,9 @@ export function EnterpriseHelpdesk() {
 	const activeConv = conversations.find((c) => c.id === activeConvId) ?? null;
 	const activeInQueue = activeConv && CLIENT_TYPES.has(activeConv.type);
 	const activeOwner = activeConv ? ownerOf(activeConv) : null;
+
+	// The drawer opens itself when a deep link set one of its facets.
+	const drawerActive = drawerOpen || Boolean(typeFacet) || unreadOnly === "1" || sortMode !== "recent";
 
 	const isOwn = useCallback(
 		(m: ChatMessage) => m.senderOpsUserId != null && m.senderOpsUserId === opsUser?.opsUserId,
@@ -280,6 +312,17 @@ export function EnterpriseHelpdesk() {
 		},
 	}), [actionsConfig, isOwn, deleteMessage]);
 
+	// A non-uuid ?id is a dead deep link - drop it so refresh/share don't replay it.
+	useEffect(() => {
+		if (rawConvId && !UUID_RE.test(rawConvId)) {
+			setSearchParams((prev) => {
+				const p = new URLSearchParams(prev);
+				p.delete("id");
+				return p;
+			}, { replace: true });
+		}
+	}, [rawConvId, setSearchParams]);
+
 	/* ── Open conversation: reset composer state, then load + mark read ── */
 	const openConversation = useCallback((conv: ChatConversation) => {
 		setReplyTo(null);
@@ -289,8 +332,14 @@ export function EnterpriseHelpdesk() {
 		setPendingFiles([]);
 		setShowSnippets(false);
 		setShowReassign(false);
-		window.history.replaceState(null, "", `/helpdesk?id=${conv.id}`);
-	}, []);
+		// Raw history.replaceState bypasses React Router - useSearchParams never
+		// sees it, so the detail pane never opens. setSearchParams notifies it.
+		setSearchParams((prev) => {
+			const p = new URLSearchParams(prev);
+			p.set("id", conv.id);
+			return p;
+		}, { replace: true });
+	}, [setSearchParams]);
 
 	useEffect(() => {
 		if (activeConvId) {
@@ -299,7 +348,7 @@ export function EnterpriseHelpdesk() {
 		}
 	}, [activeConvId, load, markRead, refreshConvs]);
 
-	/* Context rail — one round trip per open thread. */
+	/* Context rail - one round trip per open thread. */
 	useEffect(() => {
 		if (!activeConvId || !activeInQueue) {
 			setContext(null);
@@ -433,16 +482,28 @@ export function EnterpriseHelpdesk() {
 					<h1 className="page-title">Helpdesk</h1>
 					<p className="lead mt-1">Every client conversation, the ones waiting on you first.</p>
 				</div>
+				{canChat && (
+					<button type="button" className="btn btn--primary" onClick={() => setNewOpen("1")}>
+						+ New conversation
+					</button>
+				)}
 			</div>
 
-			{!canChat ? (
+			{!canChat || convsForbidden ? (
 				<p className="muted mt-2" style={{ color: "var(--error, #b00)" }}>
-					This role can&apos;t access the client conversation queue.
+					Your role can view the helpdesk but can&apos;t open threads - chat access required. Ask a manager.
 				</p>
 			) : (
 				<>
-					{error && (
-						<p className="muted mt-2" style={{ color: "var(--error, #b00)" }}>{error}</p>
+					{(error || convsError) && (
+						<p className="muted mt-2" style={{ color: "var(--error, #b00)" }}>
+							{error ?? convsError}{" "}
+							{convsError && (
+								<button type="button" className="dash-link" onClick={() => void refreshConvs()}>
+									Retry
+								</button>
+							)}
+						</p>
 					)}
 
 					<div className="dash-day" style={{ margin: "0 0 1rem" }}>
@@ -459,7 +520,7 @@ export function EnterpriseHelpdesk() {
 							<strong>{stats.unread}</strong> <span className="dash-day__date">unread</span>
 						</span>
 						<span>
-							<strong>{stats.longest > 0 ? waitLabel(stats.longest) : "—"}</strong> <span className="dash-day__date">longest wait</span>
+							<strong>{stats.longest > 0 ? waitLabel(stats.longest) : "-"}</strong> <span className="dash-day__date">longest wait</span>
 						</span>
 						<span className="dash-day__sep" aria-hidden>
 							|
@@ -474,35 +535,100 @@ export function EnterpriseHelpdesk() {
 						<div className="ops-split__list hd-list">
 							<div className="hd-list__head">
 								<div className="cn-scaffold__chips" role="tablist" aria-label="Conversations">
-									{CHIPS.map((f) => {
-										const n = counts[f.id];
-										const on = filter === f.id;
-										if (n === 0 && !["all", "awaiting", "unread", "mine", "unclaimed"].includes(f.id)) return null;
+									{FILTERS.map((f) => {
+										const n = counts[f];
+										const on = filter === f;
 										return (
 											<button
-												key={f.id}
+												key={f}
 												type="button"
 												role="tab"
 												aria-selected={on}
 												className="ops-pill"
-												onClick={() => setFilter(f.id)}
+												onClick={() => setFilter(f)}
 												style={{
 													cursor: "pointer",
 													marginLeft: 0,
 													border: "1px solid var(--border)",
 													background: on ? "var(--foreground)" : "transparent",
 													color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
-													fontWeight: f.id === "awaiting" && n > 0 && !on ? 700 : 500,
+													fontWeight: f === "awaiting" && n > 0 && !on ? 700 : 500,
 												}}
 											>
-												{f.label}
+												{FILTER_LABELS[f]}
 												<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
 													{n}
 												</span>
 											</button>
 										);
 									})}
+									<button
+										type="button"
+										className="ops-pill"
+										aria-expanded={drawerActive}
+										onClick={() => setDrawerOpen((v) => !v)}
+										style={{
+											cursor: "pointer",
+											marginLeft: 0,
+											border: `1px ${drawerActive ? "solid" : "dashed"} var(--border)`,
+											background: "transparent",
+											color: drawerActive ? "var(--foreground)" : "var(--muted-foreground)",
+											fontWeight: drawerActive ? 700 : 500,
+										}}
+									>
+										Filters {drawerActive ? "▴" : "▾"}
+									</button>
 								</div>
+								{drawerActive && (
+									<div className="cn-scaffold__chips" role="group" aria-label="Refine" style={{ marginTop: "0.5rem" }}>
+										{TYPE_FACETS.map((t) => {
+											const on = typeFacet === t.id;
+											return (
+												<button
+													key={t.id || "any"}
+													type="button"
+													className="ops-pill"
+													aria-pressed={on}
+													onClick={() => setTypeFacet(t.id)}
+													style={{
+														cursor: "pointer",
+														marginLeft: 0,
+														border: "1px solid var(--border)",
+														background: on ? "var(--foreground)" : "transparent",
+														color: on ? "var(--background)" : "var(--foreground)",
+													}}
+												>
+													{t.label}
+												</button>
+											);
+										})}
+										<button
+											type="button"
+											className="ops-pill"
+											aria-pressed={unreadOnly === "1"}
+											onClick={() => setUnreadOnly(unreadOnly === "1" ? "" : "1")}
+											style={{
+												cursor: "pointer",
+												marginLeft: 0,
+												border: "1px solid var(--border)",
+												background: unreadOnly === "1" ? "var(--foreground)" : "transparent",
+												color: unreadOnly === "1" ? "var(--background)" : "var(--foreground)",
+											}}
+										>
+											Unread only
+										</button>
+										<select
+											className="cn-select"
+											value={sortMode}
+											onChange={(e) => setSortMode(e.target.value as SortMode)}
+											aria-label="Sort"
+											style={{ marginLeft: "0.4rem" }}
+										>
+											<option value="recent">Sort · recent</option>
+											<option value="waiting">Sort · longest waiting</option>
+										</select>
+									</div>
+								)}
 								<input
 									type="search"
 									className="cn-search"
@@ -523,7 +649,18 @@ export function EnterpriseHelpdesk() {
 								{convsLoading ? (
 									<p className="muted hd-empty">Loading conversations…</p>
 								) : bands.length === 0 ? (
-									<p className="muted hd-empty">No client requests match.</p>
+									<div className="hd-empty">
+										<p className="muted">
+											{queue.length === 0 && !search.trim()
+												? "No client conversations yet - start one with + New conversation."
+												: "No client requests match."}
+										</p>
+										{queue.length === 0 && !search.trim() && (
+											<button type="button" className="btn btn--primary btn--sm" style={{ marginTop: "0.6rem" }} onClick={() => setNewOpen("1")}>
+												+ New conversation
+											</button>
+										)}
+									</div>
 								) : (
 									bands.map((band) => (
 										<div key={band.id}>
@@ -642,7 +779,11 @@ export function EnterpriseHelpdesk() {
 										onClaim={() => opsUser && void assignOwner(opsUser.opsUserId)}
 										onLoadMore={loadMore}
 										onBack={() => {
-											window.history.replaceState(null, "", "/helpdesk");
+											setSearchParams((prev) => {
+												const p = new URLSearchParams(prev);
+												p.delete("id");
+												return p;
+											}, { replace: true });
 										}}
 										onReact={(messageId, emoji) => void react(messageId, emoji)}
 										onQuoteClick={(messageId) => {
@@ -665,6 +806,36 @@ export function EnterpriseHelpdesk() {
 					/>
 				</>
 			)}
+
+			{/* Mount only while open - state resets naturally on close. */}
+			{newOpen === "1" && (
+			<NewConversationSheet
+				open
+				prefillClientId={clientFilter}
+				conversations={conversations}
+				applications={applications}
+				creating={creating}
+				onClose={() => setNewOpen(null)}
+				onSubmit={async ({ clientUserId, linkedEntityType, linkedEntityId, stageKey, initialMessage }) => {
+					// Throws on failure - the sheet shows the error inline.
+					const conv = await create({
+						clientUserId,
+						linkedEntityType,
+						linkedEntityId,
+						stageKey,
+						initialMessage,
+					});
+					setNewOpen(null);
+					setSearchParams((prev) => {
+						const p = new URLSearchParams(prev);
+						p.delete("new");
+						p.set("id", conv.id);
+						return p;
+					}, { replace: true });
+					void refreshConvs();
+				}}
+			/>
+			)}
 		</div>
 	);
 }
@@ -685,9 +856,9 @@ function ContextRail({
 				{context?.client ? (
 					<>
 						<div className="hd-rail__title">{context.client.name}</div>
-						<div className="hd-rail__line">{context.client.email ?? "—"}</div>
+						<div className="hd-rail__line">{context.client.email ?? "-"}</div>
 						<div className="hd-rail__line">
-							{[context.client.branch, context.client.targetCountry].filter(Boolean).join(" · ") || "—"}
+							{[context.client.branch, context.client.targetCountry].filter(Boolean).join(" · ") || "-"}
 						</div>
 						{context.client.memberSince && (
 							<div className="hd-rail__line">Client since {new Date(context.client.memberSince).toLocaleDateString()}</div>
@@ -717,7 +888,7 @@ function ContextRail({
 				{context && context.money.length > 0 ? (
 					context.money.map((m, i) => (
 						<div key={i} className="hd-rail__line">
-							<span className="mono">{m.invoiceNumber}</span> — {m.type} · {m.status}
+							<span className="mono">{m.invoiceNumber}</span> - {m.type} · {m.status}
 						</div>
 					))
 				) : (
@@ -729,7 +900,7 @@ function ContextRail({
 				<div className="hd-rail__label">Next appointment</div>
 				{context?.nextAppointment ? (
 					<div className="hd-rail__line">
-						{context.nextAppointment.serviceName} —{" "}
+						{context.nextAppointment.serviceName} -{" "}
 						{new Date(context.nextAppointment.startsAt).toLocaleString([], {
 							weekday: "short",
 							month: "short",
@@ -919,7 +1090,7 @@ function ConversationThread({
 						<div className="hd-pop">
 							{owner && (
 								<button type="button" className="hd-pop__row" onClick={() => onReassign(null)}>
-									— Release (unclaim)
+									- Release (unclaim)
 								</button>
 							)}
 							{directory.map((s) => (
@@ -1002,7 +1173,7 @@ function ConversationThread({
 						aria-selected={noteMode}
 						className={`hd-mode${noteMode ? " hd-mode--on" : ""}`}
 						onClick={() => !noteMode && onToggleNote()}
-						title="Staff-only note — the client never sees it"
+						title="Staff-only note - the client never sees it"
 					>
 						Note
 					</button>
@@ -1026,7 +1197,7 @@ function ConversationThread({
 			)}
 			{noteMode && (
 				<div className="hd-note-hint mono">
-					NOTE — visible to staff only. The client never sees this.
+					NOTE - visible to staff only. The client never sees this.
 				</div>
 			)}
 
@@ -1053,6 +1224,269 @@ function ConversationThread({
 				}
 			/>
 		</div>
+	);
+}
+
+/* ── New conversation sheet - staff-initiated client threads ────────────── */
+
+type Regarding =
+	| { kind: "support" }
+	| { kind: "case"; applicationId: string }
+	| { kind: "stage"; applicationId: string; stageKey: string }
+	| { kind: "consultation"; consultationId: string };
+
+function NewConversationSheet({
+	open,
+	prefillClientId,
+	conversations,
+	applications,
+	creating,
+	onClose,
+	onSubmit,
+}: {
+	open: boolean;
+	prefillClientId: string | null;
+	conversations: ChatConversation[];
+	applications: { id: string; appId: string; stage: string; status: string; applicantUserId?: string | null; email?: string }[];
+	creating: boolean;
+	onClose: () => void;
+	onSubmit: (body: {
+		clientUserId: string;
+		linkedEntityType?: string;
+		linkedEntityId?: string;
+		stageKey?: string;
+		initialMessage?: string;
+	}) => Promise<void>;
+}) {
+	// The sheet only mounts its contents while open (see the render guard in
+	// the parent), so state starts fresh on every open - no reset effect.
+	const [clients, setClients] = useState<ClientUser[]>([]);
+	const [clientsLoading, setClientsLoading] = useState(true);
+	const [clientQuery, setClientQuery] = useState("");
+	const [client, setClient] = useState<ClientUser | null>(null);
+	const [regarding, setRegarding] = useState<Regarding>({ kind: "support" });
+	const [message, setMessage] = useState("");
+	const [sheetError, setSheetError] = useState<string | null>(null);
+
+	// Load the client directory on mount; prefill from ?client=.
+	useEffect(() => {
+		let on = true;
+		listClientUsers()
+			.then((res) => {
+				if (!on) return;
+				const list = Array.isArray(res?.clients) ? res.clients : [];
+				setClients(list);
+				if (prefillClientId) {
+					setClient(list.find((c) => c.id === prefillClientId) ?? null);
+				}
+			})
+			.catch(() => { if (on) setSheetError("Could not load the client list"); })
+			.finally(() => { if (on) setClientsLoading(false); });
+		return () => { on = false; };
+	}, [prefillClientId]);
+
+	const clientMatches = useMemo(() => {
+		const q = clientQuery.trim().toLowerCase();
+		const list = q
+			? clients.filter((c) => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q))
+			: clients;
+		return list.slice(0, 6);
+	}, [clients, clientQuery]);
+
+	// This client's open cases + current stage - the "Regarding" options.
+	const clientCases = useMemo(() => {
+		if (!client) return [];
+		return applications.filter(
+			(a) => (a.applicantUserId && a.applicantUserId === client.id) || (a.email && a.email === client.email),
+		);
+	}, [applications, client]);
+
+	// Warn when an open thread already exists for this client - the API joins
+	// it rather than forking a second one.
+	const existingThread = useMemo(() => {
+		if (!client) return null;
+		return conversations.find(
+			(c) => CLIENT_TYPES.has(c.type) && c.clientUserId === client.id && !isClosed(c),
+		) ?? null;
+	}, [conversations, client]);
+
+	const pick = (c: ClientUser) => {
+		setClient(c);
+		setClientQuery("");
+		setRegarding({ kind: "support" });
+	};
+
+	const submit = () => {
+		if (!client) { setSheetError("Pick a client first"); return; }
+		if (!message.trim()) { setSheetError("Write the first message - the client needs something to see"); return; }
+		setSheetError(null);
+		const body: Parameters<typeof onSubmit>[0] = {
+			clientUserId: client.id,
+			initialMessage: message.trim(),
+		};
+		if (regarding.kind === "case") {
+			body.linkedEntityType = "application";
+			body.linkedEntityId = regarding.applicationId;
+		} else if (regarding.kind === "stage") {
+			body.linkedEntityType = "application";
+			body.linkedEntityId = regarding.applicationId;
+			body.stageKey = regarding.stageKey;
+		} else if (regarding.kind === "consultation") {
+			body.linkedEntityType = "consultation";
+			body.linkedEntityId = regarding.consultationId;
+		}
+		void onSubmit(body).catch((err) => {
+			setSheetError(err instanceof Error ? err.message : "Could not start the conversation");
+		});
+	};
+
+	return (
+		<Sheet open={open} onClose={onClose} title="New conversation">
+			<div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+				<div>
+					<p className="mono muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+						Client
+					</p>
+					{client ? (
+						<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", border: "1px solid var(--border)", padding: "0.45rem 0.6rem" }}>
+							<strong style={{ fontSize: "0.8rem" }}>{client.name}</strong>
+							<span className="muted mono" style={{ fontSize: "0.65rem" }}>{client.email}</span>
+							<button type="button" className="dash-link" style={{ marginLeft: "auto" }} onClick={() => setClient(null)}>
+								change
+							</button>
+						</div>
+					) : (
+						<>
+							<input
+								className="cn-search"
+								style={{ width: "100%", marginTop: 0 }}
+								placeholder={clientsLoading ? "Loading clients…" : "Search clients by name or email…"}
+								value={clientQuery}
+								onChange={(e) => setClientQuery(e.target.value)}
+								aria-label="Search clients"
+							/>
+							<div style={{ border: "1px solid var(--border)", borderTop: 0 }}>
+								{clientMatches.map((c) => (
+									<button
+										key={c.id}
+										type="button"
+										onClick={() => pick(c)}
+										style={{ display: "block", width: "100%", textAlign: "left", padding: "0.45rem 0.6rem", background: "none", border: "none", borderBottom: "1px solid var(--border)", cursor: "pointer" }}
+									>
+										<strong style={{ fontSize: "0.78rem" }}>{c.name}</strong>
+										<span className="muted mono" style={{ fontSize: "0.62rem", marginLeft: "0.5rem" }}>{c.email}</span>
+									</button>
+								))}
+								{!clientsLoading && clientMatches.length === 0 && (
+									<p className="muted" style={{ padding: "0.6rem", fontSize: "0.74rem" }}>No clients match.</p>
+								)}
+							</div>
+						</>
+					)}
+					{existingThread && (
+						<p className="mono muted" style={{ fontSize: "0.62rem", marginTop: "0.35rem" }}>
+							Already has an open thread - you&apos;ll join it, not duplicate it.
+						</p>
+					)}
+				</div>
+
+				<div>
+					<p className="mono muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+						Regarding
+					</p>
+					<div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+						<button
+							type="button"
+							className="ops-pill"
+							aria-pressed={regarding.kind === "support"}
+							onClick={() => setRegarding({ kind: "support" })}
+							style={{
+								cursor: "pointer",
+								border: "1px solid var(--border)",
+								background: regarding.kind === "support" ? "var(--foreground)" : "transparent",
+								color: regarding.kind === "support" ? "var(--background)" : "var(--foreground)",
+							}}
+						>
+							General support
+						</button>
+						{clientCases.map((a) => (
+							<button
+								key={a.id}
+								type="button"
+								className="ops-pill"
+								aria-pressed={regarding.kind === "case" && regarding.applicationId === a.id}
+								onClick={() => setRegarding({ kind: "case", applicationId: a.id })}
+								style={{
+									cursor: "pointer",
+									border: "1px solid var(--border)",
+									background: regarding.kind === "case" && regarding.applicationId === a.id ? "var(--foreground)" : "transparent",
+									color: regarding.kind === "case" && regarding.applicationId === a.id ? "var(--background)" : "var(--foreground)",
+								}}
+							>
+								Case · {a.appId}
+							</button>
+						))}
+						{clientCases.map((a) => (
+							<button
+								key={`${a.id}-stage`}
+								type="button"
+								className="ops-pill"
+								aria-pressed={regarding.kind === "stage" && regarding.applicationId === a.id}
+								onClick={() => setRegarding({ kind: "stage", applicationId: a.id, stageKey: a.stage })}
+								style={{
+									cursor: "pointer",
+									border: "1px dashed var(--border)",
+									background: regarding.kind === "stage" && regarding.applicationId === a.id ? "var(--foreground)" : "transparent",
+									color: regarding.kind === "stage" && regarding.applicationId === a.id ? "var(--background)" : "var(--foreground)",
+								}}
+							>
+								Stage · {a.appId} - {a.stage}
+							</button>
+						))}
+					</div>
+				</div>
+
+				<div>
+					<p className="mono muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+						First message
+					</p>
+					<textarea
+						className="cn-search"
+						style={{ width: "100%", marginTop: 0, minHeight: "4.5rem", resize: "vertical", fontFamily: "inherit" }}
+						placeholder={client ? `Hi ${client.name.split(" ")[0]} - ` : "Write the first message…"}
+						value={message}
+						onChange={(e) => setMessage(e.target.value)}
+						aria-label="First message"
+					/>
+					<div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", marginTop: "0.4rem" }}>
+						{SNIPPETS.slice(0, 3).map((s) => (
+							<button
+								key={s.id}
+								type="button"
+								className="ops-pill"
+								onClick={() => setMessage(s.body)}
+								style={{ cursor: "pointer", border: "1px dashed var(--border)", background: "transparent", color: "var(--muted-foreground)" }}
+							>
+								{s.label}
+							</button>
+						))}
+					</div>
+				</div>
+
+				{sheetError && (
+					<p style={{ color: "var(--error, #b00)", fontSize: "0.74rem" }}>{sheetError}</p>
+				)}
+
+				<div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
+					<button type="button" className="btn btn--ghost btn--sm" onClick={onClose}>
+						Cancel
+					</button>
+					<button type="button" className="btn btn--primary btn--sm" disabled={creating} onClick={submit}>
+						{creating ? "Starting…" : "Start thread →"}
+					</button>
+				</div>
+			</div>
+		</Sheet>
 	);
 }
 

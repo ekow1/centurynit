@@ -102,7 +102,55 @@ export function publishChatEvent(
 				publishToUser(userId, payload);
 			}
 		} catch {
-			// SSE is best-effort — a publish failure must not block the send.
+			// SSE is best-effort - a publish failure must not block the send.
+		}
+	})().catch(() => {});
+}
+
+/**
+ * Conversation types a portal client may read (mirrors
+ * CUSTOMER_VISIBLE_TYPES in communication.ts). internal/escalation/entity
+ * threads are staff-only even when they happen to carry a userId.
+ */
+const CLIENT_VISIBLE_TYPES = new Set(["support", "case", "stage", "applicant"]);
+
+/**
+ * Push a chat.* event to the client side of a customer-facing conversation.
+ * publishChatEvent resolves ops_users only, so it never reaches the portal:
+ * the client's SSE channel is keyed by conversations.user_id and
+ * participant_user_id rows, which this resolves instead. Callers MUST gate
+ * on visibility - an internal note published here would leak into the
+ * client's live transcript even though it never appears in history reads.
+ */
+export function publishChatEventToClient(
+	conversationId: string,
+	payload: { type: string; conversationId: string; [key: string]: unknown },
+): void {
+	(async () => {
+		try {
+			const [conv] = await db
+				.select({ type: conversations.type, userId: conversations.userId })
+				.from(conversations)
+				.where(eq(conversations.id, conversationId))
+				.limit(1);
+			if (!conv || !CLIENT_VISIBLE_TYPES.has(conv.type)) return;
+			const clientIds = new Set<string>();
+			if (conv.userId) clientIds.add(conv.userId);
+			const parts = await db
+				.select({ participantUserId: conversationParticipants.participantUserId })
+				.from(conversationParticipants)
+				.where(
+					and(
+						eq(conversationParticipants.conversationId, conversationId),
+						sql`${conversationParticipants.participantUserId} IS NOT NULL`,
+					),
+				);
+			for (const p of parts) {
+				if (p.participantUserId) clientIds.add(p.participantUserId);
+			}
+			for (const userId of clientIds) publishToUser(userId, payload);
+		} catch {
+			// SSE is best-effort - a publish failure must not block the send.
 		}
 	})().catch(() => {});
 }
@@ -149,10 +197,12 @@ function serializeConversation(
 	unreadMap: Map<string, number>,
 	lastMsgMap: Map<string, typeof messages.$inferSelect | undefined>,
 	viewerOpsUserId: string,
+	lastPublicMsgMap: Map<string, typeof messages.$inferSelect | undefined> = new Map(),
 ): ChatConversation {
 	const participants = participantsMap.get(row.id) ?? [];
 	const unread = unreadMap.get(row.id) ?? 0;
 	const lastMsg = lastMsgMap.get(row.id);
+	const lastPublicMsg = lastPublicMsgMap.get(row.id);
 	const title =
 		row.type === "direct"
 			? (participants.find((p) => p.opsUserId != null && p.opsUserId !== viewerOpsUserId)?.name ?? row.title)
@@ -179,6 +229,10 @@ function serializeConversation(
 			joinedAt: p.joinedAt.toISOString(),
 		})),
 		lastMessage: lastMsg ? serializeMessageRow(lastMsg) : null,
+		// "Awaiting" = the last PUBLIC message is the client's. An internal
+		// note must not mark the thread answered, and the viewer's unread
+		// cursor must not mark it waiting.
+		awaitingReply: Boolean(lastPublicMsg?.senderUserId),
 		unreadCount: unread,
 		lastMessageAt: row.lastMessageAt?.toISOString() ?? null,
 		createdAt: row.createdAt.toISOString(),
@@ -218,7 +272,14 @@ export async function listConversations(
 				.from(conversations)
 				.leftJoin(membership, eq(conversations.id, membership.conversationId))
 				.where(
-					sql`(${membership.conversationId} IS NOT NULL OR ${conversations.type} = 'support')`,
+					// Queue visibility covers every client-bound thread, not just
+					// support: an orphaned case/stage conversation (deleted or
+					// unassigned officer, no participants) would otherwise be
+					// invisible and the client's message would black-hole.
+					sql`(${membership.conversationId} IS NOT NULL OR (
+						${conversations.userId} IS NOT NULL AND
+						${conversations.type} IN ('support', 'case', 'stage', 'applicant')
+					))`,
 				)
 				.orderBy(activityOrder)
 		: await db
@@ -283,23 +344,50 @@ export async function listConversations(
 		unreadMap.set(row.conversationId, row.count);
 	}
 
-	// Last message per conversation
+	// Last message per conversation. DISTINCT ON returns one row per thread
+	// via the (conversation_id, created_at) index - the previous version
+	// selected every message of every listed conversation and picked the
+	// newest in JS, so each queue refresh read the entire history.
 	const lastMsgRows = await db
 		.select()
 		.from(messages)
-		.where(inArray(messages.conversationId, conversationIds))
-		.orderBy(desc(messages.createdAt));
+		.where(
+			sql`${messages.id} = ANY (
+				SELECT DISTINCT ON (conversation_id) id
+				FROM ${messages}
+				WHERE conversation_id = ANY(${conversationIds})
+				ORDER BY conversation_id, created_at DESC
+			)`,
+		);
 
 	const lastMsgMap = new Map<string, typeof messages.$inferSelect>();
 	for (const msg of lastMsgRows) {
-		// First row per conversationId is the latest (ORDER BY desc)
-		if (!lastMsgMap.has(msg.conversationId)) {
-			lastMsgMap.set(msg.conversationId, msg);
-		}
+		lastMsgMap.set(msg.conversationId, msg);
+	}
+
+	// Same shape, restricted to public messages: "awaiting reply" is derived
+	// from who wrote the last client-visible message, so a staff-only note
+	// can't make a waiting thread look answered.
+	const lastPublicMsgRows = await db
+		.select()
+		.from(messages)
+		.where(
+			sql`${messages.id} = ANY (
+				SELECT DISTINCT ON (conversation_id) id
+				FROM ${messages}
+				WHERE conversation_id = ANY(${conversationIds})
+				AND visibility = 'public'
+				ORDER BY conversation_id, created_at DESC
+			)`,
+		);
+
+	const lastPublicMsgMap = new Map<string, typeof messages.$inferSelect>();
+	for (const msg of lastPublicMsgRows) {
+		lastPublicMsgMap.set(msg.conversationId, msg);
 	}
 
 	const list = rows.map((r) =>
-		serializeConversation(r.conversations, participantsMap, unreadMap, lastMsgMap, opsUserId),
+		serializeConversation(r.conversations, participantsMap, unreadMap, lastMsgMap, opsUserId, lastPublicMsgMap),
 	);
 
 	return { conversations: list, total: list.length };
@@ -321,10 +409,12 @@ const SUPPORT_QUEUE_ROLES = new Set([
 
 /**
  * If the staff member is a support-queue role and the conversation is a
- * support conversation they're not yet a participant in, auto-join them as
+ * client-facing thread they're not yet a participant in, auto-join them as
  * a "member" so they can view and reply. This is called from getConversation
  * and getMessages to bridge the gap between list visibility (which lets them
- * see support conversations) and detail access (which requires membership).
+ * see every client-bound conversation) and detail access (which requires
+ * membership). Must cover the same types the list bypass does, or queue
+ * staff would see case/stage rows they cannot open.
  */
 async function ensureSupportQueueAccess(
 	conversationId: string,
@@ -337,7 +427,7 @@ async function ensureSupportQueueAccess(
 		.from(conversations)
 		.where(eq(conversations.id, conversationId))
 		.limit(1);
-	if (conv?.type !== "support") return;
+	if (!conv || !CLIENT_VISIBLE_TYPES.has(conv.type)) return;
 	const [existing] = await db
 		.select({ id: conversationParticipants.conversationId })
 		.from(conversationParticipants)
@@ -355,6 +445,10 @@ async function ensureSupportQueueAccess(
 				conversationId,
 				opsUserId,
 				role: "member",
+				// Baseline the read cursor at join time: a queue member opening a
+				// thread for the first time hasn't "unread" its whole history, so
+				// unread means what arrives after they join.
+				lastReadAt: sql`now()`,
 			})
 			.onConflictDoNothing();
 	}
@@ -395,19 +489,29 @@ export async function getConversation(
 	const participants = await getParticipants(conversationId);
 	const unread = await countUnread(conversationId, opsUserId);
 
-	const [lastMsg] = await db
-		.select()
-		.from(messages)
-		.where(eq(messages.conversationId, conversationId))
-		.orderBy(desc(messages.createdAt))
-		.limit(1);
+	const [lastMsg, lastPublicMsg] = await Promise.all([
+		db
+			.select()
+			.from(messages)
+			.where(eq(messages.conversationId, conversationId))
+			.orderBy(desc(messages.createdAt))
+			.limit(1),
+		db
+			.select()
+			.from(messages)
+			.where(and(eq(messages.conversationId, conversationId), eq(messages.visibility, "public")))
+			.orderBy(desc(messages.createdAt))
+			.limit(1),
+	]);
 
 	const participantsMap = new Map([[conversationId, participants]]);
 	const unreadMap = new Map([[conversationId, unread]]);
 	const lastMsgMap = new Map<string, typeof messages.$inferSelect>();
-	if (lastMsg) lastMsgMap.set(conversationId, lastMsg);
+	if (lastMsg[0]) lastMsgMap.set(conversationId, lastMsg[0]);
+	const lastPublicMsgMap = new Map<string, typeof messages.$inferSelect>();
+	if (lastPublicMsg[0]) lastPublicMsgMap.set(conversationId, lastPublicMsg[0]);
 
-	return serializeConversation(row, participantsMap, unreadMap, lastMsgMap, opsUserId);
+	return serializeConversation(row, participantsMap, unreadMap, lastMsgMap, opsUserId, lastPublicMsgMap);
 }
 
 /* ── Create conversation ────────────────────────────────────────────────── */
@@ -533,8 +637,8 @@ export async function getMessages(
 	staffRole?: string,
 ): Promise<ChatMessageList> {
 	// Authorization: only participants may read a conversation. Without this
-	// check any staff member with chat access could read any conversation —
-	// including applicant ↔ consultant threads — by iterating IDs.
+	// check any staff member with chat access could read any conversation -
+	// including applicant ↔ consultant threads - by iterating IDs.
 	// An empty opsUserId is the internal/trusted path (e.g. the applicant
 	// route, which does its own ownership check before calling in).
 	if (opsUserId) {
@@ -592,7 +696,7 @@ export async function getMessages(
 
 /* ── Send message (internal) ────────────────────────────────────────────── */
 
-/** Conversation types that face the customer — helpdesk triage targets. */
+/** Conversation types that face the customer - helpdesk triage targets. */
 const CLIENT_FACING_TYPES = new Set(["applicant", "support", "case", "stage", "entity"]);
 
 async function sendMessageInternal(
@@ -614,7 +718,7 @@ async function sendMessageInternal(
 		})
 		.returning();
 
-	// Update conversation timestamps — `lastMessageAt` is the sort key every
+	// Update conversation timestamps - `lastMessageAt` is the sort key every
 	// queue/list orders by, so it must move on every send.
 	await db
 		.update(conversations)
@@ -623,8 +727,8 @@ async function sendMessageInternal(
 
 	// Bind pre-staged uploads to the message now that it exists. Scoped to rows
 	// this sender staged and that aren't already bound, so a caller can't
-	// attach someone else's upload — or re-attach one already in another
-	// message — by guessing ids.
+	// attach someone else's upload - or re-attach one already in another
+	// message - by guessing ids.
 	if (input.attachmentIds?.length) {
 		await db
 			.update(messageAttachments)
@@ -686,7 +790,7 @@ async function sendMessageInternal(
 
 	// Real-time: push the new message to all online participants via SSE so
 	// their chat UI appends it instantly without polling. The sender is
-	// excluded — their own send call already returned the message.
+	// excluded - their own send call already returned the message.
 	//
 	// Hydrated with NO viewer: delivery ticks are only meaningful on your own
 	// messages, and this payload is going to everyone else. Passing the sender
@@ -702,7 +806,18 @@ async function sendMessageInternal(
 		sender.id,
 	);
 
-	// Notify offline participants via email — fire-and-forget so the
+	// The portal widget subscribes to the same event type, but on the
+	// client's channel - publishChatEvent resolves staff participants only.
+	// Internal notes stay staff-side: the visibility gate is the leak guard.
+	if (visibility === "public") {
+		publishChatEventToClient(conversationId, {
+			type: "chat.message",
+			conversationId,
+			message: broadcastView,
+		});
+	}
+
+	// Notify offline participants via email - fire-and-forget so the
 	// per-participant DB lookups + email queueing never delay the send.
 	void notifyOfflineParticipants(conversationId, sender, created);
 
@@ -720,7 +835,7 @@ async function sendMessageInternal(
 			const isCustomerFacing =
 				conv?.userId &&
 				conv.userId !== sender.id &&
-				// Internal notes are staff-only — the client must never be
+				// Internal notes are staff-only - the client must never be
 				// notified that one was posted.
 				visibility !== "internal" &&
 				(conv.type === "applicant" ||
@@ -735,14 +850,16 @@ async function sendMessageInternal(
 					type: "chat.reply",
 					title: `${sender.name} replied`,
 					body: preview,
-					link: "/portal/support",
+					// Deep link into the exact thread - the portal widget reads
+					// ?chat=<id> and opens on it (there is no /portal/support page).
+					link: `/portal/home?chat=${conversationId}`,
 				});
 				return;
 			}
 
 			// Staff-to-staff: notify every other participant so they get the
 			// in-app bell + push. Without this, staff only saw SSE (if online
-			// with the chat hub open) or email (if offline for 5+ min) — no
+			// with the chat hub open) or email (if offline for 5+ min) - no
 			// bell, no push, and no trace in the notifications table.
 			if (conv && !isCustomerFacing) {
 				const participants = await getParticipants(conversationId);
@@ -776,7 +893,7 @@ async function sendMessageInternal(
 							type: "chat.message",
 							title,
 							body: preview,
-							link: `/chat?conversation=${conversationId}`,
+							link: `/helpdesk?id=${conversationId}`,
 							entityType: "chat",
 							entityId: created.id,
 						})),
@@ -788,7 +905,7 @@ async function sendMessageInternal(
 	})().catch(() => {});
 
 	// Return the hydrated owner view so the sender sees the correct delivery
-	// status (double-check "delivered") immediately — mirroring editMessage
+	// status (double-check "delivered") immediately - mirroring editMessage
 	// and forwardMessage. Returning the bare serializeMessage (deliveryStatus:
 	// null) makes the bubble render a clock icon that looks like "still sending".
 	const [ownerView] = await hydrateMessages([created], { opsUserId: sender.id });
@@ -803,7 +920,7 @@ export async function sendMessage(
 	input: SendMessage,
 	staffRole?: string,
 ): Promise<ChatMessage> {
-	// Verify membership — but auto-join support-queue staff into support
+	// Verify membership - but auto-join support-queue staff into support
 	// conversations first so they can reply to threads they just opened.
 	if (staffRole) {
 		await ensureSupportQueueAccess(conversationId, senderOpsUser.id, staffRole);
@@ -865,7 +982,7 @@ export async function markAsRead(conversationId: string, opsUserId: string): Pro
  * Load a message and assert the caller participates in its conversation.
  *
  * Every action below needs the same two facts, and getting either wrong is a
- * data leak — so they share one gate rather than each re-deriving it.
+ * data leak - so they share one gate rather than each re-deriving it.
  */
 async function loadMessageForActor(
 	messageId: string,
@@ -892,7 +1009,7 @@ async function loadMessageForActor(
 }
 
 /**
- * Edit a message in place (spec §11) — never creates a new row, so replies
+ * Edit a message in place (spec §11) - never creates a new row, so replies
  * quoting it and forwards descending from it stay attached.
  */
 export async function editMessage(
@@ -910,7 +1027,7 @@ export async function editMessage(
 	if (row.deletedAt) {
 		throw new HttpError(409, "MESSAGE_DELETED", "A deleted message cannot be edited");
 	}
-	// System and action messages are authored by the platform, not a person —
+	// System and action messages are authored by the platform, not a person -
 	// letting a user rewrite them would falsify the audit trail.
 	if (row.messageType !== "text") {
 		throw new HttpError(409, "NOT_EDITABLE", "Only text messages can be edited");
@@ -928,6 +1045,13 @@ export async function editMessage(
 		conversationId: row.conversationId,
 		message: broadcastView,
 	});
+	if (updated.visibility === "public") {
+		publishChatEventToClient(row.conversationId, {
+			type: "chat.message.updated",
+			conversationId: row.conversationId,
+			message: broadcastView,
+		});
+	}
 
 	const [ownerView] = await hydrateMessages([updated], { opsUserId });
 	return ownerView;
@@ -965,6 +1089,13 @@ export async function deleteMessage(
 		conversationId: row.conversationId,
 		messageId,
 	});
+	if (row.visibility === "public") {
+		publishChatEventToClient(row.conversationId, {
+			type: "chat.message.deleted",
+			conversationId: row.conversationId,
+			messageId,
+		});
+	}
 }
 
 /**
@@ -1018,6 +1149,14 @@ export async function toggleReaction(
 		messageId,
 		reactions,
 	});
+	if (row.visibility === "public") {
+		publishChatEventToClient(row.conversationId, {
+			type: "chat.reaction",
+			conversationId: row.conversationId,
+			messageId,
+			reactions,
+		});
+	}
 	return reactions;
 }
 
@@ -1102,7 +1241,7 @@ export async function forwardMessage(
 /**
  * Fan a typing signal out to the other participants (spec §16).
  *
- * Deliberately not persisted — typing state is worthless a second later, and
+ * Deliberately not persisted - typing state is worthless a second later, and
  * writing it would mean a database round trip per keystroke. It exists only as
  * an SSE event, and the sender is excluded so nobody sees themselves typing.
  */
@@ -1135,6 +1274,13 @@ export async function setTyping(
 		},
 		actor.opsUserId,
 	);
+	// Staff typing reaches the client too - "Ama is typing" in the portal.
+	publishChatEventToClient(conversationId, {
+		type: "chat.typing",
+		conversationId,
+		actorName: actor.name,
+		typing,
+	});
 }
 
 /* ── Unread counts ──────────────────────────────────────────────────────── */
@@ -1229,7 +1375,7 @@ export async function notifyOfflineParticipants(
 		.limit(1);
 
 	const frontendUrl = env.CONSOLE_URL;
-	const conversationUrl = `${frontendUrl}/chat?conversation=${conversationId}`;
+	const conversationUrl = `${frontendUrl}/helpdesk?id=${conversationId}`;
 
 	for (const p of participants) {
 		if (!p.opsUserId) continue;
@@ -1254,7 +1400,7 @@ export async function notifyOfflineParticipants(
 
 		// Determine if the participant is "offline" using staff presence
 		// (heartbeat within last 15 min, not explicitly offline). If they're
-		// active, skip the email — they'll get the SSE + push notification.
+		// active, skip the email - they'll get the SSE + push notification.
 		const isActive = await isStaffActive(p.opsUserId);
 		if (isActive) continue;
 
@@ -1275,7 +1421,7 @@ export async function notifyOfflineParticipants(
 
 		const email: QueuedEmail = {
 			to: authUser.email,
-			subject: `New message from ${sender.name} — Century NIT Chat`,
+			subject: `New message from ${sender.name} - Century NIT Chat`,
 			html,
 			text,
 			idempotencyKey: `chat:notify:${sentMessage.id}:${p.opsUserId}`,
@@ -1288,7 +1434,7 @@ export async function notifyOfflineParticipants(
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
- * Applicant-facing chat — lets applicants message their assigned consultant
+ * Applicant-facing chat - lets applicants message their assigned consultant
  * ══════════════════════════════════════════════════════════════════════════ */
 
 /**
@@ -1346,7 +1492,7 @@ export async function getOrCreateApplicantConversation(userId: string): Promise<
 		if (officer) officerName = officer.name;
 	}
 
-	// Create the conversation — createdBy needs a valid opsUserId
+	// Create the conversation - createdBy needs a valid opsUserId
 	// If no officer is assigned yet, we still need a value for the NOT NULL column.
 	// We'll use a placeholder that will be updated when an officer is assigned.
 	if (!officerId) {
@@ -1414,7 +1560,7 @@ export async function sendApplicantMessage(
 		.limit(1);
 	if (!conv) throw new HttpError(403, "NOT_PARTICIPANT", "This is not your conversation");
 
-	// A new client message re-opens a resolved conversation — the thread is
+	// A new client message re-opens a resolved conversation - the thread is
 	// the record, and "resolved" is a state, not a wall.
 	if (conv.status === "closed") {
 		await db
@@ -1424,7 +1570,7 @@ export async function sendApplicantMessage(
 		await db.insert(messages).values({
 			conversationId,
 			senderName: "System",
-			content: "Conversation reopened — new message from the client",
+			content: "Conversation reopened - new message from the client",
 			messageType: "system",
 		});
 		publishChatEvent(conversationId, {
@@ -1451,7 +1597,7 @@ export async function sendApplicantMessage(
 		.set({ updatedAt: new Date(), lastMessageAt: created.createdAt })
 		.where(eq(conversations.id, conversationId));
 
-	// Bind pre-staged uploads — scoped to rows this applicant staged and that
+	// Bind pre-staged uploads - scoped to rows this applicant staged and that
 	// aren't already bound, matching the staff path's guard.
 	if (attachmentIds?.length) {
 		await db
@@ -1497,13 +1643,13 @@ export async function sendApplicantMessage(
 						type: "chat.message",
 						title,
 						body: preview,
-						link: `/chat?conversation=${conversationId}`,
+						link: `/helpdesk?id=${conversationId}`,
 					});
 					return;
 				}
 			}
 
-			// No consultant linked yet — surface to managers/coordinators.
+			// No consultant linked yet - surface to managers/coordinators.
 			const managers = await getManagerAndCoordinatorUserIds();
 			await notifyMany(
 				managers.map((m) => ({
@@ -1511,7 +1657,7 @@ export async function sendApplicantMessage(
 					type: "chat.message",
 					title,
 					body: preview,
-					link: `/chat?conversation=${conversationId}`,
+					link: `/helpdesk?id=${conversationId}`,
 				})),
 			);
 		} catch {
@@ -1529,7 +1675,7 @@ export async function sendApplicantMessage(
  * and posts a system divider into the thread so both sides see the boundary.
  * Reopen clears it. Archived hides the thread from client lists.
  *
- * Membership is required — the caller must already participate (support-queue
+ * Membership is required - the caller must already participate (support-queue
  * auto-join runs first so triage roles can resolve threads they just opened).
  */
 export async function setConversationStatus(
@@ -1599,6 +1745,16 @@ export async function setConversationStatus(
 		conversationId,
 		status,
 	});
+	publishChatEventToClient(conversationId, {
+		type: "chat.message",
+		conversationId,
+		message: serializeMessage(sysMsg),
+	});
+	publishChatEventToClient(conversationId, {
+		type: "chat.conversation.updated",
+		conversationId,
+		status,
+	});
 
 	return getConversation(conversationId, actor.id, staffRole);
 }
@@ -1607,7 +1763,7 @@ export async function setConversationStatus(
 
 /**
  * Make `targetOpsUserId` the conversation's owner. Any prior owner is demoted
- * to `member` — a thread has exactly one owner, which is what the helpdesk's
+ * to `member` - a thread has exactly one owner, which is what the helpdesk's
  * "Mine"/"Unclaimed" cuts and the row's owner pill read.
  *
  * `targetOpsUserId === null` releases ownership (thread goes back to
@@ -1718,11 +1874,20 @@ export async function assignConversationOwner(
 		type: "chat.conversation.updated",
 		conversationId,
 	});
+	publishChatEventToClient(conversationId, {
+		type: "chat.message",
+		conversationId,
+		message: serializeMessage(sysMsg),
+	});
+	publishChatEventToClient(conversationId, {
+		type: "chat.conversation.updated",
+		conversationId,
+	});
 
 	return getConversation(conversationId, actor.id, staffRole);
 }
 
-/* ── Context aggregate — the helpdesk's right rail ────────────────────── */
+/* ── Context aggregate - the helpdesk's right rail ────────────────────── */
 
 export interface ConversationContext {
 	client: {
@@ -1743,7 +1908,7 @@ export interface ConversationContext {
 /**
  * Everything the helpdesk's context rail needs in one round trip: who the
  * client is, where their cases sit, what they owe, and when we next see them.
- * All blocks are optional — a thread can exist before the applicant record.
+ * All blocks are optional - a thread can exist before the applicant record.
  */
 export async function getConversationContext(
 	conversationId: string,
@@ -1932,7 +2097,7 @@ export async function getConversationContext(
 /**
  * Two-phase upload, phase one: mint a private storage key, record a staged
  * `message_attachments` row owned by the uploader, and return a presigned PUT
- * the browser uploads straight to storage. Phase two is ordinary sendMessage —
+ * the browser uploads straight to storage. Phase two is ordinary sendMessage -
  * `attachmentIds` binds the staged rows to the new message (scoped to the
  * sender, so staged rows can't be attached by anyone else).
  */
@@ -1987,7 +2152,7 @@ export async function stageChatAttachment(
 }
 
 /**
- * Client-side counterpart — the applicant stages an upload against their own
+ * Client-side counterpart - the applicant stages an upload against their own
  * conversation. Ownership check is `conversations.userId`, not participants.
  */
 export async function stageCustomerAttachment(

@@ -22,6 +22,7 @@ interface CommunicationChatState {
 	sending: boolean;
 	typing: { name?: string } | null;
 	route: (opts?: { caseId?: string; stageKey?: string }) => Promise<string | null>;
+	openConversation: (conversationId: string) => Promise<void>;
 	send: (content: string, opts?: { attachmentIds?: string[] }) => Promise<void>;
 	markRead: () => Promise<void>;
 	reset: () => void;
@@ -35,7 +36,7 @@ export function useCommunicationChat(enabled: boolean): CommunicationChatState {
 	const [sending, setSending] = useState(false);
 	const [typing, setTyping] = useState<{ name?: string } | null>(null);
 	const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-	// Mirror of conversationId that route() sets synchronously — send() may be
+	// Mirror of conversationId that route() sets synchronously. Send() may be
 	// called in the same tick as route() (AI handoff escalation) before the
 	// state update re-renders, so the closure copy would still be stale/null.
 	const conversationIdRef = useRef<string | null>(null);
@@ -67,6 +68,32 @@ export function useCommunicationChat(enabled: boolean): CommunicationChatState {
 		setMessages([]);
 		setTyping(null);
 	}, []);
+
+	// Open a specific conversation by id - notification deep links
+	// (/portal/home?chat=<id>) already know the exact thread, so they bypass
+	// route()'s pick. Falls back to routing when the id is stale (archived
+	// thread, revoked access) so the widget still lands somewhere useful.
+	const openConversation = useCallback(async (convId: string) => {
+		if (!enabled) return;
+		setLoading(true);
+		try {
+			const [res, convs] = await Promise.all([
+				meApi.getCommunicationMessages(convId, { limit: 50 }),
+				meApi.listCommunicationConversations().catch(() => null),
+			]);
+			conversationIdRef.current = convId;
+			setConversationId(convId);
+			setConversationStatus(convs?.conversations.find((c) => c.id === convId)?.status ?? "open");
+			setMessages(res.messages);
+			void meApi.markCommunicationRead(convId).catch(() => {});
+		} catch {
+			conversationIdRef.current = null;
+			setConversationId(null);
+			await route();
+		} finally {
+			setLoading(false);
+		}
+	}, [enabled, route]);
 
 	// Send a message. The server returns the created message; we append it
 	// locally so the bubble appears instantly without waiting for SSE.
@@ -163,6 +190,7 @@ export function useCommunicationChat(enabled: boolean): CommunicationChatState {
 		sending,
 		typing,
 		route,
+		openConversation,
 		send,
 		markRead,
 		reset,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { meApi } from "century-nit-core";
 import type { CommunicationContext, ChatMessage, QuotedMessage } from "century-nit-shared";
 import {
@@ -61,7 +62,7 @@ export function CommunicationCenter() {
 	const [expanded, setExpanded] = useState(false);
 
 	// Pages can open the chat from in-content actions (e.g. "Message us" on the
-	// waiting screens) — the widget owns the launcher, they just signal intent.
+	// waiting screens). The widget owns the launcher, they just signal intent.
 	useEffect(() => {
 		const openChat = () => setOpen(true);
 		window.addEventListener("century:open-chat", openChat);
@@ -71,7 +72,7 @@ export function CommunicationCenter() {
 	const [context, setContext] = useState<CommunicationContext | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
-	// Journey state — feeds the AI prompt so answers are personalised to the
+	// Journey state. Feeds the AI prompt so answers are personalised to the
 	// applicant's actual stage, next step and payment signals (not generic FAQ).
 	const { application, journeyPhase, pendingAction } = useAppState();
 
@@ -83,7 +84,7 @@ export function CommunicationCenter() {
 	const [uploading, setUploading] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
-	// AI chat — streamed from the Workers AI edge endpoint. Context carries the
+	// AI chat. Streamed from the Workers AI edge endpoint. Context carries the
 	// live journey signals so the assistant answers with the applicant's real
 	// stage, next unlock, pending action and invoice states (worker caps at 6).
 	const aiChat = useAiChat("portal-comm", {
@@ -108,7 +109,7 @@ export function CommunicationCenter() {
 	const aiTyping = aiChat.typing;
 	const [aiDraft, setAiDraft] = useState("");
 
-	/* ── Load communication context (conversations + assigned officer) ── */
+	/* Load communication context (conversations + assigned officer) */
 	const loadContext = useCallback(async () => {
 		try {
 			const ctx = await meApi.getCommunicationContext();
@@ -136,7 +137,7 @@ export function CommunicationCenter() {
 	const officer = useMemo(() => officerCard(context), [context]);
 	const isOfficerAssigned = officer !== null;
 
-	/* ── Switch channel ── */
+	/* Switch channel */
 	const handleSelectChannel = useCallback(async (channel: ActiveChannel) => {
 		setActiveChannel(channel);
 		setError(null);
@@ -169,7 +170,31 @@ export function CommunicationCenter() {
 		return () => window.removeEventListener("open-chat", handler as EventListener);
 	}, [handleSelectChannel]);
 
-	/* ── Send message (support + officer) ── */
+	// Notification deep links land on /portal/home?chat=<conversationId>
+	// (there is no /portal/support page). The param is consumed so a later
+	// refresh doesn't force the widget back open.
+	const [searchParams, setSearchParams] = useSearchParams();
+	const openConversation = chat.openConversation;
+	useEffect(() => {
+		const target = searchParams.get("chat");
+		if (!target) return;
+		setSearchParams((prev) => {
+			const next = new URLSearchParams(prev);
+			next.delete("chat");
+			return next;
+		}, { replace: true });
+		setOpen(true);
+		if (target === "officer") {
+			void handleSelectChannel("officer");
+		} else if (target === "open" || target === "support") {
+			void handleSelectChannel("support");
+		} else {
+			setActiveChannel("support");
+			void openConversation(target);
+		}
+	}, [searchParams, setSearchParams, handleSelectChannel, openConversation]);
+
+	/* Send message (support + officer) */
 	const handleSend = useCallback(async (text: string) => {
 		if (!text.trim() && pendingFiles.length === 0) return;
 		await chat.send(text.trim() || "📎 Attachment", { attachmentIds: pendingFiles.map((f) => f.attachmentId) });
@@ -209,7 +234,7 @@ export function CommunicationCenter() {
 		[chat.conversationId],
 	);
 
-	/* ── AI assistant (streamed from Workers AI edge endpoint) ── */
+	/* AI assistant (streamed from Workers AI edge endpoint) */
 	const handleSendAi = useCallback((e?: FormEvent, customQuery?: string) => {
 		if (e) e.preventDefault();
 		const query = (customQuery || aiDraft).trim();
@@ -218,11 +243,11 @@ export function CommunicationCenter() {
 		void aiChat.send(query);
 	}, [aiDraft, aiTyping, aiChat]);
 
-	/* ── Escalation: AI → human (Phase 2 handoff). Routes the Support thread
+	/* Escalation: AI → human (Phase 2 handoff). Routes the Support thread
 	   and posts the AI transcript as a handoff message, so staff see the
 	   question and what the AI already answered without the applicant
-	   re-explaining. Posts once per question — repeat clicks (or a routing
-	   failure) fall back to the Phase 1 draft prefill. ── */
+	   re-explaining. Posts once per question. Repeat clicks (or a routing
+	   failure) fall back to the Phase 1 draft prefill. */
 	const lastEscalatedRef = useRef<string | null>(null);
 	const [escalating, setEscalating] = useState(false);
 
@@ -238,7 +263,7 @@ export function CommunicationCenter() {
 				return;
 			}
 			lastEscalatedRef.current = question;
-			// Last substantive AI reply — skip the welcome banner and error stubs.
+			// Last substantive AI reply. Skip the welcome banner and error stubs.
 			const lastAnswer = [...aiChat.messages]
 				.reverse()
 				.find(
@@ -258,7 +283,7 @@ export function CommunicationCenter() {
 				.join("\n");
 			await chat.send(handoff);
 		} catch {
-			// Handoff post failed — fall back to the Phase 1 behaviour so the
+			// Handoff post failed. Fall back to the Phase 1 behaviour so the
 			// applicant's question is never lost.
 			setDraft(question);
 		} finally {
@@ -266,7 +291,7 @@ export function CommunicationCenter() {
 		}
 	}, [aiChat.messages, handleSelectChannel, chat, escalating]);
 
-	/* ── Shared component callbacks (support + officer) ── */
+	/* Shared component callbacks (support + officer) */
 	const isOwn = useCallback(
 		(m: ChatMessage) => m.senderOpsUserId == null,
 		[],
@@ -394,7 +419,7 @@ export function CommunicationCenter() {
 
 					{/* Body */}
 					<div style={bodyStyle}>
-						{/* Support + Officer channels — shared components */}
+						{/* Support + Officer channels. Shared components */}
 						{(activeChannel === "support" || activeChannel === "officer") && (
 							activeChannel === "officer" && !isOfficerAssigned ? (
 								<div style={unassignedStateStyle}>
@@ -431,7 +456,7 @@ export function CommunicationCenter() {
 										</span>
 									</div>
 
-									{/* Messages — shared MessageList */}
+									{/* Messages. Shared MessageList */}
 									<MessageList
 										messages={chat.messages}
 										typing={chat.typing}
@@ -471,10 +496,10 @@ export function CommunicationCenter() {
 										}
 									/>
 
-									{/* Resolved strip — a new message reopens it */}
+									{/* Resolved strip. A new message reopens it */}
 									{chat.conversationStatus === "closed" && (
 										<div style={resolvedBarStyle}>
-											Resolved — send a message to reopen
+											Resolved. Send a message to reopen
 										</div>
 									)}
 
@@ -497,7 +522,7 @@ export function CommunicationCenter() {
 										</div>
 									)}
 
-									{/* Composer — shared */}
+									{/* Composer. Shared */}
 									<Composer
 										value={draft}
 										onChange={setDraft}
@@ -512,7 +537,7 @@ export function CommunicationCenter() {
 							)
 						)}
 
-						{/* AI channel — scripted, local-only */}
+						{/* AI channel. Scripted, local-only */}
 						{activeChannel === "ai" && (
 							<div style={streamContainerStyle}>
 								<div style={officerHeaderCardStyle}>
@@ -614,7 +639,7 @@ export function CommunicationCenter() {
 	);
 }
 
-/* ── Shell styles (header, tabs, AI channel) ────────────────────────────── */
+/* Shell styles (header, tabs, AI channel) */
 /* Support + Officer channels use the shared chat-ui components which style  */
 /* themselves via --cn-chat-* tokens. AI keeps its inline bubbles since it's  */
 /* a scripted local-only surface with no server backing.                      */
@@ -868,7 +893,7 @@ const switchChannelActionBtnStyle: CSSProperties = {
 	cursor: "pointer",
 };
 
-/* ── AI channel inline styles (scripted, no shared components) ── */
+/* AI channel inline styles (scripted, no shared components) */
 
 const messageListStyle: CSSProperties = {
 	flex: 1,

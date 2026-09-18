@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/* ── Enums ─────────────────────────────────────────────────────────────── */
+/* Enums */
 
 export const conversationTypeSchema = z.enum([
 	"direct",
@@ -42,7 +42,7 @@ export const messageTypeSchema = z.enum(["text", "system", "action"]);
 export type ChatMessageType = z.infer<typeof messageTypeSchema>;
 
 /**
- * `internal` messages are staff-only notes — they render dashed in the ops
+ * `internal` messages are staff-only notes. They render dashed in the ops
  * thread and are filtered out of every client-facing read path (portal
  * transcript, applicant SSE). Server defaults to `public`.
  */
@@ -54,13 +54,13 @@ export type MessageVisibility = z.infer<typeof messageVisibilitySchema>;
  *
  * `sending` and `failed` are CLIENT-ONLY: they describe an optimistic bubble
  * that has no server row yet. The server never emits them. Everything from
- * `sent` onwards is derived server-side — see `deliveryStatus` on
+ * `sent` onwards is derived server-side. See `deliveryStatus` on
  * `chatMessageSchema`.
  */
 export const messageDeliverySchema = z.enum(["sending", "sent", "delivered", "read", "failed"]);
 export type MessageDelivery = z.infer<typeof messageDeliverySchema>;
 
-/* ── Reactions ─────────────────────────────────────────────────────────── */
+/* Reactions */
 
 /**
  * Reactions arrive pre-aggregated by emoji rather than as a flat row list, so
@@ -78,7 +78,7 @@ export const messageReactionSchema = z.object({
 });
 export type MessageReaction = z.infer<typeof messageReactionSchema>;
 
-/* ── Attachments ───────────────────────────────────────────────────────── */
+/* Attachments */
 
 export const messageAttachmentSchema = z.object({
 	id: z.string().uuid(),
@@ -90,12 +90,12 @@ export const messageAttachmentSchema = z.object({
 });
 export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
 
-/* ── Quoted reply / forward provenance ─────────────────────────────────── */
+/* Quoted reply / forward provenance */
 
 /**
  * A denormalised snapshot of the message being quoted, hydrated server-side.
  * Without this the client would have to already hold the parent in its local
- * page of messages to render a quote — which breaks the moment the parent is
+ * page of messages to render a quote. Which breaks the moment the parent is
  * older than the current scroll window.
  */
 export const quotedMessageSchema = z.object({
@@ -107,7 +107,7 @@ export const quotedMessageSchema = z.object({
 });
 export type QuotedMessage = z.infer<typeof quotedMessageSchema>;
 
-/* ── Message ───────────────────────────────────────────────────────────── */
+/* Message */
 
 export const chatMessageSchema = z.object({
 	id: z.string().uuid(),
@@ -121,7 +121,7 @@ export const chatMessageSchema = z.object({
 	replyToId: z.string().uuid().nullable().optional(),
 	/** Hydrated preview of `replyToId`, so quotes render without a second fetch. */
 	replyTo: quotedMessageSchema.nullable().optional(),
-	/** Present when this message was forwarded — identifies the original author. */
+	/** Present when this message was forwarded. Identifies the original author. */
 	forwardedFrom: quotedMessageSchema.nullable().optional(),
 	/** Non-null once the body was edited; drives the "edited" marker. */
 	editedAt: z.string().datetime().nullable().optional(),
@@ -141,7 +141,7 @@ export const chatMessageSchema = z.object({
 });
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 
-/* ── Participant ───────────────────────────────────────────────────────── */
+/* Participant */
 
 export const chatParticipantSchema = z.object({
 	opsUserId: z.string().uuid(),
@@ -153,7 +153,7 @@ export const chatParticipantSchema = z.object({
 });
 export type ChatParticipant = z.infer<typeof chatParticipantSchema>;
 
-/* ── Conversation ──────────────────────────────────────────────────────── */
+/* Conversation */
 
 export const chatConversationSchema = z.object({
 	id: z.string().uuid(),
@@ -175,8 +175,14 @@ export const chatConversationSchema = z.object({
 	escalationReason: z.string().nullable().optional(),
 	participants: z.array(chatParticipantSchema),
 	lastMessage: chatMessageSchema.nullable().optional(),
+	/**
+	 * Server-computed triage flag: the last PUBLIC message came from the
+	 * client, so the thread is waiting on staff. Internal notes never clear
+	 * it, and it does not depend on the viewer's unread cursor.
+	 */
+	awaitingReply: z.boolean().optional(),
 	unreadCount: z.number().int().nonnegative(),
-	/** Denormalised activity timestamp — set by the server on every send. */
+	/** Denormalised activity timestamp. Set by the server on every send. */
 	lastMessageAt: z.string().datetime().nullable().optional(),
 	createdAt: z.string().datetime(),
 	updatedAt: z.string().datetime(),
@@ -189,7 +195,7 @@ export const chatConversationListSchema = z.object({
 });
 export type ChatConversationList = z.infer<typeof chatConversationListSchema>;
 
-/* ── Message list (paginated) ──────────────────────────────────────────── */
+/* Message list (paginated) */
 
 export const chatMessageListSchema = z.object({
 	messages: z.array(chatMessageSchema),
@@ -198,7 +204,7 @@ export const chatMessageListSchema = z.object({
 });
 export type ChatMessageList = z.infer<typeof chatMessageListSchema>;
 
-/* ── Unread counts ─────────────────────────────────────────────────────── */
+/* Unread counts */
 
 export const chatUnreadSchema = z.object({
 	totalUnread: z.number().int(),
@@ -211,10 +217,10 @@ export const chatUnreadSchema = z.object({
 });
 export type ChatUnread = z.infer<typeof chatUnreadSchema>;
 
-/* ── Request schemas ───────────────────────────────────────────────────── */
+/* Request schemas */
 
 export const createConversationSchema = z.object({
-	/** For direct messages — the opsUserId of the other person. */
+	/** For direct messages. The opsUserId of the other person. */
 	participantOpsUserId: z.string().uuid().optional(),
 	/** For entity-linked conversations. */
 	linkedEntityType: z
@@ -223,8 +229,18 @@ export const createConversationSchema = z.object({
 	linkedEntityId: z.string().uuid().optional(),
 	/** Explicit title override. Auto-generated for direct messages. */
 	title: z.string().min(1).max(255).optional(),
-	/** For group conversations — additional participant IDs. */
+	/** For group conversations. Additional participant IDs. */
 	participantOpsUserIds: z.array(z.string().uuid()).optional(),
+	/**
+	 * Staff-initiated client thread. The portal user the conversation is
+	 * with. Type derives from context: `linkedEntityId` + `stageKey` → stage
+	 * thread, `linkedEntityId` alone → case thread, neither → support.
+	 * Idempotent: an existing open thread for the same client+context is
+	 * returned (and the creator joined) rather than forking a second one.
+	 */
+	clientUserId: z.string().uuid().optional(),
+	/** Journey stage key for a `stage`-scoped client thread. */
+	stageKey: z.string().optional(),
 	/** Optional first message to send immediately. */
 	initialMessage: z.string().min(1).max(5000).optional(),
 });
@@ -250,7 +266,7 @@ export const sendMessageSchema = z.object({
 });
 export type SendMessage = z.infer<typeof sendMessageSchema>;
 
-/* ── Message actions (spec §11, §12, §13) ──────────────────────────────── */
+/* Message actions (spec §11, §12, §13) */
 
 export const editMessageSchema = z.object({
 	content: z.string().min(1).max(5000),
@@ -259,7 +275,7 @@ export type EditMessage = z.infer<typeof editMessageSchema>;
 
 /**
  * Forwarding targets existing conversations by id. Deliberately NOT "forward to
- * user" — resolving a user to a conversation is a separate, permission-checked
+ * user". Resolving a user to a conversation is a separate, permission-checked
  * step, and accepting user ids here would let a caller create conversations as
  * a side effect of forwarding.
  */
@@ -280,12 +296,12 @@ export const typingSchema = z.object({
 });
 export type Typing = z.infer<typeof typingSchema>;
 
-/* ── Real-time event contract (spec §20) ───────────────────────────────── */
+/* Real-time event contract (spec §20) */
 
 /**
  * Every event the server pushes over SSE for a conversation.
  *
- * This is the single source of truth for the realtime contract — the ops
+ * This is the single source of truth for the realtime contract. The ops
  * console, the client portal, and the API all import it, so adding an event
  * without handling it somewhere becomes a type error rather than a silent
  * no-op. Declared as a TypeScript union rather than a zod schema because these
@@ -308,14 +324,14 @@ export type ChatRealtimeEvent =
 	| {
 			type: "chat.conversation.updated";
 			conversationId: string;
-			/** Set when lifecycle changed — resolve/reopen/archive. */
+			/** Set when lifecycle changed. Resolve/reopen/archive. */
 			status?: ConversationStatus;
 	  }
 	| { type: "chat.read"; conversationId: string }
 	| {
 			type: "chat.typing";
 			conversationId: string;
-			/** Who is typing — never the recipient's own id. */
+			/** Who is typing. Never the recipient's own id. */
 			actorName: string;
 			typing: boolean;
 	  }
@@ -331,7 +347,7 @@ export const markReadSchema = z.object({
 });
 export type MarkRead = z.infer<typeof markReadSchema>;
 
-/* ── Staff directory (for mention autocomplete) ─────────────────────────── */
+/* Staff directory (for mention autocomplete) */
 
 export const staffDirectoryEntrySchema = z.object({
 	opsUserId: z.string().uuid(),
@@ -347,7 +363,7 @@ export const staffDirectorySchema = z.object({
 export type StaffDirectory = z.infer<typeof staffDirectorySchema>;
 
 /* ══════════════════════════════════════════════════════════════════════════
- * Context-Aware Case Communication — extends the chat contract with the
+ * Context-Aware Case Communication. Extends the chat contract with the
  * concepts needed to route a customer to the officer currently responsible
  * for their case stage (see services/communication.ts).
  * ══════════════════════════════════════════════════════════════════════════ */
@@ -371,7 +387,7 @@ export type ContactCard = z.infer<typeof contactCardSchema>;
 
 /**
  * The resolved answer to "who can help me, with what, and how do I contact
- * them?" — the single most important payload the portal chat renders.
+ * them?". The single most important payload the portal chat renders.
  */
 export const currentContactSchema = z.discriminatedUnion("kind", [
 	z.object({
@@ -410,7 +426,7 @@ export const previousContactSchema = z.object({
 });
 export type PreviousContact = z.infer<typeof previousContactSchema>;
 
-/** The portal's full communication context — drives the Communication Center. */
+/** The portal's full communication context. Drives the Communication Center. */
 export const communicationContextSchema = z.object({
 	current: currentContactSchema,
 	previousContacts: z.array(previousContactSchema),
@@ -422,7 +438,7 @@ export const communicationContextSchema = z.object({
 });
 export type CommunicationContext = z.infer<typeof communicationContextSchema>;
 
-/** Stage assignment — the per-stage officer mapping for a case. */
+/** Stage assignment. The per-stage officer mapping for a case. */
 export const stageAssignmentSchema = z.object({
 	id: z.string().uuid(),
 	applicationId: z.string().uuid(),
@@ -448,7 +464,7 @@ export const createStageAssignmentSchema = z.object({
 export type CreateStageAssignment = z.infer<typeof createStageAssignmentSchema>;
 
 /**
- * Stage handoff — an assignment decision waiting on a manager.
+ * Stage handoff. An assignment decision waiting on a manager.
  *
  * The queue item the Workspace renders as an "Assignment required" card.
  * Resolution writes an active stage_assignment via assignStageOfficer and
@@ -493,11 +509,11 @@ export const resolveStageHandoffSchema = z.object({
 	opsUserId: z.string().uuid().optional(),
 	reason: z.string().max(500).optional(),
 	/**
-	 * Coverage — `stage` staffs only the stage the handoff opened; `all`
+	 * Coverage. `stage` staffs only the stage the handoff opened; `all`
 	 * makes the handler carry the rest of the case (no further placement).
 	 */
 	scope: z.enum(["stage", "all"]).optional(),
-	/** Referral — move the case to another handling branch with this resolution. */
+	/** Referral. Move the case to another handling branch with this resolution. */
 	branch: z.string().min(1).max(64).optional(),
 });
 export type ResolveStageHandoff = z.infer<typeof resolveStageHandoffSchema>;
@@ -507,7 +523,7 @@ export const deferStageHandoffSchema = z.object({
 });
 export type DeferStageHandoff = z.infer<typeof deferStageHandoffSchema>;
 
-/** Staff directory entry with presence + load — the OPS hub view. */
+/** Staff directory entry with presence + load. The OPS hub view. */
 export const staffDirectoryEntryDetailedSchema = z.object({
 	opsUserId: z.string().uuid(),
 	name: z.string(),
@@ -547,7 +563,7 @@ export const updatePresenceSchema = z.object({
 });
 export type UpdatePresence = z.infer<typeof updatePresenceSchema>;
 
-/** Send a customer-visible or internal message — supports system/system author. */
+/** Send a customer-visible or internal message. Supports system/system author. */
 export const sendContextMessageSchema = z.object({
 	content: z.string().min(1).max(5000),
 	replyToId: z.string().uuid().optional(),

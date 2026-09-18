@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Auth panel + System Overview — readability &amp; card polish</title>
+<style>
+  :root{
+    --background:#ffffff; --foreground:#0a0a0a;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#0a0a0a; --border-light:#d4d4d8;
+    --ok:#0d7a3f;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --text-xs:.72rem; --text-sm:.875rem;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:#fafafa;color:var(--foreground);font-size:var(--text-sm)}
+  .page{max-width:1240px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .page-title{font-size:1.9rem;font-weight:700;letter-spacing:-.02em}
+  .lead{color:var(--muted-foreground);max-width:46rem;line-height:1.6}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--muted-foreground)}
+
+  .head{margin-bottom:2rem}
+  .sec{margin:2.5rem 0 1rem}
+  .sec h2{font-size:1.15rem;font-weight:700}
+  .sec .sub{font-size:var(--text-xs);color:var(--muted-foreground);margin-top:.2rem}
+
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start;margin-top:1rem}
+  @media (max-width:1020px){.compare{grid-template-columns:1fr}}
+  .variant-label{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;
+    color:var(--muted-foreground);margin-bottom:.5rem;display:flex;align-items:center;gap:.5rem}
+  .variant-label b{color:var(--foreground)}
+  .variant-label .tag{border:1px solid var(--border-light);padding:.1rem .45rem;font-size:.58rem}
+  .variant-label .tag--new{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+
+  .frame{border:1.5px solid var(--border);background:var(--background);overflow:hidden}
+  .callouts{list-style:none;margin-top:.75rem;padding:0;font-size:var(--text-xs);color:var(--muted-foreground)}
+  .callouts li{padding:.35rem 0 .35rem 1.4rem;position:relative;line-height:1.5}
+  .callouts li::before{content:attr(data-n);position:absolute;left:0;top:.3rem;font-family:var(--font-mono);
+    font-size:.6rem;border:1px solid var(--border-light);width:1.05rem;height:1.05rem;display:flex;
+    align-items:center;justify-content:center}
+  .callouts code{font-family:var(--font-mono);font-size:.62rem;background:var(--muted);padding:.05rem .3rem}
+
+  /* ══════════ AUTH LEFT PANEL — shared chrome ══════════ */
+  .brand{background:var(--foreground);color:var(--background);min-height:32rem;display:flex;
+    flex-direction:column;justify-content:space-between;padding:2.5rem 2.5rem 2rem;position:relative;overflow:hidden}
+  .brand::before{content:"";position:absolute;inset:0;pointer-events:none;
+    background-image:repeating-linear-gradient(135deg,transparent 0,transparent 2px,rgba(255,255,255,.03) 2px,rgba(255,255,255,.03) 4px)}
+  .brand>*{position:relative;z-index:1}
+  .brand__logo{font-size:1.4rem;font-weight:600;letter-spacing:-.02em}
+  .brand__logo span{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;margin-left:.5rem}
+  .brand__title{font-size:2.1rem;font-weight:500;letter-spacing:-.025em;line-height:1.15;max-width:26rem}
+  .brand__title em{font-style:italic;font-weight:400}
+  .brand__lead{font-size:1rem;line-height:1.7;opacity:.9;margin-top:1.1rem;max-width:26rem}
+  .brand__footer{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;opacity:.85;margin-top:2rem}
+
+  /* BEFORE — today's values lifted straight from app.css:
+     label .62rem uppercase mono, blurb .6rem @ 55% opacity, .5rem row padding */
+  .chapters-old{margin-top:1.75rem;border-top:1px solid rgba(255,255,255,.25)}
+  .chapters-old .row{display:grid;grid-template-columns:2rem 1fr auto;gap:.8rem;align-items:baseline;
+    padding:.5rem 0;border-bottom:1px solid rgba(255,255,255,.18);
+    font-family:var(--font-mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase}
+  .chapters-old .row .n,.chapters-old .row .d{opacity:.55}
+  .chapters-old .row .d{letter-spacing:.04em;text-transform:none;font-size:.6rem;max-width:11rem;text-align:right}
+
+  /* AFTER — proposal */
+  .chapters-new{margin-top:1.9rem}
+  .chapters-new .row{display:grid;grid-template-columns:2.4rem 1fr;gap:.9rem;align-items:start;
+    padding:.8rem 0;border-top:1px solid rgba(255,255,255,.22)}
+  .chapters-new .row:last-child{border-bottom:1px solid rgba(255,255,255,.22)}
+  .chapters-new .n{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.08em;opacity:.6;
+    border:1px solid rgba(255,255,255,.35);width:1.9rem;height:1.9rem;display:flex;align-items:center;justify-content:center;margin-top:.1rem}
+  .chapters-new .label{font-size:.92rem;font-weight:600;letter-spacing:.02em}
+  .chapters-new .d{font-size:.8rem;line-height:1.55;opacity:.72;margin-top:.15rem}
+
+  /* ══════════ SYSTEM OVERVIEW — shared ══════════ */
+  .ops{background:#fafafa;padding:1.25rem}
+  .ops-head{margin-bottom:1.1rem}
+  .ops-head .eyebrow{font-size:.6rem}
+  .ops-head h3{font-size:1.3rem;font-weight:700;margin-top:.2rem}
+  .ops-head p{font-size:.75rem;color:var(--muted-foreground);margin-top:.15rem}
+
+  .pill{display:inline-block;border:1px solid var(--border);padding:.12rem .5rem;
+    font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+  .pill--solid{background:var(--foreground);color:var(--background)}
+  .pill--hollow{color:var(--muted-foreground);border-color:var(--border-light)}
+  .pill--ok{background:var(--ok);border-color:var(--ok);color:#fff}
+
+  /* BEFORE — today's HealthCard: three border-chopped bands, tiny sub/foot,
+     mixed-value "big" line, hollow/solid pills used interchangeably */
+  .hcards-old{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem}
+  .hcard-old{border:1px solid var(--border-light);background:var(--background)}
+  .hcard-old .top{display:flex;justify-content:space-between;align-items:center;gap:.5rem;
+    padding:.7rem .9rem;border-bottom:1px solid var(--border-light)}
+  .hcard-old .top b{font-size:.82rem}
+  .hcard-old .mid{padding:.8rem .9rem}
+  .hcard-old .mid strong{font-size:1rem;font-weight:600}
+  .hcard-old .mid .sub{font-size:.68rem;color:var(--muted-foreground);margin-top:.15rem}
+  .hcard-old .foot{font-family:var(--font-mono);font-size:.62rem;color:var(--muted-foreground);
+    border-top:1px solid var(--border-light);padding:.4rem .9rem}
+
+  .panel-old{border:1px solid var(--border-light);background:var(--background)}
+  .panel-old .ph{display:flex;justify-content:space-between;align-items:center;
+    padding:.8rem 1.1rem;border-bottom:1px solid var(--border-light)}
+  .panel-old .ph b{font-size:.9rem}
+  .panel-old table{width:100%;border-collapse:collapse;font-size:.7rem}
+  .panel-old th{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;
+    text-align:left;padding:.5rem 1.1rem;color:var(--muted-foreground);border-bottom:1px solid var(--border-light)}
+  .panel-old td{padding:.55rem 1.1rem;border-bottom:1px solid var(--muted);font-family:var(--font-mono);font-size:.66rem}
+  .kv-old{list-style:none;padding:.3rem 0}
+  .kv-old li{display:flex;justify-content:space-between;gap:.75rem;padding:.55rem 1.1rem;
+    border-bottom:1px solid var(--border-light);font-size:.72rem}
+  .kv-old li span:first-child{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground)}
+  .kv-old li span:last-child{font-size:.68rem;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%}
+  .grid-old{display:grid;grid-template-columns:3fr 2fr;gap:1rem;margin-top:1rem;align-items:start}
+
+  /* AFTER — proposal */
+  .hcards-new{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1.25rem}
+  .hcard{border:1.5px solid var(--border);background:var(--background);padding:1rem 1.1rem;
+    display:flex;flex-direction:column;gap:.55rem}
+  .hcard .top{display:flex;justify-content:space-between;align-items:center;gap:.5rem}
+  .hcard .name{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .hcard .big{font-size:1.45rem;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+  .hcard .big small{font-size:.8rem;font-weight:500;color:var(--muted-foreground);letter-spacing:0}
+  .hcard .sub{font-size:.78rem;color:var(--muted-foreground);line-height:1.45}
+  .hcard .foot{font-family:var(--font-mono);font-size:.66rem;color:var(--muted-foreground);
+    padding-top:.55rem;border-top:1px solid var(--muted)}
+  .hcard--ok{border-color:var(--border)}
+  .hcard .dot{display:inline-block;width:.5rem;height:.5rem;background:var(--ok);margin-right:.4rem;vertical-align:baseline}
+
+  .grid-new{display:grid;grid-template-columns:1.6fr 1fr;gap:1.25rem;margin-top:1.25rem;align-items:start}
+  @media (max-width:760px){.grid-new{grid-template-columns:1fr}}
+  .panel{border:1.5px solid var(--border);background:var(--background)}
+  .panel .ph{display:flex;justify-content:space-between;align-items:center;padding:.9rem 1.2rem;border-bottom:1px solid var(--border)}
+  .panel .ph b{font-size:.92rem}
+  .panel .ph a{font-size:.72rem;color:var(--foreground);text-decoration:underline}
+  .panel table{width:100%;border-collapse:collapse}
+  .panel th{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;
+    text-align:left;padding:.55rem 1.2rem;color:var(--muted-foreground);border-bottom:1px solid var(--border-light)}
+  .panel td{padding:.6rem 1.2rem;border-bottom:1px solid var(--muted);font-size:.74rem}
+  .panel td.mono{font-family:var(--font-mono);font-size:.68rem}
+  .kv{list-style:none;padding:.35rem 0;display:grid;grid-template-columns:1fr 1fr}
+  .kv li{padding:.6rem 1.2rem;border-bottom:1px solid var(--muted)}
+  .kv li:nth-last-child(-n+2){border-bottom:0}
+  .kv li:last-child{grid-column:1/-1}
+  .kv .k{display:block;font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;
+    letter-spacing:.1em;color:var(--muted-foreground);margin-bottom:.15rem}
+  .kv .v{display:block;font-size:.8rem;font-weight:600;line-height:1.4}
+  .panel .pf{border-top:1px solid var(--border-light);padding:.55rem 1.2rem}
+  .panel .pf a{font-size:.72rem}
+
+  .legend{display:flex;gap:1.25rem;flex-wrap:wrap;margin-top:.6rem;font-size:var(--text-xs);color:var(--muted-foreground)}
+  .legend span{display:flex;align-items:center;gap:.4rem}
+  .legend i{display:inline-block;width:.7rem;height:.7rem;border:1px solid var(--border-light)}
+  .legend i.solid{background:var(--foreground);border-color:var(--foreground)}
+  .legend i.okdot{background:var(--ok);border-color:var(--ok)}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="head">
+    <p class="eyebrow">design polish — before / after</p>
+    <h1 class="page-title">Auth brand panel &amp; System Overview</h1>
+    <p class="lead" style="margin-top:.5rem">
+      Two fixes. The sign-in page's journey chapter list renders at 0.62rem uppercase mono with 55%-opacity
+      descriptions — under 10px, which is why the middle of the dark panel reads as noise. And the System
+      Overview health cards chop each metric into three thin-bordered bands with inconsistent pills, while the
+      "Configured" card gets squeezed at 2fr so its values clip.
+    </p>
+  </div>
+
+  <!-- ════════════════ 1 · AUTH PANEL ════════════════ -->
+  <div class="sec">
+    <h2>1 · Sign-in brand panel — the chapter list</h2>
+    <p class="sub">Source: <span class="mono">StartJourney.tsx</span> + <span class="mono">app.css .start-journey__chapter</span></p>
+  </div>
+
+  <div class="compare">
+    <div>
+      <div class="variant-label"><b>Before</b><span class="tag">current</span> — 0.62rem mono, 55% opacity blurbs</div>
+      <div class="frame">
+        <div class="brand">
+          <div class="brand__logo">Century NIT <span>International</span></div>
+          <div>
+            <h2 class="brand__title">Your entire application journey. <em>in one place.</em></h2>
+            <p class="brand__lead">One account tracks you from first consultation to departure. This is what the portal holds:</p>
+            <div class="chapters-old">
+              <div class="row"><span class="n">I</span><span>Consultation</span><span class="d">Meet, assess, verify documents</span></div>
+              <div class="row"><span class="n">II</span><span>Enrolment</span><span class="d">Confirm, package, plan, deposit</span></div>
+              <div class="row"><span class="n">III</span><span>Applications</span><span class="d">Schools, submissions, offers</span></div>
+              <div class="row"><span class="n">IV</span><span>Visa</span><span class="d">Fee, biometrics, decision</span></div>
+              <div class="row"><span class="n">V</span><span>Departure</span><span class="d">Fee milestone, flight, checklist</span></div>
+              <div class="row"><span class="n">VI</span><span>Complete</span><span class="d">Departed, post-arrival plan</span></div>
+            </div>
+          </div>
+          <p class="brand__footer">Licensed consultancy · Accra · Kumasi · Takoradi · Tamale · Tema</p>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Labels at <code>0.62rem</code> (~10px) uppercase mono — under the 12px floor for comfortable reading.</li>
+        <li data-n="2">Blurbs at <code>0.6rem</code> and <code>opacity:.55</code> — effectively invisible on the dark texture.</li>
+        <li data-n="3">Three-column grid squeezes the description into a right-aligned sliver that truncates.</li>
+      </ul>
+    </div>
+
+    <div>
+      <div class="variant-label"><b>After</b><span class="tag tag--new">proposal</span> — readable chapters, real descriptions</div>
+      <div class="frame">
+        <div class="brand">
+          <div class="brand__logo">Century NIT <span>International</span></div>
+          <div>
+            <h2 class="brand__title">Your entire application journey. <em>in one place.</em></h2>
+            <p class="brand__lead">One account tracks you from first consultation to departure. This is what the portal holds:</p>
+            <div class="chapters-new">
+              <div class="row"><span class="n">I</span><div><div class="label">Consultation</div><div class="d">Meet your consultant, get assessed, verify documents</div></div></div>
+              <div class="row"><span class="n">II</span><div><div class="label">Enrolment</div><div class="d">Confirm your offer, pick a package, plan the deposit</div></div></div>
+              <div class="row"><span class="n">III</span><div><div class="label">Applications</div><div class="d">School shortlist, submissions and offers tracked live</div></div></div>
+              <div class="row"><span class="n">IV</span><div><div class="label">Visa</div><div class="d">Fee payment, biometrics and the embassy decision</div></div></div>
+              <div class="row"><span class="n">V</span><div><div class="label">Departure</div><div class="d">Final milestone, flight booking, pre-departure checklist</div></div></div>
+              <div class="row"><span class="n">VI</span><div><div class="label">Complete</div><div class="d">Departed — post-arrival plan and alumni support</div></div></div>
+            </div>
+          </div>
+          <p class="brand__footer">Licensed consultancy · Accra · Kumasi · Takoradi · Tamale · Tema</p>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Labels to <code>.92rem / 600</code> — ~50% bigger, set in the display face not mono.</li>
+        <li data-n="2">Descriptions become a real second line: <code>.8rem</code>, <code>opacity:.72</code>, sentence case, full width.</li>
+        <li data-n="3">Numeral moves into a small bordered marker — reads as an index, not a stray glyph.</li>
+        <li data-n="4">Row padding <code>.5rem → .8rem</code> so the list breathes like the rest of the panel.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ════════════════ 2 · SYSTEM OVERVIEW ════════════════ -->
+  <div class="sec" style="margin-top:3.5rem">
+    <h2>2 · System Overview — health cards &amp; the lower grid</h2>
+    <p class="sub">Source: <span class="mono">EnterpriseAdministration.tsx — HealthCard + the 3fr/2fr grid</span></p>
+  </div>
+
+  <div class="compare">
+    <div>
+      <div class="variant-label"><b>Before</b><span class="tag">current</span> — chopped bands, clipped values</div>
+      <div class="frame">
+        <div class="ops">
+          <div class="ops-head">
+            <p class="eyebrow">Platform administration</p>
+            <h3>System Overview</h3>
+            <p>Platform health, configuration state, and recent administrative activity.</p>
+          </div>
+          <div class="hcards-old">
+            <div class="hcard-old">
+              <div class="top"><b>API</b><span class="pill pill--solid">Up</span></div>
+              <div class="mid"><strong>21ms</strong><div class="sub">/health/detail · just now</div></div>
+              <div class="foot">node v22.22.2 · up 0h6m</div>
+            </div>
+            <div class="hcard-old">
+              <div class="top"><b>Postgres</b><span class="pill pill--solid">Connected</span></div>
+              <div class="mid"><strong>SELECT 1 · 20ms</strong><div class="sub">readiness probe</div></div>
+              <div class="foot">Supabase Postgres</div>
+            </div>
+            <div class="hcard-old">
+              <div class="top"><b>Redis / queues</b><span class="pill pill--solid">Up</span></div>
+              <div class="mid"><strong>4 queues · 5 waiting</strong><div class="sub">email · calendar · push · campaign</div></div>
+              <div class="foot">BullMQ · ping 0ms</div>
+            </div>
+            <div class="hcard-old">
+              <div class="top"><b>Email worker</b><span class="pill pill--solid">Working</span></div>
+              <div class="mid"><strong>4 waiting</strong><div class="sub">0 failed</div></div>
+              <div class="foot">via Resend</div>
+            </div>
+          </div>
+          <div class="grid-old">
+            <div class="panel-old">
+              <div class="ph"><b>Notifications — delivery log</b><span class="pill pill--hollow">full log →</span></div>
+              <table>
+                <tr><th>Recipient</th><th>Template</th><th>Status</th><th>Sent</th></tr>
+                <tr><td>superadmin@softclicks…</td><td>NEW LEAD RECEIVED</td><td><span class="pill pill--solid">Delivered</span></td><td>07:49</td></tr>
+                <tr><td>ekowfimino@gmail…</td><td>CONSULTATION AS…</td><td><span class="pill pill--solid">Delivered</span></td><td>06:22</td></tr>
+                <tr><td>enochenux@gmail…</td><td>APPOINTMENT CO…</td><td><span class="pill pill--solid">Delivered</span></td><td>06:22</td></tr>
+              </table>
+            </div>
+            <div class="panel-old">
+              <div class="ph"><b>Configured — settings store</b></div>
+              <ul class="kv-old">
+                <li><span>Portal sign-in</span><span>password + Google + em…</span></li>
+                <li><span>Portal MFA</span><span>optional</span></li>
+                <li><span>Ops sign-in</span><span>password</span></li>
+                <li><span>Ops MFA</span><span>enforced</span></li>
+                <li><span>Staff</span><span>1 active of 2 · 7 roles</span></li>
+              </ul>
+              <div style="border-top:1px solid var(--border-light);padding:.5rem 1.1rem"><a href="#" style="font-size:.7rem">edit → /settings</a></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Three bordered bands per card (<code>top/mid/foot</code>) — the eye reads stripes, not the metric.</li>
+        <li data-n="2">"Big" mixes units and queries: <code>SELECT 1 · 20ms</code> — the number is the point, the rest is noise.</li>
+        <li data-n="3">Sub/foot text at <code>.68rem/.62rem</code> — same too-small problem as the auth panel.</li>
+        <li data-n="4"><code>3fr 2fr</code> grid starves "Configured": values clip to <code>password + Google + em…</code>.</li>
+        <li data-n="5">Gap rhythm jumps between <code>1rem</code> and <code>2rem</code> for no structural reason.</li>
+      </ul>
+    </div>
+
+    <div>
+      <div class="variant-label"><b>After</b><span class="tag tag--new">proposal</span> — one metric per card, room to read</div>
+      <div class="frame">
+        <div class="ops">
+          <div class="ops-head">
+            <p class="eyebrow">Platform administration</p>
+            <h3>System Overview</h3>
+            <p>Platform health, configuration state, and recent administrative activity.</p>
+          </div>
+          <div class="hcards-new">
+            <div class="hcard hcard--ok">
+              <div class="top"><span class="name">API</span><span class="pill pill--ok">Up</span></div>
+              <div class="big">21<small>ms</small></div>
+              <div class="sub">/health/detail · node v22.22.2</div>
+              <div class="foot">up 0h6m · measured just now</div>
+            </div>
+            <div class="hcard hcard--ok">
+              <div class="top"><span class="name">Postgres</span><span class="pill pill--ok">Connected</span></div>
+              <div class="big">20<small>ms</small></div>
+              <div class="sub">readiness probe · SELECT 1</div>
+              <div class="foot">Supabase Postgres</div>
+            </div>
+            <div class="hcard hcard--ok">
+              <div class="top"><span class="name">Redis / queues</span><span class="pill pill--ok">Up</span></div>
+              <div class="big">5<small>&nbsp;waiting · 4 queues</small></div>
+              <div class="sub">email · calendar · push · campaign</div>
+              <div class="foot">BullMQ · ping 0ms</div>
+            </div>
+            <div class="hcard hcard--ok">
+              <div class="top"><span class="name">Email worker</span><span class="pill pill--ok">Working</span></div>
+              <div class="big">4<small>&nbsp;waiting</small></div>
+              <div class="sub">0 failed · via Resend</div>
+              <div class="foot">last drain seconds ago</div>
+            </div>
+          </div>
+          <div class="legend">
+            <span><i class="okdot"></i> healthy → green pill</span>
+            <span><i class="solid"></i> attention → ink pill</span>
+            <span><i></i> unknown → hollow pill</span>
+          </div>
+          <div class="grid-new">
+            <div class="panel">
+              <div class="ph"><b>Notifications — delivery log</b><a href="#">full log →</a></div>
+              <table>
+                <tr><th>Recipient</th><th>Template</th><th>Status</th><th>Sent</th></tr>
+                <tr><td class="mono">superadmin@softclicksolutions.com</td><td class="mono">NEW LEAD RECEIVED</td><td><span class="pill pill--solid">Delivered</span></td><td class="mono">07:49</td></tr>
+                <tr><td class="mono">ekowfimino@gmail.com</td><td class="mono">CONSULTATION ASSIGNED</td><td><span class="pill pill--solid">Delivered</span></td><td class="mono">06:22</td></tr>
+                <tr><td class="mono">enochenux@gmail.com</td><td class="mono">APPOINTMENT CONFIRMED</td><td><span class="pill pill--solid">Delivered</span></td><td class="mono">06:22</td></tr>
+              </table>
+            </div>
+            <div class="panel">
+              <div class="ph"><b>Configured</b><a href="#">edit → /settings</a></div>
+              <ul class="kv">
+                <li><span class="k">Portal sign-in</span><span class="v">password + Google + email OTP</span></li>
+                <li><span class="k">Portal MFA</span><span class="v">optional</span></li>
+                <li><span class="k">Ops sign-in</span><span class="v">password</span></li>
+                <li><span class="k">Ops MFA</span><span class="v">enforced</span></li>
+                <li><span class="k">Staff</span><span class="v">1 active of 2 · 7 roles</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">One surface per card: name becomes an eyebrow, the metric gets <code>1.45rem</code> weight, footer is a single hairline — not three bands.</li>
+        <li data-n="2">Pill gets semantics: <code>green</code> = healthy, <code>ink</code> = needs attention, <code>hollow</code> = unknown. No more black "Working" pills that read as errors.</li>
+        <li data-n="3">Small text floors at <code>.66rem</code> foot / <code>.78rem</code> sub — readable but still secondary.</li>
+        <li data-n="4">"Configured" becomes a definition grid — eyebrow label over a <code>.8rem</code> value, stacked so nothing can clip no matter the card width. Staff row spans full width.</li>
+        <li data-n="5">Gap normalised to <code>1.25rem</code> across the whole page.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="sec" style="margin-top:3rem">
+    <h2>What this changes in code</h2>
+    <p class="sub">Small, contained diffs — no structural work.</p>
+    <ul class="callouts" style="margin-top:1rem">
+      <li data-n="a"><code>app.css</code> — restyle <code>.start-journey__chapter</code> rows: label .92rem/600, blurb .8rem @ .72 opacity, numeral marker box, .8rem row padding. Markup: move <code>.d</code> under the label (two-column grid).</li>
+      <li data-n="b"><code>EnterpriseAdministration.tsx</code> — restyle <code>HealthCard</code> (eyebrow name, 1.45rem metric, one hairline footer), give the status pill a semantic variant, change the grid to <code>1.6fr 1fr</code>, normalise gaps, bump Configured row sizes. Optionally pull the inline styles into a class.</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

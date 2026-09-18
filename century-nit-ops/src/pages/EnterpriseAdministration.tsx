@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { CmsManager } from "./CmsManager";
 import { useOpsAuth, ROLE_LABELS, type OpsRole } from "./OpsAuthContext";
@@ -179,42 +179,42 @@ function SystemOverview() {
 	return (
 		<>
 			{/* Measured component cards — every number comes from /health/detail */}
-			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
+			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "1.25rem", marginBottom: "2rem" }}>
 				<HealthCard
 					name="API"
 					pill={health === null ? "unreachable" : apiOk ? "Up" : "Degraded"}
-					pillFilled={health !== null && apiOk}
-					big={health === null ? "no response" : `${health.latencyMs}ms`}
-					sub="/health/detail · just now"
+					pillTone={health === null ? "unknown" : apiOk ? "ok" : "warn"}
+					big={health === null ? "no response" : <>{health.latencyMs}<small>ms</small></>}
+					sub="/health/detail · measured just now"
 					foot={health ? `node ${health.node} · up ${Math.floor(health.uptimeSeconds / 3600)}h${Math.floor((health.uptimeSeconds % 3600) / 60)}m` : "health endpoint did not answer"}
 				/>
 				<HealthCard
 					name="Postgres"
 					pill={dbOk === null ? "unknown" : dbOk ? "Connected" : "Down"}
-					pillFilled={dbOk === true}
-					big={dbOk === null ? "—" : dbOk ? `SELECT 1 · ${health?.components.database.ms ?? "?"}ms` : "no connection"}
-					sub="readiness probe"
-					foot="Neon Postgres"
+					pillTone={dbOk === null ? "unknown" : dbOk ? "ok" : "warn"}
+					big={dbOk === null ? "—" : dbOk ? <>{health?.components.database.ms ?? "?"}<small>ms</small></> : "no connection"}
+					sub="readiness probe · SELECT 1"
+					foot="Supabase Postgres"
 				/>
 				<HealthCard
 					name="Redis / queues"
 					pill={redisOk === null ? "unknown" : redisOk ? "Up" : "Down"}
-					pillFilled={redisOk === true}
-					big={redisOk === null ? "—" : `${queues.length} queues · ${waitingJobs ?? 0} waiting`}
+					pillTone={redisOk === null ? "unknown" : redisOk ? "ok" : "warn"}
+					big={redisOk === null ? "—" : <>{waitingJobs ?? 0}<small>&nbsp;waiting · {queues.length} queues</small></>}
 					sub={queues.length > 0 ? queues.map((q) => q.name).join(" · ") : "queue depth unmeasured"}
 					foot={redisOk === null ? "ping failed" : `BullMQ · ping ${health?.components.redis.ms ?? "?"}ms`}
 				/>
 				<HealthCard
 					name="Email worker"
 					pill={emailQueue === null ? "Unmeasured" : emailQueue.failed > 0 ? "Failing" : emailQueue.waiting > 0 ? "Working" : "Idle"}
-					pillFilled={emailQueue !== null && emailQueue.failed === 0}
-					big={emailQueue === null ? "—" : `${emailQueue.waiting} waiting`}
-					sub={emailQueue === null ? "email queue not reporting" : `${emailQueue.failed} failed`}
-					foot="via Resend"
+					pillTone={emailQueue === null ? "unknown" : emailQueue.failed > 0 ? "warn" : "ok"}
+					big={emailQueue === null ? "—" : <>{emailQueue.waiting}<small>&nbsp;waiting</small></>}
+					sub={emailQueue === null ? "email queue not reporting" : `${emailQueue.failed} failed · via Resend`}
+					foot={emailQueue === null ? "queue missing" : `${emailQueue.failed > 0 ? "drain blocked" : "draining normally"}`}
 				/>
 			</div>
 
-			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "1rem", marginBottom: "2rem", alignItems: "start" }}>
+			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: "1.25rem", marginBottom: "2rem", alignItems: "start" }}>
 				<div className="card" style={{ marginBottom: 0, padding: 0, overflow: "hidden" }}>
 					<div style={{ padding: "0.85rem 1.25rem", borderBottom: "1px solid var(--border-light)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
 						<h2 className="section-title" style={{ margin: 0, fontSize: "0.95rem" }}>Notifications — delivery log</h2>
@@ -257,28 +257,26 @@ function SystemOverview() {
 					)}
 				</div>
 				<div className="card" style={{ marginBottom: 0, padding: 0, overflow: "hidden" }}>
-					<div style={{ padding: "0.85rem 1.25rem", borderBottom: "1px solid var(--border-light)" }}>
+					<div style={{ padding: "0.85rem 1.25rem", borderBottom: "1px solid var(--border-light)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
 						<h2 className="section-title" style={{ margin: 0, fontSize: "0.95rem" }}>Configured — from the settings store</h2>
+						<Link to="/settings" className="dash-link">edit → /settings</Link>
 					</div>
 					{authRows.length === 0 ? (
 						<p className="muted" style={{ fontSize: "var(--text-sm)", padding: "1rem 1.25rem" }}>Loading settings…</p>
 					) : (
-						<ul style={{ listStyle: "none", padding: "0.3rem 0", margin: 0 }}>
+						<ul className="config-kv">
 							{authRows.map(([label, value]) => (
-								<li key={label} className="cl-kv" style={{ borderBottom: "1px solid var(--border-light)" }}>
-									<span className="cl-kv__k">{label}</span>
-									<span style={{ fontSize: "var(--text-xs)" }}>{value}</span>
+								<li key={label}>
+									<span className="config-kv__k">{label}</span>
+									<span className="config-kv__v">{value}</span>
 								</li>
 							))}
 						</ul>
 					)}
-					<div style={{ borderTop: "1px solid var(--border-light)", padding: "0.5rem 1.25rem" }}>
-						<Link to="/settings" className="dash-link">edit → /settings</Link>
-					</div>
 				</div>
 			</div>
 
-			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
+			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem", marginBottom: "2rem" }}>
 				<div className="card">
 					<h2 className="section-title mb-3">Quick Actions</h2>
 					<div className="admin-quick-actions">
@@ -2845,20 +2843,24 @@ function formatPresence(lastSeenAt: string | null): string {
 }
 
 /** A measured health component — ink card, hollow pill, no colour semantics. */
-function HealthCard({ name, pill, pillFilled, big, sub, foot }: {
-	name: string; pill: string; pillFilled: boolean; big: string; sub: string; foot: string;
+function HealthCard({ name, pill, pillTone, big, sub, foot }: {
+	name: string;
+	pill: string;
+	/** green = healthy, ink = needs attention, hollow = unknown */
+	pillTone: "ok" | "warn" | "unknown";
+	big: ReactNode;
+	sub: string;
+	foot: string;
 }) {
 	return (
-		<div className="card" style={{ marginBottom: 0, padding: 0, overflow: "hidden" }}>
-			<div style={{ padding: "0.7rem 1rem", borderBottom: "1px solid var(--border-light)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-				<span style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{name}</span>
-				<span className={`portal-pill${pillFilled ? "" : " portal-pill--hollow"}`} style={pillFilled ? { background: "var(--foreground)", color: "var(--background)" } : undefined}>{pill}</span>
+		<div className="card health-card">
+			<div className="health-card__top">
+				<span className="health-card__name">{name}</span>
+				<span className={`portal-pill health-card__pill--${pillTone}`}>{pill}</span>
 			</div>
-			<div style={{ padding: "0.8rem 1rem" }}>
-				<strong style={{ fontSize: "1.05rem" }}>{big}</strong>
-				<div className="muted" style={{ fontSize: "0.68rem", marginTop: "0.15rem" }}>{sub}</div>
-			</div>
-			<div className="mono muted" style={{ borderTop: "1px solid var(--border-light)", padding: "0.4rem 1rem", fontSize: "0.62rem" }}>{foot}</div>
+			<strong className="health-card__big">{big}</strong>
+			<div className="health-card__sub">{sub}</div>
+			<div className="health-card__foot">{foot}</div>
 		</div>
 	);
 }

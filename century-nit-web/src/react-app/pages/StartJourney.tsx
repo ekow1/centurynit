@@ -704,8 +704,10 @@ export function StartJourney() {
 						{CHAPTERS.map((ch) => (
 							<div key={ch.id} className="start-journey__chapter">
 								<span className="n">{ch.numeral}</span>
-								<span>{ch.label}</span>
-								<span className="d">{ch.blurb}</span>
+								<span className="start-journey__chapter-body">
+									<span className="t">{ch.label}</span>
+									<span className="d">{ch.blurb}</span>
+								</span>
 							</div>
 						))}
 					</div>

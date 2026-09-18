@@ -1885,6 +1885,124 @@
 	background: var(--muted);
 }
 
+/* ── System Overview · health cards ──
+   One surface per card: eyebrow name, one big metric, a single hairline
+   footer. The status pill carries the semantics — green = healthy,
+   ink = attention, hollow = unknown. */
+
+.health-card {
+	padding: 1rem 1.1rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.55rem;
+	margin-bottom: 0;
+	border: 1.5px solid var(--border);
+}
+
+.health-card__top {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.health-card__name {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--muted-foreground);
+}
+
+.health-card__big {
+	font-size: 1.45rem;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+	line-height: 1.1;
+}
+
+.health-card__big small {
+	font-size: 0.8rem;
+	font-weight: 500;
+	letter-spacing: 0;
+	color: var(--muted-foreground);
+}
+
+.health-card__sub {
+	font-size: 0.78rem;
+	line-height: 1.45;
+	color: var(--muted-foreground);
+}
+
+.health-card__foot {
+	font-family: var(--font-mono);
+	font-size: 0.66rem;
+	color: var(--muted-foreground);
+	padding-top: 0.55rem;
+	border-top: 1px solid var(--muted);
+}
+
+/* Pill semantics — the base .portal-pill supplies shape/size. */
+.portal-pill.health-card__pill--ok {
+	background: #0d7a3f;
+	border-color: #0d7a3f;
+	color: #ffffff;
+}
+
+.portal-pill.health-card__pill--warn {
+	background: var(--foreground);
+	border-color: var(--foreground);
+	color: var(--background);
+}
+
+.portal-pill.health-card__pill--unknown {
+	background: transparent;
+	border-color: var(--border-light);
+	color: var(--muted-foreground);
+}
+
+/* ── System Overview · "Configured" definition grid ──
+   Stacked label-over-value cells: nothing can clip, and it matches the
+   health cards' eyebrow-over-value rhythm. */
+
+.config-kv {
+	list-style: none;
+	padding: 0.35rem 0;
+	margin: 0;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+}
+
+.config-kv li {
+	padding: 0.6rem 1.2rem;
+	border-bottom: 1px solid var(--muted);
+}
+
+.config-kv li:nth-last-child(-n + 2) {
+	border-bottom: 0;
+}
+
+.config-kv li:last-child {
+	grid-column: 1 / -1;
+}
+
+.config-kv__k {
+	display: block;
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	color: var(--muted-foreground);
+	margin-bottom: 0.15rem;
+}
+
+.config-kv__v {
+	display: block;
+	font-size: 0.8rem;
+	font-weight: 600;
+	line-height: 1.4;
+}
+
 /* ========== Ops · document viewer ========== *//* Split-screen document vault */
 
 .doc-split {

@@ -10,6 +10,7 @@ import { documentsReleasedFor, documentHoldReasonFor, milestoneLockReasonFor, mi
 import { documentsApi } from "century-nit-core/api";
 import type { ApplicantDocument } from "century-nit-shared";
 import { meApi, ApiError } from "century-nit-core/api";
+import { usePaySheet } from "../../components/portal/PaySheet";
 import { AGENCY_STAGES, PAYMENT_PLANS } from "century-nit-core";
 import { useNotifier } from "../../components/notifier/Notifier";
 import type { ApiInvoice, TravelFlight } from "century-nit-shared";
@@ -72,7 +73,6 @@ function TravelAssistanceInner() {
 	// The real ticket invoice from the server: its status (proforma / issued /
 	// paid) is what decides whether there is anything to pay.
 	const [trip, setTrip] = useState<ApiInvoice | null>(null);
-	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
 
 	useEffect(() => {
 		let cancelled = false;
@@ -133,16 +133,7 @@ function TravelAssistanceInner() {
 		}
 	}
 
-	if (payPhase === "loading") {
-		return (
-			<div className="portal-page">
-				<div className="loading-overlay">
-					<div className="spinner" aria-hidden />
-					<p className="mono">Contacting payment provider…</p>
-				</div>
-			</div>
-		);
-	}
+
 
 	const status = ta?.status ?? "decision_pending";
 	const showDecision = !ta || status === "decision_pending" || status === "on_hold" || status === "declined";
@@ -652,6 +643,7 @@ function TravelAssistanceInner() {
 					</div>
 				</div>
 			</div>
+			{paySheet.sheet}
 		</div>
 	);
 }

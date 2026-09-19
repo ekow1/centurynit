@@ -71,6 +71,8 @@ import type {
 	TravelAssistanceDecisionInput,
 	TravelAssistanceBookingInput,
 	TravelAssistanceInvoiceInput,
+	CaseTeam,
+	StageHandoff,
 } from "century-nit-shared";
 import { API_PREFIX, type FeeSchedule } from "century-nit-shared";
 import { setGhsPerUsd } from "./ui/Money.js";
@@ -504,8 +506,11 @@ export const staffApi = {
 			hasLogin: boolean;
 			mfaEnabled: boolean;
 			lastSeenAt: string | null;
+			presence: "available" | "busy" | "on_leave" | "offline";
 			ownedConversations: number;
 			ownedCases: number;
+			openCases: number;
+			openStageSeats: number;
 			bookingsThisWeek: number;
 			canCoordinate: boolean;
 			grantExpiresAt: string | null;
@@ -1091,12 +1096,27 @@ export const applicationsApi = {
 	assign(
 		id: string,
 		employeeId: string,
-		opts?: { scope?: "stage" | "all"; branch?: string },
+		opts?: { scope?: "stage" | "all"; branch?: string; reason?: string },
 	): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/assign`, {
 			method: "POST",
-			...json({ employeeId, scope: opts?.scope, branch: opts?.branch }),
+			...json({ employeeId, scope: opts?.scope, branch: opts?.branch, reason: opts?.reason }),
 		});
+	},
+	/** The case's seats — owner, coordinator, specialists, open stages, history. */
+	team(id: string): Promise<CaseTeam> {
+		return request(`${API_PREFIX}/applications/${id}/team`);
+	},
+	/** Return a seat to the staffing queue — "owner" or a journey stage key. */
+	releaseSeat(id: string, seat: string, note?: string): Promise<StageHandoff> {
+		return request(`${API_PREFIX}/applications/${id}/seats/${encodeURIComponent(seat)}/release`, {
+			method: "POST",
+			...json({ note }),
+		});
+	},
+	/** Self-serve staffing — claim the case's pending handoff. */
+	claim(id: string): Promise<StageHandoff> {
+		return request(`${API_PREFIX}/applications/${id}/claim`, { method: "POST" });
 	},
 	/** Refer the case to another handling branch. No handler picked. */
 	refer(id: string, body: { branch: string; note?: string }): Promise<ApiApplication> {

@@ -68,7 +68,20 @@ export function staffBranchName(id: string): string {
 }
 
 /** Staff member a case can be assigned to. */
-export type Assignee = { name: string; email: string; branch: string; role?: string; opsUserId?: string };
+export type Assignee = {
+	name: string;
+	email: string;
+	branch: string;
+	role?: string;
+	opsUserId?: string;
+	/** Live presence — decays to offline after 15 min without a heartbeat. */
+	presence?: "available" | "busy" | "on_leave" | "offline" | null;
+	lastSeenAt?: string | null;
+	/** Owned cases still in flight (not completed). */
+	openCases?: number;
+	/** Active stage-specialist seats held. */
+	openStageSeats?: number;
+};
 
 export type CommentKind = "comment" | "recommendation" | "document_request" | "status" | "assignment";
 

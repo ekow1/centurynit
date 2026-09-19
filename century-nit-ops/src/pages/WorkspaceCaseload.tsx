@@ -386,6 +386,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 					{officers.map((o) => {
 						const on = staff === o.id;
 						const open = o.cases + o.consultations;
+						const assignee = assignees.find((a) => a.opsUserId === o.id);
 						return (
 							<button
 								key={o.id}
@@ -397,6 +398,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 							>
 								<span className="ops-ocard__top">
 									<span className="ops-ocard__who">
+										<span className="hsheet__presence" data-presence={assignee?.presence ?? "offline"} aria-hidden="true" />
 										{o.name}
 										{o.id === me ? " (you)" : ""}
 									</span>
@@ -404,6 +406,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 								</span>
 								<span className="ops-ocard__meta">
 									{o.cases} case{o.cases === 1 ? "" : "s"} · {o.consultations} consult{o.consultations === 1 ? "" : "s"}
+									{assignee?.openStageSeats ? ` · ${assignee.openStageSeats} seat${assignee.openStageSeats === 1 ? "" : "s"}` : ""}
 									{o.stalled > 0 ? <> · <span className="hot">{o.stalled} stalled</span></> : ""}
 								</span>
 								{(coordinating.get(o.id) ?? 0) > 0 && (

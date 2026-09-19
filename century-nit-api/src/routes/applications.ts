@@ -12,9 +12,6 @@ import {
 	referApplicationBranch,
 
 
-	canSeeAllCases,
-
-
 
 
 
@@ -94,7 +91,10 @@ import {
 	applicationListSchema,
 	applicationSchema,
 	assignCaseSchema,
+	caseTeamSchema,
 	referCaseSchema,
+	releaseSeatSchema,
+	stageHandoffSchema,
 	CASE_ERROR_CODES,
 	choosePackageSchema,
 
@@ -350,7 +350,7 @@ applicationsRouter.openapi(
 		method: "post",
 		path: "/{id}/assign",
 		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireCapability("assign_work")] as const,
 		request: {
 			params: idParams,
 			body: { content: { "application/json": { schema: assignCaseSchema } }, required: true },
@@ -364,18 +364,110 @@ applicationsRouter.openapi(
 	}),
 	async (c) => {
 		const staff = c.get("staff")!;
-		if (!canSeeAllCases(staff)) {
-			throw new HttpError(403, "FORBIDDEN", "Only managers or coordinators can assign applications");
-		}
 		const body = c.req.valid("json");
 		const updated = await assignApplication({
 			id: c.req.valid("param").id,
 			employeeId: body.employeeId,
 			scope: body.scope,
 			branch: body.branch,
+			reason: body.reason,
 			actor: actorFrom(staff),
 		});
 		return c.json(await serializeApplication(updated));
+	},
+);
+
+/* ── Staffing context: team sheet, seat release, claim ────────────────────── */
+
+/** Who holds each seat on the case — live seats, open seats, and the history. */
+applicationsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/{id}/team",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: caseTeamSchema } },
+				description: "The case's seats — owner, coordinator, specialists, history",
+			},
+		},
+	}),
+	async (c) => {
+		const id = c.req.valid("param").id;
+		await assertApplicationAccess(c, id);
+		const { getCaseTeam } = await import("../services/handoffs.js");
+		return c.json(await getCaseTeam(id));
+	},
+);
+
+/**
+ * Return a seat to the staffing queue — `"owner"` for the whole-case handler,
+ * or a journey stage for a specialist seat. Ends the assignment and opens a
+ * `manual_release` handoff.
+ */
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/seats/{seat}/release",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireCapability("assign_work")] as const,
+		request: {
+			params: z.object({ id: z.string().uuid(), seat: z.string().min(1).max(80) }),
+			body: { content: { "application/json": { schema: releaseSeatSchema } }, required: true },
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: stageHandoffSchema } },
+				description: "Seat released — handoff opened on the current stage",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const { id, seat } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const { releaseApplicationSeat } = await import("../services/handoffs.js");
+		return c.json(
+			await releaseApplicationSeat({
+				applicationId: id,
+				seat,
+				note: body.note,
+				actor: actorFrom(staff),
+			}),
+		);
+	},
+);
+
+/**
+ * Self-serve staffing — the officer claims the case's pending handoff. The
+ * service enforces role (`canOwnStage`) and branch; the claim resolves the
+ * handoff through the normal path so it stays race-safe.
+ */
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/claim",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: stageHandoffSchema } },
+				description: "Handoff claimed — the officer is seated on the stage",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const { claimPendingHandoff } = await import("../services/handoffs.js");
+		return c.json(
+			await claimPendingHandoff({
+				applicationId: c.req.valid("param").id,
+				actor: actorFrom(staff),
+			}),
+		);
 	},
 );
 
@@ -389,7 +481,7 @@ applicationsRouter.openapi(
 		method: "post",
 		path: "/{id}/refer",
 		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireCapability("assign_work")] as const,
 		request: {
 			params: idParams,
 			body: { content: { "application/json": { schema: referCaseSchema } }, required: true },
@@ -403,9 +495,6 @@ applicationsRouter.openapi(
 	}),
 	async (c) => {
 		const staff = c.get("staff")!;
-		if (!canSeeAllCases(staff)) {
-			throw new HttpError(403, "FORBIDDEN", "Only managers or coordinators can refer applications");
-		}
 		const body = c.req.valid("json");
 		const updated = await referApplicationBranch({
 			id: c.req.valid("param").id,

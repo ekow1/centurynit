@@ -367,6 +367,10 @@ export function useCasesApi() {
 						branch: s.branch ?? "",
 						role: s.role,
 						opsUserId: s.id,
+						presence: s.presence,
+						lastSeenAt: s.lastSeenAt,
+						openCases: s.openCases,
+						openStageSeats: s.openStageSeats,
 					})),
 			);
 		} catch (err) {
@@ -664,11 +668,23 @@ export function useCasesApi() {
 		assignApplication: async (
 			id: string,
 			to: Assignee,
-			opts?: { scope?: "stage" | "all"; branch?: string },
+			opts?: { scope?: "stage" | "all"; branch?: string; reason?: string },
 		) =>
 			replaceApplication(
 				await applicationsApi.assign(id, to.opsUserId ?? (await staffIdByEmail(to.email)), opts),
 			),
+		/** The case's seats — owner, coordinator, specialists, open stages, history. */
+		getCaseTeam: (id: string) => applicationsApi.team(id),
+		/** Return a seat to the staffing queue — "owner" or a journey stage key. */
+		releaseSeat: async (id: string, seat: string, note?: string) => {
+			await applicationsApi.releaseSeat(id, seat, note);
+			await refresh();
+		},
+		/** Self-serve staffing — claim the case's pending handoff. */
+		claimApplication: async (id: string) => {
+			await applicationsApi.claim(id);
+			await refresh();
+		},
 		/** Refer the case to another handling branch — no handler picked. */
 		referApplication: async (id: string, branch: string, note?: string) =>
 			replaceApplication(await applicationsApi.refer(id, { branch, note })),

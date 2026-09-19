@@ -9,14 +9,14 @@ import type {
 	Invoice,
 	Assignee,
 } from "century-nit-core/ops";
-import { invoiceBalance, invoiceAgeDays, branchName } from "century-nit-core/ops";
+import { invoiceBalance, invoiceAgeDays, branchName, branchId } from "century-nit-core/ops";
 import { LEAD_STAGE_LABELS, type Lead, type LeadStage } from "century-nit-core";
 import { ApiError, getInvoice, type ApiInvoice } from "../lib/api";
 import { ApproveInvoiceSheet } from "./case/ApproveInvoiceSheet";
 import { DelegateSheet } from "./case/DelegateSheet";
 import { useJoinMeeting } from "./case/ConsultationCall";
 import { AssignSheet, type HandlerPlacement } from "./case/AssignSheet";
-import { JOURNEY_STAGE_LABELS, API_PREFIX, type ApiOpsTask, type Booking, type JourneyStage, type StageHandoff, type TravelAssistanceRequest } from "century-nit-shared";
+import { JOURNEY_STAGE_LABELS, API_PREFIX, canOwnStage, type ApiOpsTask, type Booking, type JourneyStage, type StageHandoff, type TravelAssistanceRequest } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
 import {
 	assignPendingTask,
@@ -80,7 +80,7 @@ export function PreviewPane({
 	const [deferring, setDeferring] = useState(false);
 	const [deferError, setDeferError] = useState<string | null>(null);
 	// An invoice awaiting approval is approved here, with the sheet the case tabs use.
-	const { canIssueInvoices } = useOpsAuth();
+	const { canIssueInvoices, opsUser, roleCatalog } = useOpsAuth();
 	const approvable =
 		canIssueInvoices && item.action === "issue"
 			? item.kind === "invoice"
@@ -150,6 +150,35 @@ export function PreviewPane({
 	}
 
 	const [taskBusy, setTaskBusy] = useState(false);
+	const [claimBusy, setClaimBusy] = useState(false);
+
+	// Self-serve staffing — an officer whose role may own the stage and whose
+	// branch holds the file can take the handoff without waiting on a manager.
+	const canClaimHandoff =
+		item.kind === "handoff" &&
+		opsUser &&
+		canOwnStage(
+			opsUser.role,
+			item.record.stage,
+			Object.fromEntries(roleCatalog.map((r) => [r.id, r.permissions])),
+		) &&
+		(!item.branch || branchId(opsUser.branch) === branchId(item.branch));
+
+	async function claim() {
+		if (item.kind !== "handoff" || !item.record.applicationId) return;
+		setClaimBusy(true);
+		setActionError(null);
+		try {
+			await apiFetch(`${API_PREFIX}/applications/${item.record.applicationId}/claim`, { method: "POST" });
+			setActionOk("Claimed — the seat is yours.");
+			await onAssigned();
+		} catch (err) {
+			setActionError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not claim it");
+		} finally {
+			setClaimBusy(false);
+		}
+	}
+
 	async function markTaskDone() {
 		if (item.kind !== "task") return;
 		setTaskBusy(true);
@@ -232,6 +261,16 @@ export function PreviewPane({
 						)}
 					</div>
 					{deferError && <p className="ops-modal__error" style={{ marginTop: "0.5rem" }}>{deferError}</p>}
+				</div>
+			)}
+
+			{/* Self-serve staffing — an eligible officer takes the seat without
+			    waiting on a manager. Sits outside the assign_work block. */}
+			{item.kind === "handoff" && canClaimHandoff && (
+				<div style={{ marginTop: "1.25rem", paddingTop: "1rem", borderTop: "1px solid var(--border-light)" }}>
+					<button type="button" className="btn btn--primary btn--sm" onClick={() => void claim()} disabled={claimBusy}>
+						{claimBusy ? "Claiming…" : `Take it — I'll handle ${JOURNEY_STAGE_LABELS[item.record.stage as JourneyStage] ?? item.record.stage}`}
+					</button>
 				</div>
 			)}
 

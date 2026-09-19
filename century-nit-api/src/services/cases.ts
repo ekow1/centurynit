@@ -980,6 +980,11 @@ export async function assignApplication(input: {
 	scope?: "stage" | "all";
 	/** Referral — move the file to this handling branch with the placement. */
 	branch?: string;
+	/**
+	 * Handover note. Required when this placement replaces an active handler —
+	 * the seat change must carry context forward to whoever takes over.
+	 */
+	reason?: string;
 	actor: Actor;
 }): Promise<ApplicationRow> {
 	const row = await getApplication(input.id);
@@ -990,12 +995,53 @@ export async function assignApplication(input: {
 	// so validate against that stage, not the one that is closing. The
 	// whole-case handler is validated against the school-submission tier.
 	const stageOpened = row.stage === "document_verification" && row.depositPaid;
-	const employee = await loadAssignableStaff(input.employeeId, scope === "stage" ? (stageOpened ? "school_submission" : row.stage) : "school_submission");
+	const targetStage = stageOpened ? "school_submission" : row.stage;
+	const employee = await loadAssignableStaff(input.employeeId, scope === "stage" ? targetStage : "school_submission");
 
 	const applicant = await getApplicant(row.applicantId);
 	const referredBranch = input.branch ? canonicalBranchId(input.branch) : null;
 	if (input.branch && !referredBranch) {
 		throw new HttpError(400, "BRANCH_NOT_FOUND", `Unknown branch: ${input.branch}`);
+	}
+
+	// Branch consistency — a file placed with an officer of another office
+	// must carry the referral that moves the file there. A branch-less staff
+	// row (HQ floater) is exempt.
+	const effectiveBranch = referredBranch ?? canonicalBranchId(row.branch);
+	const employeeBranch = canonicalBranchId(employee.branch);
+	if (employeeBranch && effectiveBranch && employeeBranch !== effectiveBranch) {
+		throw new HttpError(
+			409,
+			"CASE_OTHER_BRANCH",
+			`${employee.name} sits in ${employee.branch} but this file belongs to ${row.branch}. Refer the file to ${employee.branch} or pick a ${row.branch} officer.`,
+		);
+	}
+
+	// Replacing an active handler requires the handover note — the comment and
+	// the assignment record both carry it forward to the incoming handler.
+	let replacedOpsUserId: string | null = null;
+	if (scope === "all") {
+		replacedOpsUserId = row.assignedStaffId;
+	} else {
+		const [seat] = await db
+			.select({ opsUserId: stageAssignments.opsUserId })
+			.from(stageAssignments)
+			.where(
+				and(
+					eq(stageAssignments.applicationId, row.id),
+					eq(stageAssignments.stage, targetStage),
+					eq(stageAssignments.status, "active"),
+				),
+			)
+			.limit(1);
+		replacedOpsUserId = seat?.opsUserId ?? null;
+	}
+	if (replacedOpsUserId && replacedOpsUserId !== input.employeeId && !input.reason?.trim()) {
+		throw new HttpError(
+			400,
+			"HANDOVER_NOTE_REQUIRED",
+			"Replacing an active handler requires a handover note so the next handler knows what they are walking into.",
+		);
 	}
 
 	// The handler change, the pending handoff it answers and any referral must
@@ -1008,6 +1054,7 @@ export async function assignApplication(input: {
 				applicationId: row.id,
 				opsUserId: input.employeeId,
 				assignedBy: input.actor.opsUserId,
+				note: input.reason,
 				tx: txDb,
 			});
 		}
@@ -1065,7 +1112,7 @@ export async function assignApplication(input: {
 			stage: stageOpened ? "school_submission" : row.stage,
 			opsUserId: input.employeeId,
 			assignedBy: input.actor.opsUserId,
-			reason: input.branch ? `stage handler · referred to ${referredBranch}` : "stage handler",
+			reason: input.reason ?? (input.branch ? `stage handler · referred to ${referredBranch}` : "stage handler"),
 			scope: "stage",
 		});
 	}
@@ -1091,10 +1138,25 @@ export async function assignApplication(input: {
 		targetType: "application",
 		targetId: row.id,
 		kind: "assignment",
-		text: `Assigned to ${employee.name}${scope === "stage" ? " — this stage only" : " — carries the rest of the case"}${referredBranch ? ` · file referred to ${referredBranch}` : ""}`,
+		text: `Assigned to ${employee.name}${scope === "stage" ? " — this stage only" : " — carries the rest of the case"}${referredBranch ? ` · file referred to ${referredBranch}` : ""}${input.reason ? ` — ${input.reason}` : ""}`,
 		authorName: input.actor.name,
 		authorOpsUserId: input.actor.opsUserId,
 	});
+
+	// The outgoing handler hears about a replacement — the seat should never
+	// just disappear from their queue without a word.
+	if (replacedOpsUserId && replacedOpsUserId !== input.employeeId) {
+		const outgoingUserId = await getStaffUserId(replacedOpsUserId);
+		if (outgoingUserId) {
+			notify({
+				recipientUserId: outgoingUserId,
+				type: "assignment.released",
+				title: "Case reassigned",
+				body: `${updated.appNumber}'s handler seat moved to ${employee.name}.${input.reason ? ` ${input.reason}` : ""}`,
+				link: "/applications",
+			}).catch(() => {});
+		}
+	}
 
 	// Notify the assigned staff member by email and in-app.
 	const staffUserId = await getStaffUserId(employee.id);

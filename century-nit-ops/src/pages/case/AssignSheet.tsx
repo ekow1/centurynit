@@ -39,6 +39,7 @@ export function AssignSheet({
 	keepName,
 	keepOpsUserId,
 	withReason,
+	reasonRequired = false,
 	why,
 	coverage = false,
 	coverageDefault = "stage",
@@ -59,6 +60,8 @@ export function AssignSheet({
 	keepName?: string | null;
 	keepOpsUserId?: string | null;
 	withReason?: boolean;
+	/** The API requires the handover note when this placement replaces an active handler. */
+	reasonRequired?: boolean;
 	/** One line of context above the control — why this placement is needed. */
 	why?: string | null;
 	/** Offer the coverage choice — applications, consultations and handoffs. */
@@ -103,9 +106,19 @@ export function AssignSheet({
 		// The previous handler is pinned first only where keeping them is a real
 		// option (keepName is set) — otherwise they're just another row.
 		const keep = keepOpsUserId && keepName ? atBranch.find((s) => s.opsUserId === keepOpsUserId) : undefined;
-		const rest = keep ? atBranch.filter((s) => s.opsUserId !== keepOpsUserId) : atBranch;
+		const rest = keep ? atBranch.filter((s) => s.opsUserId !== keepOpsUserId) : [...atBranch];
+		// Lightest load first — a heavy load dims but never blocks a pick.
+		rest.sort(
+			(a, b) =>
+				(a.openCases ?? 0) + (a.openStageSeats ?? 0) - ((b.openCases ?? 0) + (b.openStageSeats ?? 0)),
+		);
 		return { keep, rest };
 	}, [staff, stage, pickBranch, permissions, keepOpsUserId, keepName]);
+
+	const loadOf = (s: AssignableStaff) =>
+		typeof s.openCases === "number"
+			? `${s.openCases} case${s.openCases === 1 ? "" : "s"}${s.openStageSeats ? ` · ${s.openStageSeats} seat${s.openStageSeats === 1 ? "" : "s"}` : ""}`
+			: null;
 
 	const referred = pickBranch !== currentBranch;
 	const stageLabel = JOURNEY_STAGE_LABELS[stage as JourneyStage] ?? stage;
@@ -124,7 +137,10 @@ export function AssignSheet({
 	}
 
 	const canReferOpen = referred && Boolean(onLeaveOpen);
-	const canSubmit = pickHandler !== null && (Boolean(pickHandler) || canReferOpen);
+	const canSubmit =
+		pickHandler !== null &&
+		(Boolean(pickHandler) || canReferOpen) &&
+		(!reasonRequired || Boolean(reason.trim()));
 
 	return (
 		<Sheet open={open} onClose={onClose} title={title} size="tall">
@@ -177,8 +193,13 @@ export function AssignSheet({
 						className={`hsheet__row${pickHandler === eligible.keep.opsUserId ? " hsheet__row--on" : ""}`}
 						onClick={() => setPickHandler(eligible.keep!.opsUserId!)}
 					>
-						<span>{eligible.keep.name}</span>
-						<span className="hsheet__hint">was handler here</span>
+						<span>
+							<span className="hsheet__presence" data-presence={eligible.keep.presence ?? "offline"} aria-hidden="true" />
+							{eligible.keep.name}
+						</span>
+						<span className="hsheet__hint">
+							was handler here{loadOf(eligible.keep) ? ` · ${loadOf(eligible.keep)}` : ""}
+						</span>
 					</button>
 				)}
 				{eligible.rest.map((s) => (
@@ -189,9 +210,15 @@ export function AssignSheet({
 						aria-checked={pickHandler === s.opsUserId}
 						className={`hsheet__row${pickHandler === s.opsUserId ? " hsheet__row--on" : ""}`}
 						onClick={() => setPickHandler(s.opsUserId!)}
+						title={`${s.presence ?? "offline"}${s.lastSeenAt ? ` · last seen ${new Date(s.lastSeenAt).toLocaleString()}` : ""}`}
 					>
-						<span>{s.name}</span>
-						<span className="hsheet__hint">{s.role ?? ""}</span>
+						<span>
+							<span className="hsheet__presence" data-presence={s.presence ?? "offline"} aria-hidden="true" />
+							{s.name}
+						</span>
+						<span className="hsheet__hint">
+							{s.role ?? ""}{loadOf(s) ? ` · ${loadOf(s)}` : ""}
+						</span>
 					</button>
 				))}
 				{eligible.rest.length === 0 && !eligible.keep && (
@@ -243,11 +270,16 @@ export function AssignSheet({
 			{withReason && (
 				<input
 					className="input mt-3"
-					placeholder="Reason (optional)"
+					placeholder={
+						reasonRequired
+							? `Handover note — what should the next handler know? (required)`
+							: "Reason (optional)"
+					}
 					value={reason}
 					onChange={(e) => setReason(e.target.value)}
 					disabled={pending}
-					aria-label="Reason"
+					required={reasonRequired}
+					aria-label="Handover note"
 				/>
 			)}
 

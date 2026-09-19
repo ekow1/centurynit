@@ -767,6 +767,36 @@
 	margin: 0;
 }
 
+/* Read-only rows (the Team sheet's seats) — no hover, no pointer. */
+div.hsheet__row {
+	cursor: default;
+}
+div.hsheet__row:hover {
+	background: var(--background);
+}
+
+/* Presence dot — fill weight, never colour: solid = online, half = busy or
+   on leave, hollow = offline. */
+.hsheet__presence {
+	display: inline-block;
+	width: 0.45rem;
+	height: 0.45rem;
+	border-radius: 50%;
+	margin-right: 0.45rem;
+	border: 1px solid currentColor;
+	vertical-align: baseline;
+	opacity: 0.4;
+}
+.hsheet__presence[data-presence="available"] {
+	background: currentColor;
+	opacity: 1;
+}
+.hsheet__presence[data-presence="busy"],
+.hsheet__presence[data-presence="on_leave"] {
+	background: linear-gradient(90deg, currentColor 50%, transparent 50%);
+	opacity: 0.85;
+}
+
 .hsheet__foot {
 	display: flex;
 	justify-content: flex-end;

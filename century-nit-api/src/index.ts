@@ -29,6 +29,15 @@ const { remindDueTasks } = await import("./services/tasks.js");
 void remindDueTasks().catch(() => {});
 setInterval(() => void remindDueTasks().catch(() => {}), 5 * 60_000).unref();
 
+/*
+ * The handoff escalation sweep — a pending handoff that waits 5 days or is
+ * deferred a 3rd time gets `escalated_at` stamped once and management is
+ * re-alerted. Same cadence as the task sweep.
+ */
+const { escalateAgedHandoffs } = await import("./services/handoffs.js");
+void escalateAgedHandoffs().catch(() => {});
+setInterval(() => void escalateAgedHandoffs().catch(() => {}), 5 * 60_000).unref();
+
 serve({
 	fetch: app.fetch,
 	port: Number(env.PORT),

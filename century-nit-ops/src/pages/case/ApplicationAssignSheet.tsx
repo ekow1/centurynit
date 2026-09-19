@@ -79,7 +79,9 @@ export function ApplicationAssignSheet({
 			currentName={handoff ? null : caseHandlerName(app) || null}
 			keepName={handoff && handoffOffersKeep(handoff) ? handoff.fromOpsUserName : null}
 			keepOpsUserId={handoff && handoffOffersKeep(handoff) ? handoff.fromOpsUserId : null}
-			withReason={Boolean(handoff)}
+			withReason={Boolean(handoff) || Boolean(app.assignedStaff)}
+			/* Replacing a seated handler demands the note — the API enforces it. */
+			reasonRequired={!handoff && Boolean(app.assignedStaff)}
 			why={handoff ? whyHandoff(handoff) : null}
 			coverage
 			onAssign={async ({ opsUserId, reason, scope, branch }) => {
@@ -88,7 +90,7 @@ export function ApplicationAssignSheet({
 				} else {
 					const to = assignees.find((a) => a.opsUserId === opsUserId);
 					if (!to) throw new Error("That staff member is no longer available");
-					await assignApplication(app.id, to, { scope, branch });
+					await assignApplication(app.id, to, { scope, branch, reason });
 				}
 				onDone?.("Handler placed.");
 			}}

@@ -46,7 +46,7 @@ import { HttpError } from "../middleware/error.js";
 import type { SessionUser, StaffContext } from "../middleware/auth.js";
 import { canAccessApplication } from "./cases.js";
 import { publishChatEvent, publishChatEventToClient, notifyOfflineParticipants, sendMessage } from "./chat.js";
-import { notifyMany, getCustomerServiceUserIds, getManagerAndCoordinatorUserIds } from "./notify.js";
+import { notify, notifyMany, getStaffUserId, getCustomerServiceUserIds, getManagerAndCoordinatorUserIds } from "./notify.js";
 import { serializeMessageRow, hydrateMessages } from "./message-serializer.js";
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
@@ -1271,6 +1271,23 @@ export async function assignStageOfficer(input: {
 			.update(stageAssignments)
 			.set({ status: "reassigned", endedAt: new Date(), endedReason: input.reason ?? "reassigned" })
 			.where(eq(stageAssignments.id, row.id));
+		// The outgoing officer hears about a replacement — the seat should
+		// never just disappear from their queue without a word.
+		if (row.opsUserId !== input.opsUserId) {
+			getStaffUserId(row.opsUserId)
+				.then((userId) =>
+					userId
+						? notify({
+								recipientUserId: userId,
+								type: "assignment.released",
+								title: "Seat reassigned",
+								body: `Your ${JOURNEY_STAGE_LABELS[input.stage as JourneyStage] ?? input.stage} seat moved to another handler.${input.reason ? ` ${input.reason}` : ""}`,
+								link: "/applications",
+							})
+						: null,
+				)
+				.catch(() => {});
+		}
 		// Downgrade their conversation participant role to `former` (history retained).
 		// Find the stage conversation and update the old officer's role.
 		const [stageConv] = await db

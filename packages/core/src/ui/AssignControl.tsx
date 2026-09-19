@@ -7,6 +7,13 @@ export type AssignableStaff = {
 	email?: string;
 	branch?: string;
 	role?: string;
+	/** Live presence — decays to offline after 15 min without a heartbeat. */
+	presence?: "available" | "busy" | "on_leave" | "offline" | null;
+	lastSeenAt?: string | null;
+	/** Owned cases still in flight (not completed). */
+	openCases?: number;
+	/** Active stage-specialist seats held. */
+	openStageSeats?: number;
 };
 
 /**

@@ -7,6 +7,7 @@ import { useInvoiceApi } from "../../hooks/useInvoiceApi";
 import { CaseDocumentsPanel } from "./CaseDocumentsPanel";
 import { ApplicationAssignSheet } from "./ApplicationAssignSheet";
 import { HistorySheet } from "./HistorySheet";
+import { TeamSheet } from "./TeamSheet";
 import { useCaseTab } from "./CaseTabs";
 import { CaseSpine } from "./CaseSpine";
 import { OverviewTab } from "./tabs/OverviewTab";
@@ -239,6 +240,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// and history (the one place notes are read and written).
 	const [assignOpen, setAssignOpen] = useState(false);
 	const [historyOpen, setHistoryOpen] = useState(false);
+	const [teamOpen, setTeamOpen] = useState(false);
 
 	// Tab state, mirrored to ?tab= so a notification or a handoff can link to
 	// the right chapter and a refresh keeps it. Precedence: the URL, then the
@@ -463,9 +465,14 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					) : undefined
 				}
 				actions={
-					<button type="button" className="btn btn--sm btn--ghost" onClick={() => setHistoryOpen(true)}>
-						History{noteCount > 0 ? ` · ${noteCount}` : ""}
-					</button>
+					<>
+						<button type="button" className="btn btn--sm btn--ghost" onClick={() => setTeamOpen(true)}>
+							Team
+						</button>
+						<button type="button" className="btn btn--sm btn--ghost" onClick={() => setHistoryOpen(true)}>
+							History{noteCount > 0 ? ` · ${noteCount}` : ""}
+						</button>
+					</>
 				}
 				stageHandlers={[
 					...(app.stageHandlers ?? [])
@@ -486,6 +493,18 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			<CaseTodo items={nextActions} waitingOn={app.journey?.nextUnlock ?? null} blockedBy={blockedBy} />
 
 			<ApplicationAssignSheet app={app} open={assignOpen} onClose={() => setAssignOpen(false)} onDone={flash} />
+
+			<TeamSheet
+				app={app}
+				open={teamOpen}
+				onClose={() => setTeamOpen(false)}
+				canManage={canAssignWork}
+				onReplace={() => {
+					setTeamOpen(false);
+					setAssignOpen(true);
+				}}
+				onChanged={flash}
+			/>
 
 			<HistorySheet
 				open={historyOpen}

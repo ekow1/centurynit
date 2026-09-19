@@ -376,6 +376,16 @@ export function caseHandlerName(a: MockApplication): string {
 }
 
 /**
+ * How long a handoff has been waiting, in the queue's voice: "waiting today",
+ * then "waiting 2d", "waiting 9d". Reads `createdAt` — the moment the seat
+ * opened, not the last defer.
+ */
+export function handoffWait(h: { createdAt: string }): string {
+	const days = Math.floor((Date.now() - new Date(h.createdAt).getTime()) / 86_400_000);
+	return days <= 0 ? "waiting today" : `waiting ${days}d`;
+}
+
+/**
  * Whether the "keep previous handler" shortcut makes sense for a handoff:
  * only where the previous handler's role may own the new stage and the
  * stage is not an owner-class boundary (school handler → visa specialist is
@@ -796,7 +806,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 			record: h,
 			title: h.applicantName ?? "Applicant",
 			subtitle: `${stageLabel}${h.source === "visa_payment" ? " · payment received" : ""}${h.source === "deposit_payment" ? " · 10% deposit received" : ""} · ${was}${h.source === "offboarding" ? " — left" : ""}${h.reason ? ` · “${h.reason}”` : ""}`,
-			meta: h.deferCount > 0 ? `deferred ${h.deferCount}×` : "awaiting decision",
+			meta: `${handoffWait(h)}${h.deferCount > 0 ? ` · deferred ${h.deferCount}×` : ""}${h.escalatedAt ? " · escalated" : ""}`,
 			branch: handoffApp?.branch ?? "",
 			owner: "— open",
 			linkTo: h.stage === "visa_processing" ? `/applications?chapter=visa&id=${h.applicationId}` : `/applications?id=${h.applicationId}`,

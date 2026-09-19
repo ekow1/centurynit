@@ -303,7 +303,7 @@ export function VisaTab({
 									</button>
 								) : (
 									<Link to={`/invoices?open=${visaApiInvoice.id}`} className="btn btn--sm btn--ghost">
-										Open in Money →
+										Open in Billing →
 									</Link>
 								)
 							) : undefined
@@ -610,7 +610,7 @@ export function VisaTab({
 				title="Raise the visa invoice"
 				intro={`For ${app.applicantName} · ${app.appId}. The lines are the destination's tariff — the visa and biometrics fees at cost — editable before anything goes to approval. Raised awaiting approval; the client sees it once it is issued.`}
 				suggested={raisePreview?.lines ?? null}
-				sees={(totalCents) => `"Visa costs" on their Money page — ${fmtBoth(totalCents / 100)}, payable once issued.`}
+				sees={(totalCents) => `"Visa costs" on their Payments page — ${fmtBoth(totalCents / 100)}, payable once issued.`}
 				onRaise={submitRaise}
 				onClose={() => setRaising(false)}
 			/>

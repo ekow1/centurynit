@@ -254,7 +254,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// The standard documents were collected at consultation; nothing is
 	// invoiced while any is still unverified (the API refuses too).
 	const outstandingDocs = (app.documentChecklist ?? []).filter((d) => d.status !== "VERIFIED").map((d) => d.name);
-	// The Money view's count — invoices on this case still carrying a balance.
+	// The Billing view's count — invoices on this case still carrying a balance.
 	const dueInvoices = allInvoices.filter((i) => i.applicationId === app.id && (i.status === "issued" || i.status === "partial" || i.status === "overdue")).length;
 	// Why a control is off, in the words the server would use to refuse it.
 	const completeBlock = app.stage === "travel_assistance" ? canAdvanceToStage("travel_assistance", "completed", app) : null;
@@ -284,7 +284,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		{ id: "application", label: "Applications", locked: !applicationOpen, hint: "Unlocks once the deposit is paid" },
 		{ id: "visa", label: "Visa", locked: !visaOpen, hint: "Unlocks on the first admission" },
 		{ id: "travel", label: "Departure", locked: !travelOpen, hint: "Unlocks once the visa is approved" },
-		{ id: "payments", label: "Money", locked: false },
+		{ id: "payments", label: "Billing", locked: false },
 		{ id: "documents", label: "Documents", locked: false },
 	];
 	const isLocked = (id: TabId) => tabs.find((t) => t.id === id)?.locked ?? false;
@@ -550,7 +550,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				onChange={setTab}
 				overview={{ id: "overview", label: "Overview" }}
 				views={[
-					{ id: "payments", label: "Money", note: dueInvoices > 0 ? `${dueInvoices} due` : null },
+					{ id: "payments", label: "Billing", note: dueInvoices > 0 ? `${dueInvoices} due` : null },
 					{ id: "documents", label: "Docs", note: outstandingDocs.length > 0 ? String(outstandingDocs.length) : null },
 				]}
 			/>

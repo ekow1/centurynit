@@ -205,7 +205,7 @@ export function DepartureTab({
 	return (
 		<>
 			{/* Flight — status, the flight, the one next action. Departure is
-			    the last chapter; completion is recorded from the Money tab or
+			    the last chapter; completion is recorded from the Billing tab or
 			    by the client. */}
 			<div className="card">
 				<p className="eyebrow mb-2">Flight</p>

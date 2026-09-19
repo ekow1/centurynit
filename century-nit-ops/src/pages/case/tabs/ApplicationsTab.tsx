@@ -774,7 +774,7 @@ export function ApplicationsTab({
 									</button>
 								) : (
 									<Link to={`/invoices?open=${appInvoice.id}`} className="btn btn--sm btn--ghost">
-										Open in Money →
+										Open in Billing →
 									</Link>
 								)
 							) : undefined
@@ -838,7 +838,7 @@ export function ApplicationsTab({
 				title="Raise the application invoice"
 				intro={`For ${app.applicantName} · ${app.appId}. The lines are the schools' own fees at cost — edit them before anything goes to approval. Raised awaiting approval; the client sees it once it is issued.`}
 				suggested={raisePreview?.lines ?? null}
-				sees={(totalCents) => `"University application fees" on their Money page — ${fmtBoth(totalCents / 100)}, payable once issued.`}
+				sees={(totalCents) => `"University application fees" on their Payments page — ${fmtBoth(totalCents / 100)}, payable once issued.`}
 				onRaise={submitRaise}
 				onClose={() => setRaising(false)}
 			/>

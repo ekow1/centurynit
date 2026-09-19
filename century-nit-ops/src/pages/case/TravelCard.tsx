@@ -188,7 +188,7 @@ export function FlightSheet({
 					<p className="su-preview">
 						<span className="su-k">The client will see</span>
 						{[preview, mode === "raise" && fareCents > 0 ? formatMoney(fareCents, "ghs") : "", mode === "book" && pnr ? `PNR ${pnr.trim()}` : ""].filter(Boolean).join(" · ")}
-						{mode === "raise" ? ' — "Flight ticket" on their Money page once issued.' : " — on their Departure page, with the e-ticket once uploaded."}
+						{mode === "raise" ? ' — "Flight ticket" on their Payments page once issued.' : " — on their Departure page, with the e-ticket once uploaded."}
 					</p>
 				)}
 				{mode === "raise" && !ready && fare.length > 0 && <p className="cn-assign__error">The fare must be more than zero.</p>}
@@ -299,7 +299,7 @@ export function TravelCard({
 								</button>
 							) : (
 								<Link to={`/invoices?open=${invoice.id}`} className="btn btn--sm btn--ghost">
-									Open in Money →
+									Open in Billing →
 								</Link>
 							)
 						) : undefined
@@ -316,7 +316,7 @@ export function TravelCard({
 									: "on hold — the client can resume from the portal"
 								: status === "decision_pending"
 									? "raised once the client asks us to book"
-									: "not raised yet — quote the flight below; the client pays it in Money"}
+									: "not raised yet — quote the flight below; the client pays it in Billing"}
 						</small>
 					</div>
 					<span className="cn-inv-none__k">—</span>
@@ -383,7 +383,7 @@ export function TravelCard({
 					state={paid ? "done" : invoiceIssued ? "current" : "todo"}
 					facts={[
 						paid && `Paid${paidAt ? ` ${fmtDay(paidAt)}` : ""}${invoice ? ` · ${formatMoney(invoice.subtotalCents, "ghs")}` : ""}`,
-						!paid && invoiceIssued && "Waiting for the client — it is on their Money page. Record a transfer from the invoice.",
+						!paid && invoiceIssued && "Waiting for the client — it is on their Payments page. Record a transfer from the invoice.",
 						!paid && !invoiceIssued && !offPath && "Recorded from the ledger.",
 					]}
 				/>

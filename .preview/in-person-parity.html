@@ -1114,6 +1114,148 @@
   </div>
 </section>
 
+
+<section class="mt-5">
+  <h2>Post-arrival plan · client picks, finance approves, system schedules</h2>
+  <p class="lead">Today the client's month/frequency pick writes invoice lines instantly — nobody reviews it, dates are guessed from arrival, and no interest is charged. The proposed flow: the pick becomes a <b>request</b>; finance or a manager <b>enters the start date by hand</b> (the system never picks it); the system applies the plan's <b>interest</b> and computes every instalment through the end; the dated plan lands on the portal only on approval.</p>
+
+  <div class="compare" style="grid-template-columns:1fr 1fr 1fr;margin-top:1.25rem">
+    <!-- 1 · portal: picked, pending -->
+    <div>
+      <div class="variant-label"><span class="tag">portal · step 1</span> client picks — pending</div>
+      <div class="frame" style="padding:1.1rem 1.25rem;font-size:.8rem">
+        <div class="psec__h"><span class="psec__no">3</span><span class="psec__title">After you arrive · the remaining 40%</span><span class="psec__hint">GH₵ 3,000 + interest</span></div>
+        <div class="pkv"><span class="pkv__k">Your request</span><span class="pkv__v">6 months · monthly</span></div>
+        <div class="pkv"><span class="pkv__k">Status</span><span class="pkv__v" style="color:#b45309">under review</span></div>
+        <div class="pkv"><span class="pkv__k">Sent</span><span class="pkv__v">12 Oct · to the finance desk</span></div>
+        <p class="muted" style="font-size:.72rem;margin-top:.6rem;line-height:1.55">
+          Sent to the office to confirm — interest and dates are set then. Once approved you'll see every dated instalment here; nothing is due before then.
+        </p>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">The pick no longer touches the invoice — it's a request, not a commitment.</li>
+        <li data-n="2">The client sees the interest applies, but the exact total is quoted at approval.</li>
+      </ul>
+    </div>
+
+    <!-- 2 · ops: review card -->
+    <div>
+      <div class="variant-label"><span class="tag tag--new">ops · step 2</span> finance / manager reviews</div>
+      <div class="frame" style="padding:1.1rem 1.25rem;font-size:.8rem">
+        <div class="psec__h"><span class="psec__title">Schedule request · Efua M</span><span class="psec__hint">needs approval</span></div>
+        <div class="pkv"><span class="pkv__k">Requested</span><span class="pkv__v">6 months · monthly</span></div>
+        <div class="pkv"><span class="pkv__k">Principal</span><span class="pkv__v">GH₵ 3,000</span></div>
+        <div class="pkv"><span class="pkv__k">Interest · 8% flat</span><span class="pkv__v">+ GH₵ 240</span></div>
+        <div class="pkv"><span class="pkv__k">Total</span><span class="pkv__v">GH₵ 3,240 → 6 × GH₵ 540</span></div>
+        <div class="pkv"><span class="pkv__k">Start date</span><span class="pkv__v">[ ____ / ____ / ______ ] ✎ <span class="sub">entered by staff — never guessed</span></span></div>
+        <div class="pkv"><span class="pkv__k">End date</span><span class="pkv__v">computed on save</span></div>
+        <p class="mono" style="font-size:.68rem;margin-top:.7rem">
+          <b style="display:inline-block;border:1.5px solid var(--foreground);padding:.4rem .9rem">APPROVE &amp; SET PLAN</b>
+          &nbsp; decline…
+        </p>
+      </div>
+      <ul class="callouts">
+        <li data-n="1"><b>Staff type the start date — the system never generates it.</b> It only spreads instalments forward from the date entered, through the end of the term.</li>
+        <li data-n="2">Interest is a catalogue setting (<code>interestPct</code>, flat on the remainder) — priced into every instalment, shown to the client as principal + interest.</li>
+        <li data-n="3">Guarded by a new <code>approve_schedules</code> grant — finance + manager by default; pending requests surface in the work queue.</li>
+      </ul>
+    </div>
+
+    <!-- 3 · portal: approved -->
+    <div>
+      <div class="variant-label"><span class="tag tag--new">portal · step 3</span> approved — dates live</div>
+      <div class="frame" style="padding:1.1rem 1.25rem;font-size:.8rem">
+        <div class="psec__h"><span class="psec__no">3</span><span class="psec__title">After you arrive · the remaining 40%</span><span class="psec__hint">6 × GH₵ 540</span></div>
+        <div class="pkv"><span class="pkv__k">Principal + interest</span><span class="pkv__v">GH₵ 3,000 + 240</span></div>
+        <div class="pkv"><span class="pkv__k">1 / 6</span><span class="pkv__v">15 Nov 2026 · GH₵ 540</span></div>
+        <div class="pkv"><span class="pkv__k">2 / 6</span><span class="pkv__v">15 Dec 2026 · GH₵ 540</span></div>
+        <div class="pkv"><span class="pkv__k">…</span><span class="pkv__v">through 15 Apr 2027</span></div>
+        <p class="muted" style="font-size:.72rem;margin-top:.6rem;line-height:1.55">
+          Approved by Finance · A reminder lands 7 days before each instalment. Auto-pay on? The card debits itself on each date.
+        </p>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Same instalment UI as today — real dates from the start date staff set, never recomputed by the system.</li>
+        <li data-n="2">Interest is explicit — the client sees GH₵ 3,000 principal + GH₵ 240, not a silently inflated number.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- flow strip -->
+  <div class="frame" style="margin-top:1.25rem;padding:1rem 1.25rem">
+    <div class="variant-label"><span class="tag tag--new">flow</span> request → review → live</div>
+    <p class="mono" style="font-size:.68rem;line-height:2.1;margin-top:.5rem">
+      CLIENT PICKS 6 MO · MONTHLY → status "pending" · invoice untouched · ops work-queue task<br>
+      &nbsp;&nbsp;↳ FINANCE/MANAGER ENTERS THE START DATE → interest applied → all 6 dates computed → APPROVE<br>
+      &nbsp;&nbsp;↳ DECLINE + reason → back to the portal to re-pick<br>
+      APPROVED → dated lines written · reminders queued · "your plan is set" email · SSE opens it live
+    </p>
+    <p class="muted" style="font-size:.75rem;margin-top:.6rem;line-height:1.55">
+      Fits existing machinery: <code>postArrivalStatus</code> + <code>postArrivalStartAt</code> on the application (no new table — comments carry the audit), <code>interestPct</code> on the post-arrival catalogue, <code>postArrivalInstalments()</code> anchored on the staff-entered start (the arrival-auto-anchor goes away for approved plans), and approval behind a new <code>approve_schedules</code> capability.
+    </p>
+  </div>
+</section>
+<section class="mt-5">
+  <h2>Transaction ledger · same rows, two faces</h2>
+  <p class="lead">Every settlement — checkout card, MoMo, auto-debit, or a recorded cash payment — lands as one row in <code>payment_transactions</code>; every auto-pay attempt lands in <code>autopay_attempts</code>. Today the portal only offers a per-invoice receipt and ops sees none of it. The ledger joins both tables and renders the same truth twice: the client sees <b>what they paid and what's next</b>; ops sees <b>every channel, attempt, decline, and who recorded it</b>.</p>
+
+  <div class="compare" style="grid-template-columns:1fr 1.35fr;margin-top:1.25rem">
+    <!-- portal face -->
+    <div>
+      <div class="variant-label"><span class="tag">portal</span> Fees chapter · "Your payments"</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <table style="border-collapse:collapse;width:100%;font-size:.72rem">
+          <tr><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Date</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">For</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Method</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Amount</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left"></th></tr>
+          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">12 Oct</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Deposit · service fee</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">MTN MoMo</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">GH₵ 500</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#15803d;color:#15803d">paid</span> ↓</td></tr>
+          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">15 Nov</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Instalment 1 / 6</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Visa ····4283 · auto-pay</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">GH₵ 540</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#15803d;color:#15803d">paid</span> ↓</td></tr>
+          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">15 Dec</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Instalment 2 / 6</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Visa ····4283 · auto-pay</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">GH₵ 540</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#b91c1c;color:#b91c1c">failed</span></td></tr>
+          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">18 Dec</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Instalment 2 / 6 · retry</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Visa ····4283 · auto-pay</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">GH₵ 540</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#15803d;color:#15803d">paid</span> ↓</td></tr>
+          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">15 Jan</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Instalment 3 / 6</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">—</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">GH₵ 540</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#b45309;color:#b45309">pending</span></td></tr>
+        </table>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Client-facing only: paid / declined-retrying / scheduled — never raw gateway payloads or references.</li>
+        <li data-n="2">Each paid row carries the ↓ receipt link already on <code>openInvoiceDocument(invoice,"receipt")</code>.</li>
+        <li data-n="3">A failed auto-debit shows as "declined — retrying on 18 Dec" so the ledger matches the dunning email.</li>
+      </ul>
+    </div>
+
+    <!-- ops face -->
+    <div>
+      <div class="variant-label"><span class="tag tag--new">ops</span> Money tab · ledger under the invoice</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <table style="border-collapse:collapse;width:100%;font-size:.72rem">
+          <tr><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Date</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Entry</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Channel</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Ref</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Amount</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Status</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">By</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Outstanding</th></tr>
+          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">12 Oct</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Deposit</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">paystack · momo</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">PSK_9f…</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">+500</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#15803d;color:#15803d">paid</span></td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">webhook</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">3,000</td></tr>
+          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">15 Nov</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Instalment 1/6</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">auto-pay · card</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">AP_2c…</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">+540</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#15803d;color:#15803d">paid</span></td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">sweep</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">2,460</td></tr>
+          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">15 Dec</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Instalment 2/6</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">auto-pay · card</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">AP_7e…</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">0</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#b91c1c;color:#b91c1c">failed</span> <span class="sub">insufficient</span></td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">sweep</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">2,460</td></tr>
+          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">16 Dec</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Part payment · office</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">cash · recorded</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">—</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">+200</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#15803d;color:#15803d">paid</span> <span class="pill" style="border-color:#6d28d9;color:#6d28d9">manual</span></td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Ama K</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">2,260</td></tr>
+          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">18 Dec</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Instalment 2/6 · retry</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">auto-pay · card</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">AP_9a…</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">+340</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#15803d;color:#15803d">paid</span></td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">sweep</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">1,920</td></tr>
+        </table>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Every attempt is a row — declines carry the gateway reason (<code>failureReason</code>), manual records carry the staff member.</li>
+        <li data-n="2">Running outstanding per invoice; <code>reference</code> links out to Paystack for reconciliation.</li>
+        <li data-n="3">Manual "Record payment" writes the same table with <code>recordedBy</code> — one ledger, no shadow books.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="frame" style="margin-top:1.25rem;padding:1rem 1.25rem">
+    <div class="variant-label"><span class="tag tag--new">flow</span> one write → two reads</div>
+    <p class="mono" style="font-size:.68rem;line-height:2.1;margin-top:.5rem">
+      SETTLE (checkout · MoMo · charge_authorization · manual record) → payment_transactions row<br>
+      AUTO-PAY ATTEMPT (success or decline) → autopay_attempts row, joined on invoice<br>
+      PORTAL reads: settled + failed rows, face-value labels, receipt link · OPS reads: everything + reference + recorded-by + running balance<br>
+      SSE: each row pushed live → ledger updates on both screens without reload
+    </p>
+    <p class="muted" style="font-size:.75rem;margin-top:.6rem;line-height:1.55">
+      No new storage: the ledger is a query over <code>payment_transactions</code> LEFT JOIN <code>autopay_attempts</code> per invoice/application, exposed as <code>GET /me/ledger</code> (client-trimmed) and a case-scoped ops route. What needs building is the read path and the two renders.
+    </p>
+  </div>
+</section>
+
+
 </div>
 </body>
 </html>

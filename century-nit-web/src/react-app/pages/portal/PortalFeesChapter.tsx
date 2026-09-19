@@ -533,7 +533,7 @@ function FeesChapterInner() {
 					<div className="sharp-card sharp-card--soft">
 						<p className="eyebrow">Meanwhile</p>
 						<p className="prail__note" style={{ marginTop: "0.3rem" }}>
-							Your departure officer is booking your flight. The ticket invoice lands in Money when it is ready, before this milestone. <Link to="/portal/pre-departure" className="plnk">Departure →</Link>
+							Your departure officer is booking your flight. The ticket invoice lands in Payments when it is ready, before this milestone. <Link to="/portal/pre-departure" className="plnk">Departure →</Link>
 						</p>
 					</div>
 				</div>

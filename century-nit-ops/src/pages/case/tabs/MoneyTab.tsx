@@ -247,7 +247,7 @@ export function MoneyTab({
 										</button>
 									) : (
 										<Link to={`/invoices?open=${inv.id}`} className="btn btn--sm btn--ghost">
-											Open in Money →
+											Open in Billing →
 										</Link>
 									)
 								) : undefined

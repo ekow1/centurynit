@@ -1482,7 +1482,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 			{paySheet.sheet}
 			<header className="portal-page__header">
 				<div>
-					<p className="eyebrow">{planView ? "Chapter V · Departure · Fees" : "Money"}</p>
+					<p className="eyebrow">{planView ? "Chapter V · Departure · Fees" : "Payments"}</p>
 					<h1 className="page-title mt-1">
 						{planView ? "Your pre-departure fee milestone" : "Payments & settlements"}
 					</h1>

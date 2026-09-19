@@ -30,7 +30,7 @@ function iconKind(type: string): IconKind {
 const FILTERS: { id: Filter; label: string }[] = [
 	{ id: "all", label: "All" },
 	{ id: "unread", label: "Unread" },
-	{ id: "money", label: "Money" },
+	{ id: "money", label: "Payments" },
 	{ id: "docs", label: "Docs" },
 	{ id: "journey", label: "Journey" },
 	{ id: "chat", label: "Messages" },

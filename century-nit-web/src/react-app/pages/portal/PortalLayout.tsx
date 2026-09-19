@@ -27,7 +27,7 @@ import { MfaPrompt } from "../../components/portal/MfaPrompt";
 const MAIN_NAV = [
 	{ to: "/portal/home", label: "Home", blurb: "What's happening now", Icon: IconHome },
 	{ to: "/portal/documents", label: "Documents", blurb: "Upload & verification", Icon: IconDoc },
-	{ to: "/portal/financial", label: "Money", blurb: "Invoices, fees & balances", Icon: IconWallet },
+	{ to: "/portal/financial", label: "Payments", blurb: "Invoices, fees & balances", Icon: IconWallet },
 	{ to: "/portal/appointments", label: "Appointments", blurb: "Book, reschedule, join", Icon: IconRoute },
 	{ to: "/portal/profile", label: "Profile", blurb: "Your account & data", Icon: IconUser },
 ] as const;

@@ -33,7 +33,7 @@ const FILTERS: { id: Filter; label: string }[] = [
 	{ id: "all", label: "All" },
 	{ id: "unread", label: "Unread" },
 	{ id: "leads", label: "Leads" },
-	{ id: "money", label: "Money" },
+	{ id: "money", label: "Billing" },
 	{ id: "cases", label: "Cases" },
 	{ id: "chat", label: "Messages" },
 ];

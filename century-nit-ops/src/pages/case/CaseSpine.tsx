@@ -5,7 +5,7 @@ import type { TabId } from "./tabs/types";
  * The case's tabs as a journey track — Overview first (where a case opens),
  * then the five working chapters in the portal's I–VI vocabulary joined by
  * a connector that fills as the case passes them, then the case's other
- * views (Money, Docs) with the count that matters. Ink is the tab being
+ * views (Billing, Docs) with the count that matters. Ink is the tab being
  * viewed; ■ marks the chapter the case is in; ✓ a chapter passed; dashed a
  * chapter locked.
  *

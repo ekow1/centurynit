@@ -24,7 +24,7 @@ const PORTAL_TABS: PortalTab[] = [
 	{ to: "/portal/home", label: "Home", short: "Home", icon: <IconHome /> },
 	{ to: "/portal/journey", label: "Journey", short: "Journey", icon: <IconRoute /> },
 	{ to: "/portal/documents", label: "Documents", short: "Files", icon: <IconDoc /> },
-	{ to: "/portal/financial", label: "Money", short: "Money", icon: <IconWallet /> },
+	{ to: "/portal/financial", label: "Payments", short: "Pay", icon: <IconWallet /> },
 ];
 
 /** Stage pages live under the Journey tab, so Journey stays lit while inside one */
@@ -169,7 +169,7 @@ export function PortalAppBar({
 	);
 }
 
-/** Fixed bottom tab bar: Home · Journey · Files · Money · Help. Help opens the chat. */
+/** Fixed bottom tab bar: Home · Journey · Files · Pay · Help. Help opens the chat. */
 export function PortalTabBar() {
 	const { pathname } = useLocation();
 	const inStage = isStagePath(pathname);

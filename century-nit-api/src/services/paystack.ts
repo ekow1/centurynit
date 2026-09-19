@@ -121,6 +121,17 @@ export type PaystackVerifiedTransaction = {
 	invoiceId?: string;
 	invoiceAmountCents?: number;
 	customerEmail?: string;
+	authorization?: {
+		authorization_code?: string;
+		last4?: string;
+		exp_month?: string;
+		exp_year?: string;
+		channel?: string;
+		card_type?: string;
+		bank?: string;
+		brand?: string;
+		reusable?: boolean;
+	};
 	metadata?: Record<string, any>;
 };
 
@@ -143,6 +154,7 @@ export async function verifyPaystackTransaction(
 			amount?: number;
 			currency?: string;
 			customer?: { email?: string };
+			authorization?: PaystackVerifiedTransaction["authorization"];
 			metadata?: { invoiceId?: string } & Record<string, any>;
 		};
 	};
@@ -156,6 +168,7 @@ export async function verifyPaystackTransaction(
 		invoiceId: body.data.metadata?.invoiceId,
 		invoiceAmountCents: body.data.metadata?.invoiceAmountCents ?? body.data.metadata?.amountCents,
 		customerEmail: body.data.customer?.email,
+		authorization: body.data.authorization,
 		metadata: body.data.metadata,
 	};
 }

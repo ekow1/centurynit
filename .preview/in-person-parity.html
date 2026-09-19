@@ -991,6 +991,129 @@
   </div>
 </section>
 
+<!-- ═══════════ AUTO-PAY · recurring instalment debits ═══════════ -->
+<section class="sec">
+  <h2>Auto-pay — charge each instalment on its due date, stop when the plan ends</h2>
+  <p class="sub">The client's card is charged automatically on every due date across the instalment schedule — and only across it. When the last scheduled debit lands, auto-pay ends itself. Works because Paystack returns a reusable <code>authorization_code</code> after the first card payment; each due date the server calls <code>charge_authorization</code>, the webhook settles the invoice, and the gates open over SSE.</p>
+
+  <div class="compare">
+    <!-- ── card payer: schedule runs itself ── -->
+    <div>
+      <div class="variant-label"><span class="tag tag--new">card</span> auto-pay on — the schedule runs itself</div>
+      <div class="frame" style="padding:1rem 1.25rem;font-size:.8rem">
+        <div class="psec__h"><span class="psec__title">Your payment plan</span><span class="psec__hint">auto-pay · Visa ····4283</span></div>
+        <div class="pkv"><span class="pkv__k">Pre-departure instalment</span><span class="pkv__v">GH₵ 2,250 · auto-charged 12 Sep ✓</span></div>
+        <div class="pkv"><span class="pkv__k">Post-arrival · month 1</span><span class="pkv__v">GH₵ 750 · auto-charge 15 Oct</span></div>
+        <div class="pkv"><span class="pkv__k">Post-arrival · month 2</span><span class="pkv__v">GH₵ 750 · auto-charge 15 Nov</span></div>
+        <div class="pkv"><span class="pkv__k">Post-arrival · month 3</span><span class="pkv__v">GH₵ 750 · auto-charge 15 Dec</span></div>
+        <div class="pkv"><span class="pkv__k">Post-arrival · month 4</span><span class="pkv__v muted">GH₵ 750 · last debit · auto-pay ends</span></div>
+        <p class="muted" style="font-size:.72rem;margin-top:.6rem;line-height:1.55">
+          Each charge lands → receipt emails → the ledger marks the instalment paid → anything it gates opens live. After <b>month 4</b> — the end of the schedule — the card is never charged again and the stored authorization is dropped.
+        </p>
+        <p class="mono" style="font-size:.62rem;margin-top:.5rem;border:1px solid var(--border-light);padding:.4rem .6rem">MANAGE AUTO-PAY · pause or remove card →</p>
+      </div>
+      <ul class="callouts">
+        <li data-n="a">Consent at first card payment: "Charge this card automatically when my instalments are due." Stored only if <code>authorization.reusable</code>.</li>
+        <li data-n="b">A BullMQ job scans due instalments daily → <code>charge_authorization</code> → same <code>charge.success</code> webhook settles the invoice. No new settlement path.</li>
+        <li data-n="c">"Until the frequency period is over" = the invoice's own instalment lines; the loop is the schedule, not a calendar.</li>
+      </ul>
+    </div>
+
+    <!-- ── MoMo payer: can't auto-debit, degrades to reminders ── -->
+    <div>
+      <div class="variant-label"><span class="tag">momo</span> can't auto-debit — degrades to reminders</div>
+      <div class="frame" style="padding:1rem 1.25rem;font-size:.8rem">
+        <div class="psec__h"><span class="psec__title">Your payment plan</span><span class="psec__hint">MTN MoMo · per-instalment</span></div>
+        <div class="pkv"><span class="pkv__k">Pre-departure instalment</span><span class="pkv__v">GH₵ 2,250 · paid 12 Sep ✓</span></div>
+        <div class="pkv"><span class="pkv__k">Post-arrival · month 1</span><span class="pkv__v" style="color:#b45309">GH₵ 750 · due 15 Oct → pay</span></div>
+        <div class="pkv"><span class="pkv__k">Post-arrival · months 2–4</span><span class="pkv__v muted">GH₵ 750 each · on schedule</span></div>
+        <p class="muted" style="font-size:.72rem;margin-top:.6rem;line-height:1.55">
+          Mobile Money authorizations aren't reusable — every MoMo debit needs the client's USSD approval. So MoMo clients get the reminder chain instead: email + portal banner + SMS 5 days before and on the due date, one-tap pay link.
+        </p>
+      </div>
+      <ul class="callouts">
+        <li data-n="a">The honest split: auto-pay for card payers, reminders for MoMo — not a feature MoMo can do.</li>
+        <li data-n="b">A failed card debit (insufficient funds) falls into the same reminder chain after a retry, then ops is flagged.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- lifecycle strip -->
+  <div class="frame" style="margin-top:1.25rem;padding:1rem 1.25rem">
+    <div class="variant-label"><span class="tag tag--new">lifecycle</span> start → run → stop</div>
+    <p class="mono" style="font-size:.68rem;line-height:2.1;margin-top:.5rem">
+      CARD PAYMENT #1 → SAVE AUTHORIZATION (reusable ✓) → CLIENT OPTS IN<br>
+      &nbsp;&nbsp;↳ each due date: DEBIT GH₵ X → webhook settles → gate opens live<br>
+      &nbsp;&nbsp;↳ debit fails → retry once → reminder chain → ops flagged<br>
+      LAST SCHEDULED LINE PAID → AUTO-PAY ENDS · authorization discarded · "plan complete" ✓
+    </p>
+  </div>
+
+  <div class="frame" style="margin-top:1rem;padding:1rem 1.25rem">
+    <div class="variant-label"><span class="tag">honest note</span> what "stops" means</div>
+    <p class="muted" style="font-size:.8rem;line-height:1.6;margin-top:.5rem">
+      Auto-pay is bound to the <b>invoice's instalment schedule</b>, not a forever-subscription. When the last scheduled line is settled, no further charge is possible — there is no "keep billing" state. If a client tops up early or pays a line manually, the schedule just shortens. A new obligation (a new invoice) starts a new schedule, never silently extends the old one.
+    </p>
+  </div>
+
+  <!-- ── failed debit: the dunning sequence ── -->
+  <h3 class="mt-4" style="font-size:.95rem">When a debit fails — the retry &amp; reminder sequence</h3>
+  <div class="frame" style="padding:1rem 1.25rem">
+    <p class="mono" style="font-size:.68rem;line-height:2.1">
+      DUE DATE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debit fails (insufficient funds / expired card)<br>
+      &nbsp;&nbsp;+0 days&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;email "we couldn't charge your card" + pay-now link · portal banner · ops work-queue item<br>
+      &nbsp;&nbsp;+3 days&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;one automatic retry on the stored card — succeeds? settled, sequence ends<br>
+      &nbsp;&nbsp;+5 days&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;still unpaid → email #2 + SMS, Cc the consultant · "pay another way" (MoMo / bank)<br>
+      &nbsp;&nbsp;+10 days&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;escalate — ops task moves to "overdue"; documents/e-ticket stays held; nothing else is debited<br>
+      &nbsp;&nbsp;any time&nbsp;&nbsp;&nbsp;client pays by any channel → schedule resumes · auto-pay continues on the next due date
+    </p>
+    <p class="muted" style="font-size:.75rem;margin-top:.6rem;line-height:1.55">
+      Every email goes through the existing <code>queueEmail</code> → BullMQ <code>emailQueue</code> → Resend path (the same one settlement receipts already use), so sends are retried, idempotent on the invoice+instalment id, and audited on the email row.
+    </p>
+  </div>
+
+  <div class="compare" style="margin-top:1.25rem">
+    <!-- the email itself -->
+    <div>
+      <div class="variant-label"><span class="tag tag--new">email #1</span> what the client gets on day 0</div>
+      <div class="frame" style="padding:1.1rem 1.25rem;font-size:.8rem">
+        <p class="eyebrow">Century NIT · payment reminder</p>
+        <p style="font-weight:700;margin-top:.6rem">We couldn't charge your card for the October instalment</p>
+        <p class="muted" style="margin-top:.4rem;line-height:1.6">
+          Hi Efua — your post-arrival instalment of <b>GH₵ 750</b> was due 15 Oct, but the charge on Visa ····4283 didn't go through (your bank declined it).<br><br>
+          You don't need to do anything right away — <b>we'll try the card once more on 18 Oct</b>. If you'd rather pay now, or pay another way:
+        </p>
+        <p class="mono" style="font-size:.68rem;border:1.5px solid var(--border);display:inline-block;padding:.5rem 1rem;margin-top:.6rem">PAY GH₵ 750 NOW →</p>
+        <p class="muted" style="font-size:.72rem;margin-top:.6rem;line-height:1.55">
+          MoMo, another card, or bank transfer all work — the link opens your payment page. Questions? Reply to this email; it reaches your consultant.
+        </p>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">States the amount, the card, the reason, and <b>when we'll retry</b> — no surprise second debit.</li>
+        <li data-n="2">One-tap pay link → Payment Execution; paying manually ends the sequence instantly.</li>
+      </ul>
+    </div>
+
+    <!-- the ops side -->
+    <div>
+      <div class="variant-label"><span class="tag">ops</span> what the office sees</div>
+      <div class="frame" style="padding:1.1rem 1.25rem;font-size:.8rem">
+        <div class="psec__h"><span class="psec__title">Work queue · payments</span><span class="psec__hint">auto-pay</span></div>
+        <div class="pkv"><span class="pkv__k">Efua M · post-arrival m1</span><span class="pkv__v" style="color:#b45309">debit failed · retry 18 Oct</span></div>
+        <div class="pkv"><span class="pkv__k">Kofi A · post-arrival m2</span><span class="pkv__v">auto-charged ✓</span></div>
+        <div class="pkv"><span class="pkv__k">Ama S · service fee</span><span class="pkv__v" style="color:#b45309">overdue 10d · called →</span></div>
+        <p class="muted" style="font-size:.72rem;margin-top:.6rem;line-height:1.55">
+          Failed debits appear as work-queue tasks — nobody has to watch a dashboard. At +10 days it escalates to "overdue" and the consultant owns the follow-up call.
+        </p>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Auto-pay failures never silently lapse — they surface where ops already works.</li>
+        <li data-n="2">Papers stay held until settlement; a failed debit never releases documents.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
 </div>
 </body>
 </html>

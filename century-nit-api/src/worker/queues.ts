@@ -91,6 +91,7 @@ export const pushQueue = new Queue("push", { connection });
 export const meetingStatusQueue = new Queue("meetingStatus", { connection });
 export const documentCleanupQueue = new Queue("documentCleanup", { connection });
 export const campaignQueue = new Queue("campaign", { connection });
+export const autopayQueue = new Queue("autopay", { connection });
 
 /* ── Email ───────────────────────────────────────────────────────────────── */
 
@@ -201,6 +202,18 @@ export async function scheduleMeetingStatusPolls(): Promise<void> {
 export async function scheduleDocumentCleanup(): Promise<void> {
 	await documentCleanupQueue.add(
 		"cleanup",
+		{},
+		{ repeat: { every: 24 * 60 * 60 * 1000 }, jobId: undefined },
+	);
+}
+
+/**
+ * The daily auto-pay sweep — debits saved cards on due instalment lines.
+ * Idempotent: `autopay_attempts` dedupes re-runs inside the retry window.
+ */
+export async function scheduleAutoPaySweep(): Promise<void> {
+	await autopayQueue.add(
+		"sweep",
 		{},
 		{ repeat: { every: 24 * 60 * 60 * 1000 }, jobId: undefined },
 	);

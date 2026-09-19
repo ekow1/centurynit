@@ -1086,11 +1086,99 @@ meRouter.openapi(
 						actor: { name: "Paystack", email: "payments@centurynit.com" },
 					});
 				}
+				// Reusable card authorization → the client can opt into auto-pay.
+				const { captureAuthorization } = await import("../services/autopay.js");
+				await captureAuthorization(user.id, txn.customerEmail, txn.authorization);
 			}
 		}
 		const freshRow = await getInvoice(row.id);
 		const invoice = await serializeInvoice(freshRow ?? row);
 		return c.json({ invoice });
+	},
+);
+
+/* ── Auto-pay — saved card authorizations + client opt-in ─────────────────── */
+
+const autoPaySchema = z.object({
+	available: z.boolean(),
+	active: z.boolean(),
+	card: z
+		.object({
+			brand: z.string().nullable(),
+			last4: z.string().nullable(),
+			bank: z.string().nullable(),
+		})
+		.nullable(),
+	lastFailure: z
+		.object({
+			label: z.string(),
+			amountCents: z.number(),
+			reason: z.string().nullable(),
+			retryAt: z.string(),
+		})
+		.nullable(),
+});
+
+// Whether a reusable card is on file and auto-debit is on.
+meRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/autopay",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		responses: {
+			200: {
+				content: { "application/json": { schema: autoPaySchema } },
+				description: "The client's auto-pay state — card on file and opt-in",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const { getAutoPay } = await import("../services/autopay.js");
+		return c.json(await getAutoPay(user.id));
+	},
+);
+
+// Opt in — the saved card is charged on each instalment due date.
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/autopay",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		responses: {
+			200: {
+				content: { "application/json": { schema: autoPaySchema } },
+				description: "Auto-pay enabled",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const { setAutoPay } = await import("../services/autopay.js");
+		return c.json(await setAutoPay(user.id, true));
+	},
+);
+
+// Opt out — the card stays on file but no more automatic debits fire.
+meRouter.openapi(
+	createRoute({
+		method: "delete",
+		path: "/autopay",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		responses: {
+			200: {
+				content: { "application/json": { schema: autoPaySchema } },
+				description: "Auto-pay disabled",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const { setAutoPay } = await import("../services/autopay.js");
+		return c.json(await setAutoPay(user.id, false));
 	},
 );
 

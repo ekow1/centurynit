@@ -4,6 +4,7 @@ import { meetingStatusWorker } from "./meeting-status.js";
 import { documentCleanupWorker } from "./document-cleanup.js";
 import { campaignWorker } from "./campaign.js";
 import { pushWorker } from "./push.js";
+import { autopayWorker } from "./autopay.js";
 import {
 	connection,
 	emailQueue,
@@ -15,6 +16,8 @@ import {
 	scheduleFeedSyncs,
 	scheduleMeetingStatusPolls,
 	scheduleDocumentCleanup,
+	scheduleAutoPaySweep,
+	autopayQueue,
 } from "./queues.js";
 
 /**
@@ -45,6 +48,7 @@ const workers = [
 	{ name: "documentCleanup", worker: documentCleanupWorker },
 	{ name: "campaign", worker: campaignWorker },
 	{ name: "push", worker: pushWorker },
+	{ name: "autopay", worker: autopayWorker },
 ];
 
 console.log(
@@ -64,6 +68,9 @@ scheduleMeetingStatusPolls().catch((err) => console.error("[meetingStatus] sched
 
 // Schedule the rejected-document TTL cleanup (once per day, idempotent).
 scheduleDocumentCleanup().catch((err) => console.error("[document-cleanup] schedule error:", err.message));
+
+// Schedule the daily auto-pay sweep (idempotent — attempts dedupe re-runs).
+scheduleAutoPaySweep().catch((err) => console.error("[autopay] schedule error:", err.message));
 
 /**
  * Graceful shutdown.
@@ -90,6 +97,7 @@ async function shutdown(signal: string) {
 			emailQueue.close(),
 			calendarQueue.close(),
 			pushQueue.close(),
+			autopayQueue.close(),
 			meetingStatusQueue.close(),
 			documentCleanupQueue.close(),
 			campaignQueue.close(),

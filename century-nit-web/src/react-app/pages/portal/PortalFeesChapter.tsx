@@ -9,7 +9,7 @@ import {
 	type PostArrivalFrequency,
 } from "century-nit-shared";
 import { formatMoney } from "century-nit-core/ui";
-import { meApi, ApiError } from "century-nit-core/api";
+import { meApi, ApiError, type AutoPayStatus } from "century-nit-core/api";
 import { Button } from "../../components/ui/Button";
 import { useAppState, milestoneLockReasonFor, milestoneUnlockedFor } from "../../context/AppState";
 import { useNotifier } from "../../components/notifier/Notifier";
@@ -46,9 +46,17 @@ function FeesChapterInner() {
 	const [months, setMonths] = useState<number | null>(application.postArrivalMonths ?? null);
 	const [frequency, setFrequency] = useState<PostArrivalFrequency | null>((application.postArrivalFrequency as PostArrivalFrequency | null) ?? null);
 	const [savingSchedule, setSavingSchedule] = useState(false);
+	const [autoPay, setAutoPay] = useState<AutoPayStatus | null>(null);
+	const [togglingAutoPay, setTogglingAutoPay] = useState(false);
 
 	useEffect(() => {
 		let cancelled = false;
+		meApi
+			.autoPay()
+			.then((res) => {
+				if (!cancelled) setAutoPay(res);
+			})
+			.catch(() => {});
 		meApi
 			.invoices({ type: "agency" })
 			.then((res) => {
@@ -139,6 +147,20 @@ function FeesChapterInner() {
 		}
 	}
 
+	async function toggleAutoPay() {
+		if (!autoPay) return;
+		setTogglingAutoPay(true);
+		try {
+			const next = autoPay.active ? await meApi.disableAutoPay() : await meApi.enableAutoPay();
+			setAutoPay(next);
+			toast.success(next.active ? "Auto-pay is on — your card is charged on each due date." : "Auto-pay is off. We'll remind you before each instalment instead.");
+		} catch (err) {
+			toast.error(err instanceof ApiError ? err.message : "Could not update auto-pay.");
+		} finally {
+			setTogglingAutoPay(false);
+		}
+	}
+
 	const now = !plan
 		? "choose your payment plan"
 		: milestoneDone
@@ -205,6 +227,18 @@ function FeesChapterInner() {
 				{plan ? <span>{isInstalments ? "instalment plan" : "full payment"}</span> : null}
 				{invoice ? <span>{paidPct}% paid</span> : null}
 			</div>
+
+			{autoPay?.lastFailure ? (
+				<div className="sharp-card sharp-card--key" style={{ borderColor: "#b3261e", marginTop: "1rem" }}>
+					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "1rem", flexWrap: "wrap" }}>
+						<span className="amt" style={{ color: "#b3261e" }}>{ghs(autoPay.lastFailure.amountCents)}</span>
+						<span className="psec__hint" style={{ margin: 0 }}>card declined{autoPay.lastFailure.reason ? ` · ${autoPay.lastFailure.reason}` : ""}</span>
+					</div>
+					<p className="muted mt-2" style={{ fontSize: "0.85rem" }}>
+						The automatic charge for <b>{autoPay.lastFailure.label}</b> didn't go through. We try {autoPay.card ? `your card` : "it"} once more on {day(autoPay.lastFailure.retryAt)} — or pay now below, with any method.
+					</p>
+				</div>
+			) : null}
 
 			<div className="psteps4" style={{ gridTemplateColumns: `repeat(${isInstalments ? 3 : 2}, minmax(0, 1fr))` }}>
 				{[
@@ -327,12 +361,15 @@ function FeesChapterInner() {
 							{postCents <= 0 ? (
 								<p className="psec__later">Nothing remains after arrival on this invoice.</p>
 							) : scheduleLocked ? (
-								<div className="sharp-card sharp-card--soft">
-									<span className="psec__hint" style={{ margin: 0 }}>
-										Your schedule · {postRows.length} × {ghs(postRows[0]?.l.amountCents ?? 0)} · {application.postArrivalFrequency ? POST_ARRIVAL_FREQUENCY_LABELS[application.postArrivalFrequency as PostArrivalFrequency]?.toLowerCase() : ""}
-									</span>
-									<InstalmentRows rows={postRows} onPay={() => void pay()} paying={paying} />
-								</div>
+								<>
+									<div className="sharp-card sharp-card--soft">
+										<span className="psec__hint" style={{ margin: 0 }}>
+											Your schedule · {postRows.length} × {ghs(postRows[0]?.l.amountCents ?? 0)} · {application.postArrivalFrequency ? POST_ARRIVAL_FREQUENCY_LABELS[application.postArrivalFrequency as PostArrivalFrequency]?.toLowerCase() : ""}
+										</span>
+										<InstalmentRows rows={postRows} onPay={() => void pay()} paying={paying} />
+									</div>
+									<AutoPayCard autoPay={autoPay} onToggle={toggleAutoPay} busy={togglingAutoPay} />
+								</>
 							) : (
 								<>
 									<p className="pfoot__note">
@@ -394,10 +431,13 @@ function FeesChapterInner() {
 										</div>
 									)}
 									{chosen && !dirty && postRows.length > 0 && (
-										<div className="sharp-card sharp-card--soft mt-3">
-											<span className="psec__hint" style={{ margin: 0 }}>Your schedule as it stands</span>
-											<InstalmentRows rows={postRows} onPay={() => void pay()} paying={paying} />
-										</div>
+										<>
+											<div className="sharp-card sharp-card--soft mt-3">
+												<span className="psec__hint" style={{ margin: 0 }}>Your schedule as it stands</span>
+												<InstalmentRows rows={postRows} onPay={() => void pay()} paying={paying} />
+											</div>
+											<AutoPayCard autoPay={autoPay} onToggle={toggleAutoPay} busy={togglingAutoPay} />
+										</>
 									)}
 								</>
 							)}
@@ -523,6 +563,51 @@ function InstalmentRows({
 					</span>
 				</div>
 			))}
+		</div>
+	);
+}
+
+/**
+ * Auto-pay opt-in. Shown once a post-arrival schedule exists: a saved card
+ * can be charged on each due date. Mobile Money can't auto-debit (every MoMo
+ * payment needs USSD approval), so with no reusable card on file the card
+ * explains that reminders continue instead.
+ */
+function AutoPayCard({
+	autoPay,
+	onToggle,
+	busy,
+}: {
+	autoPay: AutoPayStatus | null;
+	onToggle: () => void;
+	busy: boolean;
+}) {
+	if (!autoPay) return null;
+	const card = autoPay.card
+		? [autoPay.card.brand, autoPay.card.last4 ? `····${autoPay.card.last4}` : ""].filter(Boolean).join(" ")
+		: null;
+	return (
+		<div className="sharp-card mt-3">
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "1rem", flexWrap: "wrap" }}>
+				<span className="psec__title" style={{ fontSize: "0.95rem" }}>Auto-pay</span>
+				<span className="psec__hint" style={{ margin: 0 }}>
+					{autoPay.active && card ? `on · ${card}` : card ? `off · ${card}` : "no card on file"}
+				</span>
+			</div>
+			<p className="muted mt-2" style={{ fontSize: "0.85rem" }}>
+				{autoPay.available
+					? autoPay.active
+						? "We charge this card on each due date and email you the result. It stops itself after the last instalment — turn it off any time."
+						: "Charge this card automatically on each due date — it stops after the last instalment and you can turn it off any time."
+					: "Pay once by card and it can be charged automatically on each due date. Mobile Money can't auto-debit — each MoMo payment needs your approval, so we send reminders instead."}
+			</p>
+			{autoPay.available ? (
+				<div className="pfoot" style={{ marginTop: "0.6rem" }}>
+					<Button type="button" variant={autoPay.active ? "ghost" : "secondary"} onClick={onToggle} disabled={busy}>
+						{busy ? "Saving…" : autoPay.active ? "Turn auto-pay off" : "Turn auto-pay on"}
+					</Button>
+				</div>
+			) : null}
 		</div>
 	);
 }

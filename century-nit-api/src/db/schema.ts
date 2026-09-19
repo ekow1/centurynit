@@ -1466,6 +1466,69 @@ export const paymentTransactions = pgTable(
 	}),
 );
 
+/**
+ * A reusable Paystack card authorization captured from a successful payment.
+ *
+ * Paystack returns `authorization.authorization_code` with `reusable: true`
+ * on card charges — never on Mobile Money. The code is stored here so the
+ * auto-pay sweep can debit the card when an instalment line falls due.
+ * `active` is the client's consent: the code is captured automatically but
+ * nothing is ever charged until the client turns auto-pay on, and turning it
+ * off (or the last instalment settling) ends the debits for good.
+ */
+export const paymentAuthorizations = pgTable(
+	"payment_authorizations",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** The Paystack customer email the authorization belongs to. */
+		email: text("email").notNull(),
+		authorizationCode: text("authorization_code").notNull(),
+		cardBrand: varchar("card_brand", { length: 32 }),
+		cardLast4: varchar("card_last4", { length: 4 }),
+		bank: text("bank"),
+		expMonth: varchar("exp_month", { length: 2 }),
+		expYear: varchar("exp_year", { length: 4 }),
+		/** Client consent — auto-debits only run while true. */
+		active: boolean("active").notNull().default(false),
+		consentedAt: timestamp("consented_at", { withTimezone: true }),
+		lastChargeAt: timestamp("last_charge_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byUser: index("payment_authorizations_user_idx").on(t.userId, t.active),
+		uniqAuth: uniqueIndex("payment_authorizations_code_uniq").on(t.userId, t.authorizationCode),
+	}),
+);
+
+/**
+ * One auto-debit attempt against one invoice line. The sweep keys idempotency
+ * and the retry cadence on this table: a `success` row means the line's debit
+ * landed, a `failed` row starts the 3-day backoff before the next try.
+ */
+export const autopayAttempts = pgTable(
+	"autopay_attempts",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		invoiceLineId: uuid("invoice_line_id")
+			.notNull()
+			.references(() => invoiceLines.id, { onDelete: "cascade" }),
+		authorizationId: uuid("authorization_id").references(() => paymentAuthorizations.id, { onDelete: "set null" }),
+		invoiceId: uuid("invoice_id").notNull(),
+		amountCents: integer("amount_cents").notNull(),
+		reference: varchar("reference", { length: 128 }),
+		status: varchar("status", { length: 16 }).notNull(),
+		failureReason: text("failure_reason"),
+		attemptedAt: timestamp("attempted_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byLine: index("autopay_attempts_line_idx").on(t.invoiceLineId, t.attemptedAt),
+	}),
+);
+
 /* ══════════════════════════════════════════════════════════════════════════
  * Internal Chat — staff-to-staff messaging
  * ══════════════════════════════════════════════════════════════════════════ */

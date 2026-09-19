@@ -1231,6 +1231,13 @@ export const applicantsApi = {
 	},
 };
 
+export type AutoPayStatus = {
+	available: boolean;
+	active: boolean;
+	card: { brand: string | null; last4: string | null; bank: string | null } | null;
+	lastFailure: { label: string; amountCents: number; reason: string | null; retryAt: string } | null;
+};
+
 export const meApi = {
 	identity(): Promise<{ isStaff: boolean; isApplicant: boolean; isBanned: boolean }> {
 		return request(`${API_PREFIX}/me/identity`);
@@ -1335,6 +1342,24 @@ export const meApi = {
 		});
 	},
 
+
+	/**
+	 * Auto-pay state — whether a reusable card is on file, whether the client
+	 * opted in, and the latest failed debit (drives the overdue banner).
+	 */
+	autoPay(): Promise<AutoPayStatus> {
+		return request(`${API_PREFIX}/me/autopay`);
+	},
+
+	/** Opt the saved card into auto-debit on instalment due dates. */
+	enableAutoPay(): Promise<AutoPayStatus> {
+		return request(`${API_PREFIX}/me/autopay`, { method: "POST" });
+	},
+
+	/** Opt out — the card stays on file but no more automatic debits fire. */
+	disableAutoPay(): Promise<AutoPayStatus> {
+		return request(`${API_PREFIX}/me/autopay`, { method: "DELETE" });
+	},
 
 	/**
 	 * Complete the journey from Payment Execution. The gate is per-plan. Full

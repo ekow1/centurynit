@@ -11,6 +11,7 @@ import { getInvoice, recordPayment, paidCentsOf } from "./invoice.js";
 import { getSetting } from "./settings.js";
 import { HttpError } from "../middleware/error.js";
 import { getExchangeRate, postPaymentSettlement } from "./paymentSettlement.js";
+import type { PaystackAuthorization } from "./autopay.js";
 
 export async function initializePayment(
 	user: { id: string; email: string; name?: string | null },
@@ -205,6 +206,8 @@ export async function verifyAndSettlePayment(
 				status?: string;
 				amount?: number;
 				currency?: string;
+				customer?: { email?: string };
+				authorization?: PaystackAuthorization;
 			};
 		};
 		if (!verifyRes.ok || !verifyData.status || verifyData.data?.status !== "success") {
@@ -214,6 +217,11 @@ export async function verifyAndSettlePayment(
 				`Paystack payment status: ${verifyData.data?.status || "unverified"}.`,
 			);
 		}
+
+		// A reusable card authorization lets the auto-pay sweep charge future
+		// instalments — stored now, charged only once the client opts in.
+		const { captureAuthorization } = await import("./autopay.js");
+		await captureAuthorization(tx.clientUserId, verifyData.data.customer?.email, verifyData.data.authorization);
 	}
 
 	// Idempotent recovery: a prior attempt may have credited the invoice and

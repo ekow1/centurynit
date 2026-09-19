@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Custom Paystack checkout — MoMo first, card inline</title>
+<style>
+  :root{
+    --background:#ffffff; --foreground:#0a0a0a;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#0a0a0a; --border-light:#d4d4d8;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --text-xs:.72rem; --text-sm:.875rem;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:#e8e8e8;color:var(--foreground);font-size:var(--text-sm)}
+  .page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .page-title{font-size:1.7rem;font-weight:800;letter-spacing:-.02em;margin-top:.3rem}
+  .lead{color:var(--muted-foreground);line-height:1.6;max-width:48rem}
+  .muted{color:var(--muted-foreground)}
+  .mono{font-family:var(--font-mono)}
+
+  .sec{margin-top:2.75rem}
+  .sec h2{font-size:1.05rem;font-weight:800}
+  .sec .sub{font-family:var(--font-mono);font-size:.68rem;color:var(--muted-foreground);margin-top:.25rem;line-height:1.6}
+
+  .row3{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;margin-top:1rem;align-items:start}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1rem;align-items:start}
+  .variant-label{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);margin-bottom:.5rem}
+  .variant-label b{color:var(--foreground);font-size:.75rem}
+  .frame{border:1.5px solid var(--border);background:var(--background);padding:1.25rem 1.35rem}
+
+  /* ── portal chrome ── */
+  .portal{border:1.5px solid var(--border);background:var(--background)}
+  .portal__bar{display:flex;justify-content:space-between;align-items:center;padding:.6rem 1rem;border-bottom:1.5px solid var(--border);font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em}
+  .portal__body{padding:1.25rem 1.35rem}
+
+  /* ── the checkout sheet ── */
+  .sheet{border:1.5px solid var(--border)}
+  .sheet__head{padding:.9rem 1.1rem;border-bottom:1.5px solid var(--border);display:flex;justify-content:space-between;align-items:baseline;gap:1rem}
+  .sheet__head h3{font-size:.95rem;font-weight:800}
+  .sheet__inv{font-family:var(--font-mono);font-size:.62rem;color:var(--muted-foreground)}
+  .sheet__body{padding:1rem 1.1rem}
+
+  .sum{display:flex;justify-content:space-between;gap:1rem;padding:.4rem 0;font-size:var(--text-sm)}
+  .sum small{display:block;color:var(--muted-foreground);font-size:var(--text-xs)}
+  .sum__amt{font-family:var(--font-mono);font-weight:600;white-space:nowrap}
+  .sum--total{border-top:1.5px solid var(--border);margin-top:.4rem;padding-top:.65rem;font-weight:800}
+
+  .chans{display:flex;gap:.5rem;margin:1rem 0 .75rem}
+  .chan{flex:1;border:1px solid var(--border-light);background:var(--background);padding:.65rem .7rem;
+    font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--muted-foreground);cursor:pointer;text-align:left}
+  .chan b{display:block;color:inherit;font-size:.72rem;margin-bottom:.15rem}
+  .chan--on{border-color:var(--foreground);color:var(--foreground);box-shadow:inset 0 0 0 1px var(--foreground)}
+
+  .field{margin-top:.6rem}
+  .field label{display:block;font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);margin-bottom:.3rem}
+  .field input,.field select{width:100%;border:1.5px solid var(--border);background:var(--background);
+    padding:.55rem .65rem;font-family:var(--font-mono);font-size:.85rem;color:var(--foreground)}
+  .nets{display:flex;gap:.5rem;flex-wrap:wrap}
+  .net{border:1px solid var(--border-light);padding:.45rem .8rem;font-family:var(--font-mono);font-size:.62rem;
+    text-transform:uppercase;letter-spacing:.08em;cursor:pointer;background:var(--background)}
+  .net--on{border-color:var(--foreground);background:var(--foreground);color:var(--background)}
+
+  .btn{display:inline-block;background:var(--foreground);color:var(--background);border:1.5px solid var(--foreground);
+    padding:.55rem 1rem;font-family:var(--font-mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;
+    font-weight:700;cursor:pointer;text-decoration:none;width:100%;text-align:center;margin-top:1rem}
+  .btn--ghost{background:var(--background);color:var(--foreground);width:auto;margin-top:.5rem}
+  .secure{margin-top:.7rem;font-family:var(--font-mono);font-size:.58rem;color:var(--muted-foreground);
+    text-transform:uppercase;letter-spacing:.08em;text-align:center}
+
+  /* pending state */
+  .pend{border:1.5px dashed var(--border);padding:1rem 1.1rem;text-align:center}
+  .pend__dot{width:.65rem;height:.65rem;border:1.5px solid var(--foreground);border-radius:50%;margin:0 auto .6rem;animation:blink 1.2s infinite}
+  @keyframes blink{50%{opacity:.2}}
+  .pend__t{font-weight:800;font-size:.9rem}
+  .pend__s{color:var(--muted-foreground);font-size:var(--text-xs);margin-top:.35rem;line-height:1.6}
+  .pend__ref{font-family:var(--font-mono);font-size:.62rem;margin-top:.6rem;color:var(--muted-foreground)}
+
+  .steps{list-style:none;padding:0;margin:.9rem 0 0;text-align:left}
+  .steps li{display:flex;gap:.55rem;padding:.35rem 0;font-size:var(--text-xs);align-items:baseline}
+  .steps .n{font-family:var(--font-mono);font-weight:700;min-width:1.1rem}
+  .steps .done{color:var(--foreground)}
+  .steps .done .n::after{content:" ✓"}
+  .steps .cur{font-weight:700}
+  .steps .todo{color:var(--muted-foreground)}
+
+  /* success */
+  .seal{display:inline-block;border:2px solid var(--foreground);padding:.35rem 1rem;font-family:var(--font-mono);
+    font-weight:800;font-size:.8rem;letter-spacing:.18em;text-transform:uppercase;transform:rotate(-3deg)}
+  .okbox{text-align:center;padding:.5rem 0 .25rem}
+  .doc-link{display:inline-flex;align-items:center;gap:.3rem;border:1px solid var(--border);
+    padding:.35rem .6rem;font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;
+    letter-spacing:.08em;color:var(--foreground);text-decoration:none;background:none;cursor:pointer}
+  .doc-link + .doc-link{margin-left:.4rem}
+
+  /* card-inline state */
+  .inline-shell{position:relative}
+  .inline-modal{position:absolute;inset:0;background:rgba(10,10,10,.42);display:flex;align-items:center;justify-content:center;padding:1rem}
+  .inline-card{background:var(--background);border:1.5px solid var(--border);width:88%;max-width:20rem;padding:1rem 1.1rem}
+  .inline-card .head{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;border-bottom:1px solid var(--border-light);padding-bottom:.5rem;margin-bottom:.7rem}
+  .fake-field{border:1px solid var(--border-light);padding:.45rem .55rem;font-family:var(--font-mono);font-size:.7rem;color:var(--muted-foreground);margin-top:.4rem}
+
+  /* autopay footnote */
+  .save-card{display:flex;gap:.6rem;align-items:flex-start;border:1px dashed var(--border);padding:.6rem .7rem;margin-top:.9rem}
+  .save-card .bx{width:.8rem;height:.8rem;border:1.5px solid var(--foreground);flex:none;margin-top:.15rem}
+  .save-card p{font-size:var(--text-xs);line-height:1.55}
+  .save-card p small{display:block;color:var(--muted-foreground)}
+
+  /* annotation */
+  .note{border-left:3px solid var(--foreground);padding:.6rem .9rem;background:var(--background);font-size:var(--text-xs);line-height:1.65;color:var(--muted-foreground)}
+  .note b{color:var(--foreground)}
+  .flow{font-family:var(--font-mono);font-size:.66rem;line-height:2;border:1px solid var(--border-light);padding:.8rem 1rem;background:var(--background)}
+  .flow b{font-weight:700}
+  .flow .dim{color:var(--muted-foreground)}
+</style>
+</head>
+<body>
+<div class="page">
+  <span class="eyebrow">Century NIT · design proposal · Option B</span>
+  <h1 class="page-title">Checkout inside the portal</h1>
+  <p class="lead">A payment sheet rendered by the portal itself — no redirect to checkout.paystack.com.
+  Mobile Money is a phone prompt, so Paystack's hosted page adds nothing; the client stays on
+  centurynit.com the whole way. Cards go through Paystack's inline modal (their fields, our page),
+  and a reusable card can opt into auto-debit for later instalments.</p>
+
+  <!-- ══ 1 · the three states ══ -->
+  <section class="sec">
+    <h2>The sheet, in its three states</h2>
+    <p class="sub">Same component — form → waiting for the phone → settled. One invoice, one tap, never leaves the page.</p>
+    <div class="row3">
+
+      <div>
+        <p class="variant-label"><b>1 · Pay</b> — MoMo selected by default</p>
+        <div class="portal">
+          <div class="portal__bar"><span>Chapter II · Enrolment</span><span>Pay</span></div>
+          <div class="portal__body">
+            <div class="sheet">
+              <div class="sheet__head"><h3>Pay the deposit</h3><span class="sheet__inv">CN-2026-0142</span></div>
+              <div class="sheet__body">
+                <div class="sum"><span>Service fee — deposit<small>opens the case · 10 %</small></span><span class="sum__amt">GH₵ 480.00</span></div>
+                <div class="sum sum--total"><span>Due now</span><span class="sum__amt">GH₵ 480.00</span></div>
+                <div class="chans">
+                  <button class="chan chan--on"><b>Mobile money</b>MTN · Telecel · AT</button>
+                  <button class="chan"><b>Card</b>Visa · Mastercard</button>
+                </div>
+                <div class="field"><label>Network</label>
+                  <div class="nets"><span class="net net--on">MTN</span><span class="net">Telecel</span><span class="net">AirtelTigo</span></div>
+                </div>
+                <div class="field"><label>Wallet number</label><input value="024 412 8890" readonly></div>
+                <button class="btn">Pay GH₵ 480.00</button>
+                <p class="secure">You approve on your phone · nothing is charged until you enter your MoMo PIN</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <p class="variant-label"><b>2 · Sent</b> — waiting for the phone</p>
+        <div class="portal">
+          <div class="portal__bar"><span>Chapter II · Enrolment</span><span>Pay</span></div>
+          <div class="portal__body">
+            <div class="sheet">
+              <div class="sheet__head"><h3>Approve on your phone</h3><span class="sheet__inv">CN-2026-0142</span></div>
+              <div class="sheet__body">
+                <div class="pend">
+                  <div class="pend__dot"></div>
+                  <p class="pend__t">GH₵ 480.00 → 024 412 8890</p>
+                  <p class="pend__s">An approval prompt is on its way to the MTN wallet.
+                  Enter your MoMo PIN to confirm — this page updates itself.</p>
+                  <p class="pend__ref">ref PS-9F2C4A77B1E0 · expires in 10:00</p>
+                </div>
+                <ul class="steps">
+                  <li class="done"><span class="n">1</span> Charge sent to MTN</li>
+                  <li class="cur"><span class="n">2</span> Waiting for the PIN on your phone…</li>
+                  <li class="todo"><span class="n">3</span> Settled → receipt issued</li>
+                </ul>
+                <button class="btn btn--ghost">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <p class="variant-label"><b>3 · Paid</b> — receipt + auto-pay offer</p>
+        <div class="portal">
+          <div class="portal__bar"><span>Chapter II · Enrolment</span><span>Pay</span></div>
+          <div class="portal__body">
+            <div class="sheet">
+              <div class="sheet__head"><h3>Deposit paid</h3><span class="sheet__inv">CN-2026-0142</span></div>
+              <div class="sheet__body">
+                <div class="okbox">
+                  <span class="seal">Paid</span>
+                  <p style="font-family:var(--font-mono);font-weight:700;font-size:1.05rem;margin-top:.7rem">GH₵ 480.00</p>
+                  <p class="pend__s">MTN MoMo · 024 *** 890 · today 14:02<br>ref PS-9F2C4A77B1E0</p>
+                </div>
+                <div style="text-align:center;margin-top:.8rem">
+                  <a class="doc-link" href="#">↓ invoice</a><a class="doc-link" href="#">↓ receipt</a>
+                </div>
+                <div class="save-card">
+                  <span class="bx"></span>
+                  <p><b>Auto-pay instalments?</b>
+                  <small>Card only — MoMo asks for your PIN every time. Pay once by card and we debit it when each instalment falls due. Off anytime in Money → Settings.</small></p>
+                </div>
+                <button class="btn btn--ghost" style="width:100%;text-align:center">Back to my journey</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ══ 2 · the card path ══ -->
+  <section class="sec">
+    <h2>The card path — inline, not a redirect</h2>
+    <p class="sub">Choosing "Card" keeps the client on the page; Paystack's modal opens over the portal. Card details never touch our servers (PCI SAQ A stays intact).</p>
+    <div class="row2">
+      <div>
+        <p class="variant-label"><b>Card selected</b> — Paystack inline modal over the sheet</p>
+        <div class="portal">
+          <div class="portal__bar"><span>Chapter II · Enrolment</span><span>Pay</span></div>
+          <div class="portal__body inline-shell" style="position:relative;min-height:19rem">
+            <div class="sheet" style="opacity:.35">
+              <div class="sheet__head"><h3>Pay the deposit</h3><span class="sheet__inv">CN-2026-0142</span></div>
+              <div class="sheet__body">
+                <div class="sum sum--total"><span>Due now</span><span class="sum__amt">GH₵ 480.00</span></div>
+                <div class="chans"><button class="chan"><b>Mobile money</b></button><button class="chan chan--on"><b>Card</b></button></div>
+              </div>
+            </div>
+            <div class="inline-modal">
+              <div class="inline-card">
+                <div class="head"><span>Paystack · secure</span><span>✕</span></div>
+                <div class="fake-field">Card number ···· ···· ···· ····</div>
+                <div style="display:flex;gap:.5rem"><div class="fake-field" style="flex:1">MM / YY</div><div class="fake-field" style="flex:1">CVV</div></div>
+                <button class="btn" style="margin-top:.8rem">Pay GH₵ 480.00</button>
+                <p class="secure">Paystack hosts this form — PCI stays with them</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="variant-label"><b>Why the split</b></p>
+        <div class="note">
+          <p><b>MoMo is fully ours.</b> <span class="mono">POST /charge</span> takes <span class="mono">mobile_money:{phone,provider}</span> — no card data, no PCI scope, so the whole screen can be Century NIT's. The "approve on your phone" state is a better UX than Paystack's generic hosted page, which shows the same waiting state anyway after a redirect.</p>
+          <p style="margin-top:.5rem"><b>Cards stay inside Paystack's modal.</b> A hand-rolled card form would push PAN/CVV through our API — PCI DSS SAQ D, a real compliance program, for pixels. The inline modal gives the same "never leaves the portal" feel at SAQ A cost.</p>
+          <p style="margin-top:.5rem"><b>Cards unlock auto-pay.</b> A card charge returns a reusable authorization — that's the <span class="mono">payment_authorizations</span> table — so the pre-departure milestone and post-arrival instalments can debit silently with consent. MoMo can't be tokenized; every MoMo payment is a manual prompt.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 3 · wiring ══ -->
+  <section class="sec">
+    <h2>Under the hood — reuses today's settlement path</h2>
+    <p class="sub">No new settlement logic: verify + webhook + pdfEngine receipts all stay exactly as they are.</p>
+    <div class="flow">
+      <b>MoMo</b> · <span class="dim">portal →</span> POST /me/invoices/:id/momo-charge <span class="dim">{phone, provider}</span><br>
+      <span class="dim">→ api →</span> Paystack POST /charge <span class="dim">(server-side, secret key)</span><br>
+      <span class="dim">→ client polls →</span> GET /me/invoices/:id/momo-status?ref=PS-… <span class="dim">(pending → success/failed)</span><br>
+      <span class="dim">→ existing →</span> settleInvoicePayment <span class="dim">→</span> receipt PDF <span class="dim">→</span> notification<br>
+      <br>
+      <b>Card</b> · <span class="dim">portal →</span> PaystackPop.setup <span class="dim">(public key from /me/paystack-public-key)</span><br>
+      <span class="dim">→ callback →</span> existing POST /me/invoices/:id/paystack/verify <span class="dim">{reference}</span><br>
+      <span class="dim">→ if authorization.reusable →</span> captureAuthorization <span class="dim">(the table you just added)</span><br>
+      <br>
+      <b>Safety</b> · the webhook + verify stay the source of truth — the UI never trusts its own callback
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>What changes for the client</h2>
+    <div class="row2">
+      <div class="note"><b>Today:</b> click Pay → full redirect to checkout.paystack.com → pay → redirect back → portal re-syncs. Two page loads, an unfamiliar domain mid-journey, and a broken session if the client closes the tab.</div>
+      <div class="note"><b>Proposed:</b> click Pay → sheet opens inline → MoMo prompt on their phone → the same page flips to Paid. Card users see a modal, never a redirect. Receipt + invoice links are right there on the success state.</div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

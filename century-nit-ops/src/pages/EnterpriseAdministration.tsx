@@ -170,7 +170,7 @@ function SystemOverview() {
 		? [
 				["Portal sign-in", [auth.portal.email_password && "password", auth.portal.social_google && "Google", auth.portal.email_otp && "email OTP"].filter(Boolean).join(" + ") || "disabled"],
 				["Portal MFA", auth.portal.mfa_required ? "required" : "optional"],
-				["Ops sign-in", [auth.ops.email_password && "password", auth.ops.google_sso && "Google SSO"].filter(Boolean).join(" + ") || "disabled"],
+				["Ops sign-in", "password only"],
 				["Ops MFA", auth.ops.mfa_required ? "enforced" : "optional"],
 				["Staff", staffCount === null ? "—" : `${activeStaff ?? "—"} active of ${staffCount} · ${rolesCount ?? "—"} roles`],
 			]
@@ -2219,7 +2219,7 @@ function AuthSettings() {
 									<tr>
 										<td>Ops console</td>
 										<td style={{ textAlign: "center" }}><PolicyBox on /></td>
-										<td style={{ textAlign: "center" }}><PolicyBox on={s.ops.google_sso} /></td>
+										<td style={{ textAlign: "center" }}><PolicyBox on={false} /></td>
 										<td style={{ textAlign: "center" }}><PolicyBox on={false} /></td>
 										<td style={{ textAlign: "center" }}><PolicyBox on /></td>
 									</tr>
@@ -2368,18 +2368,6 @@ function AuthSettings() {
 						</div>
 						<input type="checkbox" checked disabled style={{ opacity: 0.5 }} />
 					</div>
-					<label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.75rem 0", borderBottom: "1px solid var(--border-light)" }}>
-						<div>
-							<div style={{ fontWeight: 500 }}>Google SSO</div>
-							<div style={{ fontSize: "var(--text-xs)", color: "var(--muted)" }}>Allow staff to sign in via Google OAuth. Requires credentials in Platform Settings.</div>
-						</div>
-						<input
-							type="checkbox"
-							checked={s.ops.google_sso}
-							onChange={(e) => updateSettings({ ops: { google_sso: e.target.checked } })}
-							disabled={saving}
-						/>
-					</label>
 					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.75rem 0", borderBottom: "1px solid var(--border-light)" }}>
 						<div>
 							<div style={{ fontWeight: 500 }}>MFA Required</div>

@@ -57,18 +57,9 @@ function configuredHosts(callbackUrl: string | undefined): string[] {
 	return [...hosts];
 }
 
-/**
- * Whether the live instance carries usable Google credentials. Read by the
- * public `/ops-methods` route so the console only offers Google sign-in when
- * the provider would actually work — a configured-off toggle and a missing
- * credential look identical to the user otherwise.
- */
-let googleProviderConfigured = false;
-
 function createAuth(config: GoogleSocialConfig) {
 	const socialHost = callbackHost(config.callbackUrl);
 	const googleConfigured = Boolean(config.clientId && config.clientSecret && socialHost);
-	googleProviderConfigured = googleConfigured;
 
 	return betterAuth({
 	secret: env.BETTER_AUTH_SECRET,
@@ -179,11 +170,13 @@ function createAuth(config: GoogleSocialConfig) {
 		session: {
 			create: {
 				/*
-				 * Google sign-in is a per-surface toggle: ops.google_sso for staff
-				 * accounts, portal.social_google for everyone else. Enforced at
-				 * session creation on the OAuth callback path so it holds for new
-				 * and previously linked accounts alike — an account.create hook
-				 * would only ever see the first link.
+				 * Google sign-in on the OAuth callback path: staff accounts are
+				 * refused outright — the console is credentials-only, and the
+				 * ops.google_sso setting is locked false in the schema. Client
+				 * accounts answer to portal.social_google. Enforced at session
+				 * creation so it holds for new and previously linked accounts
+				 * alike — an account.create hook would only ever see the first
+				 * link.
 				 */
 				before: async (session, ctx) => {
 					const path = (ctx as { path?: string } | null | undefined)?.path ?? "";
@@ -203,16 +196,17 @@ function createAuth(config: GoogleSocialConfig) {
 								.where(eq(schema.opsUsers.email, email))
 								.limit(1)
 						: [undefined];
-					const settings = await getAuthSettings();
-					const disabled = staff?.active
-						? !settings["ops.google_sso"]
-						: !settings["portal.social_google"];
-					if (disabled) {
+					if (staff?.active) {
 						throw APIError.from("FORBIDDEN", {
 							code: "METHOD_DISABLED",
-							message: staff?.active
-								? "Google sign-in is turned off for staff accounts. Sign in with your staff credentials."
-								: "Google sign-in is turned off.",
+							message: "Staff accounts sign in with their Century NIT credentials, not Google.",
+						});
+					}
+					const settings = await getAuthSettings();
+					if (!settings["portal.social_google"]) {
+						throw APIError.from("FORBIDDEN", {
+							code: "METHOD_DISABLED",
+							message: "Google sign-in is turned off.",
 						});
 					}
 				},
@@ -621,23 +615,6 @@ auth.post("/check-staff-email", async (c) => {
 		.where(eq(schema.opsUsers.email, email))
 		.limit(1);
 	return c.json({ isStaff: Boolean(staff && staff.active) });
-});
-
-/**
- * Which sign-in methods the console should offer — public, like the portal's
- * `/auth-settings/portal`, because the login page needs the answer before any
- * session exists. Reports only what the page renders: password (always on for
- * staff by policy) and Google (the toggle AND real credentials — a toggle
- * without keys must not produce a button that fails at the redirect).
- */
-auth.get("/ops-methods", async (c) => {
-	const settings = await getAuthSettings();
-	await getAuthInstance(); // refreshes googleProviderConfigured from live settings
-	return c.json({
-		email_password: Boolean(settings["ops.email_password"]),
-		google_sso: Boolean(settings["ops.google_sso"]) && googleProviderConfigured,
-		mfa_required: Boolean(settings["ops.mfa_required"]),
-	});
 });
 
 /**

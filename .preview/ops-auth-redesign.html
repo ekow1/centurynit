@@ -96,8 +96,6 @@
 	}
 	.btn--primary { background: var(--ink); color: #fff; }
 	.btn--ghost { background: #fff; color: var(--ink); }
-	.btn--sso { display: flex; gap: .6rem; align-items: center; justify-content: center; }
-	.btn--sso .g { width: 16px; height: 16px; border: 1.5px solid var(--ink); border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: .55rem; font-weight: 700; }
 	.divider { display: flex; align-items: center; gap: .8rem; font-family: var(--mono); font-size: .58rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 	.divider::before, .divider::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
 	.err { font-size: .78rem; color: #b00020; }
@@ -160,14 +158,13 @@
 	<h1>Ops auth — proposed</h1>
 	<p class="mock-note">
 		Sign-in, invite acceptance, password reset and MFA, rebuilt on one split-screen shell and wired to the
-		auth-settings store. The toggles below are the same ones admins flip under Settings → Authentication —
-		try switching Google SSO or turning password sign-in off: the screens respond, which today they don't.
+		auth-settings store. The console is credentials-only — Google SSO is not offered to staff. The toggles
+		below are the same ones admins flip under Settings → Authentication — try the MFA methods.
 	</p>
 
 	<div class="sim">
 		<span class="lab">Settings → Authentication (ops)</span>
 		<label><input type="checkbox" id="sim-pw" checked> email_password</label>
-		<label><input type="checkbox" id="sim-sso"> google_sso</label>
 		<label><input type="checkbox" id="sim-mfa" checked> mfa_required</label>
 		<label><input type="checkbox" id="sim-totp" checked> method: totp</label>
 		<label><input type="checkbox" id="sim-otp" checked> method: email_otp</label>
@@ -199,9 +196,6 @@
 					<p class="auth__sub">Sign in to your operations account</p>
 
 					<div class="auth__form">
-						<button class="btn btn--ghost btn--sso" id="sso-btn" style="display:none"><span class="g">G</span> Continue with Google</button>
-						<div class="divider" id="sso-div" style="display:none">or</div>
-
 						<div id="pw-form">
 							<div class="field">
 								<label>Email</label>
@@ -222,11 +216,11 @@
 						</div>
 
 						<div id="pw-off" style="display:none">
-							<div class="note-strip">Password sign-in is disabled for the console. Use Google SSO with your staff account.</div>
+							<div class="note-strip">Password sign-in is disabled for the console. Contact your administrator.</div>
 						</div>
 
 						<div class="note-strip" id="signin-note">
-							<b>Fixed:</b> the live page reads <b>ops.email_password</b> and <b>ops.google_sso</b> on mount and renders what they allow. The debounced staff-email oracle is gone from this form — a wrong password already says no — and it stays only on forgot-password, where it prevents a dead send.
+							<b>Fixed:</b> credentials-only for staff — no Google SSO on the console, and the server refuses staff OAuth callbacks outright. The debounced staff-email oracle is gone from this form — a wrong password already says no — and it stays only on forgot-password, where it prevents a dead send.
 						</div>
 					</div>
 				</div>
@@ -408,7 +402,7 @@
 	<div class="legend">
 		<h2>What changes vs today</h2>
 		<ul>
-			<li><b>Settings honoured.</b> The login page reads /auth-settings: Google button appears when ops.google_sso is on (today it never exists), password form disappears when ops.email_password is off (today it always shows, and sign-in still works — the toggle is decorative end to end).</li>
+			<li><b>Credentials-only console.</b> No Google SSO on ops — the button is gone, the admin toggle is gone, and the API refuses staff OAuth callbacks outright. ops.google_sso is locked false in the schema, like ops.email_password is locked true.</li>
 			<li><b>Staff-email check moved.</b> The debounced "is this email staff" call is an enumeration oracle that also scolds typos pre-submit. It stays on forgot-password (prevents a dead send), leaves sign-in.</li>
 			<li><b>MFA challenge resumes.</b> A pending two-factor cookie on load jumps straight to the code screen. Today refresh resets you to the password form mid-challenge.</li>
 			<li><b>Invite acceptance branded + prefilled.</b> Same split shell as sign-in; name prefilled from the invitation (today the controlled input ignores defaultValue and renders empty); "Already have access? Sign in" escape; correct verb for existing-login accounts ("Join" not "Create account").</li>
@@ -431,11 +425,8 @@
 
 	// settings simulator
 	function sim() {
-		const pw = $("sim-pw").checked, sso = $("sim-sso").checked;
-		$("sso-btn").style.display = sso ? "flex" : "none";
-		$("sso-div").style.display = sso && pw ? "flex" : "none";
+		const pw = $("sim-pw").checked;
 		$("pw-form").style.display = pw ? "block" : "none";
-		$("pw-off").style.display = !pw && sso ? "block" : "none";
 		$("pw-off").style.display = !pw ? "block" : "none";
 		// mfa methods
 		$("m-totp").classList.toggle("method--off", !$("sim-totp").checked);
@@ -446,7 +437,7 @@
 			: "Two-factor is optional on this console. Turn it on now, or skip and do it later from Settings.";
 		$("mfa-req-copy").textContent = $("sim-mfa").checked ? "Required for staff" : "Recommended for staff";
 	}
-	["sim-pw","sim-sso","sim-mfa","sim-totp","sim-otp"].forEach((id) => ($(id).onchange = sim));
+	["sim-pw","sim-mfa","sim-totp","sim-otp"].forEach((id) => ($(id).onchange = sim));
 	sim();
 
 	function togglePw(id, btn) {

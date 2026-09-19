@@ -6284,56 +6284,6 @@ input[type="time"].input {
 	color: var(--foreground);
 }
 
-/* Divider between password form and SSO */
-.ops-login__divider {
-	display: flex;
-	align-items: center;
-	gap: 0.75rem;
-	font-family: var(--font-mono);
-	font-size: var(--text-xs);
-	text-transform: uppercase;
-	letter-spacing: 0.12em;
-	color: var(--muted-foreground);
-}
-
-.ops-login__divider::before,
-.ops-login__divider::after {
-	content: "";
-	flex: 1;
-	border-top: 1px solid var(--border-light);
-}
-
-/* Google SSO button — same ink treatment as the primary submit */
-.ops-login__sso {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 0.6rem;
-	width: 100%;
-	padding: 0.85rem;
-	font-size: var(--text-sm);
-	font-weight: 500;
-	border: 1px solid var(--foreground);
-	background: var(--background);
-	color: var(--foreground);
-	cursor: pointer;
-	transition: background var(--t-instant), color var(--t-instant);
-}
-
-.ops-login__sso:hover:not(:disabled) {
-	background: var(--foreground);
-	color: var(--background);
-}
-
-.ops-login__sso:disabled {
-	opacity: 0.55;
-	cursor: default;
-}
-
-.ops-login__sso svg {
-	flex-shrink: 0;
-}
-
 /* Remember-me row under the password field */
 .ops-login__meta-row {
 	display: flex;

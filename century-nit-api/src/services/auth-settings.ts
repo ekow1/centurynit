@@ -98,11 +98,6 @@ export async function getPortalMfaMethods(): Promise<string[]> {
 	return settings["portal.mfa_methods"] as string[];
 }
 
-export async function isOpsGoogleSsoEnabled(): Promise<boolean> {
-	const settings = await getAuthSettings();
-	return settings["ops.google_sso"] as boolean;
-}
-
 export async function getOpsMfaMethods(): Promise<string[]> {
 	const settings = await getAuthSettings();
 	return settings["ops.mfa_methods"] as string[];

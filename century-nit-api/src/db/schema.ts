@@ -2062,7 +2062,7 @@ export const notificationLog = pgTable(
  *   portal.mfa_required     — boolean, require MFA for portal after password/social login
  *   portal.mfa_methods      — string[], available MFA methods for portal users
  *   ops.email_password      — boolean, always true (staff always use email+password)
- *   ops.google_sso          — boolean, enable Google SSO for ops console
+ *   ops.google_sso          — always false (staff sign in with credentials only)
  *   ops.mfa_required        — boolean, always true (staff always require MFA)
  *   ops.mfa_methods         — string[], available MFA methods for staff
  */

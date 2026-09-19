@@ -203,7 +203,7 @@ export type PortalAuthSettings = z.infer<typeof portalAuthSettingsSchema>;
 /** Ops console auth settings. */
 export const opsAuthSettingsSchema = z.object({
 	email_password: z.literal(true), // always true for staff
-	google_sso: z.boolean(),
+	google_sso: z.literal(false), // staff sign in with credentials only — no SSO
 	mfa_required: z.literal(true), // always true for staff
 	mfa_methods: z.array(mfaMethodSchema).min(1),
 });

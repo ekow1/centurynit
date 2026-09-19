@@ -62,7 +62,9 @@ authSettings.get(
 			},
 			ops: {
 				email_password: raw["ops.email_password"],
-				google_sso: raw["ops.google_sso"],
+				// Locked off: staff sign in with credentials only. Hardcoded so a
+				// stale stored row cannot leak a "true" into the response.
+				google_sso: false,
 				mfa_required: raw["ops.mfa_required"],
 				mfa_methods: raw["ops.mfa_methods"],
 			},
@@ -107,11 +109,9 @@ authSettings.put(
 			}
 		}
 
-		// Update ops settings
+		// Update ops settings. google_sso is not writable — the schema fixes it
+		// to false, so nothing reaching this point can carry it.
 		if (updates.ops) {
-			if (updates.ops.google_sso !== undefined) {
-				await updateAuthSetting("ops.google_sso", updates.ops.google_sso, staffId);
-			}
 			if (updates.ops.mfa_methods !== undefined) {
 				await updateAuthSetting("ops.mfa_methods", updates.ops.mfa_methods, staffId);
 			}
@@ -129,7 +129,7 @@ authSettings.put(
 			},
 			ops: {
 				email_password: raw["ops.email_password"],
-				google_sso: raw["ops.google_sso"],
+				google_sso: false,
 				mfa_required: raw["ops.mfa_required"],
 				mfa_methods: raw["ops.mfa_methods"],
 			},

@@ -86,33 +86,6 @@ export function signIn(email: string, password: string, rememberMe?: boolean): P
 	});
 }
 
-/**
- * Which sign-in methods the console may offer — public endpoint, answered
- * before any session exists. `google_sso` is already AND-ed server-side with
- * real provider credentials, so a true here means the button will work.
- */
-export type OpsMethods = {
-	email_password: boolean;
-	google_sso: boolean;
-	mfa_required: boolean;
-};
-
-export function getOpsMethods(): Promise<OpsMethods> {
-	return apiFetch<OpsMethods>("/api/auth/ops-methods");
-}
-
-/** Kick off Google SSO. Returns the provider URL to redirect to. */
-export function signInWithGoogle(callbackURL: string): Promise<{ url?: string }> {
-	return apiFetch<{ url?: string }>("/api/auth/sign-in/social", {
-		method: "POST",
-		body: JSON.stringify({
-			provider: "google",
-			callbackURL,
-			errorCallbackURL: `${window.location.origin}/login?sso=error`,
-		}),
-	});
-}
-
 export function verifyTotp(code: string, trustDevice?: boolean): Promise<unknown> {
 	return apiFetch("/api/auth/two-factor/verify-totp", {
 		method: "POST",

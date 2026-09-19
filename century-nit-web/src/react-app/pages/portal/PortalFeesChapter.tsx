@@ -10,6 +10,7 @@ import {
 } from "century-nit-shared";
 import { formatMoney } from "century-nit-core/ui";
 import { meApi, ApiError, type AutoPayStatus } from "century-nit-core/api";
+import { usePaySheet } from "../../components/portal/PaySheet";
 import { Button } from "../../components/ui/Button";
 import { useAppState, milestoneLockReasonFor, milestoneUnlockedFor } from "../../context/AppState";
 import { useNotifier } from "../../components/notifier/Notifier";
@@ -38,7 +39,8 @@ const day = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDat
 const shortDay = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : null);
 
 function FeesChapterInner() {
-	const { application, booking, fees, payAgencyInstallment, syncFromServer, syncTick } = useAppState();
+	const { application, booking, fees, syncFromServer, syncTick } = useAppState();
+	const paySheet = usePaySheet(() => void syncFromServer());
 	const { toast } = useNotifier();
 	const [invoice, setInvoice] = useState<ApiInvoice | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -126,9 +128,19 @@ function FeesChapterInner() {
 	async function pay() {
 		setPaying(true);
 		try {
-			await payAgencyInstallment();
+			let due = invoice && invoice.balanceCents > 0 ? invoice : null;
+			if (!due) {
+				const { invoices } = await meApi.invoices({ type: "agency" });
+				due = invoices.find((i) => i.balanceCents > 0 && i.status !== "void") ?? null;
+			}
+			if (!due) {
+				toast.error("Your service-fee invoice isn't on the server yet. Ask your consultant to raise it.");
+				return;
+			}
+			paySheet.pay(due);
 		} catch (err) {
 			toast.error(err instanceof ApiError ? err.message : "Could not start the payment. Please try again.");
+		} finally {
 			setPaying(false);
 		}
 	}
@@ -526,6 +538,7 @@ function FeesChapterInner() {
 					</div>
 				</div>
 			</div>
+			{paySheet.sheet}
 		</div>
 	);
 }

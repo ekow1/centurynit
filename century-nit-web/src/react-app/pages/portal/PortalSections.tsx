@@ -46,6 +46,7 @@ import { documentsApi, meApi, ApiError, visaCostsCentsFor } from "century-nit-co
 import { useNotifier } from "../../components/notifier/Notifier";
 import { Avatar } from "../../components/ui/Avatar";
 import { AvatarCropModal } from "../../components/portal/AvatarCropModal";
+import { usePaySheet } from "../../components/portal/PaySheet";
 import { ChangePasswordModal, ChangeEmailModal } from "../../components/portal/SecurityModals";
 import type { ApplicantDocument, ApiInvoice } from "century-nit-shared";
 import { Money, MoneyInline } from "../../components/ui/Money";
@@ -1279,9 +1280,10 @@ function DocLinks({ invoice }: { invoice: ApiInvoice }) {
 }
 
 export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" } = {}) {
-	const { application, booking, schoolApplications, choosePaymentPlan, choosePostArrivalSchedule, payAgencyInstallment, enabledPostArrivalSchedules, customPostArrivalSchedules, fees, syncFromServer } = useAppState();
+	const { application, booking, schoolApplications, choosePaymentPlan, choosePostArrivalSchedule, enabledPostArrivalSchedules, customPostArrivalSchedules, fees, syncFromServer } = useAppState();
 	const { toast } = useNotifier();
 	const nav = useNavigate();
+	const paySheet = usePaySheet(() => void syncFromServer());
 	const a = application;
 	const planView = view === "plan";
 
@@ -1313,19 +1315,23 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 	const [invoices, setInvoices] = useState<ApiInvoice[]>([]);
 	const [invoicesLoaded, setInvoicesLoaded] = useState(false);
 
-	// Agency service-fee payment: redirect to Paystack hosted checkout, with
-	// a "Processing…" state while we wait for the redirect and surfaced errors
-	// if the API refuses (e.g. "No agency invoice found").
+	// Agency service-fee payment: the in-portal sheet (MoMo prompt or the card
+	// modal). `agencyPaying` only covers the moment spent resolving the invoice.
 	const [agencyPaying, setAgencyPaying] = useState(false);
 
 	async function handlePayAgency() {
 		if (agencyPaying) return;
 		setAgencyPaying(true);
 		try {
-			await payAgencyInstallment();
-			// On success the browser is redirected to Paystack; nothing else
-			// to do here. If the redirect didn't fire, payAgencyInstallment
-			// throws, so we land in the catch below.
+			let due = invoices.find((i) => i.type === "agency" && i.balanceCents > 0 && i.status !== "void") ?? null;
+			if (!due) {
+				const { invoices: list } = await meApi.invoices({ type: "agency" });
+				due = list.find((i) => i.balanceCents > 0 && i.status !== "void") ?? null;
+			}
+			if (!due) {
+				throw new Error("Your service-fee invoice isn't on the server yet. Ask your consultant to raise it.");
+			}
+			paySheet.pay(due);
 		} catch (err) {
 			toast.error(
 				err instanceof ApiError
@@ -1334,6 +1340,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 						? err.message
 						: "Could not start the payment. Please try again.",
 			);
+		} finally {
 			setAgencyPaying(false);
 		}
 	}
@@ -1472,13 +1479,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 
 	return (
 		<div className="portal-page">
-			{agencyPaying ? (
-				<div className="loading-overlay" role="status" aria-live="polite">
-					<div className="spinner" aria-hidden />
-					<p className="mono">Contacting payment provider…</p>
-					<p className="muted">Redirecting you to Paystack to pay your service fee</p>
-				</div>
-			) : null}
+			{paySheet.sheet}
 			<header className="portal-page__header">
 				<div>
 					<p className="eyebrow">{planView ? "Chapter V · Departure · Fees" : "Money"}</p>

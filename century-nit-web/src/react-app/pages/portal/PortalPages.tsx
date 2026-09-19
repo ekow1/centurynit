@@ -7,6 +7,7 @@ import { Money, MoneyInline } from "../../components/ui/Money";
 import { Field, Select } from "../../components/ui/Field";
 import { InvoiceCard, StatusPill, formatMoney } from "century-nit-core/ui";
 import { openInvoiceDocument } from "../../lib/receipt";
+import { usePaySheet } from "../../components/portal/PaySheet";
 import { StageConsentCard } from "../../components/StageConsentCard";
 import { EnrolmentDecision } from "../../components/EnrolmentDecision";
 import { AssessmentOutcomeCard } from "../../components/AssessmentOutcomeCard";
@@ -443,9 +444,10 @@ function normaliseDegreeLevel(raw: string | null | undefined): SchoolDegreeLevel
 }
 
 function SchoolPackageInner() {
-	const { application, chooseSchoolPackage, payAgencyInstallment, booking, choosePaymentPlan, fees } = useAppState();
+	const { application, chooseSchoolPackage, booking, choosePaymentPlan, fees, syncFromServer } = useAppState();
 	const { toast } = useNotifier();
 	const nav = useNavigate();
+	const paySheet = usePaySheet(() => void syncFromServer());
 	const [dbPackages, setDbPackages] = useState<ServicePackage[]>([]);
 	const [funding, setFunding] = useState<SchoolFundingTrack | "">(
 		application.schoolFundingTrack || "",
@@ -597,7 +599,12 @@ function SchoolPackageInner() {
 
 			if (andPayDeposit) {
 				setPayingDeposit(true);
-				await payAgencyInstallment();
+				const { invoices } = await meApi.invoices({ type: "agency" });
+				const due = invoices.find((i) => i.balanceCents > 0 && i.status !== "void");
+				if (!due) {
+					throw new Error("Your deposit invoice isn't on the server yet. Ask your consultant to raise it.");
+				}
+				paySheet.pay(due);
 				return;
 			}
 			toast.success("Package and plan saved. Pay the deposit to begin choosing schools.");
@@ -931,6 +938,7 @@ function SchoolPackageInner() {
 					</div>
 				</div>
 			</div>
+			{paySheet.sheet}
 		</div>
 	);
 }
@@ -2750,6 +2758,7 @@ function ApplicationHubInner() {
 		syncTick,
 		journeyPhase,
 	} = useAppState();
+	const paySheet = usePaySheet(() => void syncFromServer());
 	const [serverInvoice, setServerInvoice] = useState<ApiInvoice | null>(null);
 	// Schools added after the first invoice went out are billed on a
 	// supplementary one. Every application invoice past the first.
@@ -2758,7 +2767,6 @@ function ApplicationHubInner() {
 	const [uniId, setUniId] = useState("");
 	const [progId, setProgId] = useState("");
 	const [intake, setIntake] = useState("");
-	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
 	const { toast } = useNotifier();
 
 	const hasPkg = hasSchoolPackage(application);
@@ -2948,28 +2956,13 @@ function ApplicationHubInner() {
 		await payOne(backend);
 	}
 
-	/** Paystack hosted checkout for one issued invoice. */
-	async function payOne(backend: ApiInvoice) {
-		setPayPhase("loading");
-		try {
-			if (backend.status === "proforma") {
-				toast.error("Your consultant is still preparing this invoice. You'll be notified when it is ready to pay.");
-				return;
-			}
-			// Real Paystack hosted checkout session
-			const checkout = await meApi.paystackCheckout(backend.id);
-			if (checkout.authorizationUrl && checkout.authorizationUrl.startsWith("http")) {
-				window.location.href = checkout.authorizationUrl;
-				return;
-			}
-			toast.error("Could not initialize Paystack checkout.");
-		} catch (err) {
-			toast.error(
-				err instanceof ApiError ? err.message : "Payment could not be processed. Please try again.",
-			);
-		} finally {
-			setPayPhase("idle");
+	/** In-portal Paystack sheet for one issued invoice. */
+	function payOne(backend: ApiInvoice) {
+		if (backend.status === "proforma") {
+			toast.error("Your consultant is still preparing this invoice. You'll be notified when it is ready to pay.");
+			return;
 		}
+		paySheet.pay(backend);
 	}
 
 	function addSchool(e: FormEvent) {
@@ -3021,16 +3014,6 @@ function ApplicationHubInner() {
 	}
 
 
-
-	if (payPhase === "loading") {
-		return (
-			<div className="loading-overlay">
-				<div className="spinner" aria-hidden />
-				<p className="mono">Contacting payment provider…</p>
-				<p className="muted">Charging {formatDualCurrency(inv.amount)}</p>
-			</div>
-		);
-	}
 
 	const fund = SCHOOL_FUNDING_TRACKS.find((f) => f.id === application.schoolFundingTrack);
 	const deg = SCHOOL_DEGREE_LEVELS.find((d) => d.id === application.schoolDegreeLevel);
@@ -3596,6 +3579,7 @@ function ApplicationHubInner() {
 					)}
 				</div>
 			</div>
+			{paySheet.sheet}
 		</div>
 	);
 }
@@ -3942,7 +3926,7 @@ export function PortalVisa() {
 function VisaHubInner() {
 	const { application, schoolApplications, fees, syncFromServer, syncTick } = useAppState();
 	const inv = application.visaInvoice;
-	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
+	const paySheet = usePaySheet(() => void syncFromServer());
 	const accepted = schoolApplications.filter((s) => s.outcome === "Admitted");
 	const hasAdmit = hasAcceptedOffer(schoolApplications);
 	// The school the visa is for: the accepted offer, else the sole admission.
@@ -4031,49 +4015,24 @@ function VisaHubInner() {
 	const amount = cardInvoice.amount || usdFromCents(visaCostsCentsFor(fees?.catalogue, application.destinationId));
 
 	async function pay() {
-		setPayPhase("loading");
-		try {
-			let backend = serverInv && serverInv.balanceCents > 0 ? serverInv : null;
-			if (!backend) {
-				const { invoices } = await meApi.invoices();
-				backend = invoices.find((i) => i.type === "visa" && i.balanceCents > 0) ?? null;
-			}
-			if (!backend) {
-				toast.error(
-					"Your visa invoice has not been issued on the server yet. Ask your consultant to raise it.",
-				);
-				return;
-			}
-			if (backend.status === "proforma") {
-				toast.error(
-					"Cannot pay a proforma invoice before it is reviewed and issued by staff.",
-				);
-				return;
-			}
-			// Real Paystack checkout. Redirect to hosted checkout
-			const checkout = await meApi.paystackCheckout(backend.id);
-			if (checkout.authorizationUrl && checkout.authorizationUrl.startsWith("http")) {
-				window.location.href = checkout.authorizationUrl;
-				return;
-			}
-			toast.error("Could not initialize Paystack checkout.");
-		} catch (err) {
-			toast.error(
-				err instanceof ApiError ? err.message : "Payment could not be processed. Please try again.",
-			);
-		} finally {
-			setPayPhase("idle");
+		let backend = serverInv && serverInv.balanceCents > 0 ? serverInv : null;
+		if (!backend) {
+			const { invoices } = await meApi.invoices().catch(() => ({ invoices: [] as ApiInvoice[] }));
+			backend = invoices.find((i) => i.type === "visa" && i.balanceCents > 0) ?? null;
 		}
-	}
-
-	if (payPhase === "loading") {
-		return (
-			<div className="loading-overlay">
-				<div className="spinner" aria-hidden />
-				<p className="mono">Contacting payment provider…</p>
-				<p className="muted">Charging {formatDualCurrency(amount)} visa fee</p>
-			</div>
-		);
+		if (!backend) {
+			toast.error(
+				"Your visa invoice has not been issued on the server yet. Ask your consultant to raise it.",
+			);
+			return;
+		}
+		if (backend.status === "proforma") {
+			toast.error(
+				"Cannot pay a proforma invoice before it is reviewed and issued by staff.",
+			);
+			return;
+		}
+		paySheet.pay(backend);
 	}
 
 	const bandTitle = !hasAdmit
@@ -4313,6 +4272,7 @@ function VisaHubInner() {
 					</div>
 				</div>
 			</div>
+			{paySheet.sheet}
 		</div>
 	);
 }

@@ -31,6 +31,7 @@ export function PortalPreDeparture() {
 function TravelAssistanceInner() {
 	const { application, schoolApplications, syncFromServer, recordTravelDecision, preDepartureTasks, togglePreDepartureTask } = useAppState();
 	const { toast } = useNotifier();
+	const paySheet = usePaySheet(() => void syncFromServer());
 
 	// Where the client is going: the accepted offer, else the one admission.
 	const admitted = schoolApplications.filter((s) => s.outcome === "Admitted");
@@ -90,28 +91,16 @@ function TravelAssistanceInner() {
 	const tripDue = Boolean(trip) && trip?.status !== "paid" && trip?.status !== "proforma" && (trip?.balanceCents ?? 0) > 0;
 
 	async function payTicketing() {
-		setPayPhase("loading");
-		try {
-			let backend = trip && trip.balanceCents > 0 ? trip : null;
-			if (!backend) {
-				const { invoices } = await meApi.invoices();
-				backend = invoices.find((i) => i.type === "travel" && i.balanceCents > 0) ?? null;
-			}
-			if (!backend) {
-				toast.error("Your ticket invoice has not been issued yet. Your consultant will let you know when it is ready.");
-				return;
-			}
-			const checkout = await meApi.paystackCheckout(backend.id);
-			if (checkout.authorizationUrl && checkout.authorizationUrl.startsWith("http")) {
-				window.location.href = checkout.authorizationUrl;
-				return;
-			}
-			toast.error("Could not initialize Paystack checkout.");
-		} catch (err) {
-			toast.error(err instanceof ApiError ? err.message : "Payment could not be processed. Please try again.");
-		} finally {
-			setPayPhase("idle");
+		let backend = trip && trip.balanceCents > 0 ? trip : null;
+		if (!backend) {
+			const { invoices } = await meApi.invoices().catch(() => ({ invoices: [] as ApiInvoice[] }));
+			backend = invoices.find((i) => i.type === "travel" && i.balanceCents > 0) ?? null;
 		}
+		if (!backend) {
+			toast.error("Your ticket invoice has not been issued yet. Your consultant will let you know when it is ready.");
+			return;
+		}
+		paySheet.pay(backend);
 	}
 
 	async function handleDecision(decision: "yes" | "hold" | "no") {

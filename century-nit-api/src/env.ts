@@ -191,6 +191,8 @@ const schema = z.object({
 	 * `platform_settings` via the ops Settings screen, which overrides this.
 	 */
 	PAYSTACK_SECRET_KEY: z.string().optional(),
+	/** Browser-side key for Paystack's inline checkout — safe to expose. */
+	PAYSTACK_PUBLIC_KEY: z.string().optional(),
 	/** Fallback GHS → USD exchange rate when platform_settings value is unset. */
 	PLATFORM_EXCHANGE_RATE: z.string().optional(),
 	/**

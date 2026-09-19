@@ -105,6 +105,46 @@ export const paystackCheckoutSchema = z.object({
 	authorizationUrl: z.string().url(),
 	reference: z.string(),
 	amountCents: z.number().int(),
+	/** Lets PaystackPop.resumeTransaction open this transaction inline, no redirect. */
+	accessCode: z.string().optional(),
+});
+
+/** The public key the portal needs to open Paystack's inline checkout. */
+export const paystackConfigSchema = z.object({
+	publicKey: z.string().nullable(),
+});
+
+/** Ghana Mobile Money networks Paystack's /charge endpoint accepts. */
+export const MOMO_PROVIDERS = ["mtn", "vod", "atl"] as const;
+export type MomoProvider = (typeof MOMO_PROVIDERS)[number];
+
+/** Start a Mobile Money charge against an invoice's outstanding balance. */
+export const momoChargeSchema = z.object({
+	phone: z.string().min(7).max(20),
+	provider: z.enum(MOMO_PROVIDERS),
+});
+
+export const momoChargeResponseSchema = z.object({
+	reference: z.string(),
+	/** Paystack charge status: pending | send_otp | success | failed | … */
+	status: z.string(),
+	/** Paystack's customer-facing instruction when it gives one. */
+	displayText: z.string().nullable(),
+	amountCents: z.number().int(),
+});
+
+/** Submit the OTP a MoMo provider asks for after the initial charge. */
+export const momoOtpSchema = z.object({
+	reference: z.string().min(1).max(200),
+	otp: z.string().min(3).max(10),
+});
+
+/** Poll for the outcome of a MoMo charge — settles the invoice on success. */
+export const momoStatusResponseSchema = z.object({
+	status: z.string(),
+	settled: z.boolean(),
+	invoice: z.lazy(() => invoiceSchema).optional(),
+	displayText: z.string().nullable().optional(),
 });
 
 /** Verify a Paystack transaction reference against an invoice. */
@@ -213,6 +253,11 @@ export type InvoicePaymentRecord = z.infer<typeof invoicePaymentSchema>;
 export type InvoiceEventRecord = z.infer<typeof invoiceEventSchema>;
 export type ApiInvoice = z.infer<typeof invoiceSchema>;
 export type PaystackCheckout = z.infer<typeof paystackCheckoutSchema>;
+export type PaystackConfig = z.infer<typeof paystackConfigSchema>;
+export type MomoCharge = z.infer<typeof momoChargeSchema>;
+export type MomoChargeResponse = z.infer<typeof momoChargeResponseSchema>;
+export type MomoOtp = z.infer<typeof momoOtpSchema>;
+export type MomoStatusResponse = z.infer<typeof momoStatusResponseSchema>;
 export type PaystackVerify = z.infer<typeof paystackVerifySchema>;
 export type PaystackVerifyResponse = z.infer<typeof paystackVerifyResponseSchema>;
 export type PaystackWebhook = z.infer<typeof paystackWebhookSchema>;

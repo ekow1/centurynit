@@ -52,6 +52,7 @@ export type SettingKey =
 	| "BRANCH_OPEN_END"
 	| "WEEKLY_SLOT_SCHEDULE"
 	| "PAYSTACK_SECRET_KEY"
+	| "PAYSTACK_PUBLIC_KEY"
 	| "STRIPE_SECRET_KEY"
 	| "PLATFORM_EXCHANGE_RATE"
 	| "SERVICE_FEE_DEPOSIT_PERCENT"
@@ -225,6 +226,13 @@ export const SETTING_DEFS: Record<
 		secret: true,
 		description:
 			"Server-side Paystack key used to open and verify applicant invoice checkouts. Starts with sk_live_ or sk_test_.",
+	},
+	PAYSTACK_PUBLIC_KEY: {
+		label: "Paystack Public Key",
+		group: "Payment Gateways",
+		secret: false,
+		description:
+			"Browser-side Paystack key for the in-portal inline checkout. Starts with pk_live_ or pk_test_. Safe to expose to clients.",
 	},
 	PLATFORM_EXCHANGE_RATE: {
 		label: "Exchange rate (GHS per USD)",

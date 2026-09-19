@@ -9505,3 +9505,324 @@ a.portal-ch--on:hover {
 	color: #71717a;
 	font-size: 0.8rem;
 }
+
+/* ── PaySheet · the in-portal Paystack checkout ── */
+.paysheet {
+	position: fixed;
+	inset: 0;
+	z-index: 1100;
+	background: rgba(0, 0, 0, 0.55);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 1rem;
+}
+
+.paysheet__panel {
+	background: var(--card, #fff);
+	border: 2px solid #000;
+	width: min(26rem, 100%);
+	max-height: 92vh;
+	overflow-y: auto;
+}
+
+.paysheet__head {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 0.75rem;
+	padding: 0.9rem 1.1rem;
+	border-bottom: 2px solid #000;
+}
+
+.paysheet__head h3 {
+	font-size: 1rem;
+	font-weight: 800;
+	margin: 0;
+}
+
+.paysheet__inv {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	color: var(--muted-foreground);
+}
+
+.paysheet__x {
+	background: none;
+	border: none;
+	font-size: 0.9rem;
+	cursor: pointer;
+	color: var(--muted-foreground);
+	padding: 0.15rem 0.3rem;
+}
+
+.paysheet__body {
+	padding: 1rem 1.1rem 1.15rem;
+}
+
+.paysheet__sum {
+	display: flex;
+	justify-content: space-between;
+	gap: 1rem;
+	font-size: var(--text-sm, 0.875rem);
+}
+
+.paysheet__sum small {
+	display: block;
+	color: var(--muted-foreground);
+	font-size: 0.72rem;
+}
+
+.paysheet__amt {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	white-space: nowrap;
+}
+
+.paysheet__chans {
+	display: flex;
+	gap: 0.5rem;
+	margin: 1rem 0 0.75rem;
+}
+
+.paysheet__chan {
+	flex: 1;
+	border: 1px solid var(--border-light, #d4d4d8);
+	background: var(--background, #fff);
+	padding: 0.65rem 0.7rem;
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--muted-foreground);
+	cursor: pointer;
+	text-align: left;
+}
+
+.paysheet__chan b {
+	display: block;
+	font-size: 0.72rem;
+	margin-bottom: 0.15rem;
+}
+
+.paysheet__chan--on {
+	border-color: #000;
+	color: var(--foreground);
+	box-shadow: inset 0 0 0 1px #000;
+}
+
+.paysheet__field {
+	display: block;
+	margin-top: 0.6rem;
+}
+
+.paysheet__field > span:first-child {
+	display: block;
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	color: var(--muted-foreground);
+	margin-bottom: 0.3rem;
+}
+
+.paysheet__field input {
+	width: 100%;
+	border: 1.5px solid #000;
+	background: var(--background, #fff);
+	padding: 0.55rem 0.65rem;
+	font-family: var(--font-mono);
+	font-size: 0.85rem;
+	color: var(--foreground);
+}
+
+.paysheet__nets {
+	display: flex;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+}
+
+.paysheet__net {
+	border: 1px solid var(--border-light, #d4d4d8);
+	padding: 0.45rem 0.8rem;
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	cursor: pointer;
+	background: var(--background, #fff);
+	color: var(--foreground);
+}
+
+.paysheet__net--on {
+	border-color: #000;
+	background: #000;
+	color: #fff;
+}
+
+.paysheet__pay {
+	display: block;
+	width: 100%;
+	background: #000;
+	color: #fff;
+	border: 1.5px solid #000;
+	padding: 0.6rem 1rem;
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	font-weight: 700;
+	cursor: pointer;
+	margin-top: 1rem;
+	text-align: center;
+}
+
+.paysheet__pay:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+
+.paysheet__ghost {
+	display: block;
+	background: var(--background, #fff);
+	color: var(--foreground);
+	border: 1.5px solid #000;
+	padding: 0.5rem 0.9rem;
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	cursor: pointer;
+	margin: 0.6rem auto 0;
+	text-align: center;
+}
+
+.paysheet__secure {
+	margin-top: 0.7rem;
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	color: var(--muted-foreground);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	text-align: center;
+}
+
+.paysheet__note {
+	font-size: 0.8rem;
+	color: var(--muted-foreground);
+	line-height: 1.55;
+}
+
+.paysheet__err {
+	margin-top: 0.6rem;
+	border: 1px solid #000;
+	padding: 0.55rem 0.7rem;
+	font-size: 0.78rem;
+	line-height: 1.5;
+	background: var(--muted, #f5f5f5);
+}
+
+.paysheet__pend {
+	border: 1.5px dashed #000;
+	padding: 1rem 1.1rem;
+	text-align: center;
+}
+
+.paysheet__dot {
+	display: block;
+	width: 0.65rem;
+	height: 0.65rem;
+	border: 1.5px solid #000;
+	border-radius: 50%;
+	margin: 0 auto 0.6rem;
+	animation: paysheet-blink 1.2s infinite;
+}
+
+@keyframes paysheet-blink {
+	50% { opacity: 0.2; }
+}
+
+.paysheet__pend-t {
+	font-weight: 800;
+	font-size: 0.9rem;
+	margin: 0;
+}
+
+.paysheet__pend-s {
+	color: var(--muted-foreground);
+	font-size: 0.75rem;
+	margin: 0.35rem 0 0;
+	line-height: 1.6;
+}
+
+.paysheet__pend-ref {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	margin-top: 0.6rem;
+	color: var(--muted-foreground);
+}
+
+.paysheet__steps {
+	list-style: none;
+	padding: 0;
+	margin: 0.9rem 0 0;
+}
+
+.paysheet__steps li {
+	display: flex;
+	gap: 0.55rem;
+	padding: 0.35rem 0;
+	font-size: 0.75rem;
+	align-items: baseline;
+	color: var(--muted-foreground);
+}
+
+.paysheet__steps li span {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	min-width: 1.1rem;
+}
+
+.paysheet__steps li.done {
+	color: var(--foreground);
+}
+
+.paysheet__steps li.done span::after {
+	content: " ✓";
+}
+
+.paysheet__steps li.cur {
+	font-weight: 700;
+	color: var(--foreground);
+}
+
+.paysheet__ok {
+	text-align: center;
+	padding: 0.5rem 0 0.25rem;
+}
+
+.paysheet__seal {
+	display: inline-block;
+	border: 2px solid #000;
+	padding: 0.35rem 1rem;
+	font-family: var(--font-mono);
+	font-weight: 800;
+	font-size: 0.8rem;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	transform: rotate(-3deg);
+}
+
+.paysheet__ok-amt {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	font-size: 1.05rem;
+	margin: 0.7rem 0 0;
+}
+
+.paysheet__docs {
+	margin-top: 0.8rem;
+	display: flex;
+	justify-content: center;
+	gap: 0.4rem;
+}

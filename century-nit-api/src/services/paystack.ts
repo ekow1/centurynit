@@ -28,6 +28,16 @@ export async function paystackSecretKey(): Promise<string> {
 }
 
 /**
+ * The publishable key the portal needs for Paystack's inline checkout
+ * (PaystackPop). Not a secret — safe to return to signed-in clients. Null when
+ * unset so the portal can fall back to the hosted-redirect flow.
+ */
+export async function paystackPublicKey(): Promise<string | null> {
+	const key = await getSetting("PAYSTACK_PUBLIC_KEY");
+	return key && key.trim() ? key.trim() : null;
+}
+
+/**
  * Open a Paystack hosted checkout for an applicant invoice.
  *
  * `metadata.invoiceId` is echoed back by Paystack on verify and webhook, which
@@ -39,7 +49,7 @@ export async function createPaystackCheckout(input: {
 	invoiceId?: string;
 	customMetadata?: Record<string, any>;
 	callbackUrl: string;
-}): Promise<{ authorizationUrl: string; reference: string; amountCents: number }> {
+}): Promise<{ authorizationUrl: string; reference: string; amountCents: number; accessCode?: string }> {
 	const secretKey = await paystackSecretKey();
 	const reference = newPaystackReference();
 	const response = await fetch(`${PAYSTACK_API}/transaction/initialize`, {
@@ -64,7 +74,7 @@ export async function createPaystackCheckout(input: {
 	let body = (await response.json()) as {
 		status?: boolean;
 		message?: string;
-		data?: { authorization_url?: string };
+		data?: { authorization_url?: string; access_code?: string };
 	};
 
 	// If the merchant integration only accepts GHS, retry in GHS subunits
@@ -111,6 +121,104 @@ export async function createPaystackCheckout(input: {
 		authorizationUrl: body.data.authorization_url,
 		reference,
 		amountCents: input.amountCents,
+		accessCode: body.data.access_code,
+	};
+}
+
+export type MomoChargeResult = {
+	reference: string;
+	/** Paystack charge status — pending | send_otp | success | failed | … */
+	status: string;
+	displayText: string | null;
+};
+
+/**
+ * Charge a Ghana Mobile Money wallet server-side. No card data is involved,
+ * so the portal can render the whole checkout itself: it collects the wallet
+ * number + network, calls our endpoint, and the client approves the prompt on
+ * their phone. Amount arrives as USD cents (the invoice's currency) and is
+ * converted to GHS pesewas — MoMo is a GHS-only channel. `invoiceAmountCents`
+ * in the metadata keeps the USD figure so verification converts back at the
+ * configured rate, exactly like the hosted-checkout fallback.
+ */
+export async function chargeMoMo(input: {
+	email: string;
+	amountCents: number;
+	phone: string;
+	provider: "mtn" | "vod" | "atl";
+	invoiceId: string;
+}): Promise<MomoChargeResult> {
+	const secretKey = await paystackSecretKey();
+	const reference = newPaystackReference();
+	const rate = await exchangeRate();
+	const pesewas = Math.max(100, Math.round((input.amountCents / 100) * rate * 100));
+	const response = await fetch(`${PAYSTACK_API}/charge`, {
+		method: "POST",
+		headers: {
+			Authorization: `Bearer ${secretKey}`,
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({
+			email: input.email,
+			amount: pesewas,
+			currency: "GHS",
+			reference,
+			mobile_money: { phone: input.phone, provider: input.provider },
+			metadata: { invoiceId: input.invoiceId, invoiceAmountCents: input.amountCents },
+		}),
+	});
+	const body = (await response.json()) as {
+		status?: boolean;
+		message?: string;
+		data?: { status?: string; reference?: string; display_text?: string };
+	};
+	if (!response.ok || !body.status || !body.data?.reference) {
+		throw new HttpError(
+			502,
+			"PAYMENT_GATEWAY_ERROR",
+			`Paystack could not start the Mobile Money charge${body.message ? `: ${body.message}` : "."}`,
+		);
+	}
+	return {
+		reference: body.data.reference,
+		status: body.data.status ?? "pending",
+		displayText: body.data.display_text ?? null,
+	};
+}
+
+/**
+ * Submit the OTP a MoMo provider asks for after the initial charge (Telecel in
+ * particular can take this path instead of the plain approval prompt).
+ */
+export async function submitPaystackOtp(input: {
+	reference: string;
+	otp: string;
+}): Promise<MomoChargeResult> {
+	const secretKey = await paystackSecretKey();
+	const response = await fetch(`${PAYSTACK_API}/charge/submit_otp`, {
+		method: "POST",
+		headers: {
+			Authorization: `Bearer ${secretKey}`,
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({ reference: input.reference, otp: input.otp }),
+	});
+	const body = (await response.json()) as {
+		status?: boolean;
+		message?: string;
+		data?: { status?: string; reference?: string; display_text?: string };
+	};
+	if (!response.ok || !body.status) {
+		throw new HttpError(
+			502,
+			"PAYMENT_GATEWAY_ERROR",
+			`Paystack rejected the code${body.message ? `: ${body.message}` : "."}`,
+		);
+	}
+	return {
+		reference: body.data?.reference ?? input.reference,
+		status: body.data?.status ?? "pending",
+		displayText: body.data?.display_text ?? null,
 	};
 }
 

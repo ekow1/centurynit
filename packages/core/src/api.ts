@@ -33,8 +33,13 @@ import type {
 	ChoosePaymentPlan,
 	RecordPayment,
 	PaystackCheckout,
+	PaystackConfig,
 	PaystackVerify,
 	PaystackVerifyResponse,
+	MomoCharge,
+	MomoChargeResponse,
+	MomoOtp,
+	MomoStatusResponse,
 	UpdateMyProfile,
 	RequestEmailChange,
 	ConfirmEmailChange,
@@ -1417,6 +1422,32 @@ export const meApi = {
 			method: "POST",
 			...json({ reference } satisfies PaystackVerify),
 		});
+	},
+
+	/** The publishable key for Paystack's inline checkout, or null to redirect. */
+	paystackConfig(): Promise<PaystackConfig> {
+		return request(`${API_PREFIX}/me/paystack/config`);
+	},
+
+	/** Start a Mobile Money charge on an invoice — the client approves on their phone. */
+	momoCharge(invoiceId: string, input: MomoCharge): Promise<MomoChargeResponse> {
+		return request(`${API_PREFIX}/me/invoices/${invoiceId}/momo`, {
+			method: "POST",
+			...json(input),
+		});
+	},
+
+	/** Submit the OTP a MoMo provider asks for after the charge is created. */
+	momoOtp(invoiceId: string, input: MomoOtp): Promise<MomoChargeResponse> {
+		return request(`${API_PREFIX}/me/invoices/${invoiceId}/momo/otp`, {
+			method: "POST",
+			...json(input),
+		});
+	},
+
+	/** Poll a MoMo charge's outcome; the response carries the settled invoice. */
+	momoStatus(invoiceId: string, reference: string): Promise<MomoStatusResponse> {
+		return request(`${API_PREFIX}/me/invoices/${invoiceId}/momo/${encodeURIComponent(reference)}`);
 	},
 
 	/**

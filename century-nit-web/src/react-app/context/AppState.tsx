@@ -1170,7 +1170,6 @@ type AppStateContextValue = {
 	/** Custom schedules created by ops that the portal may show */
 	customPostArrivalSchedules: { id: string; label: string; detail: string; payments: number; intervalDays: number; graceDays: number }[];
 	setCustomPostArrivalSchedules: (schedules: { id: string; label: string; detail: string; payments: number; intervalDays: number; graceDays: number }[]) => void;
-	payAgencyInstallment: () => Promise<void>;
 	/** Multi-school tracking (no new docs - consultation already has them) */
 	schoolApplications: SchoolApplicationTrack[];
 	/** Replace the full school applications list (used by server-poll sync). */
@@ -1847,31 +1846,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			postArrivalPaymentIndex: 0,
 			counselorNote: `Post-arrival schedule set to ${scheduleId}. Payments start after a grace period following arrival.`,
 		}));
-	}, []);
-
-	/**
-	 * Initiate an agency service-fee payment through Paystack hosted checkout.
-	 *
-	 * The server resolves the agency invoice and outstanding balance from the
-	 * session, returns a Paystack `authorizationUrl`, and we redirect the
-	 * browser there. Same pattern as `paystackCheckout` for stage invoices.
-	 * On return, `PortalPayCallback` detects `?type=agency` and re-syncs
-	 * the authoritative agency invoice state from the server via
-	 * `syncFromServer`, which maps the invoice's `paidCents`/`balanceCents`
-	 * onto `agencyPaid` / `agencyDepositPaid` / `agencyStageIndex` /
-	 * `agencySettledAt`. Local-only settlement (the old `setApplication` step
-	 * math) is gone. The server is now the source of truth.
-	 *
-	 * Errors (e.g. "No agency invoice found") propagate to the caller so the
-	 * Financial page can surface them instead of silently mutating state.
-	 */
-	const payAgencyInstallment = useCallback(async () => {
-		const { authorizationUrl } = await meApi.agencyPayment();
-		if (authorizationUrl && /^https?:\/\//i.test(authorizationUrl)) {
-			window.location.href = authorizationUrl;
-			return;
-		}
-		throw new Error("Could not initialize Paystack checkout.");
 	}, []);
 
 	const updateBooking = useCallback((patch: Partial<BookingData>) => {
@@ -2729,7 +2703,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					safeSetJSON("century-nit-custom-schedules", schedules);
 				} catch { /* ignore */ }
 			},
-			payAgencyInstallment,
 			schoolApplications,
 			setSchoolApplications,
 			addSchoolApplication,
@@ -2804,7 +2777,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			enabledPostArrivalSchedules,
 			setEnabledPostArrivalSchedules,
 			customPostArrivalSchedules,
-			payAgencyInstallment,
 			schoolApplications,
 			setSchoolApplications,
 			addSchoolApplication,

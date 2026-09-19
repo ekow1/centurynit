@@ -47,6 +47,9 @@ import { setPreDepartureTask } from "../services/preDeparture.js";
 import {
 	createPaystackCheckout,
 	verifyPaystackTransaction,
+	paystackPublicKey,
+	chargeMoMo,
+	submitPaystackOtp,
 } from "../services/paystack.js";
 import {
 	getExchangeRate,
@@ -86,6 +89,11 @@ import {
 	invoiceSchema,
 	myApplicationSchema,
 	paystackCheckoutSchema,
+	paystackConfigSchema,
+	momoChargeSchema,
+	momoChargeResponseSchema,
+	momoOtpSchema,
+	momoStatusResponseSchema,
 	paystackVerifyResponseSchema,
 	paystackVerifySchema,
 
@@ -954,6 +962,88 @@ meRouter.openapi(
 );
 
 /**
+ * The invoice the signed-in client may pay: theirs, issued (an agency proforma
+ * flips to issued on the pay click — the click is the client's acceptance), and
+ * with a balance left. Shared by the hosted checkout and the MoMo charge.
+ */
+async function payableInvoiceFor(userId: string, invoiceId: string) {
+	const row = await getInvoice(invoiceId);
+	if (!row) throw new HttpError(404, "INVOICE_NOT_FOUND", "Invoice not found");
+	if (row.clientUserId !== userId) {
+		throw new HttpError(403, "FORBIDDEN", "Not allowed to pay this invoice");
+	}
+	if (row.status === "proforma") {
+		if (row.type === "agency") {
+			await db
+				.update(schema.invoices)
+				.set({ status: "issued", updatedAt: new Date() })
+				.where(eq(schema.invoices.id, row.id));
+			row.status = "issued";
+		} else {
+			throw new HttpError(
+				409,
+				"INVOICE_PROFORMA",
+				"Cannot pay a proforma invoice before it is reviewed and issued by staff",
+			);
+		}
+	}
+	const serialized = await serializeInvoice(row);
+	if (serialized.balanceCents <= 0) {
+		throw new HttpError(409, "INVOICE_PAID", "This invoice is already fully paid");
+	}
+	return { row, serialized };
+}
+
+/**
+ * Record a verified-success Paystack transaction on the invoice. Idempotent on
+ * the reference — the webhook, the redirect verify, and the MoMo poll can all
+ * report the same transaction without double-settling. Captures a reusable
+ * card authorization so the client can opt into auto-pay. Returns the freshly
+ * serialized invoice.
+ */
+async function settleVerifiedPaystack(
+	userId: string,
+	row: NonNullable<Awaited<ReturnType<typeof getInvoice>>>,
+	reference: string,
+	txn: Awaited<ReturnType<typeof verifyPaystackTransaction>>,
+) {
+	if (txn.invoiceId && txn.invoiceId !== row.id) {
+		throw new HttpError(
+			409,
+			"PAYMENT_REFERENCE_MISMATCH",
+			"This payment does not belong to that invoice",
+		);
+	}
+	const before = await serializeInvoice(row);
+	if (before.balanceCents > 0) {
+		const alreadyRecorded = await paymentWithReferenceExists(row.id, reference);
+		if (!alreadyRecorded) {
+			const rate = await getExchangeRate();
+			const rawAmountCents =
+				txn.invoiceAmountCents ??
+				(txn.currency === "GHS" ? Math.round(txn.amountCents / rate) : txn.amountCents);
+			const amountCents = Math.min(Math.max(rawAmountCents, 0), before.balanceCents);
+			if (amountCents > 0) {
+				await settleInvoicePayment({
+					invoiceId: row.id,
+					amountCents,
+					method: txn.authorization?.channel ?? "card",
+					gateway: "paystack",
+					reference,
+					currency: txn.currency ?? "USD",
+					actor: { name: "Paystack", email: "payments@centurynit.com" },
+				});
+			}
+			// Reusable card authorization → the client can opt into auto-pay.
+			const { captureAuthorization } = await import("../services/autopay.js");
+			await captureAuthorization(userId, txn.customerEmail, txn.authorization);
+		}
+	}
+	const freshRow = await getInvoice(row.id);
+	return serializeInvoice(freshRow ?? row);
+}
+
+/**
  * Applicant self-service: open a Paystack hosted checkout for the outstanding
  * balance of one of their own invoices.
  *
@@ -978,31 +1068,7 @@ meRouter.openapi(
 	async (c) => {
 		const user = c.get("user");
 		const { id } = c.req.valid("param");
-		const row = await getInvoice(id);
-		if (!row) throw new HttpError(404, "INVOICE_NOT_FOUND", "Invoice not found");
-		if (row.clientUserId !== user.id) {
-			throw new HttpError(403, "FORBIDDEN", "Not allowed to pay this invoice");
-		}
-		if (row.status === "proforma") {
-			if (row.type === "agency") {
-				await db
-					.update(schema.invoices)
-					.set({ status: "issued", updatedAt: new Date() })
-					.where(eq(schema.invoices.id, row.id));
-				row.status = "issued";
-			} else {
-				throw new HttpError(
-					409,
-					"INVOICE_PROFORMA",
-					"Cannot pay a proforma invoice before it is reviewed and issued by staff",
-				);
-			}
-		}
-		const serialized = await serializeInvoice(row);
-
-		if (serialized.balanceCents <= 0) {
-			throw new HttpError(409, "INVOICE_PAID", "This invoice is already fully paid");
-		}
+		const { row, serialized } = await payableInvoiceFor(user.id, id);
 		const origin = c.req.header("origin") || env.FRONTEND_URL;
 		const checkout = await createPaystackCheckout({
 			email: user.email,
@@ -1052,13 +1118,6 @@ meRouter.openapi(
 			throw new HttpError(403, "FORBIDDEN", "Not allowed to pay this invoice");
 		}
 		const txn = await verifyPaystackTransaction(body.reference);
-		if (txn.invoiceId && txn.invoiceId !== row.id) {
-			throw new HttpError(
-				409,
-				"PAYMENT_REFERENCE_MISMATCH",
-				"This payment does not belong to that invoice",
-			);
-		}
 		if (txn.status !== "success") {
 			throw new HttpError(
 				400,
@@ -1066,34 +1125,145 @@ meRouter.openapi(
 				`Payment was not completed (${txn.status}). If you were charged, the payment will still be recorded via the webhook.`,
 			);
 		}
-		const before = await serializeInvoice(row);
-		if (before.balanceCents > 0) {
-			const alreadyRecorded = await paymentWithReferenceExists(row.id, body.reference);
-			if (!alreadyRecorded) {
-				const rate = await getExchangeRate();
-				const rawAmountCents =
-					txn.invoiceAmountCents ??
-					(txn.currency === "GHS" ? Math.round(txn.amountCents / rate) : txn.amountCents);
-				const amountCents = Math.min(Math.max(rawAmountCents, 0), before.balanceCents);
-				if (amountCents > 0) {
-					await settleInvoicePayment({
-						invoiceId: row.id,
-						amountCents,
-						method: "card",
-						gateway: "paystack",
-						reference: body.reference,
-						currency: txn.currency ?? "USD",
-						actor: { name: "Paystack", email: "payments@centurynit.com" },
-					});
-				}
-				// Reusable card authorization → the client can opt into auto-pay.
-				const { captureAuthorization } = await import("../services/autopay.js");
-				await captureAuthorization(user.id, txn.customerEmail, txn.authorization);
-			}
-		}
-		const freshRow = await getInvoice(row.id);
-		const invoice = await serializeInvoice(freshRow ?? row);
+		const invoice = await settleVerifiedPaystack(user.id, row, body.reference, txn);
 		return c.json({ invoice });
+	},
+);
+
+/* ── In-portal checkout — Paystack inline (card) + server-side MoMo ────────── */
+
+/**
+ * The portal asks for the publishable key before opening Paystack's inline
+ * modal. Null when unconfigured — the portal then falls back to redirecting
+ * to the hosted checkout URL instead.
+ */
+meRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/paystack/config",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		responses: {
+			200: {
+				content: { "application/json": { schema: paystackConfigSchema } },
+				description: "The Paystack publishable key for the inline checkout",
+			},
+		},
+	}),
+	async (c) => c.json({ publicKey: await paystackPublicKey() }),
+);
+
+/**
+ * Charge a Mobile Money wallet without leaving the portal. The client approves
+ * on their phone; the portal then polls `/momo/{reference}` until the charge
+ * settles or fails.
+ */
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/invoices/{id}/momo",
+		tags: ["Invoices"],
+		middleware: [requireAuth] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: momoChargeSchema } },
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: momoChargeResponseSchema } },
+				description: "The MoMo charge was sent to the wallet",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const { row, serialized } = await payableInvoiceFor(user.id, id);
+		const charge = await chargeMoMo({
+			email: user.email,
+			amountCents: serialized.balanceCents,
+			phone: body.phone,
+			provider: body.provider,
+			invoiceId: row.id,
+		});
+		return c.json({ ...charge, amountCents: serialized.balanceCents });
+	},
+);
+
+/** Relay the OTP a MoMo provider asks for after the charge is created. */
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/invoices/{id}/momo/otp",
+		tags: ["Invoices"],
+		middleware: [requireAuth] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: momoOtpSchema } },
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: momoChargeResponseSchema } },
+				description: "The OTP was submitted to Paystack",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const row = await getInvoice(id);
+		if (!row) throw new HttpError(404, "INVOICE_NOT_FOUND", "Invoice not found");
+		if (row.clientUserId !== user.id) {
+			throw new HttpError(403, "FORBIDDEN", "Not allowed to pay this invoice");
+		}
+		const res = await submitPaystackOtp({ reference: body.reference, otp: body.otp });
+		return c.json({ ...res, amountCents: 0 });
+	},
+);
+
+/**
+ * Poll a MoMo charge's outcome. On `success` the payment is settled through the
+ * same path the hosted-checkout verify uses (idempotent on the reference), and
+ * the fresh invoice comes back so the sheet can flip straight to its paid state.
+ */
+meRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/invoices/{id}/momo/{reference}",
+		tags: ["Invoices"],
+		middleware: [requireAuth] as const,
+		request: {
+			params: z.object({ id: z.string().uuid(), reference: z.string().min(1).max(200) }),
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: momoStatusResponseSchema } },
+				description: "The charge's latest status, settling the invoice on success",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const { id, reference } = c.req.valid("param");
+		const row = await getInvoice(id);
+		if (!row) throw new HttpError(404, "INVOICE_NOT_FOUND", "Invoice not found");
+		if (row.clientUserId !== user.id) {
+			throw new HttpError(403, "FORBIDDEN", "Not allowed to pay this invoice");
+		}
+		const txn = await verifyPaystackTransaction(reference);
+		if (txn.status !== "success") {
+			return c.json({ status: txn.status, settled: false });
+		}
+		const invoice = await settleVerifiedPaystack(user.id, row, reference, txn);
+		return c.json({ status: "success", settled: true, invoice });
 	},
 );
 

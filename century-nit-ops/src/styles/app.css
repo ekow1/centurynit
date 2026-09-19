@@ -5698,13 +5698,13 @@
 }
 
 /* ── Payment plans · the catalogue toggles and the sentence ── */
-.ops-togs {
+.ops-picks {
 	display: flex;
 	gap: 0.5rem;
 	flex-wrap: wrap;
 }
 
-.ops-tog {
+.ops-pick {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.5rem;
@@ -5720,22 +5720,22 @@
 	cursor: pointer;
 }
 
-.ops-tog:disabled {
+.ops-pick:disabled {
 	cursor: default;
 }
 
-.ops-tog__bx {
+.ops-pick__bx {
 	width: 0.8rem;
 	height: 0.8rem;
 	border: 1px solid currentColor;
 }
 
-.ops-tog--on {
+.ops-pick--on {
 	border-color: var(--foreground);
 	color: var(--foreground);
 }
 
-.ops-tog--on .ops-tog__bx {
+.ops-pick--on .ops-pick__bx {
 	background: var(--foreground);
 }
 

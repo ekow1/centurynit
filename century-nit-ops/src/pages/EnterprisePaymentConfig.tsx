@@ -284,19 +284,19 @@ export function EnterprisePaymentConfig() {
 				<section className="card cn-now">
 					<p className="cn-detail__eyebrow">Post-arrival catalogue · what the client may pick</p>
 					<p className="cn-detailhead__meta" style={{ margin: "0.25rem 0 0.5rem" }}>Over</p>
-					<div className="ops-togs">
+					<div className="ops-picks">
 						{DURATION_CHOICES.map((m) => (
-							<button key={m} type="button" className={`ops-tog${pa.durations.includes(m) ? " ops-tog--on" : ""}`} disabled={!canEdit} onClick={() => toggleDuration(m)} aria-pressed={pa.durations.includes(m)}>
-								<span className="ops-tog__bx" aria-hidden />
+							<button key={m} type="button" className={`ops-pick${pa.durations.includes(m) ? " ops-pick--on" : ""}`} disabled={!canEdit} onClick={() => toggleDuration(m)} aria-pressed={pa.durations.includes(m)}>
+								<span className="ops-pick__bx" aria-hidden />
 								{m} months
 							</button>
 						))}
 					</div>
 					<p className="cn-detailhead__meta" style={{ margin: "0.75rem 0 0.5rem" }}>Paid</p>
-					<div className="ops-togs">
+					<div className="ops-picks">
 						{POST_ARRIVAL_FREQUENCIES.map((f) => (
-							<button key={f} type="button" className={`ops-tog${pa.frequencies.includes(f) ? " ops-tog--on" : ""}`} disabled={!canEdit} onClick={() => toggleFrequency(f)} aria-pressed={pa.frequencies.includes(f)}>
-								<span className="ops-tog__bx" aria-hidden />
+							<button key={f} type="button" className={`ops-pick${pa.frequencies.includes(f) ? " ops-pick--on" : ""}`} disabled={!canEdit} onClick={() => toggleFrequency(f)} aria-pressed={pa.frequencies.includes(f)}>
+								<span className="ops-pick__bx" aria-hidden />
 								{POST_ARRIVAL_FREQUENCY_LABELS[f]}
 							</button>
 						))}

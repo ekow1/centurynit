@@ -16,6 +16,7 @@ import {
 	type StageHandoff,
 	type Booking,
 	type TravelAssistanceRequest,
+	type ApiOpsTask,
 	VISA_STAGE_LABELS,
 	isOwnerClassBoundary,
 } from "century-nit-shared";
@@ -123,6 +124,21 @@ export type BaseTask =
 			kind: "lead";
 			action: "followup";
 			record: Lead;
+			title: string;
+			subtitle: string;
+			meta: string;
+			branch: string;
+			owner: string;
+			linkTo: string;
+			priority: number;
+	  }
+	| {
+			id: string;
+			category: string;
+			/** A follow-up somebody wrote — intent, not derived state. */
+			kind: "task";
+			action: "followup";
+			record: ApiOpsTask;
 			title: string;
 			subtitle: string;
 			meta: string;
@@ -381,6 +397,7 @@ export const TASK_KIND_LABEL: Record<PendingTask["kind"], string> = {
 	applicant: "Applicant",
 	invoice: "Invoice",
 	lead: "Lead",
+	task: "Task",
 	handoff: "Stage",
 };
 
@@ -637,6 +654,28 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 			linkTo: `/applications?id=${a.id}`,
 			at: a.updatedAt,
 			priority: PRIORITY.issue,
+		});
+	}
+
+	// A post-arrival schedule request waits on finance or a manager — they
+	// enter the start date and approve before the dated plan shows on the
+	// portal. Surfaced to everyone; the review itself checks the capability.
+	for (const a of applications) {
+		if (a.postArrivalStatus !== "pending") continue;
+		q.push({
+			id: `a-sched-${a.id}`,
+			category: "needs_action",
+			kind: "application",
+			action: "review",
+			record: a,
+			title: a.applicantName,
+			subtitle: `Payment schedule to review · ${a.postArrivalMonths} months · ${a.postArrivalFrequency ?? "—"}`,
+			meta: `App ${a.appId}`,
+			branch: a.branch,
+			owner: "Finance",
+			linkTo: `/applications?id=${a.id}&tab=payments`,
+			at: a.updatedAt,
+			priority: PRIORITY.review_application,
 		});
 	}
 

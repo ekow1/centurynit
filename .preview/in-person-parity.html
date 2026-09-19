@@ -44,6 +44,26 @@
     align-items:center;justify-content:center}
   .callouts code{font-family:var(--font-mono);font-size:.62rem;background:var(--muted);padding:.05rem .3rem}
 
+  /* ledger — rule-lined, tabular */
+  .ledger{width:100%;border-collapse:collapse;font-size:.78rem}
+  .ledger th{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;
+    color:var(--muted-foreground);text-align:left;padding:.45rem .6rem;border-top:1.5px solid var(--border);
+    border-bottom:1.5px solid var(--border)}
+  .ledger td{padding:.5rem .6rem;border-bottom:1px solid var(--border-light);vertical-align:middle}
+  .ledger tr:last-child td{border-bottom:1.5px solid var(--border)}
+  .ledger .num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--font-mono);font-size:.72rem}
+  .ledger th.num{text-align:right}
+  .ledger .ref{font-family:var(--font-mono);font-size:.62rem;color:var(--muted-foreground)}
+  .ledger .st{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--font-mono);font-size:.6rem;
+    text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
+  .ledger .st::before{content:"";width:.55rem;height:.55rem;flex-shrink:0}
+  .ledger .st--paid{color:#166534}.ledger .st--paid::before{background:#166534}
+  .ledger .st--failed{color:#b91c1c}.ledger .st--failed::before{background:#b91c1c}
+  .ledger .st--sched{color:#92400e}.ledger .st--sched::before{border:1.5px solid #92400e}
+  .ledger .st--man{color:#5b21b6}.ledger .st--man::before{background:#5b21b6}
+  .ledger tr.failed-row td{background:rgba(185,28,28,.04)}
+  .ledger .sub{display:block;font-size:.62rem;color:var(--muted-foreground);font-weight:400}
+
   /* ══ portal chrome ══ */
   .psec__h{display:flex;align-items:baseline;gap:.6rem;border-bottom:1.5px solid var(--border);padding-bottom:.4rem}
   .psec__no{font-family:var(--font-mono);font-size:.65rem;border:1.5px solid var(--border);width:1.2rem;height:1.2rem;
@@ -1199,44 +1219,49 @@
   <h2>Transaction ledger · same rows, two faces</h2>
   <p class="lead">Every settlement — checkout card, MoMo, auto-debit, or a recorded cash payment — lands as one row in <code>payment_transactions</code>; every auto-pay attempt lands in <code>autopay_attempts</code>. Today the portal only offers a per-invoice receipt and ops sees none of it. The ledger joins both tables and renders the same truth twice: the client sees <b>what they paid and what's next</b>; ops sees <b>every channel, attempt, decline, and who recorded it</b>.</p>
 
-  <div class="compare" style="grid-template-columns:1fr 1.35fr;margin-top:1.25rem">
+  <div class="compare" style="grid-template-columns:1fr 1.4fr;margin-top:1.25rem">
     <!-- portal face -->
     <div>
-      <div class="variant-label"><span class="tag">portal</span> Fees chapter · "Your payments"</div>
-      <div class="frame" style="padding:1.1rem 1.25rem">
-        <table style="border-collapse:collapse;width:100%;font-size:.72rem">
-          <tr><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Date</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">For</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Method</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Amount</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left"></th></tr>
-          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">12 Oct</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Deposit · service fee</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">MTN MoMo</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">GH₵ 500</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#15803d;color:#15803d">paid</span> ↓</td></tr>
-          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">15 Nov</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Instalment 1 / 6</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Visa ····4283 · auto-pay</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">GH₵ 540</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#15803d;color:#15803d">paid</span> ↓</td></tr>
-          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">15 Dec</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Instalment 2 / 6</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Visa ····4283 · auto-pay</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">GH₵ 540</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#b91c1c;color:#b91c1c">failed</span></td></tr>
-          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">18 Dec</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Instalment 2 / 6 · retry</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Visa ····4283 · auto-pay</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">GH₵ 540</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#15803d;color:#15803d">paid</span> ↓</td></tr>
-          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">15 Jan</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Instalment 3 / 6</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">—</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">GH₵ 540</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#b45309;color:#b45309">pending</span></td></tr>
+      <div class="variant-label"><span class="tag">portal</span> Payments page · "Your payments"</div>
+      <div class="frame">
+        <table class="ledger">
+          <thead><tr><th>Date</th><th>Item</th><th>Method</th><th class="num">Amount</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>12 Oct</td><td>Deposit · service fee</td><td>MTN MoMo</td><td class="num">500.00</td><td><span class="st st--paid">paid</span></td><td class="num"><a href="#" style="font-size:.7rem">receipt&nbsp;↓</a></td></tr>
+            <tr><td>15 Nov</td><td>Instalment 1 of 6</td><td>Visa ····4283</td><td class="num">540.00</td><td><span class="st st--paid">paid</span></td><td class="num"><a href="#" style="font-size:.7rem">receipt&nbsp;↓</a></td></tr>
+            <tr class="failed-row"><td>15 Dec</td><td>Instalment 2 of 6</td><td>Visa ····4283</td><td class="num">540.00</td><td><span class="st st--failed">declined</span><span class="sub">retrying 18 Dec</span></td><td></td></tr>
+            <tr><td>18 Dec</td><td>Instalment 2 of 6 · retry</td><td>Visa ····4283</td><td class="num">540.00</td><td><span class="st st--paid">paid</span></td><td class="num"><a href="#" style="font-size:.7rem">receipt&nbsp;↓</a></td></tr>
+            <tr><td>15 Jan</td><td>Instalment 3 of 6</td><td>auto-pay</td><td class="num">540.00</td><td><span class="st st--sched">scheduled</span></td><td></td></tr>
+          </tbody>
+          <tfoot><tr><td colspan="3" style="font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground)">Balance after instalment 2</td><td class="num" style="font-weight:700">1,620.00</td><td colspan="2" style="color:var(--muted-foreground);font-size:.68rem">GH₵</td></tr></tfoot>
         </table>
       </div>
       <ul class="callouts">
-        <li data-n="1">Client-facing only: paid / declined-retrying / scheduled — never raw gateway payloads or references.</li>
-        <li data-n="2">Each paid row carries the ↓ receipt link already on <code>openInvoiceDocument(invoice,"receipt")</code>.</li>
-        <li data-n="3">A failed auto-debit shows as "declined — retrying on 18 Dec" so the ledger matches the dunning email.</li>
+        <li data-n="1">Face-value states only — paid, declined (with the retry date), scheduled. No gateway internals.</li>
+        <li data-n="2">Paid rows carry the receipt link; a running-balance footer keeps the ledger honest.</li>
+        <li data-n="3">A declined row is tinted, not alarming — it resolves itself or offers a pay link.</li>
       </ul>
     </div>
 
     <!-- ops face -->
     <div>
-      <div class="variant-label"><span class="tag tag--new">ops</span> Money tab · ledger under the invoice</div>
-      <div class="frame" style="padding:1.1rem 1.25rem">
-        <table style="border-collapse:collapse;width:100%;font-size:.72rem">
-          <tr><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Date</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Entry</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Channel</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Ref</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Amount</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Status</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">By</th><th style="padding:.3rem .5rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.6;text-align:left">Outstanding</th></tr>
-          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">12 Oct</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Deposit</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">paystack · momo</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">PSK_9f…</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">+500</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#15803d;color:#15803d">paid</span></td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">webhook</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">3,000</td></tr>
-          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">15 Nov</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Instalment 1/6</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">auto-pay · card</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">AP_2c…</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">+540</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#15803d;color:#15803d">paid</span></td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">sweep</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">2,460</td></tr>
-          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">15 Dec</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Instalment 2/6</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">auto-pay · card</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">AP_7e…</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">0</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#b91c1c;color:#b91c1c">failed</span> <span class="sub">insufficient</span></td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">sweep</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">2,460</td></tr>
-          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">16 Dec</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Part payment · office</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">cash · recorded</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">—</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">+200</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#15803d;color:#15803d">paid</span> <span class="pill" style="border-color:#6d28d9;color:#6d28d9">manual</span></td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Ama K</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">2,260</td></tr>
-          <tr><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">18 Dec</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">Instalment 2/6 · retry</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">auto-pay · card</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">AP_9a…</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">+340</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top"><span class="pill" style="border-color:#15803d;color:#15803d">paid</span></td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">sweep</td><td style="padding:.4rem .5rem;border-bottom:1px solid var(--line,#e5e5e5);text-align:left;vertical-align:top">1,920</td></tr>
+      <div class="variant-label"><span class="tag tag--new">ops</span> Billing tab · ledger under the invoice</div>
+      <div class="frame">
+        <table class="ledger">
+          <thead><tr><th>Date</th><th>Entry</th><th>Channel</th><th>Reference</th><th class="num">Amount</th><th>Status</th><th>Recorded by</th><th class="num">Balance</th></tr></thead>
+          <tbody>
+            <tr><td>12 Oct</td><td>Deposit</td><td>paystack · momo</td><td class="ref">PSK_9f3…</td><td class="num">500.00</td><td><span class="st st--paid">settled</span></td><td>webhook</td><td class="num">3,000.00</td></tr>
+            <tr><td>15 Nov</td><td>Instalment 1/6</td><td>auto-pay · card</td><td class="ref">AP_2c8…</td><td class="num">540.00</td><td><span class="st st--paid">settled</span></td><td>sweep</td><td class="num">2,460.00</td></tr>
+            <tr class="failed-row"><td>15 Dec</td><td>Instalment 2/6</td><td>auto-pay · card</td><td class="ref">AP_7e1…</td><td class="num">0.00</td><td><span class="st st--failed">declined</span><span class="sub">insufficient funds</span></td><td>sweep</td><td class="num">2,460.00</td></tr>
+            <tr><td>16 Dec</td><td>Part payment · office</td><td>cash</td><td class="ref">—</td><td class="num">200.00</td><td><span class="st st--paid">settled</span> <span class="st st--man">manual</span></td><td>Ama K</td><td class="num">2,260.00</td></tr>
+            <tr><td>18 Dec</td><td>Instalment 2/6 · retry</td><td>auto-pay · card</td><td class="ref">AP_9a4…</td><td class="num">340.00</td><td><span class="st st--paid">settled</span></td><td>sweep</td><td class="num">1,920.00</td></tr>
+          </tbody>
         </table>
       </div>
       <ul class="callouts">
-        <li data-n="1">Every attempt is a row — declines carry the gateway reason (<code>failureReason</code>), manual records carry the staff member.</li>
-        <li data-n="2">Running outstanding per invoice; <code>reference</code> links out to Paystack for reconciliation.</li>
-        <li data-n="3">Manual "Record payment" writes the same table with <code>recordedBy</code> — one ledger, no shadow books.</li>
+        <li data-n="1">Every attempt is a row — declines keep the gateway reason, manual entries keep the staff member.</li>
+        <li data-n="2">Running balance per invoice; the reference column links out to Paystack for reconciliation.</li>
+        <li data-n="3">"Record payment" writes the same table — one ledger, no shadow books.</li>
       </ul>
     </div>
   </div>
@@ -1254,6 +1279,7 @@
     </p>
   </div>
 </section>
+
 
 
 </div>

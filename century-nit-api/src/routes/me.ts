@@ -107,6 +107,7 @@ import {
 	requestEmailChangeSchema,
 	confirmEmailChangeSchema,
 	portalStateSchema,
+	ledgerRowSchema,
 	postArrivalScheduleChoiceSchema,
 	setPreDepartureTaskSchema,
 	updatePortalStateSchema,
@@ -1349,6 +1350,28 @@ meRouter.openapi(
 		const user = c.get("user");
 		const { setAutoPay } = await import("../services/autopay.js");
 		return c.json(await setAutoPay(user.id, false));
+	},
+);
+
+// The client's transaction ledger — settlements, scheduled instalments and
+// declined auto-debits across their invoices, trimmed of gateway internals.
+meRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/ledger",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.object({ rows: z.array(ledgerRowSchema) }) } },
+				description: "The client's payment ledger",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const { clientLedger } = await import("../services/ledger.js");
+		return c.json({ rows: await clientLedger(user.id) });
 	},
 );
 

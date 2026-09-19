@@ -48,6 +48,7 @@ import type {
 	SchoolApplicationList,
 	AddSchoolApplication, OpsAddSchoolApplication, SchoolFileKind, VisaDetails, DepartureDetails, FeeCatalogue,
 	UpdateSchoolStatus,
+	LedgerRow,
 	LockSchools,
 	InitializePayment,
 	InitializePaymentResponse,
@@ -1140,6 +1141,14 @@ export const applicationsApi = {
 	setPostArrivalSchedule(id: string, input: { months: number; frequency: string; reason: string }): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/post-arrival-schedule`, { method: "POST", ...json(input) });
 	},
+	/** Finance/manager: approve a pending schedule (entering the start date) or decline it with a reason. */
+	reviewPostArrivalSchedule(id: string, input: { decision: "approve"; startAt: string } | { decision: "decline"; reason: string }): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/applications/${id}/post-arrival-schedule/review`, { method: "POST", ...json(input) });
+	},
+	/** The case's transaction ledger — every settlement, decline and scheduled line across its invoices. */
+	ledger(id: string): Promise<{ rows: LedgerRow[] }> {
+		return request(`${API_PREFIX}/applications/${id}/ledger`);
+	},
 	/** Record Departure facts. Report-by date, briefing, pickup, accommodation, emergency contact, arrival. */
 	setDepartureDetails(id: string, details: DepartureDetails): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/departure-details`, { method: "PATCH", ...json(details) });
@@ -1364,6 +1373,11 @@ export const meApi = {
 	/** Opt out — the card stays on file but no more automatic debits fire. */
 	disableAutoPay(): Promise<AutoPayStatus> {
 		return request(`${API_PREFIX}/me/autopay`, { method: "DELETE" });
+	},
+
+	/** The client's payment ledger — settlements, scheduled instalments, declined debits. */
+	ledger(): Promise<{ rows: LedgerRow[] }> {
+		return request(`${API_PREFIX}/me/ledger`);
 	},
 
 	/**

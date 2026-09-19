@@ -4,6 +4,8 @@ import {
 	leadSchema,
 	leadListSchema,
 	leadStageSchema,
+	leadLostReasonSchema,
+	logLeadTouchSchema,
 } from "century-nit-shared";
 import { requireAuth, requireModule, type AuthVariables } from "../middleware/auth.js";
 import { HttpError, validationHook } from "../middleware/error.js";
@@ -12,6 +14,7 @@ import {
 	deleteLead,
 	getLeadEvents,
 	listLeads,
+	logLeadTouch,
 	updateLead,
 } from "../services/leads.js";
 
@@ -46,6 +49,8 @@ const updateLeadBodySchema = z.object({
 	consultationId: z.string().uuid().optional().nullable(),
 	applicationId: z.string().uuid().optional().nullable(),
 	notes: z.string().optional().nullable(),
+	lostReason: leadLostReasonSchema.optional().nullable(),
+	lostNote: z.string().optional().nullable(),
 });
 
 const idParams = z.object({
@@ -162,6 +167,43 @@ leadsRouter.openapi(
 		const body = c.req.valid("json");
 		const created = await createManualLead(body);
 		return c.json(created, 201);
+	},
+);
+
+/* ── POST /api/v1/leads/:id/touches ─────────────────────────────────────────── */
+
+leadsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/touches",
+		tags: ["CRM Leads"],
+		middleware: [requireAuth, requireModule("leads")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: logLeadTouchSchema } },
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: leadSchema } },
+				description: "Touch logged; returns the updated lead",
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const staff = c.get("staff");
+		const updated = await logLeadTouch(id, body, {
+			opsUserId: staff?.opsUserId ?? null,
+			name: staff?.name ?? null,
+		});
+		if (!updated) {
+			throw new HttpError(404, "NOT_FOUND", "Lead not found");
+		}
+		return c.json(updated);
 	},
 );
 

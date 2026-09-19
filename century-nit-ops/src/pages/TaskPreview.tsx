@@ -16,7 +16,8 @@ import { ApproveInvoiceSheet } from "./case/ApproveInvoiceSheet";
 import { DelegateSheet } from "./case/DelegateSheet";
 import { useJoinMeeting } from "./case/ConsultationCall";
 import { AssignSheet, type HandlerPlacement } from "./case/AssignSheet";
-import { JOURNEY_STAGE_LABELS, type Booking, type JourneyStage, type StageHandoff, type TravelAssistanceRequest } from "century-nit-shared";
+import { JOURNEY_STAGE_LABELS, API_PREFIX, type ApiOpsTask, type Booking, type JourneyStage, type StageHandoff, type TravelAssistanceRequest } from "century-nit-shared";
+import { apiFetch } from "../lib/api";
 import {
 	assignPendingTask,
 	handoffOffersKeep,
@@ -34,6 +35,8 @@ function openLabel(item: PendingTask): string {
 	if (item.kind === "applicant") return "Open client";
 	if (item.kind === "invoice") return "Open invoice";
 	if (item.kind === "lead") return "Open leads";
+	if (item.kind === "task")
+		return item.record.leadId ? "Open lead" : item.record.applicationId ? "Open case" : "Open workspace";
 	return "Open case";
 }
 
@@ -146,6 +149,22 @@ export function PreviewPane({
 		}
 	}
 
+	const [taskBusy, setTaskBusy] = useState(false);
+	async function markTaskDone() {
+		if (item.kind !== "task") return;
+		setTaskBusy(true);
+		setActionError(null);
+		try {
+			await apiFetch(`${API_PREFIX}/tasks/${item.record.id}`, { method: "PATCH", body: JSON.stringify({ done: true }) });
+			setActionOk("Done.");
+			await onAssigned();
+		} catch (err) {
+			setActionError(err instanceof Error ? err.message : "Could not mark it done");
+		} finally {
+			setTaskBusy(false);
+		}
+	}
+
 	return (
 		<div className="cn-detail">
 			{/* The "open" action lives in the scaffold bar beside Close, not here. */}
@@ -186,6 +205,7 @@ export function PreviewPane({
 					{item.kind === "travel" && <TravelDetails ta={item.record} />}
 					{item.kind === "booking" && <BookingDetails b={item.record} />}
 					{item.kind === "lead" && <LeadDetails lead={item.record} />}
+					{item.kind === "task" && <TaskDetails t={item.record} />}
 				</div>
 			</div>
 
@@ -240,7 +260,17 @@ export function PreviewPane({
 						{loadingInvoice ? "Loading…" : "Approve & issue"}
 					</button>
 				)}
-				<Link to={item.linkTo} className={`btn btn--sm ${approvable ? "btn--ghost" : "btn--primary"}`}>
+				{item.kind === "task" && (
+					<button
+						type="button"
+						className="btn btn--primary btn--sm"
+						disabled={taskBusy}
+						onClick={() => void markTaskDone()}
+					>
+						{taskBusy ? "…" : "Mark done ✓"}
+					</button>
+				)}
+				<Link to={item.linkTo} className={`btn btn--sm ${approvable || item.kind === "task" ? "btn--ghost" : "btn--primary"}`}>
 					{openLabel(item)}
 				</Link>
 			</div>
@@ -438,6 +468,19 @@ function LeadDetails({ lead }: { lead: Lead }) {
 			<Fact k="Handler">{lead.assignedTo || "— open"}</Fact>
 			<Fact k="Last contact">{timeAgo(lead.lastContactAt)}</Fact>
 			{lead.notes && <Fact k="Notes"><i>{lead.notes}</i></Fact>}
+		</>
+	);
+}
+
+function TaskDetails({ t }: { t: ApiOpsTask }) {
+	return (
+		<>
+			<Fact k="Due">{timeAgo(t.dueAt)}</Fact>
+			<Fact k="For">{t.assigneeName ?? "— open"}</Fact>
+			{t.leadName && <Fact k="Lead">{t.leadName}</Fact>}
+			{t.applicationRef && <Fact k="Case">{t.applicationRef}</Fact>}
+			{t.createdByName && <Fact k="Set by">{t.createdByName}</Fact>}
+			{t.note && <Fact k="Note"><i>{t.note}</i></Fact>}
 		</>
 	);
 }

@@ -145,6 +145,7 @@ import {
 
 
 	applicationActivityResponseSchema,
+	ledgerRowSchema,
 	postArrivalScheduleChoiceSchema,
 } from "century-nit-shared";
 
@@ -906,6 +907,69 @@ applicationsRouter.openapi(
 		await setPostArrivalSchedule({ applicationId: id, choice, actor: actorFrom(c.get("staff")!), reason });
 		const updated = await getApplication(id);
 		return c.json(await serializeApplication(updated!));
+	},
+);
+
+/* ── POST /applications/{id}/post-arrival-schedule/review — finance/manager approves (with the start date) or declines ── */
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/post-arrival-schedule/review",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireCapability("approve_schedules")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: {
+					"application/json": {
+						schema: z.discriminatedUnion("decision", [
+							z.object({ decision: z.literal("approve"), startAt: z.string().min(1, "Enter the plan's start date") }),
+							z.object({ decision: z.literal("decline"), reason: z.string().min(1).max(500) }),
+						]),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			200: { content: { "application/json": { schema: applicationSchema } }, description: "Schedule reviewed" },
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		await assertApplicationAccess(c, id);
+		const body = c.req.valid("json");
+		const { approvePostArrivalSchedule, declinePostArrivalSchedule } = await import("../services/serviceFee.js");
+		const actor = actorFrom(c.get("staff")!);
+		if (body.decision === "approve") {
+			await approvePostArrivalSchedule({ applicationId: id, startAt: body.startAt, actor });
+		} else {
+			await declinePostArrivalSchedule({ applicationId: id, reason: body.reason, actor });
+		}
+		const updated = await getApplication(id);
+		return c.json(await serializeApplication(updated!));
+	},
+);
+
+/* ── GET /applications/{id}/ledger — the full operational ledger across the case's invoices ── */
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/{id}/ledger",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: { params: idParams },
+		responses: {
+			200: { content: { "application/json": { schema: z.object({ rows: z.array(ledgerRowSchema) }) } }, description: "The case's transaction ledger" },
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		await assertApplicationAccess(c, id);
+		const { applicationLedger } = await import("../services/ledger.js");
+		return c.json({ rows: await applicationLedger(id) });
 	},
 );
 

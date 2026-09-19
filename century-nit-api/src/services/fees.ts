@@ -150,7 +150,7 @@ export async function postArrivalCatalogue(): Promise<PostArrivalCatalogue> {
 		.split(",")
 		.map((x) => x.trim())
 		.filter((x): x is PostArrivalFrequency => (POST_ARRIVAL_FREQUENCIES as readonly string[]).includes(x));
-	const days = async (key: "POST_ARRIVAL_GRACE_DAYS" | "POST_ARRIVAL_REMIND_DAYS", fallback: number, max: number) => {
+	const days = async (key: "POST_ARRIVAL_GRACE_DAYS" | "POST_ARRIVAL_REMIND_DAYS" | "POST_ARRIVAL_INTEREST_PCT", fallback: number, max: number) => {
 		const n = Number.parseInt((await getSetting(key)) ?? "", 10);
 		return Number.isFinite(n) && n >= 0 && n <= max ? n : fallback;
 	};
@@ -159,6 +159,7 @@ export async function postArrivalCatalogue(): Promise<PostArrivalCatalogue> {
 		frequencies: frequencies.length > 0 ? [...new Set(frequencies)] : d.frequencies,
 		graceDays: await days("POST_ARRIVAL_GRACE_DAYS", d.graceDays, 180),
 		remindDays: await days("POST_ARRIVAL_REMIND_DAYS", d.remindDays, 60),
+		interestPct: await days("POST_ARRIVAL_INTEREST_PCT", d.interestPct, 100),
 	};
 }
 

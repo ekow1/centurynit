@@ -20,6 +20,15 @@ await (await import("./services/roles.js")).seedSystemRoles().catch((err) => {
 
 const app = createApp();
 
+/*
+ * The follow-up reminder sweep — due tasks notify their assignee once,
+ * through the same bell/push pipe every other notification uses.
+ * `reminded_at` on the row keeps a restart from re-firing.
+ */
+const { remindDueTasks } = await import("./services/tasks.js");
+void remindDueTasks().catch(() => {});
+setInterval(() => void remindDueTasks().catch(() => {}), 5 * 60_000).unref();
+
 serve({
 	fetch: app.fetch,
 	port: Number(env.PORT),

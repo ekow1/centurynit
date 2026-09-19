@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, bookingsApi } from "century-nit-core/api";
 import type { Booking } from "century-nit-shared";
 import type { Lead } from "century-nit-core";
-import { API_PREFIX } from "century-nit-shared";
+import { API_PREFIX, type ApiOpsTask } from "century-nit-shared";
 import { useOpsAuth } from "../pages/OpsAuthContext";
 import { useCases } from "./useCases";
 import { useOpsSSE } from "./useChatStream";
@@ -43,6 +43,7 @@ export function useWorkQueue(branchFilter = "all") {
 	const [bookings, setBookings] = useState<Booking[] | null>(null);
 	const [bookingsError, setBookingsError] = useState<string | null>(null);
 	const [leads, setLeads] = useState<Lead[]>([]);
+	const [crmTasks, setCrmTasks] = useState<ApiOpsTask[]>([]);
 	const [liveBookings, setLiveBookings] = useState<Booking[]>([]);
 
 	const loadBookings = useCallback(() => {
@@ -87,6 +88,14 @@ export function useWorkQueue(branchFilter = "all") {
 
 	useEffect(loadLeads, [loadLeads]);
 
+	const loadTasks = useCallback(() => {
+		void apiFetch<{ tasks: ApiOpsTask[] }>(`${API_PREFIX}/tasks`)
+			.then((res) => setCrmTasks(Array.isArray(res?.tasks) ? res.tasks : []))
+			.catch(() => setCrmTasks([]));
+	}, []);
+
+	useEffect(loadTasks, [loadTasks]);
+
 	useEffect(() => {
 		let cancelled = false;
 		const fetchLive = async () => {
@@ -110,18 +119,20 @@ export function useWorkQueue(branchFilter = "all") {
 	// themselves inside useCasesApi / useInvoiceApi.) Debounced so a burst
 	// of events is one refetch.
 	const queueRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const pendingQueueReloads = useRef({ bookings: false, leads: false });
+	const pendingQueueReloads = useRef({ bookings: false, leads: false, tasks: false });
 	useOpsSSE((event) => {
 		const t = String(event.type ?? "").replace(/_/g, ".");
 		if (t.startsWith("booking.")) pendingQueueReloads.current.bookings = true;
 		else if (t.startsWith("lead.")) pendingQueueReloads.current.leads = true;
+		else if (t.startsWith("task.")) pendingQueueReloads.current.tasks = true;
 		else return;
 		if (queueRefreshTimer.current) clearTimeout(queueRefreshTimer.current);
 		queueRefreshTimer.current = setTimeout(() => {
 			const pending = pendingQueueReloads.current;
-			pendingQueueReloads.current = { bookings: false, leads: false };
+			pendingQueueReloads.current = { bookings: false, leads: false, tasks: false };
 			if (pending.bookings) loadBookings();
 			if (pending.leads) loadLeads();
+			if (pending.tasks) loadTasks();
 		}, 1500);
 	});
 
@@ -177,13 +188,31 @@ export function useWorkQueue(branchFilter = "all") {
 			priority: PRIORITY.assign_consultation,
 			isLive: liveIds.has(b.id),
 		}));
-		return sortTasks([...built, ...bookingTasks]);
-	}, [scopedConsultations, scopedApplications, scopedApplicants, handoffs, travelRequests, invoiceRows, invoices, leads, liveIds, bookings, inBranch]);
+		// Written follow-ups — dashed badge, due date drives today/overdue.
+		const taskRows: PendingTask[] = crmTasks.map((t) => ({
+			id: `task-${t.id}`,
+			category: "needs_followup",
+			kind: "task",
+			action: "followup",
+			record: t,
+			title: t.title,
+			subtitle: t.leadName ? `${t.leadName} · lead` : t.applicationRef ? `Case ${t.applicationRef}` : "Personal",
+			meta: t.assigneeName ? `For ${t.assigneeName}` : "Unassigned",
+			branch: "",
+			owner: t.assigneeName ?? "— open",
+			linkTo: t.leadId ? `/leads?id=${t.leadId}` : t.applicationId ? `/applications?id=${t.applicationId}` : "/workspace",
+			at: t.createdAt,
+			due: t.dueAt,
+			priority: PRIORITY.followup,
+		}));
+		return sortTasks([...built, ...bookingTasks, ...taskRows]);
+	}, [scopedConsultations, scopedApplications, scopedApplicants, handoffs, travelRequests, invoiceRows, invoices, leads, liveIds, bookings, crmTasks, inBranch]);
 
 	const refreshAll = useCallback(() => {
 		loadBookings();
+		loadTasks();
 		void refresh();
-	}, [loadBookings, refresh]);
+	}, [loadBookings, loadTasks, refresh]);
 
 	return {
 		items,

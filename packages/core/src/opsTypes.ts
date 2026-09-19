@@ -273,6 +273,12 @@ export interface MockApplication {
 	/** The post-arrival schedule the client chose. Months and frequency. */
 	postArrivalMonths?: number | null;
 	postArrivalFrequency?: string | null;
+	/** pending until finance/manager approves; then the dated plan is live. */
+	postArrivalStatus?: "pending" | "approved" | "declined" | null;
+	postArrivalStartAt?: string | null;
+	postArrivalReviewedBy?: string | null;
+	postArrivalDeclineReason?: string | null;
+	postArrivalInterestPct?: number | null;
 	/** Agency settlement milestone index (0=deposit, 1=balance, 2=clearance) */
 	agencyStageIndex?: number;
 	/** Agency settlement fully completed */
@@ -388,6 +394,12 @@ export interface MockApplicant {
 	/** The post-arrival schedule the client chose. Months and frequency. */
 	postArrivalMonths?: number | null;
 	postArrivalFrequency?: string | null;
+	/** pending until finance/manager approves; then the dated plan is live. */
+	postArrivalStatus?: "pending" | "approved" | "declined" | null;
+	postArrivalStartAt?: string | null;
+	postArrivalReviewedBy?: string | null;
+	postArrivalDeclineReason?: string | null;
+	postArrivalInterestPct?: number | null;
 	/** Agency settlement milestone index (0=deposit, 1=balance, 2=clearance) */
 	agencyStageIndex?: number;
 	/** Agency settlement fully completed */

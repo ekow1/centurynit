@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useCases } from "../../../hooks/useCases";
+import { useOpsAuth } from "../../OpsAuthContext";
+import { useFeeCatalogue } from "../../../hooks/useFeeCatalogue";
 import { InvoiceCard, formatMoney } from "century-nit-core/ui";
-import { POST_ARRIVAL_FREQUENCY_LABELS, type PostArrivalFrequency } from "century-nit-shared";
+import { POST_ARRIVAL_FREQUENCY_LABELS, postArrivalInstalments, postArrivalInterestCents, type LedgerRow, type PostArrivalFrequency } from "century-nit-shared";
 import { applicationsApi } from "century-nit-core/api";
 import type { MockApplication } from "century-nit-core/ops";
 import type { ApiInvoice } from "../../../lib/api";
@@ -44,9 +46,26 @@ export function MoneyTab({
 	fail: Fail;
 }) {
 	const { setApplicationStage, setPaymentPlan, refresh } = useCases();
+	const { hasCapability } = useOpsAuth();
+	const { catalogue } = useFeeCatalogue();
+	const canApproveSchedules = hasCapability("approve_schedules");
+	const interestPct = catalogue?.postArrival?.interestPct ?? 0;
 	const [planDraft, setPlanDraft] = useState<"" | "full" | "installment">("");
 	const [approving, setApproving] = useState<ApiInvoice | null>(null);
 	const [raising, setRaising] = useState(false);
+	const [ledger, setLedger] = useState<LedgerRow[]>([]);
+	useEffect(() => {
+		let cancelled = false;
+		applicationsApi
+			.ledger(app.id)
+			.then((res) => {
+				if (!cancelled) setLedger(res.rows);
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	}, [app.id, caseInvoices]);
 	// The service fee as the ledger carries it — the live agency invoice's
 	// lines, each covered or not by the payments so far, dated once the
 	// post-arrival schedule is chosen.
@@ -73,7 +92,23 @@ export function MoneyTab({
 	const [schedFreq, setSchedFreq] = useState<PostArrivalFrequency>("monthly");
 	const [schedReason, setSchedReason] = useState("");
 	const [schedBusy, setSchedBusy] = useState(false);
+	const [reviewStart, setReviewStart] = useState("");
+	const [reviewDeclining, setReviewDeclining] = useState(false);
+	const [reviewReason, setReviewReason] = useState("");
+	const [reviewBusy, setReviewBusy] = useState(false);
 	const postArrivalPaid = feeRows.some((r) => r.i >= 2 && (r.covered || r.partly));
+	const remainderCents = feeRows.filter((r) => r.i >= 2).reduce((n, r) => n + r.l.amountCents, 0);
+	const reviewPreview =
+		app.postArrivalStatus === "pending" && app.postArrivalMonths && app.postArrivalFrequency && reviewStart
+			? postArrivalInstalments({
+					amountCents: remainderCents,
+					months: app.postArrivalMonths,
+					frequency: app.postArrivalFrequency as PostArrivalFrequency,
+					anchor: new Date(reviewStart),
+					graceDays: 0,
+					interestPct,
+				})
+			: null;
 	async function saveSchedule() {
 		setSchedBusy(true);
 		try {
@@ -82,11 +117,30 @@ export function MoneyTab({
 			onInvoicesChanged();
 			setSchedOpen(false);
 			setSchedReason("");
-			flash("Post-arrival schedule set — the instalments are on the invoice.");
+			flash("Schedule requested — finance or a manager sets the start date and approves it.");
 		} catch (e) {
 			fail(e, "Could not set the schedule");
 		} finally {
 			setSchedBusy(false);
+		}
+	}
+	async function reviewSchedule(approve: boolean) {
+		setReviewBusy(true);
+		try {
+			await applicationsApi.reviewPostArrivalSchedule(
+				app.id,
+				approve ? { decision: "approve", startAt: new Date(reviewStart).toISOString() } : { decision: "decline", reason: reviewReason.trim() },
+			);
+			await refresh();
+			onInvoicesChanged();
+			setReviewStart("");
+			setReviewReason("");
+			setReviewDeclining(false);
+			flash(approve ? "Plan approved — the dated instalments are on the portal." : "Request declined — the client can pick again.");
+		} catch (e) {
+			fail(e, "Could not review the schedule");
+		} finally {
+			setReviewBusy(false);
 		}
 	}
 	const fmtDay = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : null);
@@ -186,14 +240,72 @@ export function MoneyTab({
 					{app.paymentPlanId === "installment" && (
 						<div className="mt-2" style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
 							<span className="muted text-xs">
-								{app.postArrivalMonths && app.postArrivalFrequency
-									? `Post-arrival: ${app.postArrivalMonths} months · ${POST_ARRIVAL_FREQUENCY_LABELS[app.postArrivalFrequency as PostArrivalFrequency]?.toLowerCase() ?? app.postArrivalFrequency}${feeRows.some((r) => r.i >= 2 && !r.l.dueAt) ? " · dated once arrival is recorded" : ""}`
-									: "Post-arrival: the client has not chosen a schedule yet."}
+								{app.postArrivalStatus === "pending"
+									? `Post-arrival request: ${app.postArrivalMonths} months · ${POST_ARRIVAL_FREQUENCY_LABELS[app.postArrivalFrequency as PostArrivalFrequency]?.toLowerCase() ?? app.postArrivalFrequency} — awaiting approval`
+									: app.postArrivalStatus === "approved"
+										? `Post-arrival plan: ${app.postArrivalMonths} months · ${POST_ARRIVAL_FREQUENCY_LABELS[app.postArrivalFrequency as PostArrivalFrequency]?.toLowerCase() ?? app.postArrivalFrequency}${app.postArrivalStartAt ? ` · from ${fmtDay(app.postArrivalStartAt)}` : ""}${app.postArrivalInterestPct ? ` · +${app.postArrivalInterestPct}% interest` : ""}${app.postArrivalReviewedBy ? ` · approved by ${app.postArrivalReviewedBy}` : ""}`
+										: app.postArrivalStatus === "declined"
+											? `Post-arrival request declined${app.postArrivalDeclineReason ? ` — ${app.postArrivalDeclineReason}` : ""} — the client can pick again`
+											: app.postArrivalMonths && app.postArrivalFrequency
+												? `Post-arrival: ${app.postArrivalMonths} months · ${POST_ARRIVAL_FREQUENCY_LABELS[app.postArrivalFrequency as PostArrivalFrequency]?.toLowerCase() ?? app.postArrivalFrequency}`
+												: "Post-arrival: the client has not chosen a schedule yet."}
 							</span>
-							{canWork && !postArrivalPaid && !schedOpen && (
+							{canWork && !postArrivalPaid && !schedOpen && app.postArrivalStatus !== "approved" && (
 								<button type="button" className="btn btn--sm btn--ghost" onClick={() => setSchedOpen(true)}>
 									{app.postArrivalMonths ? "Change on their behalf…" : "Set on their behalf…"}
 								</button>
+							)}
+						</div>
+					)}
+					{app.postArrivalStatus === "pending" && (
+						<div className="mt-3" style={{ border: "1.5px solid var(--border)", padding: "0.75rem 0.9rem" }}>
+							<p className="eyebrow" style={{ margin: "0 0 0.4rem" }}>Schedule request · needs approval</p>
+							<p className="muted text-xs" style={{ margin: "0 0 0.6rem" }}>
+								{app.postArrivalMonths} months · {POST_ARRIVAL_FREQUENCY_LABELS[app.postArrivalFrequency as PostArrivalFrequency]?.toLowerCase() ?? app.postArrivalFrequency}
+								{" · "}principal {formatMoney(remainderCents, "ghs")}
+								{interestPct > 0 && ` · +${interestPct}% interest (${formatMoney(postArrivalInterestCents(remainderCents, interestPct), "ghs")})`}
+								{interestPct > 0 && ` · total ${formatMoney(remainderCents + postArrivalInterestCents(remainderCents, interestPct), "ghs")}`}
+							</p>
+							{canApproveSchedules ? (
+								<>
+									<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", alignItems: "center" }}>
+										<label className="muted text-xs" htmlFor="pa-start">Start date</label>
+										<input
+											id="pa-start"
+											type="date"
+											className="input input--sm cn-dt"
+											style={{ width: "auto" }}
+											value={reviewStart}
+											onChange={(e) => setReviewStart(e.target.value)}
+											disabled={reviewBusy}
+										/>
+										{reviewPreview && (
+											<span className="muted text-xs">
+												{reviewPreview.length} instalments · last {fmtDay(reviewPreview[reviewPreview.length - 1].dueAt)} · {formatMoney(reviewPreview[0].amountCents, "ghs")} each
+											</span>
+										)}
+									</div>
+									{!reviewDeclining ? (
+										<div className="mt-2" style={{ display: "flex", gap: "0.4rem" }}>
+											<button type="button" className="btn btn--sm btn--primary" disabled={reviewBusy || !reviewStart} onClick={() => void reviewSchedule(true)}>
+												{reviewBusy ? "Saving…" : "Approve & set plan"}
+											</button>
+											<button type="button" className="btn btn--sm btn--ghost" disabled={reviewBusy} onClick={() => setReviewDeclining(true)}>
+												Decline…
+											</button>
+										</div>
+									) : (
+										<div className="mt-2" style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", alignItems: "center" }}>
+											<input className="input input--sm" style={{ flex: "1 1 14rem" }} value={reviewReason} onChange={(e) => setReviewReason(e.target.value)} placeholder="Why — e.g. term too long for the balance" disabled={reviewBusy} />
+											<button type="button" className="btn btn--sm btn--primary" disabled={reviewBusy || !reviewReason.trim()} onClick={() => void reviewSchedule(false)}>
+												{reviewBusy ? "Saving…" : "Decline request"}
+											</button>
+											<button type="button" className="btn btn--sm btn--ghost" disabled={reviewBusy} onClick={() => setReviewDeclining(false)}>Back</button>
+										</div>
+									)}
+								</>
+							) : (
+								<p className="muted text-xs" style={{ margin: 0 }}>Finance or a manager approves this request.</p>
 							)}
 						</div>
 					)}
@@ -255,6 +367,56 @@ export function MoneyTab({
 						/>
 					</div>
 				))
+			)}
+
+			{ledger.length > 0 && (
+				<div className="card" style={{ padding: 0, overflow: "hidden" }}>
+					<p className="eyebrow" style={{ margin: 0, padding: "0.6rem 0.9rem 0" }}>Transaction ledger</p>
+					<table className="ledger">
+						<thead>
+							<tr>
+								<th>Date</th>
+								<th>Entry</th>
+								<th>Channel</th>
+								<th>Reference</th>
+								<th>Recorded by</th>
+								<th className="num">Amount</th>
+								<th>Status</th>
+								<th className="num">Balance</th>
+							</tr>
+						</thead>
+						<tbody>
+							{ledger.map((r) => (
+								<tr key={r.id} className={r.status === "declined" ? "failed-row" : undefined}>
+									<td className="num">{fmtDay(r.at)}</td>
+									<td>
+										{r.label}
+										<span className="sub">{r.invoiceNumber}</span>
+									</td>
+									<td>{r.channel}</td>
+									<td className="ref">{r.reference ?? "—"}</td>
+									<td>{r.recordedBy ?? "—"}</td>
+									<td className="num">{formatMoney(r.amountCents, "ghs")}</td>
+									<td>
+										{r.status === "settled" ? (
+											<span className="st st--paid">settled</span>
+										) : r.status === "manual" ? (
+											<span className="st st--man">manual</span>
+										) : r.status === "declined" ? (
+											<>
+												<span className="st st--failed">declined</span>
+												{r.failureReason && <span className="sub">{r.failureReason}</span>}
+											</>
+										) : (
+											<span className="st st--sched">scheduled</span>
+										)}
+									</td>
+									<td className="num">{r.balanceAfterCents != null ? formatMoney(r.balanceAfterCents, "ghs") : "—"}</td>
+								</tr>
+							))}
+						</tbody>
+					</table>
+				</div>
 			)}
 
 			<ApproveInvoiceSheet

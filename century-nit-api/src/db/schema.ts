@@ -1164,6 +1164,15 @@ export const applications = pgTable(
 		postArrivalMonths: integer("post_arrival_months"),
 		postArrivalFrequency: varchar("post_arrival_frequency", { length: 16 }),
 		postArrivalChosenAt: timestamp("post_arrival_chosen_at", { withTimezone: true }),
+		/** pending → approved | declined: the request waits on finance/manager before lines go live. */
+		postArrivalStatus: varchar("post_arrival_status", { length: 16 }),
+		/** The contractual first instalment date, entered by finance/manager at approval. */
+		postArrivalStartAt: timestamp("post_arrival_start_at", { withTimezone: true }),
+		postArrivalReviewedBy: text("post_arrival_reviewed_by"),
+		postArrivalReviewedAt: timestamp("post_arrival_reviewed_at", { withTimezone: true }),
+		postArrivalDeclineReason: text("post_arrival_decline_reason"),
+		/** The flat interest % frozen into the approved schedule. */
+		postArrivalInterestPct: integer("post_arrival_interest_pct"),
 		agencyStageIndex: integer("agency_stage_index").notNull().default(0),
 		agencySettled: boolean("agency_settled").notNull().default(false),
 		/** True once the applicant has paid the 10% deposit (first agency milestone). */
@@ -1396,6 +1405,15 @@ export const leads = pgTable(
 			onDelete: "set null",
 		}),
 		notes: text("notes"),
+		/**
+		 * The last time a human actually reached the client — set by touch
+		 * events and inbound client messages, never by `updatedAt` (which any
+		 * record edit or nightly sync bumps). Null until the first touch.
+		 */
+		lastClientTouchAt: timestamp("last_client_touch_at", { withTimezone: true }),
+		/** Why the lead was marked lost — a fixed enum so reports can group it. */
+		lostReason: varchar("lost_reason", { length: 32 }),
+		lostNote: text("lost_note"),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 	},
@@ -1424,6 +1442,47 @@ export const leadEvents = pgTable(
 	},
 	(t) => ({
 		byLead: index("lead_events_lead_idx").on(t.leadId, t.createdAt),
+	}),
+);
+
+/* ── Staff tasks — real follow-ups, not derived state ──────────────────── */
+
+/**
+ * A task somebody wrote: "call Ama on Tuesday". The work queue derives
+ * tasks from record state; these are intent — a due date, an owner, and a
+ * reminder through the normal notification pipe. `leadId`/`applicationId`
+ * link it to the record it concerns; either, neither (a personal reminder)
+ * or… one must be set for it to surface in the queue meaningfully.
+ */
+export const opsTasks = pgTable(
+	"ops_tasks",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		title: text("title").notNull(),
+		note: text("note"),
+		dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+		/** Null = sits in the shared queue for anyone to pick up. */
+		assigneeOpsUserId: uuid("assignee_ops_user_id").references(() => opsUsers.id, {
+			onDelete: "cascade",
+		}),
+		createdByOpsUserId: uuid("created_by_ops_user_id").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
+		leadId: uuid("lead_id").references(() => leads.id, { onDelete: "cascade" }),
+		applicationId: uuid("application_id").references(() => applications.id, {
+			onDelete: "cascade",
+		}),
+		doneAt: timestamp("done_at", { withTimezone: true }),
+		/** Set once the due reminder fired — the sweep never notifies twice. */
+		remindedAt: timestamp("reminded_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byAssignee: index("ops_tasks_assignee_idx").on(t.assigneeOpsUserId, t.dueAt),
+		byLead: index("ops_tasks_lead_idx").on(t.leadId),
+		byApplication: index("ops_tasks_application_idx").on(t.applicationId),
+		byDue: index("ops_tasks_due_idx").on(t.dueAt, t.doneAt),
 	}),
 );
 

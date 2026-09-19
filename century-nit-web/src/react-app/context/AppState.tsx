@@ -283,6 +283,11 @@ export type ApplicationData = {
 	/** The post-arrival schedule chosen. Months and frequency; null until chosen. */
 	postArrivalMonths: number | null;
 	postArrivalFrequency: string | null;
+	/** pending until finance/manager approves; then the dated plan is live. */
+	postArrivalStatus: "pending" | "approved" | "declined" | null;
+	postArrivalDeclineReason: string | null;
+	postArrivalStartAt: string | null;
+	postArrivalInterestPct: number | null;
 	paymentPlanChosenAt: string | null;
 	/** Agency settlement (Stage IV) */
 	agencyTotal: number;
@@ -567,6 +572,10 @@ const defaultApplication: ApplicationData = {
 	paymentPlanId: "",
 	postArrivalMonths: null,
 	postArrivalFrequency: null,
+	postArrivalStatus: null,
+	postArrivalDeclineReason: null,
+	postArrivalStartAt: null,
+	postArrivalInterestPct: null,
 	paymentPlanChosenAt: null,
 	agencyTotal: 0,
 	agencyPaid: 0,
@@ -2441,6 +2450,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					paymentPlanId: (a.paymentPlanId as any) ?? prev.paymentPlanId,
 					postArrivalMonths: a.postArrivalMonths ?? null,
 					postArrivalFrequency: a.postArrivalFrequency ?? null,
+					postArrivalStatus: (a.postArrivalStatus as "pending" | "approved" | "declined" | null) ?? null,
+					postArrivalDeclineReason: a.postArrivalDeclineReason ?? null,
+					postArrivalStartAt: a.postArrivalStartAt ?? null,
+					postArrivalInterestPct: a.postArrivalInterestPct ?? null,
 					agencyDepositPaid: a.agencyStageIndex > 0 || prev.agencyDepositPaid,
 					travelInvoicePaid: a.travelInvoicePaid ?? prev.travelInvoicePaid,
 					applicationConsent: (a as any).applicationConsent ?? prev.applicationConsent,

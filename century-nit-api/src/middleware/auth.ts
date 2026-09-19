@@ -294,6 +294,7 @@ const CAPABILITY_VERBS: Partial<Record<Capability, string>> = {
 	edit_packages: "edit packages",
 	edit_universities: "edit universities",
 	issue_invoices: "issue invoices",
+	approve_schedules: "approve payment schedules",
 };
 
 export function requireModule(

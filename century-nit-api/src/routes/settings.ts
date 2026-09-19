@@ -247,6 +247,7 @@ settingsRouter.openapi(
 			"POST_ARRIVAL_FREQUENCIES",
 			"POST_ARRIVAL_GRACE_DAYS",
 			"POST_ARRIVAL_REMIND_DAYS",
+			"POST_ARRIVAL_INTEREST_PCT",
 		]);
 		const isSensitiveSetting = !FEE_SCHEDULE_KEYS.has(body.key);
 

@@ -139,14 +139,6 @@ export const momoOtpSchema = z.object({
 	otp: z.string().min(3).max(10),
 });
 
-/** Poll for the outcome of a MoMo charge — settles the invoice on success. */
-export const momoStatusResponseSchema = z.object({
-	status: z.string(),
-	settled: z.boolean(),
-	invoice: z.lazy(() => invoiceSchema).optional(),
-	displayText: z.string().nullable().optional(),
-});
-
 /** Verify a Paystack transaction reference against an invoice. */
 export const paystackVerifySchema = z.object({
 	reference: z.string().min(1).max(200),
@@ -233,6 +225,16 @@ export const invoiceSchema = z.object({
 export const invoiceListSchema = z.object({
 	invoices: z.array(invoiceSchema),
 	total: z.number().int(),
+});
+
+/* Declared below invoiceSchema so the field is a plain reference — zod-to-openapi
+ * cannot document z.lazy, and there is no real cycle to break. */
+/** Poll for the outcome of a MoMo charge — settles the invoice on success. */
+export const momoStatusResponseSchema = z.object({
+	status: z.string(),
+	settled: z.boolean(),
+	invoice: invoiceSchema.optional(),
+	displayText: z.string().nullable().optional(),
 });
 
 /** Result of verifying a Paystack transaction against an invoice. */

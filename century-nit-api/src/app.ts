@@ -1,5 +1,9 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { apiReference } from "@scalar/hono-api-reference";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
 import { logger } from "hono/logger";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
@@ -30,6 +34,7 @@ import { meProceedRouter, opsProceedRouter } from "./routes/proceed.js";
 import { paymentsRouter } from "./routes/payments.js";
 import { rolesRouter } from "./routes/roles.js";
 import { leadsRouter } from "./routes/leads.js";
+import { tasksRouter } from "./routes/tasks.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { pushRouter } from "./routes/push.js";
 import { clientUsersRouter } from "./routes/clientUsers.js";
@@ -44,6 +49,20 @@ import { packagesRouter } from "./routes/packages.js";
 import { feesRouter } from "./routes/fees.js";
 import { departureRouter } from "./routes/departure.js";
 
+/*
+ * century-nit-shared resolves its own physical copy of zod (nested
+ * node_modules), so the extension @hono/zod-openapi applies to the app's zod
+ * never reaches shared-package schemas. Extend that copy too — routes use
+ * shared schemas in request.params/query positions.
+ */
+{
+	const req = createRequire(import.meta.url);
+	const sharedDir = dirname(fileURLToPath(import.meta.resolve("century-nit-shared")));
+	// shared's dist is ESM, so it loads zod's ESM build (index.js) — a different
+	// module instance than the CJS index.cjs require() would find.
+	const zodEsmPath = join(dirname(req.resolve("zod", { paths: [sharedDir] })), "index.js");
+	extendZodWithOpenApi(await import(pathToFileURL(zodEsmPath).href));
+}
 
 /**
  * Just enough of the OpenAPI shape to merge two documents.
@@ -153,6 +172,7 @@ export function createApp() {
 	app.route(`${API_PREFIX}/payments`, paymentsRouter);
 	app.route(`${API_PREFIX}/roles`, rolesRouter);
 	app.route(`${API_PREFIX}/leads`, leadsRouter);
+	app.route(`${API_PREFIX}/tasks`, tasksRouter);
 	app.route(`${API_PREFIX}/client-users`, clientUsersRouter);
 	app.route(`${API_PREFIX}/chat`, chatRouter);
 	app.route(`${API_PREFIX}/communication`, communicationRouter);
@@ -282,6 +302,7 @@ app.route(`${API_PREFIX}/departure`, departureRouter);
 	{ name: "Marketing", description: "Campaigns, mailing lists and reusable templates." },
 	{ name: "Newsletter", description: "Public website newsletter subscription and opt-out." },
 	{ name: "Team", description: "Manager dashboard for staff case assignments." },
+	{ name: "Tasks", description: "Staff follow-ups with due dates — real records next to the derived work queue." },
 	{
 		name: "Company Google Meet",
 		description: "Company Google account connection and status for automated Google Meet creation.",

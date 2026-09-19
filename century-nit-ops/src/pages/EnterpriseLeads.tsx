@@ -8,10 +8,23 @@ import {
 	type Lead,
 	type LeadStage,
 } from "century-nit-core";
-import { LEAD_STAGE_TO_DB, LEAD_STAGE_FROM_DB, API_PREFIX, type ApiLead, type LeadEvent } from "century-nit-shared";
+import {
+	LEAD_STAGE_TO_DB,
+	LEAD_STAGE_FROM_DB,
+	API_PREFIX,
+	LEAD_TOUCH_CHANNEL_LABELS,
+	LEAD_TOUCH_OUTCOME_LABELS,
+	LEAD_LOST_REASON_LABELS,
+	type ApiLead,
+	type LeadEvent,
+	type LeadLostReason,
+	type LeadTouchChannel,
+	type LeadTouchOutcome,
+} from "century-nit-shared";
 import { apiFetch } from "../lib/api";
 import { CaseScaffold } from "./case/CaseScaffold";
 import { whenLabel } from "../lib/pendingTasks";
+import { useUrlParam } from "../hooks/useUrlParam";
 
 /**
  * The Leads pad — every enquiry on the desk, hottest first.
@@ -24,7 +37,20 @@ import { whenLabel } from "../lib/pendingTasks";
  * event trail. No colour anywhere — heat is ink density.
  */
 
-type PadLead = Lead & { staffId: string | null };
+type PadLead = Lead & {
+	staffId: string | null;
+	/** The last human touch of the client — not just any record edit. */
+	lastClientTouchAt?: string | null;
+	lostReason?: LeadLostReason | null;
+	lostNote?: string | null;
+	nextTask?: { id: string; title: string; dueAt: string } | null;
+	updatedAt?: string;
+};
+
+/** The touch clock the bands read: real client contact, falling back to record age. */
+function touchAt(l: PadLead): string {
+	return l.lastClientTouchAt || l.lastContactAt || l.createdAt;
+}
 
 function timeAgo(iso?: string | null) {
 	if (!iso) return "—";
@@ -52,7 +78,7 @@ const STAGE_HEAT: Record<LeadStage, number> = {
 
 function heat(l: PadLead, now: number): number {
 	if (l.stage === "lost") return 0;
-	const touched = now - new Date(l.lastContactAt).getTime();
+	const touched = now - new Date(touchAt(l)).getTime();
 	const fresh = !Number.isNaN(touched) && touched < FRESH_MS;
 	return Math.max(1, Math.min(5, STAGE_HEAT[l.stage] + (fresh ? 1 : 0)));
 }
@@ -67,7 +93,7 @@ const PAD_BAND_LABEL: Record<PadBand, string> = {
 
 function leadBand(l: PadLead, now: number): PadBand {
 	if (l.stage === "converted" || l.stage === "lost") return "closed";
-	const touched = now - new Date(l.lastContactAt).getTime();
+	const touched = now - new Date(touchAt(l)).getTime();
 	const stale = Number.isNaN(touched) || touched > FRESH_MS;
 	const advanced = l.stage === "consultation_booked" || l.stage === "assessment_complete";
 	if (!stale || advanced) return "hot";
@@ -105,7 +131,8 @@ export function EnterpriseLeads() {
 	const [stageFilter, setStageFilter] = useState<"all" | LeadStage>("all");
 	const [sourceFilter, setSourceFilter] = useState("all");
 	const [sort, setSort] = useState<SortId>("hottest");
-	const [selectedId, setSelectedId] = useState<string | null>(null);
+	// ?id= makes a lead a shareable link — queue rows and task reminders land here.
+	const [selectedId, setSelectedId] = useUrlParam("id");
 	const [creating, setCreating] = useState(false);
 	// The clock the bands and heat read — ticks so a quiet lead goes cold in view.
 	const [now, setNow] = useState(() => Date.now());
@@ -162,6 +189,11 @@ export function EnterpriseLeads() {
 				source: al.source || "Website Registration",
 				createdAt: al.createdAt.slice(0, 10),
 				lastContactAt: al.lastContactAt || al.updatedAt || al.createdAt,
+				lastClientTouchAt: al.lastClientTouchAt ?? null,
+				lostReason: al.lostReason ?? null,
+				lostNote: al.lostNote ?? null,
+				nextTask: al.nextTask ?? null,
+				updatedAt: al.updatedAt,
 				notes: al.notes || "",
 				assignedTo: al.assignedStaffName || (al.assignedStaffId ? "Assigned" : "Unassigned"),
 				staffId: al.assignedStaffId ?? null,
@@ -197,13 +229,13 @@ export function EnterpriseLeads() {
 			rows = [...rows].sort(
 				(a, b) =>
 					heat(b, now) - heat(a, now) ||
-					new Date(b.lastContactAt).getTime() - new Date(a.lastContactAt).getTime(),
+					new Date(touchAt(b)).getTime() - new Date(touchAt(a)).getTime(),
 			);
 		} else if (sort === "newest") {
 			rows = [...rows].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 		} else {
 			rows = [...rows].sort(
-				(a, b) => new Date(a.lastContactAt).getTime() - new Date(b.lastContactAt).getTime(),
+				(a, b) => new Date(touchAt(a)).getTime() - new Date(touchAt(b)).getTime(),
 			);
 		}
 		return rows;
@@ -216,7 +248,7 @@ export function EnterpriseLeads() {
 
 	const stats = useMemo(() => {
 		const active = roleScopedLeads.filter((l) => l.stage !== "converted" && l.stage !== "lost");
-		const stale = active.filter((l) => now - new Date(l.lastContactAt).getTime() > FRESH_MS);
+		const stale = active.filter((l) => now - new Date(touchAt(l)).getTime() > FRESH_MS);
 		const converted = roleScopedLeads.filter((l) => l.stage === "converted").length;
 		const weekAgo = now - 7 * 86_400_000;
 		return {
@@ -264,11 +296,14 @@ export function EnterpriseLeads() {
 	);
 
 	const moveStage = useCallback(
-		(id: string, stage: LeadStage) => {
+		(id: string, stage: LeadStage, extra?: { lostReason?: LeadLostReason; lostNote?: string }) => {
 			setApiLeads((prev) =>
 				prev.map((l) => (l.id === id ? { ...l, stage: LEAD_STAGE_TO_DB[stage] as ApiLead["stage"] } : l)),
 			);
-			void updateLead(id, { stage: LEAD_STAGE_TO_DB[stage] }).catch(() => void loadApiLeads());
+			void updateLead(id, {
+				stage: LEAD_STAGE_TO_DB[stage],
+				...(extra?.lostReason ? { lostReason: extra.lostReason, lostNote: extra.lostNote ?? null } : {}),
+			}).catch(() => void loadApiLeads());
 		},
 		[updateLead, loadApiLeads],
 	);
@@ -282,7 +317,7 @@ export function EnterpriseLeads() {
 
 	// The picked lead is an id — the record stays honest across the 10s refresh.
 	const selected = mergedLeads.find((l) => l.id === selectedId) ?? null;
-	const select = (l: PadLead) => setSelectedId((cur) => (cur === l.id ? null : l.id));
+	const select = (l: PadLead) => setSelectedId(selectedId === l.id ? null : l.id);
 
 	return (
 		<div className="page-content fade-in">
@@ -343,8 +378,9 @@ export function EnterpriseLeads() {
 							now={now}
 							assignees={assignees}
 							canMove={canMoveLead(selected)}
-							onMove={(stage) => void moveStage(selected.id, stage)}
+							onMove={(stage, extra) => void moveStage(selected.id, stage, extra)}
 							onAssign={(opsUserId) => assignLead(selected.id, opsUserId)}
+							onChanged={() => void loadApiLeads()}
 						/>
 					) : null
 				}
@@ -473,14 +509,18 @@ export function EnterpriseLeads() {
 														>
 															<span className="ops-person__head">
 																<span className="ops-person__name" title={l.name}>{l.name}</span>
-																<span className="ops-person__when">{timeAgo(l.lastContactAt)}</span>
+																<span className="ops-person__when" title="Last client touch">{timeAgo(touchAt(l))}</span>
 															</span>
 															<span className="lead-cell__top">
 																<HeatMeter value={h} />
 																<span className="lead-cell__stage">{LEAD_STAGE_LABELS[l.stage] ?? l.stage}</span>
 															</span>
 															<span className="lead-cell__sub" title={l.country}>{l.country}</span>
-															<span className="lead-cell__sub muted">{l.source}</span>
+															{l.nextTask ? (
+																<span className="lead-cell__sub muted" title={l.nextTask.title}>◷ {whenLabel(l.nextTask.dueAt)}</span>
+															) : (
+																<span className="lead-cell__sub muted">{l.source}</span>
+															)}
 															<span className="ops-person__foot">
 																<span className="ops-person__meta">{l.assignedTo !== "Unassigned" ? l.assignedTo : "Unassigned"}</span>
 																<span className="ops-thing__arrow" aria-hidden>→</span>
@@ -526,8 +566,8 @@ function LeadDesk({
 }) {
 	const stale = leads
 		.filter((l) => l.stage !== "converted" && l.stage !== "lost")
-		.filter((l) => now - new Date(l.lastContactAt).getTime() > FRESH_MS)
-		.sort((a, b) => new Date(a.lastContactAt).getTime() - new Date(b.lastContactAt).getTime())
+		.filter((l) => now - new Date(touchAt(l)).getTime() > FRESH_MS)
+		.sort((a, b) => new Date(touchAt(a)).getTime() - new Date(touchAt(b)).getTime())
 		.slice(0, 5);
 	const unassigned = leads.filter((l) => !l.staffId && l.stage !== "converted" && l.stage !== "lost").length;
 
@@ -587,36 +627,51 @@ function LeadPane({
 	canMove,
 	onMove,
 	onAssign,
+	onChanged,
 }: {
 	lead: PadLead;
 	now: number;
 	assignees: { name: string; email: string; opsUserId?: string }[];
 	canMove: boolean;
-	onMove: (stage: LeadStage) => void;
+	onMove: (stage: LeadStage, extra?: { lostReason?: LeadLostReason; lostNote?: string }) => void;
 	onAssign: (opsUserId: string) => Promise<void>;
+	onChanged: () => void;
 }) {
 	const [events, setEvents] = useState<LeadEvent[]>([]);
 	const [assignBusy, setAssignBusy] = useState(false);
 	const [assignErr, setAssignErr] = useState<string | null>(null);
+	const [sheet, setSheet] = useState<"log" | "followup" | "edit" | "lost" | null>(null);
+	const [taskBusy, setTaskBusy] = useState(false);
+
+	const reloadEvents = useCallback(() => {
+		void apiFetch<{ events: LeadEvent[] }>(`${API_PREFIX}/leads/${lead.id}/events`)
+			.then((res) => setEvents(res.events ?? []))
+			.catch(() => setEvents([]));
+	}, [lead.id]);
 
 	useEffect(() => {
-		let cancelled = false;
-		void apiFetch<{ events: LeadEvent[] }>(`${API_PREFIX}/leads/${lead.id}/events`)
-			.then((res) => {
-				if (!cancelled) setEvents(res.events ?? []);
-			})
-			.catch(() => {
-				if (!cancelled) setEvents([]);
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [lead.id]);
+		reloadEvents();
+	}, [reloadEvents]);
 
 	const idx = (STEPPER_STAGES as LeadStage[]).indexOf(lead.stage);
 	const next = idx >= 0 ? STEPPER_STAGES[idx + 1] : undefined;
 	const prev = idx > 0 ? STEPPER_STAGES[idx - 1] : undefined;
 	const closed = lead.stage === "converted" || lead.stage === "lost";
+	const nextTask = lead.nextTask ?? null;
+	const taskOverdue = nextTask ? new Date(nextTask.dueAt).getTime() < now : false;
+
+	const doneTask = useCallback(async () => {
+		if (!nextTask) return;
+		setTaskBusy(true);
+		try {
+			await apiFetch(`${API_PREFIX}/tasks/${nextTask.id}`, { method: "PATCH", body: JSON.stringify({ done: true }) });
+			onChanged();
+		} catch {
+			/* the strip simply stays until the next refresh */
+		} finally {
+			setTaskBusy(false);
+		}
+	}, [nextTask, onChanged]);
 
 	return (
 		<div className="cn-detail">
@@ -626,7 +681,13 @@ function LeadPane({
 				</span>
 				<h3 className="cn-detailhead__title" style={{ fontSize: "1.25rem", margin: "0.25rem 0" }}>{lead.name}</h3>
 				<p className="cn-detailhead__sub">{lead.country} · {lead.source}</p>
-				<p className="cn-detailhead__meta">Last touch {timeAgo(lead.lastContactAt)} · Captured {whenLabel(lead.createdAt)}</p>
+				<p className="cn-detailhead__meta">
+					{lead.lastClientTouchAt
+						? <>Last client touch <b>{timeAgo(lead.lastClientTouchAt)}</b></>
+						: "Never touched — nobody has reached them yet"}
+					{lead.updatedAt && <> · record edited {timeAgo(lead.updatedAt)}</>}
+					{" · Captured "}{whenLabel(lead.createdAt)}
+				</p>
 
 				{/* The walk: New → Contacted → Booked → Assessed → Enrolled */}
 				<div className="lead-stepper" aria-label={`Stage: ${LEAD_STAGE_LABELS[lead.stage] ?? lead.stage}`}>
@@ -650,22 +711,56 @@ function LeadPane({
 								← {LEAD_STAGE_LABELS[prev]}
 							</button>
 						)}
-						<button type="button" className="btn btn--ghost btn--sm" onClick={() => onMove("lost")}>
+						<button type="button" className="btn btn--ghost btn--sm" onClick={() => setSheet("log")}>
+							+ Log touch
+						</button>
+						<button type="button" className="btn btn--ghost btn--sm" onClick={() => setSheet("followup")}>
+							+ Follow up
+						</button>
+						<button type="button" className="btn btn--ghost btn--sm" onClick={() => setSheet("lost")}>
 							Mark lost
 						</button>
 					</div>
 				)}
-				{lead.stage === "lost" && canMove && (
+				{closed && canMove && (
 					<div className="cn-now__actions">
-						<button type="button" className="btn btn--ghost btn--sm" onClick={() => onMove("new")}>
-							Reopen as new
+						<button type="button" className="btn btn--ghost btn--sm" onClick={() => setSheet("log")}>
+							+ Log touch
+						</button>
+						{lead.stage === "lost" && (
+							<button type="button" className="btn btn--ghost btn--sm" onClick={() => onMove("new")}>
+								Reopen as new
+							</button>
+						)}
+					</div>
+				)}
+
+				{nextTask && (
+					<div className="lead-fup">
+						<span className={`lead-fup__when${taskOverdue ? " lead-fup__when--over" : ""}`}>
+							◷ {whenLabel(nextTask.dueAt)}
+						</span>
+						<span className="lead-fup__title">{nextTask.title}</span>
+						<button type="button" className="lead-fup__done" disabled={taskBusy} onClick={() => void doneTask()}>
+							{taskBusy ? "…" : "done ✓"}
 						</button>
 					</div>
 				)}
 			</div>
 
+			{lead.stage === "lost" && lead.lostReason && (
+				<div className="card" style={{ padding: "1.25rem" }}>
+					<p className="cn-detail__eyebrow" style={{ marginBottom: "0.5rem" }}>Why it was lost</p>
+					<p className="cn-detailhead__meta" style={{ fontWeight: 600 }}>{LEAD_LOST_REASON_LABELS[lead.lostReason]}</p>
+					{lead.lostNote && <p className="lead-note">{lead.lostNote}</p>}
+				</div>
+			)}
+
 			<div className="card" style={{ padding: "1.25rem" }}>
-				<p className="cn-detail__eyebrow" style={{ marginBottom: "0.75rem" }}>Contact</p>
+				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.75rem" }}>
+					<p className="cn-detail__eyebrow" style={{ margin: 0 }}>Contact</p>
+					<button type="button" className="btn btn--ghost btn--sm" onClick={() => setSheet("edit")}>✎ Edit</button>
+				</div>
 				<div className="lead-kv"><span className="lead-kv__k">Phone</span><span className="lead-kv__v mono">{lead.phone}</span></div>
 				<div className="lead-kv"><span className="lead-kv__k">Email</span><span className="lead-kv__v">{lead.email}</span></div>
 				<div className="lead-kv"><span className="lead-kv__k">Source</span><span className="lead-kv__v">{lead.source}</span></div>
@@ -732,21 +827,66 @@ function LeadPane({
 
 			{events.length > 0 && (
 				<div className="card" style={{ padding: "1.25rem" }}>
-					<p className="cn-detail__eyebrow">Trail</p>
+					<p className="cn-detail__eyebrow">Trail — people and machine, one feed</p>
 					<ul className="cn-timeline">
-						{events.slice(0, 6).map((e) => (
-							<li key={e.id} className="cn-timeline__item">
-								<div className="cn-timeline__head">
-									<span className="cn-timeline__summary">{e.type.replace(/_/g, " ")}</span>
-									<span className="cn-timeline__when">{whenLabel(e.createdAt)}</span>
-								</div>
-								{e.actorName && <p className="cn-timeline__meta">{e.actorName}</p>}
-							</li>
-						))}
+						{events.slice(0, 10).map((e) => <TrailItem key={e.id} e={e} />)}
 					</ul>
 				</div>
 			)}
+
+			{sheet === "log" && (
+				<LogTouchSheet
+					lead={lead}
+					assignees={assignees}
+					onClose={() => setSheet(null)}
+					onDone={() => { setSheet(null); reloadEvents(); onChanged(); }}
+				/>
+			)}
+			{sheet === "followup" && (
+				<FollowUpSheet
+					lead={lead}
+					assignees={assignees}
+					onClose={() => setSheet(null)}
+					onDone={() => { setSheet(null); reloadEvents(); onChanged(); }}
+				/>
+			)}
+			{sheet === "edit" && (
+				<EditLeadSheet lead={lead} onClose={() => setSheet(null)} onDone={() => { setSheet(null); onChanged(); }} />
+			)}
+			{sheet === "lost" && (
+				<LostReasonDialog
+					lead={lead}
+					onClose={() => setSheet(null)}
+					onDone={(reason, note) => { setSheet(null); onMove("lost", { lostReason: reason, lostNote: note }); }}
+				/>
+			)}
 		</div>
+	);
+}
+
+/** One trail row — human touches carry channel + outcome; system rows stay terse. */
+function TrailItem({ e }: { e: LeadEvent }) {
+	const p = (e.payload ?? {}) as { outcome?: string | null; body?: string | null; reason?: string | null; note?: string | null; title?: string | null; dueAt?: string | null };
+	const touch = e.type.startsWith("touch.");
+	const channel = touch ? (e.type.slice(6) as LeadTouchChannel) : null;
+	const label = touch
+		? `${LEAD_TOUCH_CHANNEL_LABELS[channel ?? "note"] ?? channel}${p.outcome ? ` · ${LEAD_TOUCH_OUTCOME_LABELS[p.outcome as LeadTouchOutcome] ?? p.outcome}` : ""}`
+		: e.type === "lost" && p.reason
+			? `lost — ${LEAD_LOST_REASON_LABELS[p.reason as LeadLostReason] ?? p.reason}`
+			: e.type.replace(/_/g, " ");
+	return (
+		<li className={`cn-timeline__item${touch ? "" : " cn-timeline__item--sys"}`}>
+			<div className="cn-timeline__head">
+				<span className="cn-timeline__summary">{label}</span>
+				<span className="cn-timeline__when">{whenLabel(e.createdAt)}</span>
+			</div>
+			{e.actorName && <p className="cn-timeline__meta">{e.actorName}</p>}
+			{p.body && <p className="cn-timeline__meta" style={{ marginTop: "0.2rem" }}>{p.body}</p>}
+			{e.type === "lost" && p.note && <p className="cn-timeline__meta" style={{ marginTop: "0.2rem" }}>{p.note}</p>}
+			{e.type === "followup_scheduled" && p.title && (
+				<p className="cn-timeline__meta" style={{ marginTop: "0.2rem" }}>◷ {p.title} — {p.dueAt ? whenLabel(p.dueAt) : ""}</p>
+			)}
+		</li>
 	);
 }
 
@@ -813,6 +953,338 @@ function NewLeadDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
 						onClick={() => void submit()}
 					>
 						{busy ? "Adding…" : "Add lead"}
+					</button>
+				</p>
+			</div>
+		</div>
+	);
+}
+
+/* ── Log a touch ─────────────────────────────────────────────────────────── */
+
+const TOUCH_CHANNELS: LeadTouchChannel[] = ["call", "whatsapp", "email", "visit", "note"];
+const TOUCH_OUTCOMES: LeadTouchOutcome[] = ["reached", "no_answer", "left_message", "promised_callback"];
+
+function LogTouchSheet({
+	lead,
+	assignees,
+	onClose,
+	onDone,
+}: {
+	lead: PadLead;
+	assignees: { name: string; email: string; opsUserId?: string }[];
+	onClose: () => void;
+	onDone: () => void;
+}) {
+	const [channel, setChannel] = useState<LeadTouchChannel>("call");
+	const [outcome, setOutcome] = useState<LeadTouchOutcome>("reached");
+	const [body, setBody] = useState("");
+	const [fupTitle, setFupTitle] = useState("");
+	const [fupDate, setFupDate] = useState("");
+	const [fupAssignee, setFupAssignee] = useState(lead.staffId ?? "");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const submit = async () => {
+		setBusy(true);
+		setError(null);
+		try {
+			await apiFetch(`${API_PREFIX}/leads/${lead.id}/touches`, {
+				method: "POST",
+				body: JSON.stringify({
+					channel,
+					outcome: channel === "note" ? undefined : outcome,
+					body: body.trim() || undefined,
+					followUp:
+						fupTitle.trim() && fupDate
+							? {
+									title: fupTitle.trim(),
+									dueAt: new Date(`${fupDate}T09:00:00`).toISOString(),
+									assigneeOpsUserId: fupAssignee || undefined,
+								}
+							: undefined,
+				}),
+			});
+			onDone();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Could not log the touch");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<div className="ops-modal-backdrop" role="dialog" aria-modal="true" aria-label="Log a touch">
+			<div className="ops-modal">
+				<header className="ops-modal__head">
+					<div>
+						<h2 className="ops-modal__title">Log a touch</h2>
+						<p className="ops-modal__sub">{lead.name} — what just happened?</p>
+					</div>
+					<button type="button" className="btn btn--ghost btn--sm" onClick={onClose}>✕</button>
+				</header>
+				{error && <p className="ops-modal__error">{error}</p>}
+				<div className="ops-modal__content" style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
+					<div>
+						<p className="cn-filter__label" style={{ marginBottom: "0.4rem" }}>How</p>
+						<div className="ops-picks">
+							{TOUCH_CHANNELS.map((ch) => (
+								<button key={ch} type="button" className={`ops-pick${channel === ch ? " ops-pick--on" : ""}`} onClick={() => setChannel(ch)} aria-pressed={channel === ch}>
+									<span className="ops-pick__bx" aria-hidden /> {LEAD_TOUCH_CHANNEL_LABELS[ch]}
+								</button>
+							))}
+						</div>
+					</div>
+					{channel !== "note" && (
+						<div>
+							<p className="cn-filter__label" style={{ marginBottom: "0.4rem" }}>Outcome</p>
+							<div className="ops-picks">
+								{TOUCH_OUTCOMES.map((o) => (
+									<button key={o} type="button" className={`ops-pick${outcome === o ? " ops-pick--on" : ""}`} onClick={() => setOutcome(o)} aria-pressed={outcome === o}>
+										<span className="ops-pick__bx" aria-hidden /> {LEAD_TOUCH_OUTCOME_LABELS[o]}
+									</button>
+								))}
+							</div>
+						</div>
+					)}
+					<label>
+						<p className="cn-filter__label" style={{ marginBottom: "0.4rem" }}>What happened</p>
+						<textarea className="input" rows={3} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Wants January intake — passport renewing first…" />
+					</label>
+					<div style={{ borderTop: "1px dashed var(--border-light)", paddingTop: "0.75rem" }}>
+						<p className="cn-filter__label" style={{ marginBottom: "0.4rem" }}>Follow up — optional, becomes a task</p>
+						<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+							<input className="input" style={{ flex: "2 1 10rem" }} placeholder="Call back about…" value={fupTitle} onChange={(e) => setFupTitle(e.target.value)} />
+							<input className="input" style={{ flex: "1 1 8rem" }} type="date" value={fupDate} onChange={(e) => setFupDate(e.target.value)} />
+						</div>
+						{fupTitle.trim() && fupDate && (
+							<select className="cn-filter__select" style={{ marginTop: "0.5rem", width: "100%" }} value={fupAssignee} onChange={(e) => setFupAssignee(e.target.value)}>
+								<option value="">Assignee — me by default</option>
+								{assignees.filter((a) => a.opsUserId).map((a) => (
+									<option key={a.opsUserId} value={a.opsUserId}>{a.name}</option>
+								))}
+							</select>
+						)}
+					</div>
+				</div>
+				<p className="ops-modal__foot">
+					<button type="button" className="btn btn--ghost btn--sm" onClick={onClose} disabled={busy}>Cancel</button>
+					<button type="button" className="btn btn--primary btn--sm" disabled={busy} onClick={() => void submit()}>
+						{busy ? "Logging…" : "Log it"}
+					</button>
+				</p>
+			</div>
+		</div>
+	);
+}
+
+/* ── Follow up ───────────────────────────────────────────────────────────── */
+
+function FollowUpSheet({
+	lead,
+	assignees,
+	onClose,
+	onDone,
+}: {
+	lead: PadLead;
+	assignees: { name: string; email: string; opsUserId?: string }[];
+	onClose: () => void;
+	onDone: () => void;
+}) {
+	const [title, setTitle] = useState("");
+	const [dueAt, setDueAt] = useState("");
+	const [assignee, setAssignee] = useState(lead.staffId ?? "");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const submit = async () => {
+		setBusy(true);
+		setError(null);
+		try {
+			await apiFetch(`${API_PREFIX}/tasks`, {
+				method: "POST",
+				body: JSON.stringify({
+					title: title.trim(),
+					dueAt: new Date(`${dueAt}T09:00:00`).toISOString(),
+					assigneeOpsUserId: assignee || undefined,
+					leadId: lead.id,
+				}),
+			});
+			onDone();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Could not save the follow-up");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<div className="ops-modal-backdrop" role="dialog" aria-modal="true" aria-label="Follow up">
+			<div className="ops-modal">
+				<header className="ops-modal__head">
+					<div>
+						<h2 className="ops-modal__title">Follow up</h2>
+						<p className="ops-modal__sub">{lead.name} — lands in the work queue, reminds its owner.</p>
+					</div>
+					<button type="button" className="btn btn--ghost btn--sm" onClick={onClose}>✕</button>
+				</header>
+				{error && <p className="ops-modal__error">{error}</p>}
+				<div className="ops-modal__content" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+					<input className="input" placeholder="Call back about January intake…" value={title} onChange={(e) => setTitle(e.target.value)} />
+					<label>
+						<p className="cn-filter__label" style={{ marginBottom: "0.4rem" }}>Due</p>
+						<input className="input" type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
+					</label>
+					<select className="cn-filter__select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+						<option value="">Unassigned — sits in the shared queue</option>
+						{assignees.filter((a) => a.opsUserId).map((a) => (
+							<option key={a.opsUserId} value={a.opsUserId}>{a.name}</option>
+						))}
+					</select>
+				</div>
+				<p className="ops-modal__foot">
+					<button type="button" className="btn btn--ghost btn--sm" onClick={onClose} disabled={busy}>Cancel</button>
+					<button type="button" className="btn btn--primary btn--sm" disabled={busy || !title.trim() || !dueAt} onClick={() => void submit()}>
+						{busy ? "Saving…" : "Save follow-up"}
+					</button>
+				</p>
+			</div>
+		</div>
+	);
+}
+
+/* ── Edit the record ─────────────────────────────────────────────────────── */
+
+function EditLeadSheet({ lead, onClose, onDone }: { lead: PadLead; onClose: () => void; onDone: () => void }) {
+	const [name, setName] = useState(lead.name);
+	const [email, setEmail] = useState(lead.email);
+	const [phone, setPhone] = useState(lead.phone === "-" ? "" : lead.phone);
+	const [country, setCountry] = useState(lead.country === "Ghana" ? "" : lead.country);
+	const [notes, setNotes] = useState(lead.notes);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const submit = async () => {
+		setBusy(true);
+		setError(null);
+		try {
+			await apiFetch(`${API_PREFIX}/leads/${lead.id}`, {
+				method: "PATCH",
+				body: JSON.stringify({
+					name: name.trim(),
+					email: email.trim(),
+					phone: phone.trim() || null,
+					targetCountry: country.trim() || null,
+					notes: notes.trim() || null,
+				}),
+			});
+			onDone();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Could not save the lead");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<div className="ops-modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit lead">
+			<div className="ops-modal">
+				<header className="ops-modal__head">
+					<div>
+						<h2 className="ops-modal__title">Edit lead</h2>
+						<p className="ops-modal__sub">Fix the record — name, contact, where they're headed.</p>
+					</div>
+					<button type="button" className="btn btn--ghost btn--sm" onClick={onClose}>✕</button>
+				</header>
+				{error && <p className="ops-modal__error">{error}</p>}
+				<div className="ops-modal__content" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+					<input className="input" placeholder="Full name *" value={name} onChange={(e) => setName(e.target.value)} />
+					<input className="input" type="email" placeholder="Email *" value={email} onChange={(e) => setEmail(e.target.value)} />
+					<input className="input" placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+					<input className="input" placeholder="Target country" value={country} onChange={(e) => setCountry(e.target.value)} />
+					<textarea className="input" placeholder="Notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
+				</div>
+				<p className="ops-modal__foot">
+					<button type="button" className="btn btn--ghost btn--sm" onClick={onClose} disabled={busy}>Cancel</button>
+					<button type="button" className="btn btn--primary btn--sm" disabled={busy || !name.trim() || !email.trim()} onClick={() => void submit()}>
+						{busy ? "Saving…" : "Save"}
+					</button>
+				</p>
+			</div>
+		</div>
+	);
+}
+
+/* ── Mark lost — the reason is the data ──────────────────────────────────── */
+
+const LOST_REASONS: { id: LeadLostReason; hint: string }[] = [
+	{ id: "no_response", hint: "unreachable after repeated attempts" },
+	{ id: "cost", hint: "couldn't afford the package or fees" },
+	{ id: "competitor", hint: "chose another agency" },
+	{ id: "not_eligible", hint: "academics, documents, funds" },
+	{ id: "changed_plans", hint: "no longer travelling / studying" },
+	{ id: "other", hint: "say it below" },
+];
+
+function LostReasonDialog({
+	lead,
+	onClose,
+	onDone,
+}: {
+	lead: PadLead;
+	onClose: () => void;
+	onDone: (reason: LeadLostReason, note?: string) => void;
+}) {
+	const [reason, setReason] = useState<LeadLostReason | null>(null);
+	const [note, setNote] = useState("");
+
+	return (
+		<div className="ops-modal-backdrop" role="dialog" aria-modal="true" aria-label="Mark lost">
+			<div className="ops-modal">
+				<header className="ops-modal__head">
+					<div>
+						<h2 className="ops-modal__title">Mark lost — why?</h2>
+						<p className="ops-modal__sub">{lead.name} — the reason is what Reports can group.</p>
+					</div>
+					<button type="button" className="btn btn--ghost btn--sm" onClick={onClose}>✕</button>
+				</header>
+				<div className="ops-modal__content">
+					<ul className="lead-lost">
+						{LOST_REASONS.map((r) => (
+							<li key={r.id}>
+								<button
+									type="button"
+									className={`lead-lost__opt${reason === r.id ? " lead-lost__opt--on" : ""}`}
+									onClick={() => setReason(r.id)}
+									aria-pressed={reason === r.id}
+								>
+									<span className="lead-lost__rb" aria-hidden />
+									<span>
+										{LEAD_LOST_REASON_LABELS[r.id]}
+										<small>{r.hint}</small>
+									</span>
+								</button>
+							</li>
+						))}
+					</ul>
+					<textarea
+						className="input"
+						rows={2}
+						placeholder="Note — optional"
+						style={{ marginTop: "0.75rem", width: "100%" }}
+						value={note}
+						onChange={(e) => setNote(e.target.value)}
+					/>
+				</div>
+				<p className="ops-modal__foot">
+					<button type="button" className="btn btn--ghost btn--sm" onClick={onClose}>Keep lead</button>
+					<button
+						type="button"
+						className="btn btn--primary btn--sm"
+						disabled={!reason}
+						onClick={() => reason && onDone(reason, note.trim() || undefined)}
+					>
+						Mark lost
 					</button>
 				</p>
 			</div>

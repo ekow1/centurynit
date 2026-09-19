@@ -11,12 +11,34 @@ import { db } from "../db/index.js";
 import { applicants, applications, caseComments, invoiceLines, invoicePayments, invoices, travelAssistanceRequests } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import { exchangeRate, postArrivalCatalogue, serviceFeeSplit } from "./fees.js";
-import { cancelQueued, queueReminder } from "../worker/queues.js";
+import { cancelQueued, queueEmail, queueReminder } from "../worker/queues.js";
+import { emailLayout } from "../lib/email-templates.js";
 import { instalmentDueForClient } from "./notifications.js";
 import { formatGhs, formatUsd } from "./receiptEmail.js";
+import { emitDomain } from "../worker/pubsub.js";
 import { env } from "../env.js";
 
 type Actor = { opsUserId?: string | null; name: string };
+
+/** A schedule change moves screens on both sides — ops refetches, the portal re-syncs. */
+async function broadcastScheduleChange(applicationId: string): Promise<void> {
+	try {
+		const [row] = await db
+			.select({ app: applications, userId: applicants.userId })
+			.from(applications)
+			.innerJoin(applicants, eq(applications.applicantId, applicants.id))
+			.where(eq(applications.id, applicationId))
+			.limit(1);
+		if (!row) return;
+		emitDomain(
+			"case.updated",
+			{ caseId: row.app.id, appNumber: row.app.appNumber, stage: row.app.stage, postArrivalStatus: row.app.postArrivalStatus },
+			{ ops: true, userId: row.userId ?? null },
+		);
+	} catch (err) {
+		console.warn("[serviceFee] Failed to broadcast schedule change:", err);
+	}
+}
 
 /**
  * The service fee as the ledger carries it: one agency invoice per case,
@@ -121,9 +143,10 @@ async function postArrivalAnchor(applicationId: string, departureDetails: unknow
 
 /**
  * The client (or ops on their behalf) chose how to spread the post-arrival
- * remainder. Validated against the catalogue; refused once any of it is
- * paid. The remainder's line(s) become one dated line per instalment, and
- * a reminder is queued ahead of each date.
+ * remainder. Validated against the catalogue; refused once an approved
+ * plan stands. The pick is a *request* — it does not touch the invoice.
+ * Finance or a manager enters the start date and approves; only then do
+ * the dated instalment lines appear.
  */
 export async function setPostArrivalSchedule(input: {
 	applicationId: string;
@@ -145,18 +168,169 @@ export async function setPostArrivalSchedule(input: {
 	if (app.paymentPlanId !== "installment") {
 		throw new HttpError(409, "PLAN_NOT_INSTALMENT", "A post-arrival schedule applies to the instalment plan only.");
 	}
+	if (app.postArrivalStatus === "approved") {
+		throw new HttpError(409, "SCHEDULE_LOCKED", "The post-arrival plan is approved — it can no longer change.");
+	}
 	await db
 		.update(applications)
-		.set({ postArrivalMonths: choice.months, postArrivalFrequency: choice.frequency, postArrivalChosenAt: new Date(), updatedAt: new Date() })
+		.set({
+			postArrivalMonths: choice.months,
+			postArrivalFrequency: choice.frequency,
+			postArrivalChosenAt: new Date(),
+			postArrivalStatus: "pending",
+			postArrivalStartAt: null,
+			postArrivalReviewedBy: null,
+			postArrivalReviewedAt: null,
+			postArrivalDeclineReason: null,
+			postArrivalInterestPct: null,
+			updatedAt: new Date(),
+		})
 		.where(eq(applications.id, app.id));
-	await rewritePostArrivalLines(app.id);
+	await collapsePostArrivalTail(app.id);
 	await db.insert(caseComments).values({
 		targetType: "application",
 		targetId: app.id,
 		kind: "status",
-		text: `Post-arrival schedule: ${choice.months} months, ${POST_ARRIVAL_FREQUENCY_LABELS[choice.frequency].toLowerCase()}${input.reason ? ` — ${input.reason}` : ""}`,
+		text: `Post-arrival schedule requested: ${choice.months} months, ${POST_ARRIVAL_FREQUENCY_LABELS[choice.frequency].toLowerCase()} — awaiting finance/manager approval${input.reason ? ` (${input.reason})` : ""}`,
 		authorName: input.actor.name,
 		authorOpsUserId: input.actor.opsUserId ?? null,
+	});
+	await broadcastScheduleChange(app.id);
+}
+
+/**
+ * A pending request becomes the contractual plan: the start date is
+ * entered by finance/manager (the system never picks it), the catalogue's
+ * flat interest is priced in and frozen on the row, and the invoice's
+ * remainder becomes one dated line per instalment through the end.
+ */
+export async function approvePostArrivalSchedule(input: {
+	applicationId: string;
+	startAt: string;
+	actor: Actor;
+}): Promise<void> {
+	const startAt = new Date(input.startAt);
+	if (Number.isNaN(startAt.getTime())) {
+		throw new HttpError(400, "START_DATE_REQUIRED", "Enter a valid start date for the plan.");
+	}
+	const [app] = await db.select().from(applications).where(eq(applications.id, input.applicationId)).limit(1);
+	if (!app) throw new HttpError(404, "APPLICATION_NOT_FOUND", "Application not found");
+	if (app.postArrivalStatus !== "pending" || !app.postArrivalMonths || !app.postArrivalFrequency) {
+		throw new HttpError(409, "SCHEDULE_NOT_PENDING", "There is no schedule request waiting for approval.");
+	}
+	const catalogue = await postArrivalCatalogue();
+	const interestPct = catalogue.interestPct;
+	await db
+		.update(applications)
+		.set({
+			postArrivalStatus: "approved",
+			postArrivalStartAt: startAt,
+			postArrivalInterestPct: interestPct,
+			postArrivalReviewedBy: input.actor.name,
+			postArrivalReviewedAt: new Date(),
+			postArrivalDeclineReason: null,
+			updatedAt: new Date(),
+		})
+		.where(eq(applications.id, app.id));
+	await rewritePostArrivalLines(app.id);
+	const freq = POST_ARRIVAL_FREQUENCY_LABELS[app.postArrivalFrequency as PostArrivalFrequency].toLowerCase();
+	const start = startAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+	await db.insert(caseComments).values({
+		targetType: "application",
+		targetId: app.id,
+		kind: "status",
+		text: `Post-arrival plan approved — ${app.postArrivalMonths} months, ${freq}, starting ${start}${interestPct > 0 ? `, ${interestPct}% interest on the remainder` : ""}.`,
+		authorName: input.actor.name,
+		authorOpsUserId: input.actor.opsUserId ?? null,
+	});
+	await notifyScheduleReviewed(app.id, "approved").catch(() => {});
+	await broadcastScheduleChange(app.id);
+}
+
+/** Decline the pending request; the client can pick again. */
+export async function declinePostArrivalSchedule(input: {
+	applicationId: string;
+	reason: string;
+	actor: Actor;
+}): Promise<void> {
+	const [app] = await db.select().from(applications).where(eq(applications.id, input.applicationId)).limit(1);
+	if (!app) throw new HttpError(404, "APPLICATION_NOT_FOUND", "Application not found");
+	if (app.postArrivalStatus !== "pending") {
+		throw new HttpError(409, "SCHEDULE_NOT_PENDING", "There is no schedule request waiting for review.");
+	}
+	await db
+		.update(applications)
+		.set({
+			postArrivalStatus: "declined",
+			postArrivalReviewedBy: input.actor.name,
+			postArrivalReviewedAt: new Date(),
+			postArrivalDeclineReason: input.reason,
+			updatedAt: new Date(),
+		})
+		.where(eq(applications.id, app.id));
+	await db.insert(caseComments).values({
+		targetType: "application",
+		targetId: app.id,
+		kind: "status",
+		text: `Post-arrival plan declined — ${input.reason}`,
+		authorName: input.actor.name,
+		authorOpsUserId: input.actor.opsUserId ?? null,
+	});
+	await notifyScheduleReviewed(app.id, "declined").catch(() => {});
+	await broadcastScheduleChange(app.id);
+}
+
+/**
+ * While a request is pending or declined the remainder is a single undated
+ * line — nothing looks payable on a schedule nobody has approved.
+ */
+async function collapsePostArrivalTail(applicationId: string): Promise<void> {
+	const inv = await liveAgencyInvoice(applicationId);
+	if (!inv) return;
+	const { lines, paidCents } = await linesAndPaid(inv.id);
+	const head = lines.slice(0, 2);
+	const tail = lines.slice(2);
+	if (tail.length === 0) return;
+	const headCents = head.reduce((n, l) => n + l.amountCents, 0);
+	if (paidCents > headCents) {
+		throw new HttpError(409, "SCHEDULE_LOCKED", "An instalment has already been paid — the schedule can no longer change.");
+	}
+	const remainderCents = tail.reduce((n, l) => n + l.amountCents, 0);
+	await db.transaction(async (tx) => {
+		for (const l of tail) await tx.delete(invoiceLines).where(eq(invoiceLines.id, l.id));
+		await tx.insert(invoiceLines).values({
+			invoiceId: inv.id,
+			position: head.length,
+			label: AGENCY_STAGES[2].label,
+			detail: "A payment schedule is under review — dates appear once approved",
+			amountCents: remainderCents,
+			dueAt: null,
+		});
+	});
+}
+
+/** Tell the client their schedule was approved or declined. */
+async function notifyScheduleReviewed(applicationId: string, outcome: "approved" | "declined"): Promise<void> {
+	const [who] = await db
+		.select({ name: applicants.name, email: applicants.email, declineReason: applications.postArrivalDeclineReason })
+		.from(applications)
+		.innerJoin(applicants, eq(applications.applicantId, applicants.id))
+		.where(eq(applications.id, applicationId))
+		.limit(1);
+	if (!who?.email) return;
+	const portalUrl = `${env.FRONTEND_URL}/portal/financial`;
+	const title = outcome === "approved" ? "Your payment plan is set" : "Your payment plan request was declined";
+	const body =
+		outcome === "approved"
+			? `<p>Hi ${who.name ?? "there"},</p><p>The office has approved your post-arrival payment schedule — your dated instalments are now on your Payments page.</p><p><a href="${portalUrl}">View your payment plan →</a></p>`
+			: `<p>Hi ${who.name ?? "there"},</p><p>The office couldn't approve the payment schedule you requested${who.declineReason ? ` — <i>${who.declineReason}</i>` : ""}. You can pick a different schedule on your Payments page.</p><p><a href="${portalUrl}">Review your options →</a></p>`;
+	await queueEmail({
+		to: who.email,
+		subject: title,
+		html: emailLayout({ title, preheader: title, bodyHtml: body }),
+		text: title,
+		idempotencyKey: `postarrival:${outcome}:${applicationId}:${Date.now()}`,
+		template: `Post-arrival ${outcome}`,
 	});
 }
 
@@ -170,6 +344,8 @@ export async function setPostArrivalSchedule(input: {
 export async function rewritePostArrivalLines(applicationId: string): Promise<void> {
 	const [app] = await db.select().from(applications).where(eq(applications.id, applicationId)).limit(1);
 	if (!app || app.paymentPlanId !== "installment" || !app.postArrivalMonths || !app.postArrivalFrequency) return;
+	// Pending and declined requests never write dated lines.
+	if (app.postArrivalStatus !== "approved") return;
 	const inv = await liveAgencyInvoice(applicationId);
 	if (!inv) return;
 	const { lines, paidCents } = await linesAndPaid(inv.id);
@@ -183,15 +359,22 @@ export async function rewritePostArrivalLines(applicationId: string): Promise<vo
 		throw new HttpError(409, "SCHEDULE_LOCKED", "An instalment has already been paid — the schedule can no longer change.");
 	}
 	const catalogue = await postArrivalCatalogue();
-	const anchor = await postArrivalAnchor(applicationId, app.departureDetails);
+	// Approved plans anchor on the staff-entered start date — the first
+	// instalment falls on it. Legacy rows approved before this flow keep the
+	// old anchor (arrival, else the booked flight + a day) plus grace.
+	const approved = app.postArrivalStartAt != null;
+	const anchor = approved ? app.postArrivalStartAt : await postArrivalAnchor(applicationId, app.departureDetails);
+	const interestPct = app.postArrivalInterestPct ?? 0;
 	const plan = postArrivalInstalments({
 		amountCents: remainderCents,
 		months: app.postArrivalMonths,
 		frequency: app.postArrivalFrequency as PostArrivalFrequency,
 		anchor,
-		graceDays: catalogue.graceDays,
+		graceDays: approved ? 0 : catalogue.graceDays,
+		interestPct,
 	});
 	const freq = POST_ARRIVAL_FREQUENCY_LABELS[app.postArrivalFrequency as PostArrivalFrequency].toLowerCase();
+	const interestNote = interestPct > 0 ? ` · incl. ${interestPct}% interest` : "";
 	await db.transaction(async (tx) => {
 		for (const l of tail) await tx.delete(invoiceLines).where(eq(invoiceLines.id, l.id));
 		await tx.insert(invoiceLines).values(
@@ -199,7 +382,7 @@ export async function rewritePostArrivalLines(applicationId: string): Promise<vo
 				invoiceId: inv.id,
 				position: head.length + p.n - 1,
 				label: `Service fee · post-arrival ${p.n} of ${p.total}`,
-				detail: `${app.postArrivalMonths} months · ${freq}${p.dueAt ? "" : " · dated once you arrive"}`,
+				detail: `${app.postArrivalMonths} months · ${freq}${interestNote}${p.dueAt ? "" : " · dated once you arrive"}`,
 				amountCents: p.amountCents,
 				dueAt: p.dueAt ? new Date(p.dueAt) : null,
 			})),
@@ -243,9 +426,19 @@ async function queueInstalmentReminders(applicationId: string, invoiceId: string
 	}
 }
 
-/** Re-date the instalments when arrival or the booking changes the anchor. Never throws. */
+/**
+ * Re-date the instalments when arrival or the booking changes the anchor.
+ * Never throws. Only legacy approved plans (no staff-entered start date)
+ * still re-anchor — a start date set at approval is contractual.
+ */
 export async function refreshPostArrivalDates(applicationId: string): Promise<void> {
 	try {
+		const [app] = await db
+			.select({ status: applications.postArrivalStatus, startAt: applications.postArrivalStartAt })
+			.from(applications)
+			.where(eq(applications.id, applicationId))
+			.limit(1);
+		if (!app || app.status !== "approved" || app.startAt) return;
 		await rewritePostArrivalLines(applicationId);
 	} catch (err) {
 		if (err instanceof HttpError && err.status === 409) return;

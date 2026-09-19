@@ -100,6 +100,8 @@ export const postArrivalCatalogueSchema = z.object({
 	frequencies: z.array(postArrivalFrequencySchema).min(1),
 	graceDays: z.number().int().min(0).max(180),
 	remindDays: z.number().int().min(0).max(60),
+	/** Flat interest on the post-arrival remainder, priced into each instalment at approval. */
+	interestPct: z.number().min(0).max(100).default(0),
 });
 export type PostArrivalCatalogue = z.infer<typeof postArrivalCatalogueSchema>;
 
@@ -108,6 +110,7 @@ export const DEFAULT_POST_ARRIVAL_CATALOGUE: PostArrivalCatalogue = {
 	frequencies: ["monthly", "biweekly"],
 	graceDays: 30,
 	remindDays: 7,
+	interestPct: 8,
 };
 
 export const feeCatalogueSchema = z.object({
@@ -152,19 +155,27 @@ export function postArrivalInstalmentCount(months: number, frequency: PostArriva
  *. The client has not arrived yet. The dates are null and the count and
  * amounts still stand.
  */
+/** Flat interest on the principal — the total the instalments must add up to. */
+export function postArrivalInterestCents(amountCents: number, interestPct: number): number {
+	return Math.round((amountCents * interestPct) / 100);
+}
+
 export function postArrivalInstalments(input: {
 	amountCents: number;
 	months: number;
 	frequency: PostArrivalFrequency;
 	anchor: Date | string | null;
 	graceDays: number;
+	/** Flat interest on the remainder; the instalments total principal + interest. */
+	interestPct?: number;
 }): PostArrivalInstalment[] {
 	const count = postArrivalInstalmentCount(input.months, input.frequency);
-	const each = Math.floor(input.amountCents / count);
+	const totalCents = input.amountCents + postArrivalInterestCents(input.amountCents, input.interestPct ?? 0);
+	const each = Math.floor(totalCents / count);
 	const anchor = input.anchor ? new Date(input.anchor) : null;
 	const out: PostArrivalInstalment[] = [];
 	for (let i = 0; i < count; i++) {
-		const amountCents = i === count - 1 ? input.amountCents - each * (count - 1) : each;
+		const amountCents = i === count - 1 ? totalCents - each * (count - 1) : each;
 		let dueAt: string | null = null;
 		if (anchor && !Number.isNaN(anchor.getTime())) {
 			const d = new Date(anchor);
@@ -177,6 +188,23 @@ export function postArrivalInstalments(input: {
 	}
 	return out;
 }
+
+/** One row of the transaction ledger — the same truth served to portal and ops. */
+export const ledgerRowSchema = z.object({
+	id: z.string(),
+	at: z.string(),
+	label: z.string(),
+	invoiceId: z.string(),
+	invoiceNumber: z.string(),
+	channel: z.string(),
+	reference: z.string().nullable(),
+	amountCents: z.number(),
+	status: z.enum(["settled", "manual", "declined", "scheduled"]),
+	failureReason: z.string().nullable(),
+	recordedBy: z.string().nullable(),
+	balanceAfterCents: z.number().nullable(),
+});
+export type LedgerRow = z.infer<typeof ledgerRowSchema>;
 
 const joinList = (parts: string[]) => (parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} or ${parts[parts.length - 1]}`);
 

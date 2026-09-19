@@ -9,6 +9,8 @@ import { HttpError } from "../middleware/error.js";
 import {
 	LEAD_STAGE_FROM_DB,
 	LEAD_STAGE_TO_DB,
+	leadLostReasonSchema,
+	type LeadLostReason,
 	type LeadStage,
 } from "century-nit-shared";
 
@@ -24,7 +26,13 @@ export interface LeadView {
 	assignedStaffId: string | null;
 	assignedStaffName?: string | null;
 	assignedTo?: string | null;
+	/** Any record edit — kept for honesty, but never read as "contact". */
 	lastContactAt?: string | null;
+	/** The last human touch of the client; null until the first one. */
+	lastClientTouchAt?: string | null;
+	lostReason?: LeadLostReason | null;
+	lostNote?: string | null;
+	nextTask?: { id: string; title: string; dueAt: string } | null;
 	consultationId: string | null;
 	applicationId: string | null;
 	notes: string | null;
@@ -35,6 +43,7 @@ export interface LeadView {
 function serializeLead(
 	r: typeof leads.$inferSelect,
 	staffName?: string | null,
+	nextTask?: { id: string; title: string; dueAt: string } | null,
 ): LeadView {
 	const normalizedStage = (LEAD_STAGE_FROM_DB[r.stage] ?? "new") as LeadStage;
 	const contactDate = r.updatedAt ? r.updatedAt.toISOString() : r.createdAt.toISOString();
@@ -51,6 +60,10 @@ function serializeLead(
 		assignedStaffName: staffName ?? null,
 		assignedTo: staffName ?? "Unassigned",
 		lastContactAt: contactDate,
+		lastClientTouchAt: r.lastClientTouchAt?.toISOString() ?? null,
+		lostReason: leadLostReasonSchema.safeParse(r.lostReason).success ? (r.lostReason as LeadLostReason) : null,
+		lostNote: r.lostNote ?? null,
+		nextTask: nextTask ?? null,
 		consultationId: r.consultationId,
 		applicationId: r.applicationId,
 		notes: r.notes,
@@ -413,8 +426,16 @@ export async function listLeads(query?: {
 		? rows.filter((r) => r.assignedStaffId === query.assignedStaffId || r.assignedStaffId === null)
 		: rows;
 
+	// One batched read for the "next follow-up" strip on every card.
+	const { nextOpenTasksForLeads } = await import("./tasks.js");
+	const nextTasks = await nextOpenTasksForLeads(filteredRows.map((r) => r.id)).catch(() => new Map());
+
 	return filteredRows.map((r) =>
-		serializeLead(r, r.assignedStaffId ? staffNameMap.get(r.assignedStaffId) ?? null : null),
+		serializeLead(
+			r,
+			r.assignedStaffId ? staffNameMap.get(r.assignedStaffId) ?? null : null,
+			nextTasks.get(r.id) ?? null,
+		),
 	);
 }
 
@@ -472,6 +493,8 @@ export async function updateLead(
 		consultationId: string | null;
 		applicationId: string | null;
 		notes: string | null;
+		lostReason: string | null;
+		lostNote: string | null;
 	}>,
 	actorName?: string | null,
 ): Promise<LeadView | null> {
@@ -490,6 +513,11 @@ export async function updateLead(
 	if (dbStage) {
 		updateValues.stage = dbStage;
 	}
+	// Leaving lost reopens the lead — the reason belongs to that closing, not this one.
+	if (dbStage && current.stage === "Lost" && dbStage !== "Lost") {
+		updateValues.lostReason = null;
+		updateValues.lostNote = null;
+	}
 
 	const [updated] = await db
 		.update(leads)
@@ -499,12 +527,20 @@ export async function updateLead(
 
 	if (!updated) return null;
 
-	// Record stage change event
+	// Record stage change event — a loss carries its reason so reports can group it.
 	if (dbStage && dbStage !== current.stage) {
-		await recordLeadEvent(id, "stage_changed", actorName ?? null, {
-			from: current.stage,
-			to: dbStage,
-		});
+		await recordLeadEvent(
+			id,
+			dbStage === "Lost" ? "lost" : current.stage === "Lost" ? "reopened" : "stage_changed",
+			actorName ?? null,
+			{
+				from: current.stage,
+				to: dbStage,
+				...(dbStage === "Lost"
+					? { reason: updated.lostReason ?? null, note: updated.lostNote ?? null }
+					: {}),
+			},
+		);
 	}
 
 	// Record assignment event
@@ -537,6 +573,70 @@ export async function updateLead(
 
 	emitDomain("lead.updated", { leadId: id, stage: updated.stage ?? null }, { ops: true });
 	return serializeLead(updated, assignedStaffName);
+}
+
+/**
+ * Log a human touch — the call, WhatsApp, email, visit or note that the
+ * system events never see. Writes a `touch.<channel>` event onto the lead's
+ * trail; every channel except `note` moves the real last-client-touch clock
+ * (a note is bookkeeping, not contact). An optional follow-up becomes a real
+ * dated task in the same call.
+ */
+export async function logLeadTouch(
+	leadId: string,
+	input: {
+		channel: "call" | "whatsapp" | "email" | "visit" | "note";
+		outcome?: "reached" | "no_answer" | "left_message" | "promised_callback";
+		body?: string;
+		followUp?: { title: string; dueAt: string; assigneeOpsUserId?: string };
+	},
+	actor: { opsUserId: string | null; name: string | null },
+): Promise<LeadView | null> {
+	const lead = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
+	if (!lead) return null;
+
+	await recordLeadEvent(leadId, `touch.${input.channel}`, actor.name, {
+		outcome: input.outcome ?? null,
+		body: input.body?.trim() || null,
+	});
+
+	// Only real contact channels move the client-touch clock.
+	if (input.channel !== "note") {
+		await db
+			.update(leads)
+			.set({ lastClientTouchAt: new Date(), updatedAt: new Date() })
+			.where(eq(leads.id, leadId));
+	} else {
+		await db.update(leads).set({ updatedAt: new Date() }).where(eq(leads.id, leadId));
+	}
+
+	if (input.followUp) {
+		const { createTask } = await import("./tasks.js");
+		await createTask(
+			{
+				title: input.followUp.title,
+				dueAt: input.followUp.dueAt,
+				assigneeOpsUserId: input.followUp.assigneeOpsUserId ?? actor.opsUserId ?? undefined,
+				leadId,
+			},
+			actor.opsUserId,
+		);
+		await recordLeadEvent(leadId, "followup_scheduled", actor.name, {
+			title: input.followUp.title,
+			dueAt: input.followUp.dueAt,
+		});
+	}
+
+	emitDomain("lead.updated", { leadId, touched: true }, { ops: true });
+
+	const updated = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
+	if (!updated) return null;
+	const staff = updated.assignedStaffId
+		? await db.query.opsUsers.findFirst({ where: eq(opsUsers.id, updated.assignedStaffId) })
+		: null;
+	const { nextOpenTaskForLead } = await import("./tasks.js");
+	const nextTask = await nextOpenTaskForLead(leadId).catch(() => null);
+	return serializeLead(updated, staff?.name ?? null, nextTask);
 }
 
 export async function deleteLead(id: string): Promise<boolean> {

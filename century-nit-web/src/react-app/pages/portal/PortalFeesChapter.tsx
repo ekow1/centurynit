@@ -5,7 +5,9 @@ import {
 	DEFAULT_SERVICE_FEE_SPLIT,
 	POST_ARRIVAL_FREQUENCY_LABELS,
 	postArrivalInstalments,
+	postArrivalInterestCents,
 	type ApiInvoice,
+	type LedgerRow,
 	type PostArrivalFrequency,
 } from "century-nit-shared";
 import { formatMoney } from "century-nit-core/ui";
@@ -43,6 +45,8 @@ function FeesChapterInner() {
 	const paySheet = usePaySheet(() => void syncFromServer());
 	const { toast } = useNotifier();
 	const [invoice, setInvoice] = useState<ApiInvoice | null>(null);
+	const [invoicesById, setInvoicesById] = useState<Map<string, ApiInvoice>>(new Map());
+	const [ledgerRows, setLedgerRows] = useState<LedgerRow[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [paying, setPaying] = useState(false);
 	const [months, setMonths] = useState<number | null>(application.postArrivalMonths ?? null);
@@ -60,11 +64,18 @@ function FeesChapterInner() {
 			})
 			.catch(() => {});
 		meApi
+			.ledger()
+			.then((res) => {
+				if (!cancelled) setLedgerRows(res.rows);
+			})
+			.catch(() => {});
+		meApi
 			.invoices({ type: "agency" })
 			.then((res) => {
 				if (cancelled) return;
 				const live = res.invoices.filter((i) => i.status !== "void").sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 				setInvoice(live[0] ?? null);
+				setInvoicesById(new Map(res.invoices.map((i) => [i.id, i])));
 			})
 			.catch(() => {})
 			.finally(() => {
@@ -117,12 +128,13 @@ function FeesChapterInner() {
 	const total = invoice?.subtotalCents ?? 0;
 	const paidPct = total > 0 && invoice ? Math.round((invoice.paidCents / total) * 100) : 0;
 
-	// The schedule preview from the catalogue's maths. Dates only once arrival is known.
+	// The schedule preview from the catalogue's maths, interest included.
 	const preview = useMemo(() => {
 		if (!months || !frequency || postCents <= 0) return [];
-		return postArrivalInstalments({ amountCents: postCents, months, frequency, anchor: null, graceDays: catalogue.graceDays });
-	}, [months, frequency, postCents, catalogue.graceDays]);
+		return postArrivalInstalments({ amountCents: postCents, months, frequency, anchor: null, graceDays: catalogue.graceDays, interestPct: catalogue.interestPct });
+	}, [months, frequency, postCents, catalogue.graceDays, catalogue.interestPct]);
 	const chosen = Boolean(application.postArrivalMonths && application.postArrivalFrequency);
+	const schedStatus = application.postArrivalStatus ?? null;
 	const dirty = months !== (application.postArrivalMonths ?? null) || frequency !== (application.postArrivalFrequency ?? null);
 
 	async function pay() {
@@ -151,7 +163,7 @@ function FeesChapterInner() {
 		try {
 			await meApi.choosePostArrivalSchedule({ months, frequency });
 			await syncFromServer();
-			toast.success("Your schedule is set. The instalments are on your service-fee invoice.");
+			toast.success("Your request is with the finance desk — your dated instalments appear once it's approved.");
 		} catch (err) {
 			toast.error(err instanceof ApiError ? err.message : "Could not save your schedule.");
 		} finally {
@@ -179,9 +191,11 @@ function FeesChapterInner() {
 			? postRows.length > 0 && postPaid < postRows.length
 				? dueNow?.l.dueAt
 					? `instalment ${postPaid + 1} of ${postRows.length} · ${ghs(dueNow.remaining)} · due ${shortDay(dueNow.l.dueAt)}`
-					: chosen
-						? "your schedule starts after you arrive"
-						: "choose how to spread the rest"
+					: schedStatus === "pending"
+						? "your plan is with the finance desk"
+						: chosen
+							? "your schedule is set"
+							: "choose how to spread the rest"
 				: "your service fee is settled"
 			: milestone
 				? unlocked
@@ -372,11 +386,20 @@ function FeesChapterInner() {
 							</div>
 							{postCents <= 0 ? (
 								<p className="psec__later">Nothing remains after arrival on this invoice.</p>
-							) : scheduleLocked ? (
+							) : schedStatus === "pending" ? (
+								<div className="sharp-card sharp-card--soft">
+									<span className="psec__hint" style={{ margin: 0 }}>
+										Under review · {application.postArrivalMonths} months · {application.postArrivalFrequency ? POST_ARRIVAL_FREQUENCY_LABELS[application.postArrivalFrequency as PostArrivalFrequency]?.toLowerCase() : ""}
+									</span>
+									<p className="pfoot__note" style={{ margin: "0.4rem 0 0" }}>
+										The finance desk sets your start date and approves the plan — the system works out every instalment to the end{catalogue.interestPct > 0 ? `, with ${catalogue.interestPct}% interest on the ${ghs(postCents)} remainder` : ""}. Your dated schedule appears here once it's approved.
+									</p>
+								</div>
+							) : scheduleLocked || schedStatus === "approved" ? (
 								<>
 									<div className="sharp-card sharp-card--soft">
 										<span className="psec__hint" style={{ margin: 0 }}>
-											Your schedule · {postRows.length} × {ghs(postRows[0]?.l.amountCents ?? 0)} · {application.postArrivalFrequency ? POST_ARRIVAL_FREQUENCY_LABELS[application.postArrivalFrequency as PostArrivalFrequency]?.toLowerCase() : ""}
+											Your schedule · {postRows.length} × {ghs(postRows[0]?.l.amountCents ?? 0)} · {application.postArrivalFrequency ? POST_ARRIVAL_FREQUENCY_LABELS[application.postArrivalFrequency as PostArrivalFrequency]?.toLowerCase() : ""}{application.postArrivalInterestPct ? ` · incl. ${application.postArrivalInterestPct}% interest` : ""}
 										</span>
 										<InstalmentRows rows={postRows} onPay={() => void pay()} paying={paying} />
 									</div>
@@ -384,17 +407,25 @@ function FeesChapterInner() {
 								</>
 							) : (
 								<>
+									{schedStatus === "declined" && (
+										<div className="sharp-card" style={{ borderColor: "var(--red, #b3261e)", marginBottom: "0.8rem" }}>
+											<span className="psec__hint" style={{ margin: 0, color: "var(--red, #b3261e)" }}>
+												The office couldn't approve that schedule{application.postArrivalDeclineReason ? ` — ${application.postArrivalDeclineReason}` : ""}. Pick another.
+											</span>
+										</div>
+									)}
 									<p className="pfoot__note">
-										Pick how long to spread it over and how often you pay. Your first instalment falls {catalogue.graceDays} days after you arrive. You can change this until then.
+										Pick how long to spread it over and how often you pay{catalogue.interestPct > 0 ? ` — ${catalogue.interestPct}% interest on the remainder is priced in` : ""}. The office sets your start date when it approves the plan; the system works out every instalment to the end.
 									</p>
 									<p className="psec__hint" style={{ margin: "0.2rem 0 0" }}>Over</p>
 									<div className="pchips">
 										{catalogue.durations.map((m) => {
 											const count = frequency ? postArrivalInstalments({ amountCents: postCents, months: m, frequency, anchor: null, graceDays: 0 }).length : m;
+											const each = Math.floor((postCents + postArrivalInterestCents(postCents, catalogue.interestPct)) / count);
 											return (
 												<button key={m} type="button" className={`pchip${months === m ? " pchip--on" : ""}`} onClick={() => setMonths(m)} aria-pressed={months === m}>
 													{m} months
-													<small>{ghs(Math.floor(postCents / count))} × {count}</small>
+													<small>{ghs(each)} × {count}</small>
 												</button>
 											);
 										})}
@@ -414,13 +445,13 @@ function FeesChapterInner() {
 									{preview.length > 0 && (
 										<div className="sharp-card sharp-card--soft mt-3">
 											<span className="psec__hint" style={{ margin: 0 }}>
-												Your schedule · {preview.length} × {ghs(preview[0].amountCents)} · {frequency ? POST_ARRIVAL_FREQUENCY_LABELS[frequency].toLowerCase() : ""} · from {catalogue.graceDays} days after arrival
+												Your schedule · {preview.length} × {ghs(preview[0].amountCents)} · {frequency ? POST_ARRIVAL_FREQUENCY_LABELS[frequency].toLowerCase() : ""}{catalogue.interestPct > 0 ? ` · incl. ${catalogue.interestPct}% interest` : ""} · dates set on approval
 											</span>
 											<div className="inst mt-2">
 												{(postRows.length === preview.length && postRows.some((r) => r.l.dueAt) && !dirty ? postRows.map((r) => ({ n: r.i - 1, amount: r.l.amountCents, dueAt: r.l.dueAt })) : preview.map((p) => ({ n: p.n, amount: p.amountCents, dueAt: p.dueAt }))).slice(0, 4).map((p) => (
 													<div key={p.n} className="inst__r">
 														<span className="inst__i">{p.n} / {preview.length}</span>
-														<span className="inst__d">{day(p.dueAt) ?? (p.n === 1 ? `${catalogue.graceDays} days after arrival` : "then on schedule")}</span>
+														<span className="inst__d">{day(p.dueAt) ?? (p.n === 1 ? "start date set on approval" : "then on schedule")}</span>
 														<span>Post-arrival instalment</span>
 														<span className="inst__a">{ghs(p.amount)}</span>
 													</div>
@@ -442,17 +473,66 @@ function FeesChapterInner() {
 											</div>
 										</div>
 									)}
-									{chosen && !dirty && postRows.length > 0 && (
-										<>
-											<div className="sharp-card sharp-card--soft mt-3">
-												<span className="psec__hint" style={{ margin: 0 }}>Your schedule as it stands</span>
-												<InstalmentRows rows={postRows} onPay={() => void pay()} paying={paying} />
-											</div>
-											<AutoPayCard autoPay={autoPay} onToggle={toggleAutoPay} busy={togglingAutoPay} />
-										</>
-									)}
 								</>
 							)}
+						</section>
+					)}
+					{/* Your payments — the ledger */}
+					{ledgerRows.length > 0 && (
+						<section className="psec">
+							<div className="psec__h">
+								<span className="psec__no">◷</span>
+								<span className="psec__title">Your payments</span>
+								<span className="psec__hint">every settlement and what's next</span>
+							</div>
+							<div className="sharp-card" style={{ padding: 0, overflow: "hidden" }}>
+								<table className="ledger">
+									<thead>
+										<tr>
+											<th>Date</th>
+											<th>For</th>
+											<th>Method</th>
+											<th className="num">Amount</th>
+											<th>Status</th>
+										</tr>
+									</thead>
+									<tbody>
+										{ledgerRows.map((r) => {
+											const inv = invoicesById.get(r.invoiceId);
+											return (
+												<tr key={r.id} className={r.status === "declined" ? "failed-row" : undefined}>
+													<td className="num">{shortDay(r.at)}</td>
+													<td>
+														{r.label}
+														{r.invoiceNumber && <span className="sub">{r.invoiceNumber}</span>}
+													</td>
+													<td>{r.channel}</td>
+													<td className="num">{ghs(r.amountCents)}</td>
+													<td>
+														{r.status === "settled" || r.status === "manual" ? (
+															<>
+																<span className="st st--paid">paid</span>
+																{inv && (
+																	<button type="button" className="sub" style={{ background: "none", border: 0, padding: 0, cursor: "pointer", textDecoration: "underline" }} onClick={() => openInvoiceDocument(inv, "receipt")}>
+																		receipt ↓
+																	</button>
+																)}
+															</>
+														) : r.status === "declined" ? (
+															<>
+																<span className="st st--failed">declined</span>
+																<span className="sub">we'll try again — or pay another way</span>
+															</>
+														) : (
+															<span className="st st--sched">scheduled</span>
+														)}
+													</td>
+												</tr>
+											);
+										})}
+									</tbody>
+								</table>
+							</div>
 						</section>
 					)}
 				</div>

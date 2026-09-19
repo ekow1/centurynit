@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leads — touch log, follow-ups, lost reason</title>
+<style>
+:root{--bg:#fff;--fg:#0a0a0a;--muted:#f5f5f5;--muted-fg:#52525b;--b:#0a0a0a;--bl:#d4d4d8;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
+*{box-sizing:border-box;margin:0}
+body{font-family:var(--sans);background:#e8e8e8;color:var(--fg);font-size:.875rem}
+.page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 5rem}
+.eyebrow{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg)}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
+h2{font-size:1.15rem;font-weight:800;margin:2.5rem 0 .4rem}
+h3{font-size:.85rem;font-weight:700;margin:1.4rem 0 .3rem}
+.lead{color:var(--muted-fg);font-size:.85rem;max-width:46rem;line-height:1.6}
+.note{font-size:.72rem;color:var(--muted-fg);border-left:3px solid var(--fg);padding:.6rem .9rem;margin:1rem 0;line-height:1.6;background:#fff}
+.frame{background:var(--bg);border:1px solid var(--bl);margin-top:1.25rem;padding:1.5rem}
+.tag{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;border:1px solid var(--b);padding:.12rem .45rem;white-space:nowrap}
+.tag--new{background:var(--fg);color:var(--bg)}
+.tag--old{border-style:dashed;color:var(--muted-fg);border-color:var(--bl)}
+table.review{width:100%;border-collapse:collapse;font-size:.78rem;background:#fff;margin-top:.6rem}
+.review th{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);text-align:left;padding:.45rem .7rem;border-bottom:1px solid var(--b)}
+.review td{padding:.55rem .7rem;border-bottom:1px solid var(--bl);vertical-align:top;line-height:1.5}
+.review td:first-child{white-space:nowrap}
+code,pre{font-family:var(--mono);font-size:.72rem}
+code{background:var(--muted);padding:.05rem .3rem}
+
+/* ===== the lead pane ===== */
+.pane{max-width:26rem;background:#fff;border:1.5px solid var(--b)}
+.card{padding:1.1rem 1.25rem;border-bottom:1px solid var(--bl)}
+.card:last-child{border-bottom:0}
+.kicker{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg)}
+.pane h3{font-size:1.2rem;font-weight:800;margin:.25rem 0}
+.sub{color:var(--muted-fg);font-size:.78rem}
+.meta{font-family:var(--mono);font-size:.62rem;color:var(--muted-fg);margin-top:.3rem}
+.meter{letter-spacing:.12em;font-size:.6rem}
+.stepper{display:flex;align-items:center;gap:0;margin:.8rem 0}
+.sdot{width:.7rem;height:.7rem;border:1.5px solid var(--b);border-radius:50%;background:#fff;flex-shrink:0}
+.sdot.on{background:var(--b)}
+.sline{flex:1;height:1.5px;background:var(--b);opacity:.35}
+.actions{display:flex;gap:.45rem;flex-wrap:wrap;margin-top:.8rem}
+.btn{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;
+  border:1.5px solid var(--b);background:#fff;color:var(--fg);padding:.42rem .75rem;cursor:pointer}
+.btn--fill{background:var(--b);color:#fff;font-weight:700}
+.btn--dashed{border-style:dashed;color:var(--muted-fg)}
+.kv{display:flex;justify-content:space-between;gap:1rem;padding:.32rem 0;font-size:.78rem;border-bottom:1px solid var(--muted)}
+.kv:last-child{border-bottom:0}
+.kv b{font-weight:400;color:var(--muted-fg);font-size:.68rem;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em}
+/* next follow-up strip on the card */
+.fup{display:flex;align-items:center;gap:.6rem;border:1.5px dashed var(--b);padding:.55rem .8rem;margin-top:.75rem;font-size:.74rem}
+.fup .when{font-family:var(--mono);font-size:.62rem;font-weight:700;white-space:nowrap}
+.fup .x{margin-left:auto;background:none;border:0;font-family:var(--mono);font-size:.6rem;cursor:pointer;color:var(--muted-fg)}
+/* timeline */
+.tl{list-style:none;padding:0}
+.tl li{border-left:2px solid var(--b);padding:.3rem 0 .3rem .8rem;margin-left:.2rem;position:relative}
+.tl li::before{content:"";position:absolute;left:-4.5px;top:.55rem;width:7px;height:7px;background:var(--b);border-radius:50%}
+.tl li.sys{border-left-color:var(--bl)}
+.tl li.sys::before{background:#fff;border:1.5px solid var(--bl)}
+.tl .who{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-fg)}
+.tl .what{font-size:.78rem;font-weight:600;margin-top:.1rem}
+.tl .body{font-size:.72rem;color:var(--muted-fg);margin-top:.15rem;line-height:1.55}
+.tl .when{font-family:var(--mono);font-size:.58rem;color:var(--muted-fg)}
+/* the log sheet (modal mock) */
+.sheet{max-width:24rem;background:#fff;border:2px solid var(--b);box-shadow:8px 8px 0 rgba(0,0,0,.15)}
+.sheet .head{display:flex;justify-content:space-between;align-items:baseline;padding:.85rem 1.1rem;border-bottom:2px solid var(--b)}
+.sheet .head b{font-size:.95rem}
+.sheet .bd{padding:1rem 1.1rem}
+.fld{display:block;margin-top:.7rem}
+.fld>span{display:block;font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);margin-bottom:.3rem}
+.fld input,.fld textarea{width:100%;border:1.5px solid var(--b);padding:.5rem .6rem;font-family:var(--mono);font-size:.8rem;background:#fff}
+.chips{display:flex;gap:.4rem;flex-wrap:wrap}
+.chip{border:1px solid var(--bl);background:#fff;padding:.4rem .7rem;font-family:var(--mono);font-size:.6rem;
+  text-transform:uppercase;letter-spacing:.08em;cursor:pointer}
+.chip.on{border-color:var(--b);background:var(--b);color:#fff}
+.sheet .foot{display:flex;gap:.5rem;justify-content:flex-end;padding:.8rem 1.1rem;border-top:1px solid var(--bl)}
+/* work-queue row with a task */
+.qtable{width:100%;border-collapse:collapse;font-size:.78rem;background:#fff}
+.qtable th{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);text-align:left;padding:.45rem .7rem;border-top:1.5px solid var(--b);border-bottom:1.5px solid var(--b)}
+.qtable td{padding:.55rem .7rem;border-bottom:1px solid var(--bl);vertical-align:top}
+.qtable .taskrow td{background:#fff}
+.qtable .badge{font-family:var(--mono);font-size:.56rem;border:1.5px solid var(--b);padding:.1rem .4rem;letter-spacing:.06em;text-transform:uppercase}
+.qtable .badge--task{border-style:dashed}
+/* two-up */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start}
+@media(max-width:940px){.two{grid-template-columns:1fr}}
+.fcap{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);margin-bottom:.5rem}
+.lostlist{list-style:none}
+.lostlist li{display:flex;gap:.6rem;align-items:center;border:1px solid var(--bl);padding:.55rem .7rem;margin-top:.4rem;cursor:pointer;font-size:.8rem}
+.lostlist li.on{border-color:var(--b);box-shadow:inset 0 0 0 1px var(--b)}
+.lostlist .rb{width:.65rem;height:.65rem;border:1.5px solid var(--b);border-radius:50%;flex-shrink:0}
+.lostlist li.on .rb{background:var(--b)}
+.lostlist small{display:block;color:var(--muted-fg);font-size:.66rem}
+</style>
+</head>
+<body>
+<div class="page">
+<p class="eyebrow">Mock · CRM gap #1–3 · Ops console → Leads</p>
+<h1>Touch log, follow-ups, and why a lead died</h1>
+<p class="lead">Three additions to the lead pane that turn it from a scoreboard into a workstation:
+<b>Log</b> writes a human touch (call / WhatsApp / email / visit / note) into the lead's trail and moves the real <i>last-client-touch</i> clock;
+<b>Follow up</b> creates a dated task that lands in the work queue and reminds its owner;
+<b>Mark lost</b> asks why, so Reports can finally answer the question. <span class="tag tag--new">new behaviour</span></p>
+
+<!-- ═══ A · the pane, before/after ═══ -->
+<h2>1 · The lead pane — before / after</h2>
+<p class="lead">Same rail, three more verbs. The pane stops being read-only: every touch is loggable, the next touch is schedulable, and "lost" costs a reason.</p>
+<div class="two" style="margin-top:1.25rem">
+<div>
+<p class="fcap">Today — watch it, can't work it</p>
+<div class="pane">
+  <div class="card">
+    <span class="kicker">Contacted · ●●●○○</span>
+    <h3>Ama Serwaa Boateng</h3>
+    <p class="sub">Canada · Instagram</p>
+    <p class="meta">Last touch 3d ago · Captured 12 Sep</p>
+    <div class="stepper"><span class="sdot on"></span><span class="sline"></span><span class="sdot on"></span><span class="sline"></span><span class="sdot"></span><span class="sline"></span><span class="sdot"></span><span class="sline"></span><span class="sdot"></span></div>
+    <div class="actions">
+      <button class="btn btn--fill">Consultation booked →</button>
+      <button class="btn">← New lead</button>
+      <button class="btn">Mark lost</button>
+    </div>
+  </div>
+  <div class="card">
+    <span class="kicker">Contact</span>
+    <div class="kv"><b>Phone</b><span class="mono">+233 24 555 0192</span></div>
+    <div class="kv"><b>Email</b><span>ama.boateng@gmail.com</span></div>
+    <div class="kv"><b>Source</b><span>Instagram</span></div>
+    <div class="kv"><b>Country</b><span>Canada</span></div>
+  </div>
+  <div class="card">
+    <span class="kicker">Trail</span>
+    <ul class="tl">
+      <li class="sys"><span class="who">system</span><p class="what">stage changed</p><span class="when">2d ago</span></li>
+      <li class="sys"><span class="who">system</span><p class="what">assigned → Efua</p><span class="when">3d ago</span></li>
+      <li class="sys"><span class="who">system</span><p class="what">captured · account registration</p><span class="when">12 Sep</span></li>
+    </ul>
+    <p class="meta" style="margin-top:.7rem">Only the machine speaks. The two calls Efua already made are nowhere.</p>
+  </div>
+</div>
+</div>
+<div>
+<p class="fcap">Proposed — the same rail, worked</p>
+<div class="pane">
+  <div class="card">
+    <span class="kicker">Contacted · ●●●○○</span>
+    <h3>Ama Serwaa Boateng</h3>
+    <p class="sub">Canada · Instagram</p>
+    <p class="meta">Last client touch <b>yesterday</b> · record edited 4h ago · Captured 12 Sep</p>
+    <div class="stepper"><span class="sdot on"></span><span class="sline"></span><span class="sdot on"></span><span class="sline"></span><span class="sdot"></span><span class="sline"></span><span class="sdot"></span><span class="sline"></span><span class="sdot"></span></div>
+    <div class="actions">
+      <button class="btn btn--fill">Consultation booked →</button>
+      <button class="btn">+ Log touch</button>
+      <button class="btn">+ Follow up</button>
+      <button class="btn btn--dashed">Mark lost</button>
+    </div>
+    <div class="fup"><span class="when">◷ TUE 23 SEP</span><span>Call back — she asked about January intake</span><button class="x">done ✓</button></div>
+  </div>
+  <div class="card">
+    <span class="kicker">Contact</span>
+    <div class="kv"><b>Phone</b><span class="mono">+233 24 555 0192</span></div>
+    <div class="kv"><b>Email</b><span>ama.boateng@gmail.com</span></div>
+    <div class="kv"><b>Source</b><span>Instagram</span></div>
+    <div class="kv"><b>Country</b><span>Canada</span></div>
+    <div class="actions" style="margin-top:.6rem"><button class="btn btn--dashed" style="font-size:.56rem">✎ Edit details</button></div>
+  </div>
+  <div class="card">
+    <span class="kicker">Trail — people and machine, one feed</span>
+    <ul class="tl">
+      <li><span class="who">Efua · call · reached</span><p class="what">Spoke 15 min — wants January intake, passport renewing</p><span class="when">yesterday</span></li>
+      <li><span class="who">Efua · whatsapp · no answer</span><p class="what">Sent fee breakdown, seen ✓✓</p><span class="when">3d ago</span></li>
+      <li class="sys"><span class="who">system</span><p class="what">assigned → Efua</p><span class="when">3d ago</span></li>
+      <li class="sys"><span class="who">system</span><p class="what">captured · account registration</p><span class="when">12 Sep</span></li>
+    </ul>
+  </div>
+</div>
+</div>
+</div>
+<div class="note">Human entries get the solid spine and a channel + outcome in the kicker (<code>Efua · call · reached</code>); system rows keep the hollow spine. One feed, two speakers — no separate "notes" tab to forget to check.</div>
+
+<!-- ═══ B · the log sheet ═══ -->
+<h2>2 · The touch sheet</h2>
+<p class="lead">One small form, four fields, no friction — if logging a call takes longer than the call, staff won't do it.</p>
+<div class="frame" style="background:#e8e8e8">
+<div class="sheet" style="margin:0 auto">
+  <div class="head"><b>Log a touch</b><span class="kicker">Ama Serwaa Boateng</span></div>
+  <div class="bd">
+    <label class="fld"><span>How</span>
+      <span class="chips">
+        <button class="chip on">☎ Call</button><button class="chip">◈ WhatsApp</button><button class="chip">✉ Email</button><button class="chip">⛨ Visit</button><button class="chip">✎ Note</button>
+      </span>
+    </label>
+    <label class="fld"><span>Outcome</span>
+      <span class="chips">
+        <button class="chip on">Reached</button><button class="chip">No answer</button><button class="chip">Left message</button><button class="chip">Promised callback</button>
+      </span>
+    </label>
+    <label class="fld"><span>What happened</span><textarea rows="3">Wants January intake. Passport at the passport office — renews first. Fees OK.</textarea></label>
+    <label class="fld"><span>Follow up on — optional, becomes a task</span><input value="2026-09-23" type="date"></label>
+  </div>
+  <div class="foot"><button class="btn">Cancel</button><button class="btn btn--fill">Log it</button></div>
+</div>
+</div>
+<div class="note">The outcome chips are the scoring data — "no answer ×3" is the honest signal the heat meter can't fake. A follow-up date on the same sheet means the reminder never gets forgotten <i>because</i> logging was easy.</div>
+
+<!-- ═══ C · the task lands in the queue ═══ -->
+<h2>3 · Follow-ups in the work queue</h2>
+<p class="lead">A follow-up is a real row — assignable, dated, reminding through the existing notification pipe (bell + push + email). It files beside the derived tasks, not in a separate screen nobody opens.</p>
+<div class="frame" style="padding:0">
+<table class="qtable">
+<thead><tr><th>When</th><th>Task</th><th>On</th><th>Owner</th><th></th></tr></thead>
+<tbody>
+<tr class="taskrow"><td class="mono">Today</td><td><span class="badge badge--task">Follow-up</span> Call back — January intake question</td><td>Ama Serwaa Boateng · lead</td><td>Efua</td><td class="mono"><a href="#">open →</a></td></tr>
+<tr><td class="mono">Today</td><td><span class="badge">Handoff</span> Visa stage needs a handler</td><td>Kwame Mensah · case CN-2026-0098</td><td>— open</td><td class="mono"><a href="#">assign →</a></td></tr>
+<tr class="taskrow"><td class="mono">Tomorrow</td><td><span class="badge badge--task">Follow-up</span> Send fee breakdown PDF</td><td>Yaw Darko · lead</td><td>Efua</td><td class="mono"><a href="#">open →</a></td></tr>
+<tr><td class="mono">Thu</td><td><span class="badge">Invoice</span> Deposit unpaid 5 days</td><td>Efua Asante · CN-2026-0142</td><td>Finance</td><td class="mono"><a href="#">open →</a></td></tr>
+</tbody>
+</table>
+</div>
+<div class="note">Dashed badge = a task somebody wrote; solid = a task the state implies. Overdue follow-ups sort themselves into the "overdue" band the queue already has — no new surface to learn.</div>
+
+<!-- ═══ D · mark lost asks why ═══ -->
+<h2>4 · Mark lost — the reason is the data</h2>
+<p class="lead">One extra click. Without it "Lost" is a graveyard; with it the report gets a column that changes decisions.</p>
+<div class="frame" style="background:#e8e8e8">
+<div class="sheet" style="margin:0 auto">
+  <div class="head"><b>Mark lost — why?</b><span class="kicker">Ama Serwaa Boateng</span></div>
+  <div class="bd">
+    <ul class="lostlist">
+      <li><span class="rb"></span><span>No response<small>unreachable after repeated attempts</small></span></li>
+      <li class="on"><span class="rb"></span><span>Cost<small>couldn't afford the package or fees</small></span></li>
+      <li><span class="rb"></span><span>Chose another agency</span></li>
+      <li><span class="rb"></span><span>Not eligible<small>academics, documents, funds</small></span></li>
+      <li><span class="rb"></span><span>Changed plans<small>no longer travelling / studying</small></span></li>
+      <li><span class="rb"></span><span>Other — say it below</span></li>
+    </ul>
+    <label class="fld"><span>Note — optional</span><textarea rows="2" placeholder="…"></textarea></label>
+  </div>
+  <div class="foot"><button class="btn">Keep lead</button><button class="btn btn--fill">Mark lost</button></div>
+</div>
+</div>
+<div class="note">The reason is a fixed enum (<code>no_response | cost | competitor | not_eligible | changed_plans | other</code>) so Reports can group it; the note is free text for the story. Reopen keeps working and logs a <code>reopened</code> event.</div>
+
+<!-- ═══ E · wiring ═══ -->
+<h2>5 · Wiring — small and honest</h2>
+<table class="review">
+<thead><tr><th>Piece</th><th>Where</th><th>What it is</th></tr></thead>
+<tbody>
+<tr><td class="mono">lead.touch</td><td class="mono">lead_events</td><td>New event types — <code>touch.call / .whatsapp / .email / .visit / .note</code> with <code>{outcome, body}</code> payload. Same append-only trail, no new table for the log itself.</td></tr>
+<tr><td class="mono">leads.lastClientTouchAt</td><td class="mono">leads (new column)</td><td>Written <b>only</b> by touch events and inbound client messages — never by <code>updatedAt</code>. The heat meter and "going cold" band finally measure contact, not edits.</td></tr>
+<tr><td class="mono">leads.lostReason / lostNote</td><td class="mono">leads (new columns)</td><td>Set by the lost dialog; cleared on reopen. Feeds a "why leads die" row in Reports.</td></tr>
+<tr><td class="mono">tasks</td><td class="mono">new table</td><td><code>title, dueAt, assigneeOpsUserId, leadId?, applicationId?, doneAt, createdBy</code>. The work queue unions derived tasks with real ones; due-soon + overdue rows push through <code>notifyMany</code> → bell, SSE, push.</td></tr>
+<tr><td class="mono">POST /leads/:id/touches</td><td class="mono">routes/leads.ts</td><td>Writes the event + bumps <code>lastClientTouchAt</code> + optionally creates the follow-up task in one call.</td></tr>
+<tr><td class="mono">PATCH /leads/:id</td><td class="mono">existing</td><td>Already accepts the fields — the pane just gains an Edit sheet and the lost dialog posts <code>{stage:"lost", lostReason, lostNote}</code>.</td></tr>
+</tbody>
+</table>
+
+<p class="lead" style="margin-top:2rem">Deliberately <b>not</b> in this pass: SMS/WhatsApp sending (separate provider work), public enquiry endpoint, CSV export, merge. Those are their own builds — this one makes the pad honest first.</p>
+</div>
+</body>
+</html>

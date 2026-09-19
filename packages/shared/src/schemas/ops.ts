@@ -192,6 +192,8 @@ export const capabilitySchema = z.enum([
 	"edit_universities",
 	/** Turn a proforma into a payable invoice; void; credit. */
 	"issue_invoices",
+	/** Set the start date and approve (or decline) a post-arrival payment schedule. */
+	"approve_schedules",
 	/** May own the work of a chapter. Offered in that chapter's assign control. */
 	"own:consult",
 	"own:apply",
@@ -209,6 +211,7 @@ export const CAPABILITIES: readonly { id: Capability; label: string; hint: strin
 	{ id: "own:visa", label: "Own visa work", hint: "Can be the visa officer", group: "Chapter ownership" },
 	{ id: "own:depart", label: "Own departure work", hint: "Can be the travel officer", group: "Chapter ownership" },
 	{ id: "issue_invoices", label: "Issue invoices", hint: "Issue, void and credit invoices; raising a proforma needs only the chapter", group: "Money" },
+	{ id: "approve_schedules", label: "Approve payment schedules", hint: "Set the start date and approve or decline a client's post-arrival plan", group: "Money" },
 	{ id: "edit_packages", label: "Edit packages", hint: "Service packages and their fees", group: "Catalogue" },
 	{ id: "edit_universities", label: "Edit universities & programmes", hint: "", group: "Catalogue" },
 	{ id: "invite_staff", label: "Invite & manage staff", hint: "Of lower rank than their own", group: "Administration" },
@@ -224,11 +227,11 @@ export type Permission = z.infer<typeof permissionSchema>;
 /** What each built-in role can do. The seed and the "reset to defaults". */
 export const ROLE_CAPABILITIES: Record<SystemRole, Capability[]> = {
 	super_admin: capabilitySchema.options as unknown as Capability[],
-	manager: ["assign_work", "see_all_cases", "see_all_branches", "invite_staff", "manage_clients", "edit_packages", "edit_universities", "issue_invoices", "own:consult", "own:apply", "own:visa", "own:depart"],
+	manager: ["assign_work", "see_all_cases", "see_all_branches", "invite_staff", "manage_clients", "edit_packages", "edit_universities", "issue_invoices", "approve_schedules", "own:consult", "own:apply", "own:visa", "own:depart"],
 	coordinator: ["assign_work", "see_all_cases", "see_all_branches", "own:consult", "own:apply", "own:visa", "own:depart"],
 	customer_service: ["assign_work", "see_all_branches"],
 	consultant: ["own:consult", "own:apply", "own:visa", "own:depart", "issue_invoices"],
-	finance: ["see_all_branches", "edit_packages", "issue_invoices"],
+	finance: ["see_all_branches", "edit_packages", "issue_invoices", "approve_schedules"],
 	admin: ["see_all_cases", "see_all_branches", "invite_staff", "manage_roles", "manage_clients", "manage_settings"],
 };
 

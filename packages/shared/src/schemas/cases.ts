@@ -745,6 +745,15 @@ export const applicationSchema = z.object({
 	/** The post-arrival schedule the client chose. Months and frequency; null until chosen. */
 	postArrivalMonths: z.number().int().nullable().optional(),
 	postArrivalFrequency: z.string().nullable().optional(),
+	/** pending → finance/manager approves (or declines) → the dated plan goes live. */
+	postArrivalStatus: z.enum(["pending", "approved", "declined"]).nullable().optional(),
+	/** The contractual first instalment date, entered by finance/manager at approval. */
+	postArrivalStartAt: z.string().datetime().nullable().optional(),
+	postArrivalReviewedBy: z.string().nullable().optional(),
+	postArrivalReviewedAt: z.string().datetime().nullable().optional(),
+	postArrivalDeclineReason: z.string().nullable().optional(),
+	/** The flat interest rate frozen into the approved schedule; null = none. */
+	postArrivalInterestPct: z.number().nullable().optional(),
 	packageId: z.string().uuid().nullable(),
 	packageSelectedAt: z.string().datetime().nullable(),
 	agencyStageIndex: z.number().int(),

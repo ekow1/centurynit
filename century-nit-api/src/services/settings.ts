@@ -62,6 +62,7 @@ export type SettingKey =
 	| "POST_ARRIVAL_FREQUENCIES"
 	| "POST_ARRIVAL_GRACE_DAYS"
 	| "POST_ARRIVAL_REMIND_DAYS"
+	| "POST_ARRIVAL_INTEREST_PCT"
 	| "VAPID_PUBLIC_KEY"
 	| "VAPID_PRIVATE_KEY"
 	| string;
@@ -291,6 +292,12 @@ export const SETTING_DEFS: Record<
 		group: "Fee Schedule",
 		secret: false,
 		description: "Days after arrival before the first instalment falls due. Default: 30.",
+	},
+	POST_ARRIVAL_INTEREST_PCT: {
+		label: "Post-arrival · interest (%)",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Flat interest on the post-arrival remainder, priced into an approved schedule's instalments. Default: 8.",
 	},
 	POST_ARRIVAL_REMIND_DAYS: {
 		label: "Post-arrival · remind (days before)",

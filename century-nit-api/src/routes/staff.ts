@@ -15,7 +15,7 @@ import {
 	AUTH_ERROR_CODES,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { applications, bookings, conversations, coordinationGrants, conversationParticipants, opsUsers, staffPresence, users, sessions, accounts } from "../db/schema.js";
+import { applications, bookings, conversations, coordinationGrants, conversationParticipants, opsUsers, staffPresence, stageAssignments, users, sessions, accounts } from "../db/schema.js";
 import { recordAdminEvent, requestIp } from "../services/audit.js";
 import { env } from "../env.js";
 import { HttpError, validationHook } from "../middleware/error.js";
@@ -562,8 +562,11 @@ staffRouter.openapi(
 									hasLogin: z.boolean(),
 									mfaEnabled: z.boolean(),
 									lastSeenAt: z.string().nullable(),
+									presence: z.enum(["available", "busy", "on_leave", "offline"]),
 									ownedConversations: z.number(),
 									ownedCases: z.number(),
+									openCases: z.number(),
+									openStageSeats: z.number(),
 									bookingsThisWeek: z.number(),
 									canCoordinate: z.boolean(),
 									grantExpiresAt: z.string().nullable(),
@@ -592,6 +595,7 @@ staffRouter.openapi(
 				grantId: coordinationGrants.id,
 				grantExpiresAt: coordinationGrants.expiresAt,
 				lastSeenAt: staffPresence.lastSeenAt,
+				presenceStatus: staffPresence.status,
 			})
 			.from(opsUsers)
 			.leftJoin(users, eq(users.id, opsUsers.userId))
@@ -627,6 +631,34 @@ staffRouter.openapi(
 			.where(sql`${applications.assignedStaffId} IS NOT NULL`)
 			.groupBy(applications.assignedStaffId);
 		const casesBy = new Map(caseCounts.map((r) => [r.assignedStaffId, r.n]));
+
+		// Open case load — owned cases still in flight (not completed), and
+		// active stage-specialist seats. Both feed the assign sheet's roster
+		// so a manager sees the load before placing a handler.
+		const openCaseCounts = await db
+			.select({
+				assignedStaffId: applications.assignedStaffId,
+				n: sql<number>`count(*)::int`,
+			})
+			.from(applications)
+			.where(
+				and(
+					sql`${applications.assignedStaffId} IS NOT NULL`,
+					sql`${applications.stage} <> 'completed'`,
+				),
+			)
+			.groupBy(applications.assignedStaffId);
+		const openCasesBy = new Map(openCaseCounts.map((r) => [r.assignedStaffId, r.n]));
+
+		const seatCounts = await db
+			.select({
+				opsUserId: stageAssignments.opsUserId,
+				n: sql<number>`count(*)::int`,
+			})
+			.from(stageAssignments)
+			.where(eq(stageAssignments.status, "active"))
+			.groupBy(stageAssignments.opsUserId);
+		const seatsBy = new Map(seatCounts.map((r) => [r.opsUserId, r.n]));
 
 		// Consultation bookings this week per handler — the rail's workload line.
 		const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -673,6 +705,12 @@ staffRouter.openapi(
 		return c.json({
 			staff: visible.map((r) => {
 				const grantActive = Boolean(r.grantId) && (!r.grantExpiresAt || r.grantExpiresAt.getTime() > Date.now());
+				// Presence decays to offline when no heartbeat lands for 15
+				// minutes — same rule the chat service applies.
+				let presence = (r.presenceStatus ?? "offline") as "available" | "busy" | "on_leave" | "offline";
+				if (presence !== "offline" && (!r.lastSeenAt || Date.now() - r.lastSeenAt.getTime() > 15 * 60 * 1000)) {
+					presence = "offline";
+				}
 				return {
 					id: r.id,
 					email: r.email,
@@ -685,8 +723,11 @@ staffRouter.openapi(
 					hasLogin: Boolean(r.userId),
 					mfaEnabled: r.twoFactorEnabled ?? false,
 					lastSeenAt: r.lastSeenAt ? r.lastSeenAt.toISOString() : null,
+					presence,
 					ownedConversations: ownedBy.get(r.id) ?? 0,
 					ownedCases: casesBy.get(r.id) ?? 0,
+					openCases: openCasesBy.get(r.id) ?? 0,
+					openStageSeats: seatsBy.get(r.id) ?? 0,
 					bookingsThisWeek: bookingsBy.get(r.id) ?? 0,
 					canCoordinate: grantActive,
 					grantExpiresAt: grantActive && r.grantExpiresAt ? r.grantExpiresAt.toISOString() : null,

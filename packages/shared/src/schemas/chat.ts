@@ -29,6 +29,7 @@ export const stageAssignmentStatusSchema = z.enum([
 	"reassigned",
 	"on_leave",
 	"completed",
+	"released",
 ]);
 export type StageAssignmentStatus = z.infer<typeof stageAssignmentStatusSchema>;
 
@@ -488,6 +489,8 @@ export const stageHandoffSchema = z.object({
 	deferredAt: z.string().datetime().nullable(),
 	deferCount: z.number().int().nonnegative().default(0),
 	reason: z.string().nullable(),
+	/** Stamped once when the handoff ages past the escalation threshold. */
+	escalatedAt: z.string().datetime().nullable().optional(),
 	createdAt: z.string().datetime(),
 });
 export type StageHandoff = z.infer<typeof stageHandoffSchema>;

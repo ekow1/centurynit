@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { openInNewTab } from "century-nit-core";
 import { documentsApi } from "century-nit-core/api";
 import type { ApplicantDocument } from "century-nit-shared";
 import { StatusPill, type Tone } from "century-nit-core/ui";
@@ -104,8 +105,7 @@ export function ArtifactCard({
 	async function onDownload() {
 		if (!doc) return;
 		try {
-			const ticket = await documentsApi.downloadUrl(doc.id);
-			window.open(ticket.url, "_blank", "noopener");
+			await openInNewTab(documentsApi.downloadUrl(doc.id));
 		} catch (e) {
 			setError(e instanceof Error ? e.message : "Could not open the file");
 		}

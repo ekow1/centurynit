@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { DOCUMENT_TYPES } from "century-nit-core";
 import { ApiError, documentsApi, schoolsApi } from "century-nit-core/api";
+import { openInNewTab } from "century-nit-core";
 import { RELEASE_GATED_DOCUMENT_TYPES, type ApplicantDocument } from "century-nit-shared";
 import { Button } from "./ui/Button";
 
@@ -65,8 +66,9 @@ export function OfficialDocuments({
 		setBusy(row.id);
 		setError(null);
 		try {
-			const ticket = row.kind === "offer-letter" ? await schoolsApi.meAdmissionLetterDownloadUrl(row.id) : await documentsApi.downloadUrl(row.id);
-			window.open(ticket.url, "_blank", "noopener");
+			await openInNewTab(
+				row.kind === "offer-letter" ? schoolsApi.meAdmissionLetterDownloadUrl(row.id) : documentsApi.downloadUrl(row.id),
+			);
 		} catch (err) {
 			setError(err instanceof ApiError && err.code === "RELEASE_HELD" ? err.message : "Could not open the document. Please try again.");
 		} finally {

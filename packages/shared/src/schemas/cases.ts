@@ -643,6 +643,8 @@ export const stageHandoffPreviewSchema = z.object({
 	fromOpsUserName: z.string().nullable(),
 	reason: z.string().nullable(),
 	deferCount: z.number().int(),
+	/** Stamped once when the handoff ages past the escalation threshold. */
+	escalatedAt: z.string().datetime().nullable().optional(),
 	createdAt: z.string().datetime(),
 });
 export type StageHandoffPreview = z.infer<typeof stageHandoffPreviewSchema>;
@@ -841,6 +843,12 @@ export const assignCaseSchema = z.object({
 	scope: z.enum(["stage", "all"]).optional(),
 	/** Referral. The office that owns the file, when it moves with this placement. */
 	branch: z.string().min(1).max(64).optional(),
+	/**
+	 * Handover note — what the incoming handler needs to know. Required by the
+	 * API when this placement replaces an active handler, so the seat change
+	 * always carries context forward.
+	 */
+	reason: z.string().max(500).optional(),
 });
 /**
  * Refer a case or consultation to another handling branch without placing a
@@ -851,6 +859,57 @@ export const referCaseSchema = z.object({
 	note: z.string().max(500).optional(),
 });
 export type ReferCase = z.infer<typeof referCaseSchema>;
+
+/**
+ * Return a seat to the staffing queue. `seat` is `"owner"` (the whole-case
+ * handler) or a journey stage (the specialist seat). Releasing ends the
+ * assignment and opens a `manual_release` handoff so the case resurfaces in
+ * the Workspace queue for re-staffing.
+ */
+export const releaseSeatSchema = z.object({
+	/** Why the seat is going back — recorded on the handoff and history. */
+	note: z.string().max(500).optional(),
+});
+export type ReleaseSeat = z.infer<typeof releaseSeatSchema>;
+
+/**
+ * One staffed (or formerly staffed) seat on a case. `seat` distinguishes the
+ * whole-case owner and the journey coordinator from the per-stage specialist
+ * seats. `endedAt`/`endReason`/`endedByName` are set on past seats only.
+ */
+export const caseSeatSchema = z.object({
+	seat: z.enum(["owner", "coordinator", "stage"]),
+	/** The stage a specialist seat covers; null on owner/coordinator. */
+	stage: z.string().nullable(),
+	opsUserId: z.string().uuid().nullable(),
+	name: z.string().nullable(),
+	email: z.string().email().nullable(),
+	role: z.string().nullable(),
+	presence: z.enum(["available", "busy", "on_leave", "offline"]).nullable(),
+	lastSeenAt: z.string().datetime().nullable(),
+	/** When the seat was taken (assignedAt on the assignment row). */
+	since: z.string().datetime().nullable(),
+	/** The handover note written at placement, if any. */
+	note: z.string().nullable(),
+	endedAt: z.string().datetime().nullable().optional(),
+	endReason: z.string().nullable().optional(),
+	endedByName: z.string().nullable().optional(),
+});
+export type CaseSeat = z.infer<typeof caseSeatSchema>;
+
+/** The case's staffing picture — who holds each seat now and who held it before. */
+export const caseTeamSchema = z.object({
+	owner: caseSeatSchema.nullable(),
+	coordinator: caseSeatSchema.nullable(),
+	/** Active stage-specialist seats. */
+	seats: z.array(caseSeatSchema),
+	/** Ended seats (owner and stage history), most recent first. */
+	pastSeats: z.array(caseSeatSchema),
+	/** Upcoming stages with nobody seated — the queue ahead. */
+	openStages: z.array(z.string()),
+	pendingHandoff: stageHandoffPreviewSchema.nullable(),
+});
+export type CaseTeam = z.infer<typeof caseTeamSchema>;
 export const completeAssessmentSchema = assessmentResultSchema;
 export const cancelConsultationSchema = z.object({
 	reason: z.string().max(1000).optional(),

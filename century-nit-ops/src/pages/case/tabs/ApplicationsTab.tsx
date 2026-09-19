@@ -6,6 +6,7 @@ import { InvoiceCard, SchoolStatePill } from "century-nit-core/ui";
 import type { MockApplication } from "century-nit-core/ops";
 import type { ApiInvoice } from "../../../lib/api";
 import type { Fail, Flash, TabId } from "./types";
+import { openInNewTab } from "century-nit-core";
 import { schoolsApi } from "century-nit-core/api";
 import {
 	ALLOWED_DOCUMENT_TYPES,
@@ -221,8 +222,7 @@ function SchoolRow({
 
 	async function viewFile(kind: SchoolFileKind) {
 		try {
-			const { url } = await schoolsApi.fileDownloadUrl(school.id, kind);
-			window.open(url, "_blank", "noopener");
+			await openInNewTab(schoolsApi.fileDownloadUrl(school.id, kind));
 		} catch (err) {
 			fail(err, `Could not open the ${SCHOOL_FILE_LABELS[kind].toLowerCase()}`);
 		}

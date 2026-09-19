@@ -20,6 +20,7 @@ export * from "./storage.js";
 export * from "./fileStore.js";
 export * from "./siteContent.js";
 export { meApi, schoolsApi, packagesApi } from "./api.js";
+export { openInNewTab } from "./openTab.js";
 
 /**
  * The ops record types live behind `century-nit-core/ops` rather than being

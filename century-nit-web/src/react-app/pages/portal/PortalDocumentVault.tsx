@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { DOCUMENT_TYPES, REQUIRED_DOCUMENTS } from "century-nit-core";
 import { ApiError, documentsApi, meApi } from "century-nit-core/api";
+import { openInNewTab } from "century-nit-core";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import type { ApplicantDocument } from "century-nit-shared";
@@ -261,8 +262,7 @@ export function PortalDocumentVault() {
 		setBusyId(row.id);
 		setError(null);
 		try {
-			const ticket = await documentsApi.downloadUrl(row.live.id);
-			window.open(ticket.url, "_blank", "noopener,noreferrer");
+			await openInNewTab(documentsApi.downloadUrl(row.live.id));
 		} catch (err) {
 			const msg = readableError(err, "Could not open that document.");
 			setError(msg);

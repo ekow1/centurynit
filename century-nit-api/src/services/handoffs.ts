@@ -1,8 +1,11 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
 import {
+	JOURNEY_STAGES,
 	JOURNEY_STAGE_LABELS,
 	STAGE_OWNER_CLASS,
 	isOwnerClassBoundary,
+	type CaseSeat,
+	type CaseTeam,
 	type JourneyStage,
 	type StageHandoff,
 	type StageHandoffPreview,
@@ -11,8 +14,12 @@ import { db } from "../db/index.js";
 import {
 	applicants,
 	applications,
+	caseAssignments,
 	caseComments,
+	conversations,
+	conversationParticipants,
 	opsUsers,
+	staffPresence,
 	stageAssignments,
 	stageHandoffs,
 } from "../db/schema.js";
@@ -322,6 +329,7 @@ async function serializeHandoff(row: HandoffRow): Promise<StageHandoff> {
 		deferredAt: row.deferredAt ? row.deferredAt.toISOString() : null,
 		deferCount: row.deferCount,
 		reason: row.reason,
+		escalatedAt: row.escalatedAt ? row.escalatedAt.toISOString() : null,
 		createdAt: row.createdAt.toISOString(),
 	};
 }
@@ -378,6 +386,7 @@ export async function pendingHandoffForApplication(
 		fromOpsUserName: fromNameRow?.name ?? null,
 		reason: row.reason,
 		deferCount: row.deferCount,
+		escalatedAt: row.escalatedAt ? row.escalatedAt.toISOString() : null,
 		createdAt: row.createdAt.toISOString(),
 	};
 }
@@ -671,4 +680,518 @@ export async function deferStageHandoff(input: {
 	);
 
 	return serializeHandoff(updated);
+}
+/* ── Return to queue ─────────────────────────────────────────────────────────
+ *
+ * Release a seat back to the staffing queue — the whole-case owner ("owner")
+ * or a stage specialist. The assignment row ends (history kept) and a
+ * `manual_release` handoff opens on the case's current stage, so the case
+ * resurfaces in the Workspace queue for re-staffing. Managers only — the
+ * route gates on `assign_work`.
+ */
+export async function releaseApplicationSeat(input: {
+	applicationId: string;
+	/** `"owner"` for the whole-case handler, else a journey stage seat. */
+	seat: string;
+	note?: string;
+	actor: Actor;
+}): Promise<StageHandoff> {
+	const [app] = await db
+		.select()
+		.from(applications)
+		.where(eq(applications.id, input.applicationId))
+		.limit(1);
+	if (!app) throw new HttpError(404, "APPLICATION_NOT_FOUND", "Application not found");
+
+	let releasedOpsUserId: string | null = null;
+
+	if (input.seat === "owner") {
+		if (!app.assignedStaffId) {
+			throw new HttpError(409, "SEAT_ALREADY_OPEN", "This case has no whole-case handler to release.");
+		}
+		releasedOpsUserId = app.assignedStaffId;
+		const { endAssignment } = await import("./caseAssignments.js");
+		await endAssignment({
+			targetType: "application",
+			targetId: app.id,
+			endedBy: input.actor.opsUserId,
+			endReason: "unassigned",
+		});
+		await db
+			.update(applications)
+			.set({ assignedStaffId: null, updatedAt: new Date() })
+			.where(eq(applications.id, app.id));
+		await db
+			.update(applicants)
+			.set({ assignedOfficerId: null, updatedAt: new Date() })
+			.where(eq(applicants.id, app.applicantId));
+	} else {
+		const [seat] = await db
+			.select()
+			.from(stageAssignments)
+			.where(
+				and(
+					eq(stageAssignments.applicationId, app.id),
+					eq(stageAssignments.stage, input.seat),
+					eq(stageAssignments.status, "active"),
+				),
+			)
+			.limit(1);
+		if (!seat) {
+			throw new HttpError(409, "SEAT_ALREADY_OPEN", `No active ${input.seat} seat to release.`);
+		}
+		releasedOpsUserId = seat.opsUserId;
+		await db
+			.update(stageAssignments)
+			.set({
+				status: "released",
+				endedAt: new Date(),
+				endedReason: input.note ?? "released to queue",
+			})
+			.where(eq(stageAssignments.id, seat.id));
+		// Same demotion reassignment applies — the released officer becomes a
+		// `former` participant on the stage conversation.
+		const [stageConv] = await db
+			.select({ id: conversations.id })
+			.from(conversations)
+			.where(
+				and(
+					eq(conversations.linkedEntityType, "application"),
+					eq(conversations.linkedEntityId, app.id),
+					eq(conversations.stageKey, input.seat),
+					eq(conversations.type, "stage"),
+				),
+			)
+			.limit(1);
+		if (stageConv) {
+			await db
+				.update(conversationParticipants)
+				.set({ role: "former" })
+				.where(
+					and(
+						eq(conversationParticipants.conversationId, stageConv.id),
+						eq(conversationParticipants.opsUserId, seat.opsUserId),
+					),
+				);
+		}
+	}
+
+	// The released seat becomes a manual_release handoff on the case's current
+	// stage — the queue picks it up from there.
+	const handoff = await createOrGetHandoff({
+		applicationId: app.id,
+		stage: app.stage,
+		source: "manual_release",
+		fromOpsUserId: releasedOpsUserId,
+	});
+	if (input.note) {
+		await db
+			.update(stageHandoffs)
+			.set({ reason: input.note, updatedAt: new Date() })
+			.where(eq(stageHandoffs.id, handoff.id));
+	}
+
+	const seatLabel =
+		input.seat === "owner"
+			? "whole-case handler"
+			: (JOURNEY_STAGE_LABELS[input.seat as JourneyStage] ?? input.seat);
+	const [released] = releasedOpsUserId
+		? await db.select({ name: opsUsers.name }).from(opsUsers).where(eq(opsUsers.id, releasedOpsUserId)).limit(1)
+		: [null];
+
+	await db.insert(caseComments).values({
+		targetType: "application",
+		targetId: app.id,
+		kind: "assignment",
+		text: `Released ${released?.name ?? "handler"} from ${seatLabel} — seat returned to queue (by ${input.actor.name}).${input.note ? ` ${input.note}` : ""}`,
+		authorName: input.actor.name,
+		authorOpsUserId: input.actor.opsUserId,
+	});
+
+	const { recordEvent } = await import("./communication.js");
+	await recordEvent({
+		action: "seat_released",
+		actorOpsUserId: input.actor.opsUserId,
+		applicationId: app.id,
+		stageKey: app.stage,
+		metadata: { seat: input.seat, releasedOpsUserId, handoffId: handoff.id, note: input.note },
+	});
+
+	// The released officer hears about it — a seat should never just vanish.
+	if (releasedOpsUserId) {
+		const releasedUserId = await getStaffUserId(releasedOpsUserId);
+		if (releasedUserId) {
+			await notify({
+				recipientUserId: releasedUserId,
+				type: "assignment.released",
+				title: "Seat returned to queue",
+				body: `Your ${seatLabel} seat was returned to the queue.${input.note ? ` ${input.note}` : ""}`,
+				link: "/applications",
+				entityType: "case",
+				entityId: app.id,
+				caseId: app.id,
+			}).catch(() => {});
+		}
+	}
+
+	const recipients = await getManagerAndCoordinatorUserIds();
+	await notifyMany(
+		recipients.map((r) => ({
+			recipientUserId: r.userId,
+			type: "stage.needs_handler",
+			title: "Seat released — case needs a handler",
+			body: `${released?.name ?? "A handler"} was released from ${seatLabel}; the case is back in the queue.`,
+			link: "/applications",
+			entityType: "case",
+			entityId: app.id,
+			caseId: app.id,
+		})),
+	).catch(() => {});
+
+	emitDomain(
+		"handoff.updated",
+		{ handoffId: handoff.id, applicationId: app.id, stage: app.stage, released: true },
+		{ ops: true },
+	);
+
+	return serializeHandoff(handoff);
+}
+
+/**
+ * Self-serve staffing — the claimant takes the case's open handoff. Their role
+ * must be able to own the stage and their branch must hold the file; the
+ * resolution runs through the normal path so the claim stays race-safe.
+ */
+export async function claimPendingHandoff(input: {
+	applicationId: string;
+	actor: Actor;
+}): Promise<StageHandoff> {
+	const [row] = await db
+		.select()
+		.from(stageHandoffs)
+		.where(
+			and(
+				eq(stageHandoffs.applicationId, input.applicationId),
+				eq(stageHandoffs.status, "pending"),
+			),
+		)
+		.limit(1);
+	if (!row) throw new HttpError(404, "NO_OPEN_HANDOFF", "This case is not waiting on a handler.");
+
+	// Role eligibility is the same gate direct assignment applies.
+	const { loadAssignableStaff } = await import("./cases.js");
+	const claimant = await loadAssignableStaff(input.actor.opsUserId, row.stage);
+
+	const [app] = await db
+		.select({ branch: applications.branch })
+		.from(applications)
+		.where(eq(applications.id, input.applicationId))
+		.limit(1);
+	const { canonicalBranchId } = await import("./availability.js");
+	if (claimant.branch && app && canonicalBranchId(claimant.branch) !== canonicalBranchId(app.branch)) {
+		throw new HttpError(
+			409,
+			"CASE_OTHER_BRANCH",
+			`This file belongs to ${app.branch ?? "another office"}; only that office's staff can claim it.`,
+		);
+	}
+
+	return resolveStageHandoff({
+		handoffId: row.id,
+		decision: "assign",
+		opsUserId: input.actor.opsUserId,
+		reason: "self-claimed from queue",
+		scope: "stage",
+		actor: input.actor,
+	});
+}
+
+/* ── Escalation sweep ─────────────────────────────────────────────────────── */
+
+/** A pending handoff escalates after 5 days waiting or its 3rd defer. */
+const HANDOFF_ESCALATION_AGE_MS = 5 * 24 * 60 * 60 * 1000;
+const HANDOFF_ESCALATION_DEFERS = 3;
+
+/**
+ * Stamps `escalatedAt` once on handoffs that have waited too long and
+ * re-alerts management. Idempotent — runs on the API's periodic sweep
+ * alongside the task reminders.
+ */
+export async function escalateAgedHandoffs(): Promise<number> {
+	const cutoff = new Date(Date.now() - HANDOFF_ESCALATION_AGE_MS);
+	const aged = await db
+		.select({
+			id: stageHandoffs.id,
+			applicationId: stageHandoffs.applicationId,
+			stage: stageHandoffs.stage,
+			deferCount: stageHandoffs.deferCount,
+			createdAt: stageHandoffs.createdAt,
+			appNumber: applications.appNumber,
+		})
+		.from(stageHandoffs)
+		.innerJoin(applications, eq(applications.id, stageHandoffs.applicationId))
+		.where(
+			and(
+				eq(stageHandoffs.status, "pending"),
+				isNull(stageHandoffs.escalatedAt),
+				or(
+					lte(stageHandoffs.createdAt, cutoff),
+					gte(stageHandoffs.deferCount, HANDOFF_ESCALATION_DEFERS),
+				),
+			),
+		);
+	if (!aged.length) return 0;
+	const recipients = await getManagerAndCoordinatorUserIds();
+	let stamped = 0;
+	for (const row of aged) {
+		const [stampedRow] = await db
+			.update(stageHandoffs)
+			.set({ escalatedAt: new Date(), updatedAt: new Date() })
+			.where(and(eq(stageHandoffs.id, row.id), isNull(stageHandoffs.escalatedAt)))
+			.returning();
+		if (!stampedRow) continue;
+		stamped += 1;
+		const stageLabel = JOURNEY_STAGE_LABELS[row.stage as JourneyStage] ?? row.stage;
+		const waitedDays = Math.max(0, Math.floor((Date.now() - row.createdAt.getTime()) / (24 * 60 * 60 * 1000)));
+		await notifyMany(
+			recipients.map((r) => ({
+				recipientUserId: r.userId,
+				type: "stage.needs_handler",
+				title: "Escalated — case still waiting on a handler",
+				body: `${row.appNumber ?? "A case"} has waited ${waitedDays}d for a ${stageLabel} handler${row.deferCount ? ` (deferred ×${row.deferCount})` : ""}.`,
+				link: "/applications",
+				entityType: "case",
+				entityId: row.applicationId,
+				caseId: row.applicationId,
+			})),
+		).catch(() => {});
+		emitDomain(
+			"handoff.updated",
+			{ handoffId: row.id, applicationId: row.applicationId, stage: row.stage, escalated: true },
+			{ ops: true },
+		);
+	}
+	return stamped;
+}
+
+/* ── Team sheet ───────────────────────────────────────────────────────────── */
+
+/**
+ * The case's staffing picture — every live seat, the seats that ended, and the
+ * stages still ahead with nobody on them. Reads only; the caller gates access.
+ */
+export async function getCaseTeam(applicationId: string): Promise<CaseTeam> {
+	const [app] = await db
+		.select({
+			id: applications.id,
+			stage: applications.stage,
+			assignedStaffId: applications.assignedStaffId,
+			applicantId: applications.applicantId,
+		})
+		.from(applications)
+		.where(eq(applications.id, applicationId))
+		.limit(1);
+	if (!app) throw new HttpError(404, "APPLICATION_NOT_FOUND", "Application not found");
+
+	const [applicant] = await db
+		.select({ coordinatorId: applicants.coordinatorId })
+		.from(applicants)
+		.where(eq(applicants.id, app.applicantId))
+		.limit(1);
+
+	const seatRows = await db
+		.select({
+			id: stageAssignments.id,
+			stage: stageAssignments.stage,
+			status: stageAssignments.status,
+			opsUserId: stageAssignments.opsUserId,
+			assignedAt: stageAssignments.assignedAt,
+			endedAt: stageAssignments.endedAt,
+			endedReason: stageAssignments.endedReason,
+			name: opsUsers.name,
+			email: opsUsers.email,
+			role: opsUsers.role,
+		})
+		.from(stageAssignments)
+		.innerJoin(opsUsers, eq(stageAssignments.opsUserId, opsUsers.id))
+		.where(eq(stageAssignments.applicationId, applicationId))
+		.orderBy(desc(stageAssignments.assignedAt));
+
+	const ownerRows = await db
+		.select({
+			opsUserId: caseAssignments.opsUserId,
+			status: caseAssignments.status,
+			assignedAt: caseAssignments.assignedAt,
+			endedAt: caseAssignments.endedAt,
+			endReason: caseAssignments.endReason,
+			endedBy: caseAssignments.endedBy,
+			note: caseAssignments.note,
+			name: opsUsers.name,
+			email: opsUsers.email,
+			role: opsUsers.role,
+		})
+		.from(caseAssignments)
+		.innerJoin(opsUsers, eq(caseAssignments.opsUserId, opsUsers.id))
+		.where(
+			and(
+				eq(caseAssignments.targetType, "application"),
+				eq(caseAssignments.targetId, applicationId),
+				eq(caseAssignments.role, "primary"),
+			),
+		)
+		.orderBy(desc(caseAssignments.assignedAt));
+
+	// One presence query for everyone named on the team — decays to offline
+	// after 15 minutes without a heartbeat, same as the staff directory.
+	const ids = new Set<string>();
+	if (app.assignedStaffId) ids.add(app.assignedStaffId);
+	if (applicant?.coordinatorId) ids.add(applicant.coordinatorId);
+	for (const r of seatRows) ids.add(r.opsUserId);
+	const presenceRows = ids.size
+		? await db
+				.select({ opsUserId: staffPresence.opsUserId, status: staffPresence.status, lastSeenAt: staffPresence.lastSeenAt })
+				.from(staffPresence)
+				.where(sql`${staffPresence.opsUserId} = ANY(${[...ids]}::uuid[])`)
+		: [];
+	const presenceBy = new Map(
+		presenceRows.map((r) => {
+			let status = r.status as "available" | "busy" | "on_leave" | "offline";
+			if (status !== "offline" && (!r.lastSeenAt || Date.now() - r.lastSeenAt.getTime() > 15 * 60 * 1000)) {
+				status = "offline";
+			}
+			return [r.opsUserId, { status, lastSeenAt: r.lastSeenAt }] as const;
+		}),
+	);
+	const presenceOf = (opsUserId: string) => {
+		const p = presenceBy.get(opsUserId);
+		return {
+			presence: (p?.status ?? null) as CaseSeat["presence"],
+			lastSeenAt: p?.lastSeenAt ? p.lastSeenAt.toISOString() : null,
+		};
+	};
+
+	const staffInfo = async (opsUserId: string) => {
+		const [row] = await db
+			.select({ name: opsUsers.name, email: opsUsers.email, role: opsUsers.role })
+			.from(opsUsers)
+			.where(eq(opsUsers.id, opsUserId))
+			.limit(1);
+		return row ?? null;
+	};
+
+	const activeOwnerRow = ownerRows.find((r) => r.status === "active") ?? null;
+	const owner: CaseSeat | null = app.assignedStaffId
+		? await (async () => {
+				const info = activeOwnerRow ?? (await staffInfo(app.assignedStaffId!));
+				return {
+					seat: "owner" as const,
+					stage: null,
+					opsUserId: app.assignedStaffId,
+					name: info?.name ?? null,
+					email: info?.email ?? null,
+					role: info?.role ?? null,
+					...presenceOf(app.assignedStaffId!),
+					since: activeOwnerRow?.assignedAt ? activeOwnerRow.assignedAt.toISOString() : null,
+					note: activeOwnerRow?.note ?? null,
+				};
+			})()
+		: null;
+
+	const coordinator: CaseSeat | null = applicant?.coordinatorId
+		? await (async () => {
+				const coordinatorId = applicant.coordinatorId!;
+				const info = await staffInfo(coordinatorId);
+				return {
+					seat: "coordinator" as const,
+					stage: null,
+					opsUserId: coordinatorId,
+					name: info?.name ?? null,
+					email: info?.email ?? null,
+					role: info?.role ?? null,
+					...presenceOf(coordinatorId),
+					since: null,
+					note: null,
+				};
+			})()
+		: null;
+
+	const seats: CaseSeat[] = seatRows
+		.filter((r) => r.status === "active")
+		.map((r) => ({
+			seat: "stage" as const,
+			stage: r.stage,
+			opsUserId: r.opsUserId,
+			name: r.name,
+			email: r.email,
+			role: r.role,
+			...presenceOf(r.opsUserId),
+			since: r.assignedAt ? r.assignedAt.toISOString() : null,
+			note: null,
+		}));
+
+	// Past seats — ended stage seats plus ended owner assignments, newest first.
+	const endedByIds = [...new Set(ownerRows.map((r) => r.endedBy).filter((x): x is string => Boolean(x)))];
+	const endedByRows = endedByIds.length
+		? await db
+				.select({ id: opsUsers.id, name: opsUsers.name })
+				.from(opsUsers)
+				.where(sql`${opsUsers.id} = ANY(${endedByIds}::uuid[])`)
+		: [];
+	const endedByName = new Map(endedByRows.map((r) => [r.id, r.name]));
+
+	const pastSeats: CaseSeat[] = [
+		...seatRows
+			.filter((r) => r.status !== "active")
+			.map((r): CaseSeat => ({
+				seat: "stage" as const,
+				stage: r.stage,
+				opsUserId: r.opsUserId,
+				name: r.name,
+				email: r.email,
+				role: r.role,
+				presence: null,
+				lastSeenAt: null,
+				since: r.assignedAt ? r.assignedAt.toISOString() : null,
+				note: null,
+				endedAt: r.endedAt ? r.endedAt.toISOString() : null,
+				endReason: r.endedReason ?? r.status,
+				endedByName: null,
+			})),
+		...ownerRows
+			.filter((r) => r.status !== "active")
+			.map((r): CaseSeat => ({
+				seat: "owner" as const,
+				stage: null,
+				opsUserId: r.opsUserId,
+				name: r.name,
+				email: r.email,
+				role: r.role,
+				presence: null,
+				lastSeenAt: null,
+				since: r.assignedAt ? r.assignedAt.toISOString() : null,
+				note: r.note ?? null,
+				endedAt: r.endedAt ? r.endedAt.toISOString() : null,
+				endReason: r.endReason ?? null,
+				endedByName: r.endedBy ? (endedByName.get(r.endedBy) ?? null) : null,
+			})),
+	].sort((a, b) => (b.endedAt ?? "").localeCompare(a.endedAt ?? ""));
+
+	// Open seats — stages from the current one onward with no specialist seated
+	// and no whole-case owner to carry through.
+	const stageIdx = JOURNEY_STAGES.indexOf(app.stage as JourneyStage);
+	const seatedStages = new Set(seatRows.filter((r) => r.status === "active").map((r) => r.stage));
+	const openStages = app.assignedStaffId
+		? []
+		: JOURNEY_STAGES.slice(Math.max(0, stageIdx)).filter(
+				(s) => s !== "completed" && !seatedStages.has(s),
+			);
+
+	return {
+		owner,
+		coordinator,
+		seats,
+		pastSeats,
+		openStages,
+		pendingHandoff: await pendingHandoffForApplication(applicationId),
+	};
 }

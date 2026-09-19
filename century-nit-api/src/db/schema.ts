@@ -1639,6 +1639,7 @@ export const stageAssignmentStatusEnum = pgEnum("stage_assignment_status", [
 	"reassigned",
 	"on_leave",
 	"completed",
+	"released",
 ]);
 
 export const messageTypeEnum = pgEnum("message_type", [
@@ -1953,6 +1954,8 @@ export const stageHandoffs = pgTable(
 		deferredAt: timestamp("deferred_at", { withTimezone: true }),
 		deferCount: integer("defer_count").notNull().default(0),
 		reason: text("reason"),
+		/** Stamped once when the handoff ages past the escalation threshold. */
+		escalatedAt: timestamp("escalated_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 	},

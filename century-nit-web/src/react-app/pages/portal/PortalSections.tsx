@@ -42,6 +42,7 @@ import {
 	REQUIRED_DOCUMENTS,
 	getBranchName,
 } from "century-nit-core";
+import { openInNewTab } from "century-nit-core";
 import { documentsApi, meApi, ApiError, visaCostsCentsFor } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { Avatar } from "../../components/ui/Avatar";
@@ -670,8 +671,7 @@ export function PortalProfile() {
 												className="profile-doc__action"
 												onClick={async () => {
 													try {
-														const { url } = await documentsApi.downloadUrl(live.id);
-														window.open(url, "_blank", "noopener,noreferrer");
+														await openInNewTab(documentsApi.downloadUrl(live.id));
 													} catch {
 														toast.error("Could not open the document. Please try again.");
 													}

@@ -53,6 +53,7 @@ import {
 	branches,
 	AGENCY_DEPOSIT_PORTION,
 } from "century-nit-core";
+import { openInNewTab } from "century-nit-core";
 import { meApi, bookingsApi, schoolsApi, documentsApi, feesApi, packagesApi, ApiError, visaCostsCentsFor } from "century-nit-core/api";
 import type { ApiInvoice, ApplicantDocument, AvailabilitySlot, ApiConsultation, ApiApplication, ServicePackage, SchoolFileKind } from "century-nit-shared";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
@@ -3607,8 +3608,7 @@ function SchoolFileLink({ schoolId, kind, label, compact = false }: { schoolId: 
 		setBusy(true);
 		setError(null);
 		try {
-			const ticket = await schoolsApi.meFileDownloadUrl(schoolId, kind);
-			window.open(ticket.url, "_blank", "noopener");
+			await openInNewTab(schoolsApi.meFileDownloadUrl(schoolId, kind));
 		} catch {
 			setError("Could not open the file. Please try again.");
 		} finally {

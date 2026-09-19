@@ -26,6 +26,7 @@ import { permissionsOfRole } from "./roles.js";
 import * as mail from "./notifications.js";
 import { notify, notifyMany, getManagerAndCoordinatorUserIds, getStaffUserIdByEmail } from "./notify.js";
 import { queueCalendar, queueEmails, queueReminder, cancelQueued, releaseCalendarJob } from "../worker/queues.js";
+import type { DomainEventType } from "century-nit-shared";
 import { emitDomain } from "../worker/pubsub.js";
 
 /**
@@ -114,7 +115,7 @@ async function loadEmployee(employeeId: string) {
  * live-meeting views on every console; the client's channel syncs the
  * portal's appointment screens. Bell entries stay with notify().
  */
-function emitBookingEvent(row: BookingRow, type: string, extra?: Record<string, unknown>): void {
+function emitBookingEvent(row: BookingRow, type: DomainEventType, extra?: Record<string, unknown>): void {
 	emitDomain(
 		type,
 		{ bookingId: row.id, reference: row.reference, status: row.status, ...extra },

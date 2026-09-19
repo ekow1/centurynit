@@ -27,6 +27,7 @@ import { activeFeeItem } from "./fees.js";
 import { formatGhs, formatUsd } from "./receiptEmail.js";
 import { invoiceRaisedForClient } from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
+import type { DomainEventType } from "century-nit-shared";
 import { emitDomain } from "../worker/pubsub.js";
 
 /**
@@ -319,7 +320,7 @@ async function notifyClientInvoice(row: InvoiceRow, kind: "issued" | "paid"): Pr
  * the portal's finance screens sync without waiting on the poll. Bell
  * entries stay with notifyClientInvoice — this only moves screens.
  */
-function emitInvoiceEvent(row: InvoiceRow, type: string, extra?: Record<string, unknown>): void {
+function emitInvoiceEvent(row: InvoiceRow, type: DomainEventType, extra?: Record<string, unknown>): void {
 	emitDomain(
 		type,
 		{

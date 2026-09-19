@@ -1,4 +1,5 @@
 import { Redis } from "ioredis";
+import type { DomainEventType } from "century-nit-shared";
 import { env } from "../env.js";
 
 /**
@@ -64,7 +65,7 @@ export function publishToOps(payload: unknown): void {
  * remain the fallback for anything missed.
  */
 export function emitDomain(
-	type: string,
+	type: DomainEventType,
 	payload: Record<string, unknown>,
 	audience: { userId?: string | null; ops?: boolean },
 ): void {

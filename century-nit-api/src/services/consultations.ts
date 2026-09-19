@@ -54,6 +54,7 @@ import { permissionsOfRole } from "./roles.js";
 import * as mail from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
 import { notify, notifyMany, getStaffUserId, getManagerAndCoordinatorUserIds } from "./notify.js";
+import type { DomainEventType } from "century-nit-shared";
 import { emitDomain } from "../worker/pubsub.js";
 
 
@@ -1226,7 +1227,7 @@ export async function applicantUserIdOfConsultation(id: string): Promise<string 
  * pipeline and work queue; the applicant's channel syncs the portal's
  * consultation chapter. Bell entries stay with notify().
  */
-async function emitConsultationEvent(row: ConsultationRow, type: string, extra?: Record<string, unknown>): Promise<void> {
+async function emitConsultationEvent(row: ConsultationRow, type: DomainEventType, extra?: Record<string, unknown>): Promise<void> {
 	const clientUserId = await applicantUserIdOfConsultation(row.id);
 	emitDomain(
 		type,

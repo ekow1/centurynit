@@ -11,6 +11,7 @@ export * from "./schemas/cases.js";
 export * from "./schemas/packages.js";
 export * from "./schemas/school.js";
 export * from "./schemas/chat.js";
+export * from "./schemas/events.js";
 export * from "./schemas/payment.js";
 export * from "./schemas/leads.js";
 export * from "./api-version.js";

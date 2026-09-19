@@ -393,10 +393,46 @@ export function useCasesApi() {
 	refreshRef.current = refresh;
 	useOpsSSE((event) => {
 		const t = String(event.type ?? "").replace(/_/g, ".");
-		if (OPS_CASE_EVENT_PREFIXES.some((p) => t.startsWith(p))) {
-			if (refreshTimer.current) clearTimeout(refreshTimer.current);
-			refreshTimer.current = setTimeout(() => void refreshRef.current(), 1500);
+		if (!OPS_CASE_EVENT_PREFIXES.some((p) => t.startsWith(p))) return;
+		// Targeted refresh: when the event names the entity, refetch just that
+		// row and patch it into the list instead of pulling the whole caseload.
+		const applicationId = (
+			event.targetType === "consultation" ? undefined : (event.applicationId ?? event.caseId)
+		) as string | undefined;
+		const consultationId = (
+			event.targetType === "consultation" ? event.caseId : event.consultationId
+		) as string | undefined;
+		if (applicationId) {
+			applicationsApi
+				.get(applicationId)
+				.then((row) => replaceApplication(row))
+				// A stale/foreign id must not swallow the refresh — fall back to
+				// the full pull so the screen still converges.
+				.catch(() => void refreshRef.current());
+			// These events move collections the application row doesn't carry —
+			// refresh the aux slice alongside the case.
+			if (t.startsWith("handoff.") && canAssignWork) {
+				apiFetch<{ handoffs: StageHandoff[] }>(`${API_PREFIX}/applications/handoffs?status=pending`)
+					.then((hf) => setHandoffs(Array.isArray(hf?.handoffs) ? hf.handoffs : []))
+					.catch(() => {});
+			}
+			if (t.startsWith("travel.")) {
+				applicationsApi
+					.listTravelAssistance()
+					.then((ta) => setTravelRequests(Array.isArray(ta) ? ta : []))
+					.catch(() => {});
+			}
+			return;
 		}
+		if (consultationId) {
+			consultationsApi
+				.get(consultationId)
+				.then((row) => replaceConsultation(row))
+				.catch(() => void refreshRef.current());
+			return;
+		}
+		if (refreshTimer.current) clearTimeout(refreshTimer.current);
+		refreshTimer.current = setTimeout(() => void refreshRef.current(), 1500);
 	});
 
 	const replaceConsultation = (row: ApiConsultation) => {

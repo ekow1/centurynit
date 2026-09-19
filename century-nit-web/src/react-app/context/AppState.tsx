@@ -2233,6 +2233,36 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	 * with AppState. Runs on mount and then polls every 30 seconds so assignment
 	 * and eligibility decisions from ops appear without requiring a page reload.
 	 */
+	/**
+	 * The agency invoice is the server's record of truth for the service fee.
+	 * Map its paid/balance cents onto the local agency state so the Financial
+	 * page reflects real settlement progress after a Paystack return, on every
+	 * poll, and on money domain events. Deposit is "paid" once any money
+	 * lands; stage index is derived from how far through the plan the payments
+	 * have gone (deposit 10% → pre-departure +50% → post-arrival 40%).
+	 */
+	const applyAgencyInvoice = (agencyInvoice: { subtotalCents: number; paidCents: number; balanceCents: number; updatedAt: string } | undefined) => {
+		if (!agencyInvoice) return;
+		const totalUsd = agencyInvoice.subtotalCents / 100;
+		const paidUsd = agencyInvoice.paidCents / 100;
+		const settled = agencyInvoice.balanceCents === 0 && agencyInvoice.paidCents > 0;
+		const depositThreshold = totalUsd * AGENCY_DEPOSIT_PORTION;
+		const depositPaid = paidUsd > 0 && paidUsd >= depositThreshold - 0.5;
+		const preDepDone = paidUsd >= depositThreshold + totalUsd * 0.5 - 0.5;
+		setApplication((prev) => ({
+			...prev,
+			agencyTotal: totalUsd > 0 ? totalUsd : prev.agencyTotal,
+			agencyPaid: paidUsd,
+			agencyDepositPaid: depositPaid,
+			agencyStageIndex: settled ? 2 : preDepDone ? 1 : 0,
+			agencySettledAt: settled ? agencyInvoice.updatedAt : null,
+			completedAt:
+				settled && prev.visaStatus === "complete"
+					? agencyInvoice.updatedAt
+					: prev.completedAt,
+		}));
+	};
+
 	const syncFromServer = useCallback(async () => {
 		if (!authUser) return;
 		let hasApplication = false;
@@ -2521,41 +2551,35 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			/* keep local values */
 		}
 
-		/* Sync agency service-fee invoice (Stage IV settlement)
-		 * The agency invoice is the server's record of truth for the service
-		 * fee. Map its paid/balance cents onto the local agency state so the
-		 * Financial page reflects real settlement progress after a Paystack
-		 * return (and on every poll). Deposit is "paid" once any money lands;
-		 * stage index is derived from how far through the plan the payments
-		 * have gone (deposit 10% → pre-departure +50% → post-arrival 40%). */
+		/* Sync agency service-fee invoice (Stage IV settlement) — the same
+		 * slice the money-only event sync refreshes. */
 		try {
 			const { invoices: agencyInvoices } = await meApi.invoices({ type: "agency" });
-			const agencyInvoice = agencyInvoices[0];
-			if (agencyInvoice) {
-				const totalUsd = agencyInvoice.subtotalCents / 100;
-				const paidUsd = agencyInvoice.paidCents / 100;
-				const settled = agencyInvoice.balanceCents === 0 && agencyInvoice.paidCents > 0;
-				const depositThreshold = totalUsd * AGENCY_DEPOSIT_PORTION;
-				const depositPaid = paidUsd > 0 && paidUsd >= depositThreshold - 0.5;
-				const preDepDone = paidUsd >= depositThreshold + totalUsd * 0.5 - 0.5;
-				setApplication((prev) => ({
-					...prev,
-					agencyTotal: totalUsd > 0 ? totalUsd : prev.agencyTotal,
-					agencyPaid: paidUsd,
-					agencyDepositPaid: depositPaid,
-					agencyStageIndex: settled ? 2 : preDepDone ? 1 : 0,
-					agencySettledAt: settled ? agencyInvoice.updatedAt : null,
-					completedAt:
-						settled && prev.visaStatus === "complete"
-							? agencyInvoice.updatedAt
-							: prev.completedAt,
-				}));
-			}
+			applyAgencyInvoice(agencyInvoices[0]);
 		} catch {
 			/* keep local values. Server may be unreachable */
 		}
 		setSyncTick((n) => n + 1);
 	}, [authUser, resetJourney, setServerJourney]);
+
+	/**
+	 * Lightweight sync for money events (`invoice.updated`,
+	 * `payment.recorded`): a payment or invoice change only affects fees,
+	 * the agency invoice, and the journey gates it unlocks — no need for the
+	 * full seven-endpoint sync.
+	 */
+	const syncMoney = useCallback(async () => {
+		if (!authUser) return;
+		const [fetchedFees, agencyRes, fetchedJourney] = await Promise.all([
+			meApi.fees().catch(() => null),
+			meApi.invoices({ type: "agency" }).catch(() => null),
+			meApi.journey().catch(() => null),
+		]);
+		if (fetchedFees) setFees(fetchedFees);
+		if (agencyRes) applyAgencyInvoice(agencyRes.invoices[0]);
+		if (fetchedJourney) setServerJourney(fetchedJourney);
+		setSyncTick((n) => n + 1);
+	}, [authUser]);
 
 	/** Run on mount */
 	useEffect(() => {
@@ -2581,6 +2605,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	// identity must not tear down and reopen the stream.
 	const syncRef = useRef(syncFromServer);
 	syncRef.current = syncFromServer;
+	const syncMoneyRef = useRef(syncMoney);
+	syncMoneyRef.current = syncMoney;
+	// Debounce bursts — one settlement can publish invoice.updated,
+	// payment.recorded and case.updated together; they collapse into a
+	// single refetch.
+	const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const pendingFullSyncRef = useRef(false);
 
 	useEffect(() => {
 		if (!authUser) return;
@@ -2602,6 +2633,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					createdAt?: string;
 				};
 				const type = data.type ?? "";
+				const t = type.replace(/_/g, ".");
 				// Staff-only notifications (lead.new, booking.new, etc.) are never
 				// shown in the client portal. Drop them here too, not just on the
 				// REST read, so a dual-role account never sees a live staff push.
@@ -2609,7 +2641,21 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				// The server just told us the case moved. Pull the new state now —
 				// for real notifications and for id-less domain events alike
 				// (case.updated, payment.recorded, school.updated…).
-				if (isJourneyNotification(type)) void syncRef.current();
+				if (isJourneyNotification(type)) {
+					// Money events only need the money slice: fees, the agency
+					// invoice, and the journey gates the payment unlocks. Once a
+					// heavier sync is requested it stays requested — a money
+					// event must not downgrade a pending full sync.
+					const moneyOnly = t.startsWith("invoice.") || t.startsWith("payment.");
+					if (!moneyOnly) pendingFullSyncRef.current = true;
+					if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+					syncTimerRef.current = setTimeout(() => {
+						syncTimerRef.current = null;
+						const full = pendingFullSyncRef.current;
+						pendingFullSyncRef.current = false;
+						void (full ? syncRef.current() : syncMoneyRef.current());
+					}, 700);
+				}
 				// Domain events are pure refresh signals: no notification row, no
 				// toast, no bell entry. Everything below assumes a real
 				// notification payload.
@@ -2640,6 +2686,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		});
 
 		return () => {
+			if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+			syncTimerRef.current = null;
+			pendingFullSyncRef.current = false;
 			es.close();
 		};
 	}, [authUser]);

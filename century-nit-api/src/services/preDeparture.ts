@@ -4,6 +4,7 @@ import { preDepartureTemplateSchema, type PreDepartureTask, type PreDepartureTem
 import { db } from "../db/index.js";
 import { applicantDocuments, applicants, applications, caseComments, destinations, opsUsers, schoolApplications, travelAssistanceRequests } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
+import { emitDomain } from "../worker/pubsub.js";
 import { getSetting, writeSetting } from "./settings.js";
 
 /* ── The template ────────────────────────────────────────────────────────── */
@@ -243,5 +244,17 @@ export async function setPreDepartureTask(
 			authorOpsUserId: actor.opsUserId ?? null,
 		});
 	}
+	// Refresh signal: a checklist tick moves both the ops Departure tab and
+	// the client's own checklist — whichever side didn't make the change.
+	const [applicant] = await db
+		.select({ userId: applicants.userId })
+		.from(applicants)
+		.where(eq(applicants.id, updated.applicantId))
+		.limit(1);
+	emitDomain(
+		"case.updated",
+		{ caseId: applicationId, taskId, done: input.done },
+		{ ops: true, userId: applicant?.userId ?? null },
+	);
 	return updated;
 }

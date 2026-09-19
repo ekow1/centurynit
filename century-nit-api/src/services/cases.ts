@@ -30,7 +30,7 @@ import { normalizeTravelStatus } from "./travelAssistance.js";
 import { livePermissions } from "./roles.js";
 import { documentChecklistForApplication, visaDocumentChecklistFor } from "./documentChecklist.js";
 // Comments and document requests target either record; the consultation half lives next door.
-import { getConsultation } from "./consultations.js";
+import { applicantUserIdOfConsultation, getConsultation } from "./consultations.js";
 import type { z } from "zod";
 import { db } from "../db/index.js";
 import {
@@ -855,6 +855,28 @@ export async function addCaseComment(input: {
 			authorOpsUserId: input.actor.opsUserId,
 		})
 		.returning();
+
+	// Refresh signal: ops activity feeds update live; the applicant's portal
+	// syncs too when the comment is client-visible.
+	let clientUserId: string | null = null;
+	if (row.visibility === "applicant") {
+		if (input.targetType === "application") {
+			const [app] = await db
+				.select({ applicantId: applications.applicantId })
+				.from(applications)
+				.where(eq(applications.id, input.targetId))
+				.limit(1);
+			const applicant = app ? await getApplicant(app.applicantId) : null;
+			clientUserId = applicant?.userId ?? null;
+		} else {
+			clientUserId = await applicantUserIdOfConsultation(input.targetId);
+		}
+	}
+	emitDomain(
+		"case.updated",
+		{ caseId: input.targetId, targetType: input.targetType, comment: true },
+		{ ops: true, userId: clientUserId },
+	);
 	return row;
 }
 

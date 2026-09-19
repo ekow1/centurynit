@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cases — staffing context: load-aware assign, team sheet, return to queue</title>
+<style>
+:root{--bg:#fff;--fg:#0a0a0a;--muted:#f5f5f5;--muted-fg:#52525b;--b:#0a0a0a;--bl:#d4d4d8;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
+*{box-sizing:border-box;margin:0}
+body{font-family:var(--sans);background:#e8e8e8;color:var(--fg);font-size:.875rem}
+.page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 5rem}
+.eyebrow{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg)}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
+h2{font-size:1.15rem;font-weight:800;margin:2.5rem 0 .4rem}
+h3{font-size:.85rem;font-weight:700;margin:1.4rem 0 .3rem}
+.lead{color:var(--muted-fg);font-size:.85rem;max-width:46rem;line-height:1.6}
+.note{font-size:.72rem;color:var(--muted-fg);border-left:3px solid var(--fg);padding:.6rem .9rem;margin:1rem 0;line-height:1.6;background:#fff}
+.frame{background:var(--bg);border:1px solid var(--bl);margin-top:1.25rem;padding:1.5rem}
+.tag{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;border:1px solid var(--b);padding:.12rem .45rem;white-space:nowrap}
+.tag--new{background:var(--fg);color:var(--bg)}
+.tag--old{border-style:dashed;color:var(--muted-fg);border-color:var(--bl)}
+table.review{width:100%;border-collapse:collapse;font-size:.78rem;background:#fff;margin-top:.6rem}
+.review th{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg);text-align:left;padding:.45rem .7rem;border-bottom:1px solid var(--b)}
+.review td{padding:.55rem .7rem;border-bottom:1px solid var(--bl);vertical-align:top;line-height:1.5}
+.review td:first-child{white-space:nowrap}
+code,pre{font-family:var(--mono);font-size:.72rem}
+code{background:var(--muted);padding:.05rem .3rem}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+@media(max-width:900px){.cols{grid-template-columns:1fr}}
+.colhead{display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem}
+
+/* ===== sheet ===== */
+.sheet{max-width:26rem;background:#fff;border:1.5px solid var(--b)}
+.shead{padding:.8rem 1.25rem;border-bottom:1.5px solid var(--b);display:flex;justify-content:space-between;align-items:baseline}
+.shead b{font-size:.95rem}
+.shead span{font-family:var(--mono);font-size:.6rem;color:var(--muted-fg)}
+.sbody{padding:1.1rem 1.25rem}
+.sfoot{padding:.8rem 1.25rem;border-top:1.5px solid var(--b);display:flex;justify-content:flex-end;gap:.5rem}
+.why{font-size:.76rem;color:var(--muted-fg);line-height:1.55;margin-bottom:1rem}
+.step{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg);margin:.9rem 0 .35rem}
+
+/* roster rows */
+.row{display:flex;align-items:center;gap:.7rem;width:100%;border:1px solid var(--bl);background:#fff;padding:.55rem .7rem;cursor:pointer;font:inherit;font-size:.8rem;text-align:left;margin-bottom:.35rem}
+.row--on{border-color:var(--fg);box-shadow:inset 0 0 0 1px var(--fg)}
+.row--heavy{opacity:.55}
+.rdot{width:.55rem;height:.55rem;border-radius:50%;border:1.5px solid var(--fg);flex-shrink:0}
+.rdot--on{background:var(--fg)}
+.rdot--away{background:repeating-linear-gradient(45deg,var(--fg) 0 1px,transparent 1px 3px)}
+.rname{font-weight:600}
+.rrole{font-family:var(--mono);font-size:.58rem;color:var(--muted-fg);text-transform:uppercase;letter-spacing:.06em}
+.rload{margin-left:auto;text-align:right;font-family:var(--mono);font-size:.6rem;color:var(--muted-fg);line-height:1.4;white-space:nowrap}
+.rload b{color:var(--fg);font-size:.68rem}
+.rhint{font-size:.62rem;color:var(--muted-fg)}
+
+/* buttons */
+.btn{border:1.5px solid var(--b);background:#fff;padding:.4rem .9rem;font:inherit;font-size:.72rem;font-weight:600;cursor:pointer;text-transform:uppercase;letter-spacing:.05em;font-family:var(--mono)}
+.btn--pri{background:var(--fg);color:#fff}
+.btn--ghost{border-color:var(--bl);color:var(--muted-fg)}
+.btn--danger{border-style:dashed}
+
+/* team sheet */
+.seat{display:flex;align-items:baseline;gap:.7rem;padding:.6rem .7rem;border:1px solid var(--bl);margin-bottom:.35rem;font-size:.8rem}
+.seat--owner{border-color:var(--fg);border-width:1.5px}
+.seat--past{border-style:dashed;color:var(--muted-fg)}
+.seat__stage{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-fg);min-width:7rem}
+.seat__name{font-weight:600}
+.seat__meta{margin-left:auto;font-family:var(--mono);font-size:.58rem;color:var(--muted-fg);text-align:right;white-space:nowrap}
+.seat__act{display:flex;gap:.3rem;margin-left:.6rem}
+.mini{font-family:var(--mono);font-size:.55rem;border:1px solid var(--bl);background:#fff;padding:.15rem .4rem;cursor:pointer;text-transform:uppercase;letter-spacing:.05em;color:var(--muted-fg)}
+.mini:hover{border-color:var(--fg);color:var(--fg)}
+
+/* case header strip */
+.chead{max-width:44rem;background:#fff;border:1.5px solid var(--b);padding:1rem 1.25rem}
+.chead h4{font-size:1.05rem;font-weight:800;margin:.15rem 0}
+.cmeta{font-family:var(--mono);font-size:.62rem;color:var(--muted-fg)}
+.chips{display:flex;gap:.4rem;margin-top:.6rem;flex-wrap:wrap}
+.chip{font-family:var(--mono);font-size:.58rem;border:1px solid var(--b);padding:.2rem .5rem;letter-spacing:.05em}
+.chip--coord{border-style:dashed;color:var(--muted-fg);border-color:var(--bl)}
+
+/* handoff card (queue row) */
+.qrow{display:flex;align-items:center;gap:.8rem;border:1.5px solid var(--b);background:#fff;padding:.7rem .9rem;font-size:.8rem;max-width:44rem}
+.qrow--aged{border-style:dashed}
+.qage{font-family:var(--mono);font-size:.58rem;border:1.5px solid var(--fg);padding:.15rem .4rem;text-transform:uppercase}
+.qtitle{font-weight:600}
+.qmeta{font-family:var(--mono);font-size:.6rem;color:var(--muted-fg)}
+.qact{margin-left:auto;display:flex;gap:.4rem}
+</style>
+</head>
+<body>
+<div class="page">
+<p class="eyebrow">Century NIT · Ops · Cases</p>
+<h1>Staffing context</h1>
+<p class="lead">Assign stops being blind. The roster shows who is carrying what and who is actually online; the case gets a Team sheet — every seat, who sat it before, replace or release per seat; and a case can go back to the queue without picking a successor. Below: the changed assign sheet, the new team sheet, the queue row gains age + a claim path for staff who can take it.</p>
+
+<h2>1 · The assign sheet — before / after</h2>
+<div class="cols">
+<div>
+<div class="colhead"><span class="tag tag--old">Today</span><span class="eyebrow">names only</span></div>
+<div class="sheet">
+	<div class="shead"><b>Handler · Visa</b><span>CN-2026-0142</span></div>
+	<div class="sbody">
+		<p class="why">The client is ready for their visa — place a handler.</p>
+		<p class="step">2 · Handler — Accra HQ</p>
+		<button class="row"><span class="rname">Efua Owusu</span><span class="rhint" style="margin-left:auto">consultant</span></button>
+		<button class="row"><span class="rname">Kofi Mensah</span><span class="rhint" style="margin-left:auto">visa officer</span></button>
+		<button class="row"><span class="rname">Ama Serwaa</span><span class="rhint" style="margin-left:auto">visa officer</span></button>
+	</div>
+	<div class="sfoot"><button class="btn btn--pri">Set handler</button></div>
+</div>
+<p class="note">Three names. Is Ama already holding nine visa files? Is Efua even in today? The sheet can't say — managers assign on memory.</p>
+</div>
+<div>
+<div class="colhead"><span class="tag tag--new">Proposed</span><span class="eyebrow">load · presence · sorted</span></div>
+<div class="sheet">
+	<div class="shead"><b>Handler · Visa</b><span>CN-2026-0142</span></div>
+	<div class="sbody">
+		<p class="why">The client is ready for their visa — place a handler.</p>
+		<p class="step">2 · Handler — Accra HQ · sorted by load</p>
+		<button class="row">
+			<span class="rdot rdot--on" title="online"></span>
+			<span><span class="rname">Ama Serwaa</span><br><span class="rrole">visa officer</span></span>
+			<span class="rload"><b>3</b> cases · <b>2</b> seats<br>online</span>
+		</button>
+		<button class="row">
+			<span class="rdot rdot--away" title="away"></span>
+			<span><span class="rname">Kofi Mensah</span><br><span class="rrole">visa officer</span></span>
+			<span class="rload"><b>6</b> cases · <b>4</b> seats<br>away · 26m</span>
+		</button>
+		<button class="row row--heavy">
+			<span class="rdot" title="offline"></span>
+			<span><span class="rname">Efua Owusu</span><br><span class="rrole">consultant · can own stage</span></span>
+			<span class="rload"><b>11</b> cases · <b>3</b> seats<br>offline since Fri</span>
+		</button>
+		<p class="rhint" style="margin-top:.5rem">Kofi was the handler on Applications — keeping him keeps the client's contact continuous. <button class="mini">Keep Kofi</button></p>
+	</div>
+	<div class="sfoot"><button class="btn btn--pri">Set handler</button></div>
+</div>
+<p class="note">Every row answers the three questions a manager asks: <b>can they</b> (role filter, existing), <b>are they around</b> (presence dot from <code>staff_presence</code>), <b>how full are they</b> (open cases + open stage seats, sorted lightest first). Heavy load dims but never blocks — a manager may still need them.</p>
+</div>
+</div>
+
+<h2>2 · New — the Team sheet</h2>
+<div class="cols">
+<div>
+<div class="colhead"><span class="tag tag--new">Proposed</span><span class="eyebrow">opened from the case header</span></div>
+<div class="sheet" style="max-width:30rem">
+	<div class="shead"><b>Team · CN-2026-0142</b><span>Akosua Frimpong</span></div>
+	<div class="sbody">
+		<p class="step">Now</p>
+		<div class="seat seat--owner"><span class="seat__stage">Case owner</span><span class="seat__name">Efua Owusu</span><span class="seat__meta">since 12 Sep</span><span class="seat__act"><button class="mini">Replace</button><button class="mini">Release</button></span></div>
+		<div class="seat"><span class="seat__stage">IV · Visa</span><span class="seat__name">Kofi Mensah</span><span class="seat__meta">since 18 Sep</span><span class="seat__act"><button class="mini">Replace</button><button class="mini">Release</button></span></div>
+		<div class="seat"><span class="seat__stage">Journey coord.</span><span class="seat__name">Yaw Darko</span><span class="seat__meta">delegated 15 Sep</span><span class="seat__act"><button class="mini">Reassign</button></span></div>
+		<p class="step" style="margin-top:1rem">Open seat</p>
+		<div class="seat" style="border-style:dashed"><span class="seat__stage">V · Departure</span><span class="rhint">unstaffed — opens when the visa lands</span><span class="seat__act" style="margin-left:auto"><button class="mini">Pre-staff…</button></span></div>
+		<p class="step" style="margin-top:1rem">Previously</p>
+		<div class="seat seat--past"><span class="seat__stage">Case owner</span><span class="seat__name">Adjoa B.</span><span class="seat__meta">Aug → 12 Sep · reassigned</span></div>
+		<div class="seat seat--past"><span class="seat__stage">III · Applications</span><span class="seat__name">Efua Owusu</span><span class="seat__meta">12 → 18 Sep · stage closed</span></div>
+		<p class="rhint" style="margin-top:.8rem">Past seats are read-only history (from <code>case_assignments</code> + <code>stage_assignments</code>). Live seats take Replace (re-seat the stage) or Release (open a handoff — the seat goes back to the queue).</p>
+	</div>
+</div>
+</div>
+<div>
+<div class="colhead"><span class="tag tag--new">Proposed</span><span class="eyebrow">header gains "Team"</span></div>
+<div class="chead">
+	<p class="cmeta">CN-2026-0142 · Accra HQ · IV · Visa processing</p>
+	<h4>Akosua Frimpong <span style="font-weight:400;font-size:.8rem;color:var(--muted-fg)">— BSc Nursing, University of Ghana → UK</span></h4>
+	<p class="cmeta">handler Efua Owusu · akosua@… · +233 …</p>
+	<div class="chips">
+		<span class="chip">III · Efua Owusu</span>
+		<span class="chip">IV · Kofi Mensah</span>
+		<span class="chip chip--coord">→ coord. Yaw Darko</span>
+	</div>
+	<div style="display:flex;gap:.5rem;margin-top:.8rem">
+		<button class="btn">Team</button>
+		<button class="btn">History · 14</button>
+		<button class="btn btn--ghost">Handler…</button>
+		<button class="btn btn--ghost btn--danger">Return to queue</button>
+	</div>
+</div>
+<p class="note"><b>Return to queue</b> ends the seat and opens a handoff (<code>source: "manual_release"</code>) — managers get the existing "needs a handler" task. Today the only way to unseat someone is picking a replacement or deactivating them.</p>
+</div>
+</div>
+
+<h2>3 · The queue row — age, escalate, claim</h2>
+<div class="frame" style="max-width:47rem">
+	<p class="eyebrow" style="margin-bottom:.6rem">Workspace · needs a handler</p>
+	<div class="qrow">
+		<span class="qage">waiting 3d</span>
+		<span><span class="qtitle">Visa needs a handler</span><br><span class="qmeta">CN-2026-0142 · Akosua Frimpong · deferred ×2</span></span>
+		<span class="qact"><button class="mini">Assign…</button><button class="mini">Later</button></span>
+	</div>
+	<div class="qrow qrow--aged" style="margin-top:.5rem">
+		<span class="qage">waiting 6d</span>
+		<span><span class="qtitle">Departure needs a handler</span><br><span class="qmeta">CN-2026-0098 · Kweku A. · deferred ×4 — <b>escalated to GM</b></span></span>
+		<span class="qact"><button class="mini">Assign…</button><button class="mini">Take it</button></span>
+	</div>
+	<p class="rhint" style="margin-top:.8rem"><b>Take it</b> appears for officers whose role may own the stage (<code>canOwnStage</code>) and whose branch holds the file — <code>POST /applications/:id/claim</code>. Escalation fires at the threshold (mock: pending 5d or 3rd defer) → GM notification + dashed row.</p>
+</div>
+
+<h2>4 · Reassign asks for a handover note</h2>
+<div class="sheet" style="max-width:26rem">
+	<div class="shead"><b>Change handler</b><span>IV · Visa</span></div>
+	<div class="sbody">
+		<p class="why">Kofi Mensah holds this stage — replacing ends their seat and notifies them (today the outgoing handler learns nothing).</p>
+		<p class="step">Handover note — required</p>
+		<div style="border:1.5px solid var(--b);padding:.6rem .8rem;font-size:.78rem;color:var(--muted-fg)">What should Ama know? e.g. "Client's passport expires Mar — renewal in progress, see Docs"</div>
+		<p class="rhint" style="margin-top:.4rem">Lands as an applicant-invisible comment + the assignment's <code>note</code>. The single biggest continuity fix per keystroke.</p>
+	</div>
+	<div class="sfoot"><button class="btn btn--pri">Change handler</button></div>
+</div>
+
+<h2>5 · The wiring</h2>
+<table class="review">
+<tr><th>Piece</th><th>Route / surface</th><th>Build cost</th></tr>
+<tr><td>Load + presence on the roster</td><td>Extend the staff list the sheet already fetches — <code>GET /staff/assignable?stage=visa_processing</code> → adds <code>openCaseCount</code>, <code>openStageCount</code>, <code>presence</code>, <code>lastSeenAt</code>. Two indexed COUNT subqueries, no new tables.</td><td>Small</td></tr>
+<tr><td>Team sheet data</td><td><code>GET /applications/:id/team</code> — owner + coordinator + active stage seats + ended seats, from <code>case_assignments</code>/<code>stage_assignments</code> (both already keep history).</td><td>Small</td></tr>
+<tr><td>Replace / Release per seat</td><td>Replace reuses <code>resolveHandoff</code>/<code>assignApplication</code>. Release is new: <code>POST /applications/:id/seats/:stage/release</code> → ends the seat, opens a handoff <code>source:"manual_release"</code>.</td><td>Small</td></tr>
+<tr><td>Return to queue</td><td>Same release, on the case-owner seat (<code>applications.assignedStaffId → null</code> + handoff). Manager-only.</td><td>Small</td></tr>
+<tr><td>Claim ("Take it")</td><td><code>POST /applications/:id/claim</code> — allowed when a pending handoff exists OR the current stage seat is open, officer's branch matches the file, and <code>canOwnStage(role, stage)</code>. Ends as a normal resolve.</td><td>Small</td></tr>
+<tr><td>Handoff escalation</td><td>Zero schema: derive "aged" from <code>createdAt</code> + <code>deferCount</code>; a nightly/5-min sweep (same loop as task reminders) notifies GM once — add <code>escalatedAt</code> so it fires once.</td><td>Small</td></tr>
+<tr><td>Outgoing-handler notify</td><td>One <code>notify()</code> in the reassign path — "Your seat on CN-2026-0142 moved to Ama".</td><td>Trivial</td></tr>
+<tr><td>Handover note on reassign</td><td>Required <code>reason</code> when an active seat exists — schema unchanged, <code>case_assignments.note</code> + a comment row already hold it.</td><td>Trivial</td></tr>
+<tr><td>Capability unification</td><td><code>/assign</code> route moves from <code>canSeeAllCases</code> to <code>requireCapability("assign_work")</code> so custom roles behave identically on both paths.</td><td>Trivial</td></tr>
+<tr><td>Branch consistency</td><td><code>assignApplication</code> validates officer branch ↔ case branch: cross-branch placement must carry <code>branch:</code> (the referral) so the file and the handler can't disagree silently.</td><td>Trivial</td></tr>
+</table>
+
+<p class="note" style="margin-top:1.5rem"><b>Deliberately out of this pass:</b> watchers, @mentions, secondary/reviewer seats, the staffing KPI report, pre-staffing's <code>planned</code> status (the Team sheet shows "Pre-staff…" disabled-copy or stubs it to a handoff-note — decide at build). Everything above runs on tables that exist today.</p>
+
+<p class="eyebrow" style="margin-top:3rem">Say proceed — schema touch is one column (<code>stage_handoffs.escalated_at</code>); everything else is read-paths and route glue.</p>
+</div>
+</body>
+</html>

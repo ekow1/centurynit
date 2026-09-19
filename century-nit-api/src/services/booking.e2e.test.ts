@@ -410,7 +410,7 @@ describe("reschedule request lifecycle", () => {
 				// The room's baked window followed the new slot — nbf is slot −30m.
 				const patch = calls.find((c) => c.path === "/rooms/e2e-room-approve" && (c.init as { method?: string })?.method === "POST");
 				expect(patch).toBeTruthy();
-				const props = (patch!.init as { body: { properties: { nbf: number; exp: number } } }).body.properties;
+				const props = (patch!.init as unknown as { body: { properties: { nbf: number; exp: number } } }).body.properties;
 				const expectedNbf = Math.floor((zonedTimeToUtc(newDate, "11:00", TZ).getTime() - 30 * 60_000) / 1000);
 				expect(props.nbf).toBe(expectedNbf);
 				expect(props.exp).toBeGreaterThan(expectedNbf);

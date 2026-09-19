@@ -3,6 +3,10 @@ import { HTTPException } from "hono/http-exception";
 import type { Hook } from "@hono/zod-openapi";
 import { ZodError } from "zod";
 import { env } from "../env.js";
+import {
+	StorageError,
+	StorageNotConfiguredError,
+} from "../services/storage/types.js";
 
 /**
  * An error with a stable, client-facing code.
@@ -102,6 +106,27 @@ export const errorHandler: ErrorHandler<{ Variables: { requestId: string } }> = 
 
 	if (err instanceof HTTPException) {
 		return c.json(body("HTTP_ERROR", err.message, requestId), err.status);
+	}
+
+	// Document storage failures are operational, not programming errors: the
+	// caller should see "storage is not configured" or the provider's message
+	// (e.g. "Object not found", "signature verification failed") — not a bare
+	// "Internal server error" that says nothing about which system failed.
+	// Surfaced here so every storage call site gets it, not just the download
+	// route where it was first noticed.
+	if (err instanceof StorageNotConfiguredError) {
+		return c.json(
+			body(
+				"STORAGE_NOT_CONFIGURED",
+				"Document storage is not configured on this server.",
+				requestId,
+			),
+			503,
+		);
+	}
+	if (err instanceof StorageError) {
+		console.error(`[requestId=${requestId}] storage error:`, err.message);
+		return c.json(body("STORAGE_ERROR", err.message, requestId), 502);
 	}
 
 	console.error(`[requestId=${requestId}]`, err);

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MeetNotConnectedError, MeetUnavailableError } from "./types.js";
 import {
 	createDailyRoom,

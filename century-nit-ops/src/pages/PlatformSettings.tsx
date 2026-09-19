@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_PREFIX } from "century-nit-shared";
 import { apiFetch, ApiError } from "../lib/api";
 import { CompanyConnectRow } from "./CompanyGoogleCalendarCard";
+import { StorageCheckRow } from "./StorageCheckRow";
 
 /**
  * Platform Settings — integration credentials and fee schedule.
@@ -415,6 +416,7 @@ export function PlatformSettings() {
 							</div>
 
 							{group === "Google Calendar" && <CompanyConnectRow />}
+							{group === "Storage" && <StorageCheckRow />}
 
 							<div className="admin-table-wrap">
 								<table className="admin-table">

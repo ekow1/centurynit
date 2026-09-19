@@ -32,7 +32,7 @@ async function main() {
 	const local = new Client({ connectionString: LOCAL });
 	await prod.connect();
 	await local.connect();
-	console.log("connected — prod:", new URL(PROD).host, "→ local:", new URL(LOCAL).host);
+	console.log("connected — prod:", new URL(PROD!).host, "→ local:", new URL(LOCAL).host);
 
 	const { rows: tables } = await prod.query<{ tablename: string }>(
 		`select tablename from pg_tables where schemaname = 'public' order by tablename`,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { formatBytes, getFile, isPreviewable } from "century-nit-core";
+import { formatBytes, getFile, isPreviewable, openInNewTab } from "century-nit-core";
 import { documentsApi } from "century-nit-core/api";
 
 /**
@@ -36,6 +36,7 @@ export function DocumentViewer({ name, category, applicantName, reference, statu
 	const [signedUrl, setSignedUrl] = useState<string | null>(null);
 	const [signedType, setSignedType] = useState<string | null>(null);
 	const [fetchError, setFetchError] = useState<string | null>(null);
+	const [retryTick, setRetryTick] = useState(0);
 	const [isModalOpen, setIsModalOpen] = useState(false);
 
 	const file = getFile(name);
@@ -72,7 +73,18 @@ export function DocumentViewer({ name, category, applicantName, reference, statu
 		return () => {
 			cancelled = true;
 		};
-	}, [file, documentId, name]);
+	}, [file, documentId, name, retryTick]);
+
+	// The preview iframe needs the inline disposition; an actual download wants
+	// the attachment one — a separate ticket, fetched inside the click's user
+	// activation so the popup blocker doesn't swallow it.
+	function handleDownload() {
+		if (file) return; // session files use the anchor's own href
+		if (!documentId) return;
+		void openInNewTab(documentsApi.downloadUrl(documentId)).catch((err) => {
+			setFetchError(err instanceof Error ? err.message : "Could not open the document.");
+		});
+	}
 
 	const remoteKind = signedUrl && signedType ? isPreviewable(signedType) : null;
 	const displayUrl = file?.url ?? signedUrl;
@@ -132,9 +144,36 @@ export function DocumentViewer({ name, category, applicantName, reference, statu
 							>
 								Open
 							</button>
-							<a className="docview__tool docview__tool--wide" href={displayUrl} download={name}>
-								Download
-							</a>
+							{file ? (
+								<a className="docview__tool docview__tool--wide" href={displayUrl} download={name}>
+									Download
+								</a>
+							) : (
+								<button
+									type="button"
+									className="docview__tool docview__tool--wide"
+									onClick={handleDownload}
+								>
+									Download
+								</button>
+							)}
+						</>
+					) : fetchError && documentId ? (
+						<>
+							<button
+								type="button"
+								className="docview__tool docview__tool--wide"
+								onClick={() => setRetryTick((t) => t + 1)}
+							>
+								Retry
+							</button>
+							<button
+								type="button"
+								className="docview__tool docview__tool--wide"
+								onClick={handleDownload}
+							>
+								Open anyway
+							</button>
 						</>
 					) : null}
 				</div>

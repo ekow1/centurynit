@@ -311,3 +311,52 @@ describe("acting on a single document", () => {
 		expect(res.status).toBe(403);
 	});
 });
+
+describe("storage failure surfacing", () => {
+	maybe()("a provider failure answers STORAGE_ERROR, not a bare 500", async () => {
+		// The viewer dead-ended on "Internal server error" because StorageError
+		// fell through to the generic handler. The provider's message is the
+		// only thing that tells an admin whether the key, the bucket, or the
+		// object is wrong — it has to survive to the client.
+		const { setDocumentStorage } = await import("../services/storage/index.js");
+		const { StorageError } = await import("../services/storage/types.js");
+		const restore = setDocumentStorage({
+			enabled: true,
+			createUploadUrl: async () => { throw new StorageError("unused"); },
+			createDownloadUrl: async () => { throw new StorageError("Object not found"); },
+			head: async () => null,
+			remove: async () => {},
+		});
+		try {
+			sessionUserId = ids.manager;
+			const res = await request(`/api/v1/documents/${ids.docA}/download`);
+			expect(res.status).toBe(502);
+			const body = (await res.json()) as { error: { code: string; message: string } };
+			expect(body.error.code).toBe("STORAGE_ERROR");
+			expect(body.error.message).toBe("Object not found");
+		} finally {
+			restore();
+		}
+	});
+
+	maybe()("a missing configuration answers STORAGE_NOT_CONFIGURED", async () => {
+		const { setDocumentStorage } = await import("../services/storage/index.js");
+		const { StorageNotConfiguredError } = await import("../services/storage/types.js");
+		const restore = setDocumentStorage({
+			enabled: true,
+			createUploadUrl: async () => { throw new StorageNotConfiguredError(); },
+			createDownloadUrl: async () => { throw new StorageNotConfiguredError(); },
+			head: async () => null,
+			remove: async () => {},
+		});
+		try {
+			sessionUserId = ids.manager;
+			const res = await request(`/api/v1/documents/${ids.docA}/download`);
+			expect(res.status).toBe(503);
+			const body = (await res.json()) as { error: { code: string } };
+			expect(body.error.code).toBe("STORAGE_NOT_CONFIGURED");
+		} finally {
+			restore();
+		}
+	});
+});

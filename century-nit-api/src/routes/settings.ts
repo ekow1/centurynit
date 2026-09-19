@@ -3,10 +3,12 @@ import {
 	listSettingsForDisplay,
 	writeSetting,
 	getAuditLog,
+	getSetting,
 	SETTING_DEFS,
 	mask,
 	type SettingKey,
 } from "../services/settings.js";
+import { getDocumentStorage } from "../services/storage/index.js";
 import { getUnifiedAuditLog } from "../services/audit.js";
 import { getAuthInstance } from "./auth.js";
 import { HttpError, validationHook } from "../middleware/error.js";
@@ -406,6 +408,89 @@ settingsRouter.openapi(
 		};
 		const page = await getUnifiedAuditLog(q);
 		return c.json(page);
+	},
+);
+
+/* ── GET /api/v1/settings/storage-check ──────────────────────────────────────
+ *
+ * Document storage is the one integration that fails invisibly: the settings
+ * list can show SUPABASE_* as configured while decryption, the service key,
+ * or the bucket are actually broken — and the document viewer dead-ends on a
+ * generic 500. This endpoint resolves the same storage the routes use and
+ * performs a real (harmless) probe, so an admin gets the ground truth: which
+ * layer supplies each value, and whether the bucket actually answers.
+ *
+ * Read-only: it lists nothing and touches no object. The probe key is a name
+ * that cannot exist, so a healthy bucket answers "not found" — the error only
+ * ever fires when the credentials or bucket themselves are wrong.
+ */
+settingsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/storage-check",
+		tags: ["Settings"],
+		summary: "Probe document storage configuration and connectivity",
+		middleware: [requireAuth, requireMfa, requireModule("settings")] as const,
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							configured: z.boolean(),
+							supabaseUrl: z.string().nullable(),
+							bucket: z.string().nullable(),
+							sources: z.record(z.string(), z.string()),
+							reachable: z.boolean().nullable(),
+							probeError: z.string().nullable(),
+						}),
+					},
+				},
+				description: "Storage configuration + connectivity probe",
+			},
+		},
+	}),
+	async (c) => {
+		const display = await listSettingsForDisplay();
+		const sourceOf = (key: string) =>
+			display.find((s) => s.key === key)?.source ?? "unset";
+
+		const url = await getSetting("SUPABASE_URL");
+		const bucket = await getSetting("SUPABASE_STORAGE_BUCKET");
+		const storage = await getDocumentStorage();
+
+		let reachable: boolean | null = null;
+		let probeError: string | null = null;
+		if (storage.enabled) {
+			try {
+				// Sign a key that cannot exist. A healthy stack answers
+				// "Object not found" — which still proves the URL, the service
+				// key, the bucket, and URL signing all work. Any other error
+				// (bad key, wrong bucket, unreachable host) is reported as-is.
+				await storage.createDownloadUrl({ key: "__storage-probe__.bin" });
+				reachable = true;
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				if (/not found|does not exist/i.test(msg)) {
+					reachable = true;
+				} else {
+					reachable = false;
+					probeError = msg;
+				}
+			}
+		}
+
+		return c.json({
+			configured: storage.enabled,
+			supabaseUrl: url ?? null,
+			bucket: bucket ?? null,
+			sources: {
+				SUPABASE_URL: sourceOf("SUPABASE_URL"),
+				SUPABASE_SERVICE_ROLE_KEY: sourceOf("SUPABASE_SERVICE_ROLE_KEY"),
+				SUPABASE_STORAGE_BUCKET: sourceOf("SUPABASE_STORAGE_BUCKET"),
+			},
+			reachable,
+			probeError,
+		});
 	},
 );
 

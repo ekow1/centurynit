@@ -401,6 +401,200 @@
   </div>
 </section>
 
+<!-- ══════════════════ STAGE-SEAT BUG ══════════════════ -->
+<section class="sec">
+  <h2>+ The handoff bug — a stage-seated handler reads as "unassigned" everywhere</h2>
+  <p class="sub">One root cause explains both complaints. When a handoff resolves (or a handler is placed) with the default coverage <b>"This stage only"</b>, <code>assignStageOfficer</code> writes a <code>stage_assignments</code> row — and leaves <code>applications.assignedStaffId</code> null. Half the ops UI then reads only <code>app.assignedStaff</code> and concludes nobody holds the case.</p>
+
+  <div class="truth">
+    <div><span class="gap">the bug</span><b>Case list row</b><code>EnterpriseCases.tsx:419</code> — <code>app.assignedStaff ? badge : "No handler"</code>. A stage-seated case shows <b>"No handler"</b> while <code>assignmentNeeded</code> correctly says no "Needs handler" pill — a contradiction in the same row.</div>
+    <div><span class="gap">the bug</span><b>Case header</b><code>CaseDetail.tsx:450</code> — <code>handlerName={app.assignedStaff || null}</code> → header shows unassigned. Same at <code>CaseBoard.tsx:272</code>, <code>EnrolmentTab.tsx:56</code>.</div>
+    <div><span class="gap">the bug</span><b>Assign sheet</b><code>ApplicationAssignSheet.tsx:79</code> — <code>currentName</code> ignores the stage seat, so re-opening the handler sheet on the current stage shows nobody seated — "Set handler" instead of "Change handler".</div>
+    <div><span class="gap">the bug</span><b>canWork / mayAdvance</b><code>CaseDetail.tsx:370,434</code> — <code>assignedStaffEmail === me</code> only. The stage-seated consultant is locked out: can't raise the application invoice, can't advance, can't work the tab — even though the API's <code>canAccessApplication</code> honors their seat.</div>
+    <div><span class="ok">already right</span><b>The helper exists</b><code>caseHandlerName()</code> (pendingTasks.ts:356) already resolves <code>assignedStaff → stageHandlers.find(stage === app.stage)</code>. The row just doesn't call it.</div>
+    <div><span class="ok">already right</span><b>API access</b><code>canAccessApplication</code> checks <code>stageAssignments</code> — a stage-seated consultant can raise the invoice today; the UI hides the button.</div>
+  </div>
+
+  <div class="compare mt-4">
+    <div>
+      <div class="variant-label"><span class="tag">before</span> handoff resolved · stage coverage · case row</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <div style="border:1.5px solid var(--border);padding:.8rem .9rem">
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <span class="mono" style="font-size:.7rem;font-weight:700">APP-2026-011</span>
+            <span class="pill">Accepted</span>
+          </div>
+          <p style="font-weight:600;margin-top:.35rem">Ama Serwaa</p>
+          <p class="muted" style="font-size:.78rem">KNUST · BSc Computer Science — Needs handler · School Submission · Ghana</p>
+          <p class="mono muted mt-2" style="font-size:.68rem">No handler · Accra HQ</p>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">No "Needs handler" pill — the seat IS filled. Yet the meta line still reads "No handler".</li>
+        <li data-n="2">The seated consultant opens the case and every tab is read-only for them.</li>
+      </ul>
+    </div>
+
+    <div>
+      <div class="variant-label"><span class="tag tag--new">after</span> the stage seat names the handler</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <div style="border:1.5px solid var(--border);padding:.8rem .9rem">
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <span class="mono" style="font-size:.7rem;font-weight:700">APP-2026-011</span>
+            <span class="pill">Accepted</span>
+          </div>
+          <p style="font-weight:600;margin-top:.35rem">Ama Serwaa</p>
+          <p class="muted" style="font-size:.78rem">KNUST · BSc Computer Science</p>
+          <p class="mono muted mt-2" style="font-size:.68rem">Ekow F. · School Submission · Accra HQ</p>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Row meta uses <code>caseHandlerName(app)</code> — whole-case owner, else the seat on <code>app.stage</code>.</li>
+        <li data-n="2">The seat's stage is named inline so a stage-scoped seat doesn't read as full ownership.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="compare mt-4">
+    <div>
+      <div class="variant-label"><span class="tag">before</span> "Handler…" sheet on the current stage</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <p class="eyebrow">Handler · School Submission</p>
+        <p class="hsheet__eyebrow" style="margin-top:.9rem;font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)">2 · Handler</p>
+        <div style="border:1.5px solid var(--border);padding:.6rem .8rem;margin-top:.4rem;display:flex;justify-content:space-between">
+          <span style="font-size:.85rem">Ekow Firmino</span><span class="muted" style="font-size:.72rem">consultant</span>
+        </div>
+        <div style="border:1.5px solid var(--border-light);padding:.6rem .8rem;margin-top:.4rem;display:flex;justify-content:space-between">
+          <span style="font-size:.85rem">Yaa Mensah</span><span class="muted" style="font-size:.72rem">coordinator</span>
+        </div>
+        <div class="mt-3"><a class="btn btn--primary btn--sm" href="#">Set handler</a></div>
+        <p class="mono muted mt-2" style="font-size:.62rem">LOOKS UNSEATED — Ekow already holds this stage</p>
+      </div>
+      <ul class="callouts">
+        <li data-n="1"><code>currentName = app.assignedStaff</code> — null for a stage seat, so the sheet reads "Set handler" and doesn't mark who holds the stage.</li>
+      </ul>
+    </div>
+
+    <div>
+      <div class="variant-label"><span class="tag tag--new">after</span> the seat is shown</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <p class="eyebrow">Change handler · School Submission</p>
+        <p class="hsheet__eyebrow" style="margin-top:.9rem;font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)">2 · Handler</p>
+        <div style="border:1.5px solid var(--border);background:var(--muted);padding:.6rem .8rem;margin-top:.4rem;display:flex;justify-content:space-between">
+          <span style="font-size:.85rem;font-weight:600">Ekow Firmino</span><span class="mono" style="font-size:.62rem;color:var(--muted-foreground)">holds this stage</span>
+        </div>
+        <div style="border:1.5px solid var(--border-light);padding:.6rem .8rem;margin-top:.4rem;display:flex;justify-content:space-between">
+          <span style="font-size:.85rem">Yaa Mensah</span><span class="muted" style="font-size:.72rem">coordinator</span>
+        </div>
+        <div class="mt-3"><a class="btn btn--primary btn--sm" href="#">Change handler</a></div>
+        <p class="mono mt-2" style="font-size:.62rem;color:var(--ok)">SEAT VISIBLE — currentName falls back to the stage seat</p>
+      </div>
+      <ul class="callouts">
+        <li data-n="1"><code>currentName</code> = whole-case owner → else the active seat on the stage being staffed. Title flips to "Change handler" and the seat is marked in the list.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ APPLICATION FEE PARITY ══════════════════ -->
+<section class="sec">
+  <h2>+ Application fee — same raise → approve as visa, once the seat counts</h2>
+  <p class="sub">The flow already exists end-to-end — "Raise application invoice" → proforma → "Approve &amp; issue". What broke it for the consultant is the stage-seat bug above: with the default "This stage only" coverage they were invisible to <code>canWork</code>, so the raise button never rendered. Fix the seat, and the parity the screenshot asks for falls out:</p>
+
+  <div class="compare">
+    <div>
+      <div class="variant-label"><span class="tag">before</span> stage-seated consultant on Applications tab</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <p class="eyebrow">University application fees</p>
+        <p style="font-weight:600;font-size:.9rem;margin-top:.3rem">No invoice yet — 2 schools chosen</p>
+        <p class="muted mt-2" style="font-size:.78rem">Each school's own application fee, paid on the client's behalf at cost. Raise it once the standard documents are verified; the client pays, then submissions start.</p>
+        <p class="mono muted mt-3" style="font-size:.62rem">NO BUTTON — canWork is false for a stage seat</p>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">The consultant holds School Submission but the tab treats them as a stranger — nothing to click.</li>
+      </ul>
+    </div>
+
+    <div>
+      <div class="variant-label"><span class="tag tag--new">after</span> seat honoured → same flow as visa</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <p class="eyebrow">University application fees</p>
+        <p style="font-weight:600;font-size:.9rem;margin-top:.3rem">No invoice yet — 2 schools chosen</p>
+        <p class="muted mt-2" style="font-size:.78rem">Each school's own application fee, paid on the client's behalf at cost. The client pays, then submissions start.</p>
+        <div class="mt-3"><a class="btn btn--primary btn--sm" href="#">Raise application invoice</a></div>
+        <p class="mono mt-3" style="font-size:.62rem;color:var(--ok)">CONSULTANT RAISES → PROFORMA → "APPROVE &amp; ISSUE" FOR THE APPROVER</p>
+      </div>
+      <ul class="callouts">
+        <li data-n="1"><code>canWork</code> gains: <code>|| stageHandlers.some(h =&gt; h.stage === app.stage &amp;&amp; h.opsUserEmail === me)</code>.</li>
+        <li data-n="2">Raise → proforma → approver (finance, or now a consultant with the capability) issues → client pays. Identical shape to the visa card.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="truth mt-4">
+    <div><span class="gap">web · one-line fix</span><b>canWork / mayAdvance</b><code>CaseDetail.tsx:370,434</code> — add the stage-seat check so the seated officer can act on the chapter they hold.</div>
+    <div><span class="gap">web · display</span><b>4 surfaces</b><code>EnterpriseCases:419</code>, <code>CaseBoard:272</code>, <code>EnrolmentTab:56</code>, <code>CaseDetail:450</code> — read the handler via <code>caseHandlerName(app)</code>, not <code>assignedStaff</code> alone.</div>
+    <div><span class="gap">web · sheet</span><b>currentName</b><code>ApplicationAssignSheet:79</code> — fall back to the seat on the stage being staffed so it reads "Change handler" and shows who holds it.</div>
+    <div><span class="ok">cosmetic</span><b>Queue label</b>The app-fee task reads "Review" while visa's reads "Raise visa invoice" — align the action label so the queue says "Raise application invoice".</div>
+  </div>
+</section>
+
+<!-- ══════════════════ SYSTEM FEES SKIP APPROVAL ══════════════════ -->
+<section class="sec">
+  <h2>+ "Enrolment invoice · PROFORMA" — system fees shouldn't wait for approval</h2>
+  <p class="sub">Checked against main: this is <b>already the design</b> — and likely a deploy lag or a hand-raised custom invoice.</p>
+
+  <div class="truth">
+    <div><span class="ok">already direct</span><b>Consultation fee</b>Born <code>issued</code>/<code>paid</code> at booking (<code>invoice.ts:522</code>) — the client pays it in the same step. No approval.</div>
+    <div><span class="ok">already direct</span><b>Enrolment / package fee</b>Born <code>issued</code> at package selection (<code>cases.ts:2393</code>, commit <code>4bda071</code>). Legacy agency proformas auto-promote the moment a payment lands (<code>invoice.ts:580</code>).</div>
+    <div><span class="ok">correctly gated</span><b>Visa · application · travel · custom</b>These stay proforma → approval — because the lines are <b>typed/edited by a human</b> before raising. Approval is the review of what was typed.</div>
+    <div><span class="gap">the screenshot's cause</span><b>Two possibilities</b>(a) The deployed API predates <code>4bda071</code> — the backend is running an older build. (b) A staffer raised it by hand via "Raise an invoice" — a <code>custom</code> proforma, which correctly waits. Prod currently has zero proformas.</div>
+  </div>
+
+  <div class="compare mt-4">
+    <div>
+      <div class="variant-label"><span class="tag">before</span> what the screenshot showed</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <div class="sharp-card">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <b style="font-size:.9rem">Enrolment invoice</b>
+            <span class="pill">Proforma</span>
+          </div>
+          <p class="muted mt-2" style="font-size:.78rem">Awaiting approval — the client cannot see or pay it until it is issued.</p>
+          <div class="pkv mt-2"><span class="pkv__k">Total</span><span class="pkv__v">GH₵ 4,500</span></div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">A system-priced fee parked at proforma — nothing for an approver to review; it just stalls the deposit.</li>
+      </ul>
+    </div>
+
+    <div>
+      <div class="variant-label"><span class="tag tag--new">after</span> same fee on current main</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <div class="sharp-card">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <b style="font-size:.9rem">Service package invoice</b>
+            <span class="pill pill--ok">Issued</span>
+          </div>
+          <p class="muted mt-2" style="font-size:.78rem">Issued the moment the client picks the package — payable immediately, no approval step.</p>
+          <div class="pkv mt-2"><span class="pkv__k">Deposit (10%)</span><span class="pkv__v">GH₵ 450</span></div>
+          <div class="pkv"><span class="pkv__k">Balance</span><span class="pkv__v">GH₵ 4,050</span></div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">The price is configured (<code>pkg.priceCents</code> / fee schedule) — it issues, the client pays, done.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="truth mt-4">
+    <div><span class="gap">action</span><b>Deploy the API</b>Main already carries the fix — prod is running an older build (same deploy gap as the realtime work). Redeploy and this card never shows proforma for system fees.</div>
+    <div><span class="ok">no code</span><b>Hand-raised customs</b>If this specific invoice was raised via "Raise an invoice", it's a <code>custom</code> proforma — approval is correct there. Void or issue it once; the real enrolment invoice issues itself.</div>
+    <div><span class="ok">option</span><b>Catalogue-untouched raises</b>If you want a custom raise whose lines are untouched fee-schedule prices to skip approval, that's a small change — say the word. Otherwise editing is why approval exists.</div>
+  </div>
+</section>
+
 <!-- ══════════════════ INVOICE APPROVAL ══════════════════ -->
 <section class="sec">
   <h2>+ Consultant can't approve invoices — the actual gate</h2>

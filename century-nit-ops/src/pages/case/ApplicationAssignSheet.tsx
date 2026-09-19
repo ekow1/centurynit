@@ -2,7 +2,7 @@ import { JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 import type { MockApplication } from "century-nit-core/ops";
 import type { StageHandoff } from "century-nit-shared";
 import { useCases } from "../../hooks/useCases";
-import { handoffOffersKeep } from "../../lib/pendingTasks";
+import { caseHandlerName, handoffOffersKeep } from "../../lib/pendingTasks";
 import { AssignSheet } from "./AssignSheet";
 
 /**
@@ -76,7 +76,7 @@ export function ApplicationAssignSheet({
 			stage={stage}
 			staff={assignees}
 			branch={app.branch}
-			currentName={handoff ? null : app.assignedStaff || null}
+			currentName={handoff ? null : caseHandlerName(app) || null}
 			keepName={handoff && handoffOffersKeep(handoff) ? handoff.fromOpsUserName : null}
 			keepOpsUserId={handoff && handoffOffersKeep(handoff) ? handoff.fromOpsUserId : null}
 			withReason={Boolean(handoff)}

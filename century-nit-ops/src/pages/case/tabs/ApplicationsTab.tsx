@@ -26,6 +26,7 @@ import { fmtBoth } from "../../currency";
 import { AddSchoolApplicationModal } from "../../AddSchoolApplicationModal";
 import { useFeeCatalogue } from "../../../hooks/useFeeCatalogue";
 import { ApproveInvoiceSheet } from "../ApproveInvoiceSheet";
+import { PaymentGate } from "../PaymentGate";
 
 /**
  * Applications — the schools, the application fee, submissions and offers.
@@ -684,6 +685,65 @@ export function ApplicationsTab({
 		flash(canIssueInvoices ? `${invoice.invoiceNumber} raised — approve it to issue.` : `${invoice.invoiceNumber} raised — awaiting approval.`);
 	}
 
+	const schoolsCard = (
+		<div className="card">
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }} className="mb-2">
+				<p className="eyebrow" style={{ margin: 0, display: "flex", alignItems: "center", gap: "0.75rem" }}>
+					Schools
+					{canWork && (
+						<button type="button" className="btn btn--sm btn--ghost" onClick={() => setAdding(true)}>
+							+ Add school
+						</button>
+					)}
+				</p>
+				<p className="text-xs" style={{ margin: 0, display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+					<span>
+						{total} of {cap ?? "—"} in the package
+					</span>
+					{preparing > 0 && <span>{preparing} preparing</span>}
+					{awaiting > 0 && <span>{awaiting} submitted</span>}
+					{admitted > 0 && <span style={{ fontWeight: 700 }}>{admitted} admitted</span>}
+					{waitlisted > 0 && <span>{waitlisted} waitlisted</span>}
+					{unsuccessful > 0 && <span className="muted">{unsuccessful} unsuccessful</span>}
+				</p>
+			</div>
+			<p className="text-sm mb-3">
+				<span className="muted">Next · </span>
+				{next}
+			</p>
+
+			{over && (
+				<div style={{ border: "1px solid var(--foreground)", padding: "0.6rem 0.75rem", marginBottom: "0.75rem" }}>
+					<span className="wf-badge wf-badge--warn">Over allowance</span>
+					<p className="muted mt-1 text-xs">
+						{total} schools against a {cap}-school package. Confirm the client has paid for the extra applications before submitting them.
+					</p>
+				</div>
+			)}
+
+			{total > 0 ? (
+				<div className="cn-stack">
+					{schools.map((s) => (
+						<SchoolRow
+							key={s.id}
+							appId={app.appId}
+							school={s}
+							feePaid={feePaid}
+							canWork={canWork}
+							accepted={app.acceptedSchoolId === s.id}
+							otherAccepted={Boolean(app.acceptedSchoolId) && app.acceptedSchoolId !== s.id}
+							offerAcceptedAt={app.offerAcceptedAt}
+							flash={flash}
+							fail={fail}
+						/>
+					))}
+				</div>
+			) : (
+				<p className="muted text-sm">No schools chosen yet.</p>
+			)}
+		</div>
+	);
+
 	return (
 		<>
 			{/* Application fee — always on, so the money story never disappears */}
@@ -756,63 +816,22 @@ export function ApplicationsTab({
 				)}
 			</div>
 
-			{/* Schools */}
-			<div className="card">
-				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }} className="mb-2">
-					<p className="eyebrow" style={{ margin: 0, display: "flex", alignItems: "center", gap: "0.75rem" }}>
-						Schools
-						{canWork && (
-							<button type="button" className="btn btn--sm btn--ghost" onClick={() => setAdding(true)}>
-								+ Add school
-							</button>
-						)}
-					</p>
-					<p className="text-xs" style={{ margin: 0, display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-						<span>
-							{total} of {cap ?? "—"} in the package
-						</span>
-						{preparing > 0 && <span>{preparing} preparing</span>}
-						{awaiting > 0 && <span>{awaiting} submitted</span>}
-						{admitted > 0 && <span style={{ fontWeight: 700 }}>{admitted} admitted</span>}
-						{waitlisted > 0 && <span>{waitlisted} waitlisted</span>}
-						{unsuccessful > 0 && <span className="muted">{unsuccessful} unsuccessful</span>}
-					</p>
-				</div>
-				<p className="text-sm mb-3">
-					<span className="muted">Next · </span>
-					{next}
-				</p>
-
-				{over && (
-					<div style={{ border: "1px solid var(--foreground)", padding: "0.6rem 0.75rem", marginBottom: "0.75rem" }}>
-						<span className="wf-badge wf-badge--warn">Over allowance</span>
-						<p className="muted mt-1 text-xs">
-							{total} schools against a {cap}-school package. Confirm the client has paid for the extra applications before submitting them.
-						</p>
-					</div>
-				)}
-
-				{total > 0 ? (
-					<div className="cn-stack">
-						{schools.map((s) => (
-							<SchoolRow
-								key={s.id}
-								appId={app.appId}
-								school={s}
-								feePaid={feePaid}
-								canWork={canWork}
-								accepted={app.acceptedSchoolId === s.id}
-								otherAccepted={Boolean(app.acceptedSchoolId) && app.acceptedSchoolId !== s.id}
-								offerAcceptedAt={app.offerAcceptedAt}
-								flash={flash}
-								fail={fail}
-							/>
-						))}
-					</div>
-				) : (
-					<p className="muted text-sm">No schools chosen yet.</p>
-				)}
-			</div>
+			{/* Schools — locked behind the application invoice once it exists:
+			    the list is the invoice's input, so it only gates after the
+			    handler has raised it and until the client has paid. */}
+			{appInvoice && !feePaid ? (
+				<PaymentGate
+					invoice={appInvoice}
+					subject="School work"
+					paid={feePaid}
+					onApprove={canIssueInvoices ? (inv) => setApproving(inv) : undefined}
+					onRecordPayment={canIssueInvoices ? () => setTab("payments") : undefined}
+				>
+					{schoolsCard}
+				</PaymentGate>
+			) : (
+				schoolsCard
+			)}
 
 			<RaiseLinesSheet
 				open={raising}

@@ -22,7 +22,7 @@ import {
 	type ChapterId,
 } from "century-nit-shared";
 import { ApplicationAssignSheet, AssignChip, assignmentNeeded } from "./case/ApplicationAssignSheet";
-import { tasksForApplication, taskActionLabel } from "../lib/pendingTasks";
+import { caseHandlerName, tasksForApplication, taskActionLabel } from "../lib/pendingTasks";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { fmtBoth } from "./currency";
 
@@ -416,11 +416,15 @@ export function EnterpriseCases() {
 														{tasks.length > 0 && <span> — <strong>{tasks[0].subtitle || taskActionLabel(tasks[0])}</strong></span>}
 													</p>
 													<div className="cn-row__meta">
-														{app.assignedStaff ? (
-															<StaffChatBadge opsUserId={opsUserIdByEmail(app.assignedStaffEmail)} name={app.assignedStaff} email={app.assignedStaffEmail} />
-														) : (
-															<span className="cn-row__unassigned">No handler</span>
-														)}
+														{(() => {
+															const seatName = caseHandlerName(app);
+															const seatEmail = app.assignedStaff ? app.assignedStaffEmail : (app.stageHandlers ?? []).find((h) => h.stage === app.stage)?.opsUserEmail;
+															return seatName ? (
+																<StaffChatBadge opsUserId={opsUserIdByEmail(seatEmail ?? "")} name={seatName} email={seatEmail} />
+															) : (
+																<span className="cn-row__unassigned">No handler</span>
+															);
+														})()}
 														{canSeeAll && <span> · {branchName(app.branch)}</span>}
 														<span> · </span>
 														<RowMeta app={app} chapter={chapter} invoices={allInvoices} taStatus={taStatusOf(app)} />

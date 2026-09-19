@@ -6,6 +6,7 @@ import type { TravelAssistanceRequest, TravelFlight } from "century-nit-shared";
 import type { ApiInvoice } from "../../lib/api";
 import { ArtifactCard } from "./ArtifactCard";
 import { ApproveInvoiceSheet } from "./ApproveInvoiceSheet";
+import { PaymentGate } from "./PaymentGate";
 import { centsFromGhs } from "../currency";
 
 /**
@@ -322,6 +323,16 @@ export function TravelCard({
 				</div>
 			)}
 
+			{/* The rail is also the gate: once the ticket invoice exists, the
+			    steps stay visible but inert until the client has paid. */}
+			<PaymentGate
+				locked={Boolean(invoice) && !paid}
+				invoice={invoice}
+				subject="Booking"
+				steps={["Decided", "Quoted", "Issued", "Paid", "Booked"]}
+				stepIndex={booked ? 4 : paid ? 3 : invoiceIssued ? 2 : invoice ? 1 : decided ? 0 : -1}
+				onApprove={canIssueInvoices ? (inv) => setApproving(inv) : undefined}
+			>
 			<div className="cn-stack">
 				<Step
 					n={1}
@@ -394,6 +405,7 @@ export function TravelCard({
 					}
 				/>
 			</div>
+			</PaymentGate>
 
 			{(status === "ticket_paid" || booked) && ownerUserId && (
 				<ArtifactCard

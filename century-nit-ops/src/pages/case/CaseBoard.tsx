@@ -12,6 +12,7 @@ import {
 	type ChapterId,
 	type JourneyStage,
 } from "century-nit-shared";
+import { caseHandlerName } from "../../lib/pendingTasks";
 
 /**
  * The cases as columns, one per stage, under a rail of the chapters the
@@ -269,7 +270,7 @@ export function CaseBoard({
 							Assign
 						</button>
 					) : (
-						<span>{app.assignedStaff || "Unassigned"}</span>
+						<span>{caseHandlerName(app) || "Unassigned"}</span>
 					)}
 					<span className={`ops-kase__age${stalled ? " ops-kase__age--stalled" : ""}`} title={app.updatedAt ? `Last moved ${new Date(app.updatedAt).toLocaleString()}` : undefined}>
 						{ageLabel(age)}

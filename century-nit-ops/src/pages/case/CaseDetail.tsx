@@ -16,7 +16,7 @@ import { ApplicationsTab } from "./tabs/ApplicationsTab";
 import { VisaTab } from "./tabs/VisaTab";
 import { DepartureTab } from "./tabs/DepartureTab";
 import { MoneyTab } from "./tabs/MoneyTab";
-import { tasksForApplication, taskActionLabel, type PendingTask } from "../../lib/pendingTasks";
+import { caseHandlerName, tasksForApplication, taskActionLabel, type PendingTask } from "../../lib/pendingTasks";
 import { listInvoices, getApplicationActivity, type ApiInvoice } from "../../lib/api";
 import { CaseHeader, Sheet, type NextAction } from "century-nit-core/ui";
 import { CaseTodo } from "./CaseTodo";
@@ -367,7 +367,10 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const coarseStage = (JOURNEY_STAGES[Math.max(0, stageIdx(app.stage))] ?? JOURNEY_STAGES[0]) as JourneyStage;
 	const nextStage = JOURNEY_STAGES[JOURNEY_STAGES.indexOf(coarseStage) + 1] as JourneyStage | undefined;
 	const advanceBlock = nextStage ? canAdvanceToStage(coarseStage, nextStage, app) : null;
-	const mayAdvance = canAssignWork || app.assignedStaffEmail === opsUser?.email;
+	const mayAdvance =
+		canAssignWork ||
+		app.assignedStaffEmail === opsUser?.email ||
+		(app.stageHandlers ?? []).some((h) => h.stage === app.stage && h.opsUserEmail === opsUser?.email);
 	// Why the next stage is out of reach — a state, not a task. The band shows
 	// it only when there is nothing to do; when there is, the task explains it.
 	const blockedBy =
@@ -430,8 +433,12 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			.finally(() => setActivityLoading(false));
 	}, [app.id, historyOpen, app.comments?.length, app.assignedStaffId, invoiceRefresh]);
 
-	// Who may act on the case at all — the handler, or anyone who can route work.
-	const canWork = canAssignWork || app.assignedStaffEmail === opsUser?.email;
+	// Who may act on the case at all — the handler, a staffer seated on the
+	// current stage, or anyone who can route work.
+	const canWork =
+		canAssignWork ||
+		app.assignedStaffEmail === opsUser?.email ||
+		(app.stageHandlers ?? []).some((h) => h.stage === app.stage && h.opsUserEmail === opsUser?.email);
 	const noteCount = (app.comments ?? []).length;
 
 
@@ -447,7 +454,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				// Ops closed the case — the pill says so even when the client's
 				// own signals still owe a step (a fee settled off-platform).
 				portalStage={app.stage === "completed" ? "completed" : (app.journey?.portalStage ?? null)}
-				handlerName={app.assignedStaff || null}
+				handlerName={caseHandlerName(app) || null}
 				handlerAction={
 					canAssignWork ? (
 						<button type="button" className="btn btn--sm btn--ghost" onClick={() => setAssignOpen(true)}>

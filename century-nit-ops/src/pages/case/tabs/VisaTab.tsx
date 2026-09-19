@@ -11,6 +11,7 @@ import type { Flash, Fail, TabId } from "./types";
 import { VISA_STAGE_LABELS, type ApplicationActivityEvent, type StageHandoff, type VisaDetails, type VisaStage } from "century-nit-shared";
 import { ArtifactCard } from "../ArtifactCard";
 import { ApproveInvoiceSheet } from "../ApproveInvoiceSheet";
+import { PaymentGate } from "../PaymentGate";
 
 /**
  * Visa — the fee, the officer, then the application as a set of milestones
@@ -327,7 +328,15 @@ export function VisaTab({
 				)}
 			</div>
 
-			{/* The application, milestone by milestone */}
+			{/* The application, milestone by milestone — locked while the fee
+			    is unpaid: the rail stays visible, the band names the blocker. */}
+			<PaymentGate
+				locked={stage === "locked"}
+				invoice={visaApiInvoice}
+				subject="Visa work"
+				onApprove={canIssueInvoices ? (inv) => setApproving(inv) : undefined}
+				onRecordPayment={canIssueInvoices ? () => setTab("payments") : undefined}
+			>
 			<div className="card">
 				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }} className="mb-2">
 					<p className="eyebrow" style={{ margin: 0 }}>
@@ -498,6 +507,7 @@ export function VisaTab({
 					</div>
 				)}
 			</div>
+			</PaymentGate>
 
 			{/* The visa document set — verified on the Documents tab */}
 			{docs.length > 0 && (

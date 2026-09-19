@@ -8,6 +8,7 @@ import type { Flash, Fail } from "./types";
 import { PackageSheet } from "../PackageSheet";
 
 import { useCases } from "../../../hooks/useCases";
+import { caseHandlerName } from "../../../lib/pendingTasks";
 import { DECISION_LABELS, PAYMENT_PLAN_LABELS, decisionOf } from "century-nit-shared";
 
 
@@ -53,7 +54,7 @@ export function EnrolmentTab({ app, caseInvoices, canIssueInvoices, canWork, fla
 					<div><p className="muted text-xs">Payment plan</p><p>{PAYMENT_PLAN_LABELS[app.paymentPlanId ?? ""] ?? "Not chosen"}</p></div>
 					<div><p className="muted text-xs">Target schools</p><p>{app.targetSchoolCount ? `${app.targetSchoolCount} institution${app.targetSchoolCount === 1 ? "" : "s"}` : "Not specified"}</p></div>
 					<div><p className="muted text-xs">Deposit (10%)</p><p>{app.depositPaid ? "Paid" : "Not paid"}</p></div>
-					<div><p className="muted text-xs">Consultant</p><p>{app.assignedStaff || "Unassigned"}</p></div>
+					<div><p className="muted text-xs">Consultant</p><p>{caseHandlerName(app) || "Unassigned"}</p></div>
 				</div>
 				{canWork && (!app.fundingTrack || !app.paymentPlanId) && (
 					<div className="mt-3" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>

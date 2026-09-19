@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { and, desc, eq, inArray, not } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, not } from "drizzle-orm";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
 import {
@@ -52,6 +52,8 @@ import {
 	getExchangeRate,
 	settleInvoicePayment,
 } from "../services/paymentSettlement.js";
+import { generateInvoicePdf, generateReceiptPdf } from "../services/pdfEngine.js";
+import { INVOICE_CHAPTERS } from "../services/receiptEmail.js";
 import { journeyForApplicant } from "../services/journey.js";
 
 import { syncLeadFromApplicant } from "../services/leads.js";
@@ -274,6 +276,136 @@ meRouter.openapi(
 		});
 		const list = await Promise.all(rows.map(serializeInvoice));
 		return c.json({ invoices: list, total: list.length });
+	},
+);
+
+/**
+ * Applicant self-service: the invoice or receipt as a real PDF.
+ *
+ * Streams the same pdfmake documents the settlement email attaches — one
+ * renderer for email and portal, so the file the client downloads is the
+ * file the office sent. `kind=receipt` itemizes every payment on the
+ * invoice and only exists once money has been received.
+ *
+ * Everything that isn't the caller's own issued invoice is a 404 — no
+ * existence leak, and proforma/void documents are not printable.
+ */
+meRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/invoices/{id}/pdf",
+		tags: ["Applicants"],
+		middleware: [requireAuth, requireMfa] as const,
+		request: {
+			params: z.object({ id: z.string().uuid() }),
+			query: z.object({ kind: z.enum(["invoice", "receipt"]).default("invoice") }),
+		},
+		responses: {
+			200: {
+				content: { "application/pdf": { schema: z.string().openapi({ format: "binary" }) } },
+				description: "The invoice or receipt PDF for the signed-in user's own invoice",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const { id } = c.req.valid("param");
+		const { kind } = c.req.valid("query");
+		const invoice = await getInvoice(id);
+		if (!invoice || invoice.clientUserId !== user.id || invoice.status === "proforma" || invoice.status === "void") {
+			throw new HttpError(404, "NOT_FOUND", "Invoice not found");
+		}
+
+		const [lines, payments, rate, applicantRows] = await Promise.all([
+			db
+				.select()
+				.from(schema.invoiceLines)
+				.where(eq(schema.invoiceLines.invoiceId, id))
+				.orderBy(asc(schema.invoiceLines.position)),
+			db
+				.select()
+				.from(schema.invoicePayments)
+				.where(eq(schema.invoicePayments.invoiceId, id))
+				.orderBy(asc(schema.invoicePayments.at)),
+			getExchangeRate(),
+			invoice.applicantEmail
+				? db
+						.select({ phone: schema.applicants.phone })
+						.from(schema.applicants)
+						.where(eq(schema.applicants.email, invoice.applicantEmail))
+						.limit(1)
+				: Promise.resolve([]),
+		]);
+		const applicant = applicantRows[0] ?? null;
+
+		const invoiceTotalUsd = invoice.subtotalCents / 100;
+		const paidCents = payments.reduce((n, p) => n + p.amountCents, 0);
+		const paidUsd = paidCents / 100;
+		const balanceUsd = Math.max(0, invoice.subtotalCents - invoice.creditedCents - paidCents) / 100;
+		const chapter = INVOICE_CHAPTERS[invoice.type] ?? null;
+		const lineItems = lines.map((l) => ({
+			label: l.label,
+			detail: l.detail ?? null,
+			amountUsd: l.amountCents / 100,
+			amountGhs: (l.amountCents / 100) * rate,
+		}));
+		const fmtDate = (d: Date) => d.toLocaleDateString("en-US");
+
+		let pdf: Buffer;
+		let filename: string;
+		if (kind === "receipt") {
+			if (payments.length === 0) {
+				throw new HttpError(404, "NOT_FOUND", "No payments on this invoice yet");
+			}
+			const last = payments[payments.length - 1];
+			pdf = await generateReceiptPdf({
+				receiptNumber: `REC-${last.reference ?? invoice.invoiceNumber}`,
+				invoiceNumber: invoice.invoiceNumber,
+				clientName: invoice.applicantName || "Valued Client",
+				clientEmail: invoice.applicantEmail ?? "",
+				paymentDate: fmtDate(last.at),
+				paymentChannel: last.gateway ?? last.method,
+				reference: last.reference ?? "",
+				lineItems,
+				totalGhs: paidUsd * rate,
+				totalUsd: invoiceTotalUsd,
+				invoiceTotalUsd,
+				paidUsd,
+				chapter,
+				balanceUsd,
+				payments: payments.map((p) => ({
+					date: fmtDate(p.at),
+					channel: p.gateway ?? p.method,
+					reference: p.reference ?? "",
+					amountUsd: p.amountCents / 100,
+					amountGhs: (p.amountCents / 100) * rate,
+				})),
+			});
+			filename = `${invoice.invoiceNumber}-receipt.pdf`;
+		} else {
+			pdf = await generateInvoicePdf({
+				invoiceNumber: invoice.invoiceNumber,
+				clientName: invoice.applicantName || "Valued Client",
+				clientEmail: invoice.applicantEmail ?? "",
+				clientPhone: applicant?.phone ?? null,
+				dueAt: invoice.dueAt ? fmtDate(invoice.dueAt) : "On issue",
+				issueDate: fmtDate(invoice.createdAt),
+				lineItems,
+				totalGhs: invoiceTotalUsd * rate,
+				totalUsd: invoiceTotalUsd,
+				chapter,
+				paidUsd,
+			});
+			filename = `${invoice.invoiceNumber}-invoice.pdf`;
+		}
+
+		return new Response(new Uint8Array(pdf), {
+			headers: {
+				"Content-Type": "application/pdf",
+				"Content-Disposition": `inline; filename="${filename}"`,
+				"Content-Length": String(pdf.length),
+			},
+		});
 	},
 );
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { InvoiceCard, formatMoney } from "century-nit-core/ui";
-import { downloadReceipt } from "../../lib/receipt";
+import { openInvoiceDocument } from "../../lib/receipt";
 import { useAppState, hasSettledPlan } from "../../context/AppState";
 import { Button } from "../../components/ui/Button";
 import { ChapterGate } from "./PortalLayout";
@@ -363,15 +363,21 @@ function TravelAssistanceInner() {
 										invoice={trip}
 										display="ghs"
 										actions={
-											trip.status === "paid" ? (
-												<Button variant="secondary" onClick={() => downloadReceipt(trip, "Ticket invoice")}>
-													Download receipt
-												</Button>
-											) : tripDue ? (
-												<Button variant="primary" onClick={() => void payTicketing()} arrow>
-													Pay {formatMoney(trip.balanceCents, "ghs")}
-												</Button>
-											) : null
+											<>
+												{tripDue ? (
+													<Button variant="primary" onClick={() => void payTicketing()} arrow>
+														Pay {formatMoney(trip.balanceCents, "ghs")}
+													</Button>
+												) : null}
+												<button type="button" className="doc-link" onClick={() => openInvoiceDocument(trip, "invoice")}>
+													↓ invoice
+												</button>
+												{trip.payments.length > 0 ? (
+													<button type="button" className="doc-link" onClick={() => openInvoiceDocument(trip, "receipt")}>
+														↓ receipt
+													</button>
+												) : null}
+											</>
 										}
 										hint={
 											trip.status === "paid"
@@ -406,9 +412,14 @@ function TravelAssistanceInner() {
 										{!feePaid && " Your e-ticket releases with your papers below once the service-fee instalment is settled."}
 									</p>
 									{trip?.status === "paid" && (
-										<Button variant="secondary" size="sm" onClick={() => downloadReceipt(trip, "Ticket invoice")}>
-											Download receipt
-										</Button>
+										<span>
+											<button type="button" className="doc-link" onClick={() => openInvoiceDocument(trip, "invoice")}>
+												↓ invoice
+											</button>
+											<button type="button" className="doc-link" onClick={() => openInvoiceDocument(trip, "receipt")}>
+												↓ receipt
+											</button>
+										</span>
 									)}
 								</div>
 							</div>

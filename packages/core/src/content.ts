@@ -2462,7 +2462,7 @@ export const DEFAULT_REQUIRED_DOCUMENT_IDS: DocumentTypeId[] = ["passport", "tra
  * The visa-stage set: what the officer builds the application from. Asked
  * once the visa chapter opens, on top of the consultation set.
  */
-export const VISA_DOCUMENT_IDS: DocumentTypeId[] = ["passport", "photo", "financial", "admission_letter", "visa_form", "tb_test"];
+export const VISA_DOCUMENT_IDS: DocumentTypeId[] = ["passport", "photo", "financial", "admission_letter", "tb_test"];
 
 /** The standard set with its names and hints. What the vault renders when no package applies. */
 export const REQUIRED_DOCUMENTS = DOCUMENT_TYPES.filter((d) => (DEFAULT_REQUIRED_DOCUMENT_IDS as string[]).includes(d.id));

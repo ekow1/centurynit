@@ -7733,6 +7733,32 @@ img.profile-monogram {
 	color: inherit;
 }
 
+/* Document downloads — the invoice/receipt PDF chip. A bordered mono chip
+   reads as a file, not a nav link, and pairs side by side on paid rows. */
+.doc-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
+	background: none;
+	border: 1px solid var(--border);
+	padding: 0.3rem 0.55rem;
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	cursor: pointer;
+	color: var(--foreground);
+	text-decoration: none;
+	white-space: nowrap;
+}
+.doc-link:hover {
+	background: var(--foreground);
+	color: var(--background);
+}
+.doc-link + .doc-link {
+	margin-left: 0.4rem;
+}
+
 @media (max-width: 720px) {
 	.jclosed__seal {
 		position: static;

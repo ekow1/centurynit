@@ -52,7 +52,7 @@ import { Money, MoneyInline } from "../../components/ui/Money";
 import { getMfaEnrollment, type MfaEnrollmentStatus } from "../../lib/api";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import { prepareDocumentForUpload } from "../../lib/upload";
-import { downloadInvoice, downloadReceipt } from "../../lib/receipt";
+import { downloadReceipt, openInvoiceDocument } from "../../lib/receipt";
 
 /* ========== Profile ========== */
 
@@ -1262,6 +1262,22 @@ export function PortalJourney() {
  *    every invoice, receipt and university deposit.
  *  • `view="plan"` (the /portal/payment-execution chapter). The payment
  *    plan picker, service-fee milestones and the travel invoice position. */
+/** Invoice · Receipt — both documents on every row that has them. */
+function DocLinks({ invoice }: { invoice: ApiInvoice }) {
+	return (
+		<>
+			<button type="button" className="doc-link" onClick={() => openInvoiceDocument(invoice, "invoice")}>
+				↓ invoice
+			</button>
+			{invoice.payments.length > 0 ? (
+				<button type="button" className="doc-link" onClick={() => openInvoiceDocument(invoice, "receipt")}>
+					↓ receipt
+				</button>
+			) : null}
+		</>
+	);
+}
+
 export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" } = {}) {
 	const { application, booking, schoolApplications, choosePaymentPlan, choosePostArrivalSchedule, payAgencyInstallment, enabledPostArrivalSchedules, customPostArrivalSchedules, fees, syncFromServer } = useAppState();
 	const { toast } = useNotifier();
@@ -1551,16 +1567,10 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 													<Button to="/portal/consultation" size="sm" variant="primary">
 														Pay →
 													</Button>
-													{consultInvoiceType ? (
-														<button type="button" className="jlink" onClick={() => downloadInvoice(consultInvoiceType, "Consultation fee")}>
-															Invoice
-														</button>
-													) : null}
+													{consultInvoiceType ? <DocLinks invoice={consultInvoiceType} /> : null}
 												</>
 											) : consultInvoiceType ? (
-												<button type="button" className="jlink" onClick={() => downloadReceipt(consultInvoiceType, "Consultation fee")}>
-													Receipt
-												</button>
+												<DocLinks invoice={consultInvoiceType} />
 											) : null}
 										</td>
 									</tr>
@@ -1590,16 +1600,10 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 													<Button to="/portal/package" size="sm" variant="primary">
 														Pay →
 													</Button>
-													{agencyInvoiceType ? (
-														<button type="button" className="jlink" onClick={() => downloadInvoice(agencyInvoiceType, "Service fee deposit")}>
-															Invoice
-														</button>
-													) : null}
+													{agencyInvoiceType ? <DocLinks invoice={agencyInvoiceType} /> : null}
 												</>
 											) : depositPaid && agencyInvoiceType ? (
-												<button type="button" className="jlink" onClick={() => downloadReceipt(agencyInvoiceType, "Service fee deposit")}>
-													Receipt
-												</button>
+												<DocLinks invoice={agencyInvoiceType} />
 											) : null}
 										</td>
 									</tr>
@@ -1635,16 +1639,10 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 													<Button to="/portal/application" size="sm" variant="primary">
 														Pay →
 													</Button>
-													{appInvoiceType ? (
-														<button type="button" className="jlink" onClick={() => downloadInvoice(appInvoiceType, "Application invoice")}>
-															Invoice
-														</button>
-													) : null}
+													{appInvoiceType ? <DocLinks invoice={appInvoiceType} /> : null}
 												</>
 											) : appPaid && appInvoiceType ? (
-												<button type="button" className="jlink" onClick={() => downloadReceipt(appInvoiceType, "Application invoice")}>
-													Receipt
-												</button>
+												<DocLinks invoice={appInvoiceType} />
 											) : null}
 										</td>
 									</tr>
@@ -1675,16 +1673,10 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 													<Button to="/portal/visa" size="sm" variant="primary">
 														Pay →
 													</Button>
-													{visaInvoiceType ? (
-														<button type="button" className="jlink" onClick={() => downloadInvoice(visaInvoiceType, "Visa invoice")}>
-															Invoice
-														</button>
-													) : null}
+													{visaInvoiceType ? <DocLinks invoice={visaInvoiceType} /> : null}
 												</>
 											) : visaPaid && visaInvoiceType ? (
-												<button type="button" className="jlink" onClick={() => downloadReceipt(visaInvoiceType, "Visa invoice")}>
-													Receipt
-												</button>
+												<DocLinks invoice={visaInvoiceType} />
 											) : null}
 										</td>
 									</tr>
@@ -1728,6 +1720,8 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 													Pay →
 												</Button>
 											) : null}
+											{/* This milestone is a line on the service-fee invoice — the documents live there. */}
+											{agencyInvoiceType ? <DocLinks invoice={agencyInvoiceType} /> : null}
 										</td>
 									</tr>
 									{(() => {
@@ -1757,14 +1751,10 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 															<Button to="/portal/pre-departure" size="sm" variant="primary">
 																Pay →
 															</Button>
-															<button type="button" className="jlink" onClick={() => downloadInvoice(travelInvoice, "Ticket invoice")}>
-																Invoice
-															</button>
+															<DocLinks invoice={travelInvoice} />
 														</>
 													) : (
-														<button type="button" className="jlink" onClick={() => downloadReceipt(travelInvoice, "Ticket invoice")}>
-															Receipt
-														</button>
+														<DocLinks invoice={travelInvoice} />
 													)}
 												</td>
 											</tr>
@@ -1793,6 +1783,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 														Pay →
 													</Button>
 												) : null}
+												{agencyInvoiceType ? <DocLinks invoice={agencyInvoiceType} /> : null}
 											</td>
 										</tr>
 									) : null}

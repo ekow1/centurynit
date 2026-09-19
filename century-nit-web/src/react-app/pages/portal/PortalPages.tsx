@@ -6,7 +6,7 @@ import { Button } from "../../components/ui/Button";
 import { Money, MoneyInline } from "../../components/ui/Money";
 import { Field, Select } from "../../components/ui/Field";
 import { InvoiceCard, StatusPill, formatMoney } from "century-nit-core/ui";
-import { downloadReceipt } from "../../lib/receipt";
+import { openInvoiceDocument } from "../../lib/receipt";
 import { StageConsentCard } from "../../components/StageConsentCard";
 import { EnrolmentDecision } from "../../components/EnrolmentDecision";
 import { AssessmentOutcomeCard } from "../../components/AssessmentOutcomeCard";
@@ -276,7 +276,7 @@ export function PortalAwaitingHandler() {
 						<div className="pkv"><span className="pkv__k">Handling branch</span><span className="pkv__v">{branchName}</span></div>
 						<div className="pkv"><span className="pkv__k">Consultant</span><span className="pkv__v">{application.assignedStaffName ?? <span className="muted">Assigning</span>}</span></div>
 						<div style={{ marginTop: "0.9rem" }}>
-							<Link to="/portal/money" className="btn btn--ghost" style={{ width: "100%", textAlign: "center" }}>
+							<Link to="/portal/financial" className="btn btn--ghost" style={{ width: "100%", textAlign: "center" }}>
 								Deposit receipt
 							</Link>
 						</div>
@@ -3398,15 +3398,21 @@ function ApplicationHubInner() {
 									invoice={serverInvoice}
 									display="ghs"
 									actions={
-										serverInvoice.status === "paid" ? (
-											<Button variant="secondary" onClick={() => downloadReceipt(serverInvoice, "Application invoice")}>
-												Download receipt
-											</Button>
-										) : serverInvoice.status !== "proforma" && serverInvoice.balanceCents > 0 ? (
-											<Button onClick={payInvoice} arrow>
-												Pay {formatMoney(serverInvoice.balanceCents, "ghs")}
-											</Button>
-										) : null
+										<>
+											{serverInvoice.status !== "proforma" && serverInvoice.balanceCents > 0 ? (
+												<Button onClick={payInvoice} arrow>
+													Pay {formatMoney(serverInvoice.balanceCents, "ghs")}
+												</Button>
+											) : null}
+											<button type="button" className="doc-link" onClick={() => openInvoiceDocument(serverInvoice, "invoice")}>
+												↓ invoice
+											</button>
+											{serverInvoice.payments.length > 0 ? (
+												<button type="button" className="doc-link" onClick={() => openInvoiceDocument(serverInvoice, "receipt")}>
+													↓ receipt
+												</button>
+											) : null}
+										</>
 									}
 								/>
 								<p className="pfoot__note mt-3">
@@ -3421,15 +3427,21 @@ function ApplicationHubInner() {
 											invoice={x}
 											display="ghs"
 											actions={
-												x.status === "paid" ? (
-													<Button variant="secondary" onClick={() => downloadReceipt(x, "Application invoice")}>
-														Download receipt
-													</Button>
-												) : x.status !== "proforma" && x.balanceCents > 0 ? (
-													<Button onClick={() => void payOne(x)} arrow>
-														Pay {formatMoney(x.balanceCents, "ghs")}
-													</Button>
-												) : null
+												<>
+													{x.status !== "proforma" && x.balanceCents > 0 ? (
+														<Button onClick={() => void payOne(x)} arrow>
+															Pay {formatMoney(x.balanceCents, "ghs")}
+														</Button>
+													) : null}
+													<button type="button" className="doc-link" onClick={() => openInvoiceDocument(x, "invoice")}>
+														↓ invoice
+													</button>
+													{x.payments.length > 0 ? (
+														<button type="button" className="doc-link" onClick={() => openInvoiceDocument(x, "receipt")}>
+															↓ receipt
+														</button>
+													) : null}
+												</>
 											}
 										/>
 									</div>
@@ -4204,15 +4216,21 @@ function VisaHubInner() {
 								invoice={serverInv}
 								display="ghs"
 								actions={
-									serverInv.status === "paid" ? (
-										<Button variant="secondary" onClick={() => downloadReceipt(serverInv, "Visa invoice")}>
-											Download receipt
-										</Button>
-									) : serverInv.balanceCents > 0 ? (
-										<Button onClick={pay} arrow>
-											Pay {formatMoney(serverInv.balanceCents, "ghs")}
-										</Button>
-									) : null
+									<>
+										{serverInv.balanceCents > 0 ? (
+											<Button onClick={pay} arrow>
+												Pay {formatMoney(serverInv.balanceCents, "ghs")}
+											</Button>
+										) : null}
+										<button type="button" className="doc-link" onClick={() => openInvoiceDocument(serverInv, "invoice")}>
+											↓ invoice
+										</button>
+										{serverInv.payments.length > 0 ? (
+											<button type="button" className="doc-link" onClick={() => openInvoiceDocument(serverInv, "receipt")}>
+												↓ receipt
+											</button>
+										) : null}
+									</>
 								}
 								hint={paid ? undefined : "Visa processing starts once this invoice is paid."}
 							/>
@@ -4781,8 +4799,11 @@ function CompleteInner() {
 										<span className="pkv__k">{INVOICE_TYPE_LABELS[i.type] ?? i.type}</span>
 										<span className="pkv__v">
 											{formatMoney(i.subtotalCents - i.balanceCents, "ghs")} ·{" "}
-											<button type="button" className="jlink" onClick={() => void downloadReceipt(i, INVOICE_TYPE_LABELS[i.type] ?? i.type)}>
-												receipt
+											<button type="button" className="doc-link" onClick={() => openInvoiceDocument(i, "invoice")}>
+												↓ invoice
+											</button>
+											<button type="button" className="doc-link" onClick={() => openInvoiceDocument(i, "receipt")}>
+												↓ receipt
 											</button>
 										</span>
 									</div>

@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Money documents — invoice &amp; receipt together</title>
+<style>
+  :root{
+    --background:#ffffff; --foreground:#0a0a0a;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#0a0a0a; --border-light:#d4d4d8;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --text-xs:.72rem; --text-sm:.875rem;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:#e8e8e8;color:var(--foreground);font-size:var(--text-sm)}
+  .page{max-width:1180px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .page-title{font-size:1.7rem;font-weight:800;letter-spacing:-.02em;margin-top:.3rem}
+  .lead{color:var(--muted-foreground);line-height:1.6;max-width:46rem}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--muted-foreground)}
+
+  .sec{margin-top:2.75rem}
+  .sec h2{font-size:1.05rem;font-weight:800}
+  .sec .sub{font-family:var(--font-mono);font-size:.68rem;color:var(--muted-foreground);margin-top:.25rem}
+
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1rem}
+  .variant-label{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);margin-bottom:.5rem}
+  .variant-label b{color:var(--foreground);font-size:.75rem}
+  .tag{display:inline-block;border:1px solid var(--border-light);padding:.1rem .45rem;margin-left:.4rem;font-size:.58rem}
+  .tag--new{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+  .frame{border:1.5px solid var(--border);background:var(--background);padding:1.1rem 1.25rem}
+
+  /* portal ledger table (ptable) */
+  .ptable{width:100%;border-collapse:collapse;font-size:var(--text-sm)}
+  .ptable th{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;
+    color:var(--muted-foreground);text-align:left;padding:.55rem .6rem;border-bottom:1.5px solid var(--border)}
+  .ptable th:last-child,.ptable td:last-child{text-align:right}
+  .ptable td{padding:.7rem .6rem;border-bottom:1px solid var(--border-light);vertical-align:top}
+  .ptable__mark{font-family:var(--font-mono);font-weight:700;width:1.6rem}
+  .ptable__sub{display:block;font-family:var(--font-mono);font-size:.62rem;color:var(--muted-foreground);margin-top:.15rem}
+  .ptable__amt{font-family:var(--font-mono);font-weight:600;white-space:nowrap}
+  .ptable__now{background:var(--muted)}
+
+  .portal-pill{display:inline-block;border:1.5px solid var(--border);padding:.12rem .55rem;
+    font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em}
+  .portal-pill--solid{background:var(--foreground);color:var(--background)}
+  .portal-pill--hollow{border-color:var(--border-light);color:var(--muted-foreground)}
+
+  .jlink{background:none;border:none;padding:0;font-family:var(--font-mono);font-size:.68rem;
+    text-transform:uppercase;letter-spacing:.08em;text-decoration:underline;text-underline-offset:3px;
+    cursor:pointer;color:var(--foreground)}
+  .jlink + .jlink{margin-left:.7rem}
+  .btn{display:inline-block;background:var(--foreground);color:var(--background);border:1.5px solid var(--foreground);
+    padding:.4rem .9rem;font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;
+    font-weight:700;text-decoration:none;cursor:pointer}
+  .btn--ghost{background:var(--background);color:var(--foreground)}
+  .doc-link{display:inline-flex;align-items:center;gap:.3rem;background:none;border:1px solid var(--border);
+    padding:.3rem .55rem;font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;
+    letter-spacing:.08em;cursor:pointer;color:var(--foreground);text-decoration:none}
+  .doc-link + .doc-link{margin-left:.4rem}
+  .doc-link svg{width:11px;height:11px}
+
+  .pkv{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--border-light);font-size:.85rem}
+  .pkv:last-child{border-bottom:0}
+  .pkv__k{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);padding-top:.15rem}
+  .pkv__v{font-weight:600;text-align:right}
+
+  .sharp-card{border:1.5px solid var(--border);background:var(--background);padding:1.1rem 1.25rem}
+  .sharp-card--key{border-width:2px}
+
+  /* invoice card */
+  .cn-invoice{border:1.5px solid var(--border);padding:1.1rem 1.25rem;background:var(--background)}
+  .cn-invoice__head{display:flex;justify-content:space-between;align-items:baseline;gap:1rem}
+  .cn-invoice__number{font-family:var(--font-mono);font-weight:700;font-size:1rem;display:block;margin-top:.15rem}
+  .cn-invoice__lines{list-style:none;padding:0;margin:.8rem 0 0;border-top:1px solid var(--border-light)}
+  .cn-invoice__line{display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-bottom:1px solid var(--border-light);font-size:var(--text-sm)}
+  .cn-invoice__line-detail{display:block;color:var(--muted-foreground);font-size:var(--text-xs)}
+  .cn-invoice__totals{display:grid;grid-template-columns:auto 1fr;gap:.25rem 1rem;margin-top:.8rem;font-size:var(--text-sm)}
+  .cn-invoice__totals dt{color:var(--muted-foreground);font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;padding-top:.15rem}
+  .cn-invoice__totals dd{font-family:var(--font-mono);font-weight:600;text-align:right;margin:0}
+  .cn-invoice__actions{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-top:1rem;padding-top:.9rem;border-top:1.5px solid var(--border)}
+  .cn-invoice__hint{font-size:var(--text-xs);color:var(--muted-foreground);margin-left:auto}
+
+  /* the downloadable document sheet */
+  .doc{background:#fff;max-width:820px;margin:0 auto;border:1px solid var(--border-light);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .doc__head{background:var(--foreground);color:var(--background);padding:1.75rem 2.5rem;display:flex;justify-content:space-between;align-items:flex-end;gap:2rem}
+  .seal{display:inline-block;border:1.5px solid #fff;padding:.25rem .55rem;font-family:var(--font-mono);font-size:.62rem;font-weight:700;letter-spacing:.15em;text-transform:uppercase}
+  .co{font-size:1.35rem;font-weight:700;letter-spacing:-.02em;margin-top:.55rem}
+  .addr{font-size:.68rem;opacity:.7;margin-top:.25rem;line-height:1.6}
+  .kind{text-align:right}
+  .kind .k{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.15em;text-transform:uppercase;opacity:.65}
+  .kind .no{font-family:var(--font-mono);font-size:1.4rem;font-weight:800;margin-top:.2rem}
+  .kind .st{display:inline-block;border:1.5px solid #fff;padding:.15rem .6rem;margin-top:.5rem;font-family:var(--font-mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase}
+  .paid{display:flex;align-items:center;gap:1.25rem;padding:1.5rem 2.5rem;border-bottom:1.5px solid var(--border)}
+  .paid__seal{border:2px solid var(--border);padding:.45rem .9rem;font-weight:800;letter-spacing:.2em;font-family:var(--font-mono);font-size:.8rem}
+  .paid__seal--part{border-style:dashed}
+  .paid__amt{font-family:var(--font-mono);font-size:1.5rem;font-weight:800;letter-spacing:-.02em}
+  .paid__when{font-size:.72rem;color:var(--muted-foreground);margin-top:.2rem;font-family:var(--font-mono)}
+  .doc__meta{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1.5px solid var(--border)}
+  .doc__meta>div{padding:1rem 1.25rem;border-right:1px solid var(--border-light)}
+  .doc__meta>div:last-child{border-right:none}
+  .doc__meta .k{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground)}
+  .doc__meta .v{font-weight:650;font-size:var(--text-sm);margin-top:.3rem}
+  .doc__meta .v small{display:block;font-weight:400;color:var(--muted-foreground);font-size:var(--text-xs);margin-top:.1rem}
+  .doc__lines{width:100%;border-collapse:collapse}
+  .doc__lines th{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);text-align:left;padding:.7rem 1.25rem;border-bottom:1.5px solid var(--border)}
+  .doc__lines th:last-child,.doc__lines td:last-child{text-align:right}
+  .doc__lines td{padding:.85rem 1.25rem;border-bottom:1px solid var(--border-light);vertical-align:top;font-size:var(--text-sm)}
+  .doc__lines td small{display:block;color:var(--muted-foreground);font-size:var(--text-xs);margin-top:.15rem}
+  .doc__lines .amt{font-family:var(--font-mono);font-weight:600;white-space:nowrap}
+  .pays{width:100%;border-collapse:collapse}
+  .pays th{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);text-align:left;padding:.6rem 1.25rem;border-bottom:1.5px solid var(--border);background:var(--muted)}
+  .pays td{padding:.6rem 1.25rem;border-bottom:1px solid var(--border-light);font-size:var(--text-sm);font-family:var(--font-mono)}
+  .pays td:last-child,.pays th:last-child{text-align:right}
+  .totals{display:flex;justify-content:flex-end}
+  .totals>div{width:20rem}
+  .trow{display:flex;justify-content:space-between;padding:.6rem 1.25rem;font-size:var(--text-sm);border-bottom:1px solid var(--border-light)}
+  .trow .amt{font-family:var(--font-mono);font-weight:600}
+  .trow--inv{background:var(--foreground);color:var(--background);border-bottom:none}
+  .trow--inv .amt{font-weight:800;font-size:1.05rem}
+  .trow--inv .k{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;padding-top:.35rem}
+  .doc__foot{border-top:1px solid var(--border-light);padding:.9rem 1.5rem;display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:.62rem;color:var(--muted-foreground);margin-top:1.5rem}
+  .doc__bar{position:sticky;top:0;background:var(--foreground);color:var(--background);padding:.7rem 1.5rem;display:flex;justify-content:space-between;align-items:center;font-family:var(--font-mono);font-size:.68rem}
+  .doc__bar button{background:#fff;color:var(--foreground);border:none;padding:.45rem 1rem;font-family:inherit;font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+
+  .callouts{list-style:none;padding:0;margin:.9rem 0 0;max-width:44rem}
+  .callouts li{position:relative;padding:.45rem 0 .45rem 2.2rem;border-bottom:1px solid var(--border-light);font-size:var(--text-sm);line-height:1.55}
+  .callouts li::before{content:attr(data-n);position:absolute;left:0;top:.55rem;font-family:var(--font-mono);font-size:.65rem;border:1.5px solid var(--border);width:1.5rem;height:1.5rem;display:flex;align-items:center;justify-content:center;font-weight:700}
+  .callouts li b{font-weight:700}
+  .callouts li .fix{font-family:var(--font-mono);font-size:.62rem;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.08em}
+
+  @media (max-width:900px){.compare{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="head">
+    <p class="eyebrow">journey portal · money documents — before / after</p>
+    <h1 class="page-title">Invoice and receipt, together</h1>
+    <p class="lead" style="margin-top:.5rem">
+      Today a paid invoice makes the invoice document vanish and only the receipt remains; unpaid rows
+      show a Pay button with no way to see the bill itself. And both "downloads" are actually a
+      print-dialog window, not the real PDF the API already emails. This pass puts
+      <b>Invoice&nbsp;·&nbsp;Receipt</b> side by side on every paid row, adds the invoice link everywhere
+      an invoice exists, itemizes every payment on the receipt, and serves the real server-generated PDF.
+    </p>
+  </div>
+
+  <!-- ── 1 · the ledger ─────────────────────────────────────────────── -->
+  <div class="sec">
+    <h2>1 · The Money ledger — a paid row keeps both documents</h2>
+    <p class="sub">Source: <span class="mono">PortalSections.tsx · the ledger table</span></p>
+
+    <div class="compare">
+      <div>
+        <div class="variant-label"><b>Before</b><span class="tag">current</span> — one or the other, never both</div>
+        <div class="frame" style="padding:0;overflow:hidden">
+          <table class="ptable">
+            <thead><tr><th></th><th>Fee</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="ptable__mark">I</td>
+                <td>Consultation fee<span class="ptable__sub">CN-2026-0142</span></td>
+                <td class="ptable__amt">GH₵ 1,500.00</td>
+                <td><span class="portal-pill portal-pill--solid">Paid</span></td>
+                <td><button class="jlink">Receipt</button></td>
+              </tr>
+              <tr class="ptable__now">
+                <td class="ptable__mark">III</td>
+                <td>Application fee<span class="ptable__sub">CN-2026-0211</span></td>
+                <td class="ptable__amt">GH₵ 4,800.00</td>
+                <td><span class="portal-pill">Due</span></td>
+                <td><span class="btn">Pay →</span> <button class="jlink">Invoice</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <ul class="callouts">
+          <li data-n="1">Paid row: the invoice document is <b>gone</b> — only "Receipt". A client who needs the original bill can't get it.</li>
+          <li data-n="2">Unpaid row: "Invoice" exists here — but it's the <b>only</b> surface that has it, and it disappears on payment.</li>
+        </ul>
+      </div>
+
+      <div>
+        <div class="variant-label"><b>After</b><span class="tag tag--new">proposal</span> — invoice · receipt side by side</div>
+        <div class="frame" style="padding:0;overflow:hidden">
+          <table class="ptable">
+            <thead><tr><th></th><th>Fee</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="ptable__mark">I</td>
+                <td>Consultation fee<span class="ptable__sub">CN-2026-0142</span></td>
+                <td class="ptable__amt">GH₵ 1,500.00</td>
+                <td><span class="portal-pill portal-pill--solid">Paid</span></td>
+                <td>
+                  <a class="doc-link" href="#">↓ invoice</a>
+                  <a class="doc-link" href="#">↓ receipt</a>
+                </td>
+              </tr>
+              <tr class="ptable__now">
+                <td class="ptable__mark">III</td>
+                <td>Application fee<span class="ptable__sub">CN-2026-0211</span></td>
+                <td class="ptable__amt">GH₵ 4,800.00</td>
+                <td><span class="portal-pill">Due</span></td>
+                <td><span class="btn">Pay →</span> <a class="doc-link" href="#">↓ invoice</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <ul class="callouts">
+          <li data-n="1">Paid → <b>invoice + receipt</b>. The bill and the proof of payment, both downloadable, always.</li>
+          <li data-n="2">Unpaid → <b>Pay + invoice</b>. See the document you're about to settle.</li>
+          <li data-n="3">Both buttons fetch <b>the real PDF</b> from <span class="mono">GET /me/invoices/:id/pdf</span> — the same pdfmake file the settlement email attaches. One renderer, no divergence.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2 · the chapter card ───────────────────────────────────────── -->
+  <div class="sec">
+    <h2>2 · The chapter invoice card — documents next to Pay</h2>
+    <p class="sub">Source: <span class="mono">PortalPages.tsx · InvoiceCard actions slot</span> (application, visa, ticket — same pattern)</p>
+
+    <div class="compare">
+      <div>
+        <div class="variant-label"><b>Before</b><span class="tag">current</span> — paid state: receipt only</div>
+        <div class="cn-invoice">
+          <div class="cn-invoice__head">
+            <div><span class="eyebrow">Visa invoice</span><span class="cn-invoice__number">CN-2026-0287</span></div>
+            <span class="portal-pill portal-pill--solid">Paid</span>
+          </div>
+          <ul class="cn-invoice__lines">
+            <li class="cn-invoice__line"><span>Visa processing<span class="cn-invoice__line-detail">Embassy handling + biometrics appointment</span></span><span class="mono">GH₵ 6,200.00</span></li>
+            <li class="cn-invoice__line"><span>Destination tariff<span class="cn-invoice__line-detail">UK student route</span></span><span class="mono">GH₵ 1,400.00</span></li>
+          </ul>
+          <dl class="cn-invoice__totals">
+            <dt>Total</dt><dd>GH₵ 7,600.00</dd>
+            <dt>Paid</dt><dd>GH₵ 7,600.00</dd>
+            <dt>Balance</dt><dd>GH₵ 0.00</dd>
+          </dl>
+          <div class="cn-invoice__actions">
+            <span class="btn btn--ghost">Download receipt</span>
+          </div>
+        </div>
+        <ul class="callouts">
+          <li data-n="1">One button. The invoice — the document that says what the money was <b>for</b> — is unreachable once paid.</li>
+          <li data-n="2">While unpaid it's worse: only "Pay". No way to read the bill first.</li>
+        </ul>
+      </div>
+
+      <div>
+        <div class="variant-label"><b>After</b><span class="tag tag--new">proposal</span> — both documents, always present</div>
+        <div class="cn-invoice">
+          <div class="cn-invoice__head">
+            <div><span class="eyebrow">Visa invoice</span><span class="cn-invoice__number">CN-2026-0287</span></div>
+            <span class="portal-pill portal-pill--solid">Paid</span>
+          </div>
+          <ul class="cn-invoice__lines">
+            <li class="cn-invoice__line"><span>Visa processing<span class="cn-invoice__line-detail">Embassy handling + biometrics appointment</span></span><span class="mono">GH₵ 7,600.00</span></li>
+          </ul>
+          <dl class="cn-invoice__totals">
+            <dt>Total</dt><dd>GH₵ 7,600.00</dd>
+            <dt>Paid</dt><dd>GH₵ 7,600.00</dd>
+            <dt>Balance</dt><dd>GH₵ 0.00</dd>
+          </dl>
+          <div class="cn-invoice__actions">
+            <a class="doc-link" href="#">↓ invoice</a>
+            <a class="doc-link" href="#">↓ receipt</a>
+            <p class="cn-invoice__hint">Paid 4 Sep · Paystack · ref PS-88412</p>
+          </div>
+        </div>
+        <ul class="callouts">
+          <li data-n="1">The actions slot holds the documents <b>in addition to</b> Pay — it already does on ops ("Issue" / "Void"); the portal slot just never got them.</li>
+          <li data-n="2">Unpaid state adds the invoice link under Pay. Proforma still shows neither — the document doesn't exist until approved.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 3 · the receipt document ───────────────────────────────────── -->
+  <div class="sec">
+    <h2>3 · The receipt itself — every payment itemized, honest seal</h2>
+    <p class="sub">Source: <span class="mono">lib/receipt.ts · downloadReceipt</span> — today it prints only the <i>last</i> payment's reference and stamps PAID even on a partial balance</p>
+    <div class="doc" style="margin-top:1rem">
+      <div class="doc__bar"><span>Receipt CN-2026-0198 · Century NIT</span><button>Download PDF</button></div>
+      <div class="doc__head">
+        <div>
+          <span class="seal">Century NIT</span>
+          <p class="co">Century NIT Consult</p>
+          <p class="addr">Accra, Ghana · London, United Kingdom</p>
+        </div>
+        <div class="kind">
+          <p class="k">Official receipt</p>
+          <p class="no">CN-2026-0198</p>
+          <p><span class="st">Partially paid</span></p>
+        </div>
+      </div>
+      <div class="paid">
+        <span class="paid__seal paid__seal--part">Part paid</span>
+        <div>
+          <p class="paid__amt">GH₵ 9,000.00 <span style="font-size:.8rem;font-weight:400;color:#52525b">of GH₵ 18,000.00</span></p>
+          <p class="paid__when">2 payments · latest 12 Sep 2026 · via Paystack</p>
+        </div>
+      </div>
+      <div class="doc__meta">
+        <div><p class="k">Received from</p><p class="v">Ama Mensah<small>ama@example.com</small></p></div>
+        <div><p class="k">Invoice</p><p class="v">CN-2026-0198<small>Chapter II · Enrolment</small></p></div>
+        <div><p class="k">Payments</p><p class="v">2 of 4<small>instalment plan</small></p></div>
+        <div><p class="k">Balance</p><p class="v">GH₵ 9,000.00<small>2 instalments left</small></p></div>
+      </div>
+      <table class="doc__lines">
+        <thead><tr><th>Item</th><th>Amount</th></tr></thead>
+        <tbody>
+          <tr><td>Service fee · deposit<small>10% of GH₵ 18,000 — enrolment</small></td><td class="amt">GH₵ 1,800.00</td></tr>
+          <tr><td>Service fee · pre-departure milestone<small>50% — releases documents</small></td><td class="amt">GH₵ 9,000.00</td></tr>
+          <tr><td>Service fee · post-arrival<small>40% — instalments</small></td><td class="amt">GH₵ 7,200.00</td></tr>
+        </tbody>
+      </table>
+      <table class="pays">
+        <thead><tr><th>Payment</th><th>Date</th><th>Method</th><th>Reference</th><th>Amount</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>20 Aug 2026</td><td>Paystack · card</td><td>PS-77120</td><td>GH₵ 1,800.00</td></tr>
+          <tr><td>2</td><td>12 Sep 2026</td><td>Paystack · momo</td><td>PS-88412</td><td>GH₵ 7,200.00</td></tr>
+        </tbody>
+      </table>
+      <div class="totals"><div>
+        <div class="trow"><span class="muted">Invoice total</span><span class="amt">GH₵ 18,000.00</span></div>
+        <div class="trow trow--inv"><span class="k">Amount paid</span><span class="amt">GH₵ 9,000.00</span></div>
+        <div class="trow"><span class="muted">Balance remaining</span><span class="amt muted">GH₵ 9,000.00 · next due 12 Oct</span></div>
+      </div></div>
+      <div class="doc__foot"><span>CENTURY NIT CONSULT</span><span>CN-2026-0198 · Service fee</span></div>
+    </div>
+    <ul class="callouts" style="max-width:56rem">
+      <li data-n="1"><b>Every payment is a row</b> — date, method, reference, amount. Today only the last payment's reference prints while the total claims all of them.</li>
+      <li data-n="2"><b>The seal tells the truth.</b> "Partially paid" (dashed) while a balance remains; solid "Paid" only when settled in full. Today's stamp says PAID either way.</li>
+      <li data-n="3"><b>It's the real file.</b> The button streams <span class="mono">application/pdf</span> — the pdfmake buffer the settlement email already attaches — not a print-dialog HTML page. Popup blockers can't eat it; the filename is <span class="mono">CN-2026-0198-receipt.pdf</span>.</li>
+    </ul>
+  </div>
+
+  <!-- ── 4 · the rest of the sweep ──────────────────────────────────── -->
+  <div class="sec">
+    <h2>4 · The rest of the sweep</h2>
+    <p class="sub">Smaller gaps the same pass closes</p>
+    <ul class="callouts" style="max-width:52rem">
+      <li data-n="4"><b>Fees chapter rail.</b> <span class="mono">PortalFeesChapter</span> shows <span class="mono">CN-…</span> as dead text — the invoice number becomes a link pair: ↓ invoice · ↓ receipt.</li>
+      <li data-n="5"><b>Complete chapter.</b> "Money, in full" rows get <span class="mono">↓ invoice ↓ receipt</span> next to each total, replacing the lone "receipt" jlink.</li>
+      <li data-n="6"><b>Dead link.</b> The awaiting-handler "Deposit receipt" button points at <span class="mono">/portal/money</span> — no such route, it silently redirects home. Repoint to <span class="mono">/portal/financial</span> or drop it for a direct receipt link.</li>
+      <li data-n="7"><b>Proforma stays clean.</b> Raised-but-unapproved invoices show no document links — there's no issued bill to print yet. The hint text already explains.</li>
+      <li data-n="8"><b>Voided invoices vanish.</b> Already filtered out everywhere; the PDF endpoint 404s them too.</li>
+    </ul>
+  </div>
+
+  <p class="note" style="max-width:none;border-left-color:var(--foreground)">
+    Server side the work is one route — <span class="mono">GET /api/v1/me/invoices/:id/pdf?kind=invoice|receipt</span> —
+    streaming the buffers <span class="mono">generateInvoicePdf / generateReceiptPdf</span> already produce for
+    settlement emails. Everything else is putting existing buttons where the invoices already render.
+  </p>
+
+</div>
+</body>
+</html>

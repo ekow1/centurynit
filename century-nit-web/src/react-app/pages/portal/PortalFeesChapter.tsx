@@ -14,6 +14,7 @@ import { Button } from "../../components/ui/Button";
 import { useAppState, milestoneLockReasonFor, milestoneUnlockedFor } from "../../context/AppState";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { ChapterGate } from "./PortalLayout";
+import { openInvoiceDocument } from "../../lib/receipt";
 
 /**
  * Chapter V · Fees before you go. The service fee as the ledger carries it:
@@ -462,7 +463,17 @@ function FeesChapterInner() {
 								</div>
 								<div className="pkv">
 									<span className="pkv__k">Invoice</span>
-									<span className="pkv__v">{invoice.invoiceNumber}</span>
+									<span className="pkv__v">
+										{invoice.invoiceNumber}{" "}
+										<button type="button" className="doc-link" onClick={() => openInvoiceDocument(invoice, "invoice")}>
+											↓ invoice
+										</button>
+										{invoice.payments.length > 0 ? (
+											<button type="button" className="doc-link" onClick={() => openInvoiceDocument(invoice, "receipt")}>
+												↓ receipt
+											</button>
+										) : null}
+									</span>
 								</div>
 							</div>
 						</div>

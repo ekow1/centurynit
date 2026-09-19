@@ -87,6 +87,14 @@ export type PdfInvoiceInput = {
 	statusLabel?: string | null;
 };
 
+export type PdfReceiptPayment = {
+	date: string;
+	channel: string;
+	reference: string;
+	amountUsd: number;
+	amountGhs: number;
+};
+
 export type PdfReceiptInput = {
 	receiptNumber: string;
 	invoiceNumber: string;
@@ -102,6 +110,16 @@ export type PdfReceiptInput = {
 	chapter?: string | null;
 	/** What is still owed after this payment (USD) — "settled in full" when 0. */
 	balanceUsd?: number | null;
+	/**
+	 * Every payment recorded on the invoice, oldest first. When present the
+	 * document itemizes them and the totals describe the whole invoice, not
+	 * just one settlement.
+	 */
+	payments?: PdfReceiptPayment[];
+	/** The invoice's full subtotal (USD). Defaults to totalUsd. */
+	invoiceTotalUsd?: number | null;
+	/** Total received across all payments (USD). Defaults to totalUsd. */
+	paidUsd?: number | null;
 };
 
 /* ── shared document parts ───────────────────────────────────────────────── */
@@ -274,6 +292,45 @@ function totalsTable(rows: { label: string; value: string; inverted?: boolean; m
 	};
 }
 
+/** The itemized payments table — every settlement on the invoice, oldest
+ * first. A receipt covering four instalments shows four rows, not just the
+ * last payment's reference. */
+function paymentsTable(payments: PdfReceiptPayment[]): Content {
+	const head = (text: string, right = false): TableCell => ({
+		text,
+		fontSize: 6.5,
+		color: GRAY,
+		characterSpacing: 1,
+		alignment: right ? ("right" as const) : ("left" as const),
+		border: [false, false, false, false],
+		margin: [0, 0, 0, 6],
+	});
+	const body: TableCell[][] = [
+		[head("PAYMENT"), head("DATE"), head("METHOD"), head("REFERENCE"), head("AMOUNT", true)],
+		...payments.map((p, i): TableCell[] => [
+			{ text: `${i + 1} / ${payments.length}`, fontSize: 8.5, color: GRAY, border: [false, false, false, false], margin: [0, 6, 0, 6] },
+			{ text: p.date, fontSize: 9, border: [false, false, false, false], margin: [0, 6, 0, 6] },
+			{ text: p.channel.replace(/_/g, " "), fontSize: 9, border: [false, false, false, false], margin: [0, 6, 0, 6] },
+			{ text: p.reference || "—", fontSize: 8.5, border: [false, false, false, false], margin: [0, 6, 0, 6] },
+			{ text: formatUsd(p.amountUsd), fontSize: 9, bold: true, alignment: "right" as const, border: [false, false, false, false], margin: [0, 6, 0, 6] },
+		]),
+	];
+	return {
+		stack: [
+			{ text: "PAYMENTS RECEIVED", fontSize: 6.5, color: GRAY, characterSpacing: 1, margin: [0, 14, 0, 4] },
+			{
+				table: { headerRows: 1, widths: ["auto", "auto", "*", "auto", "auto"], body },
+				layout: {
+					hLineWidth: (i: number, node: { table: { body: unknown[] } }) =>
+						i === 0 ? 0 : i === 1 ? 1.25 : i === node.table.body.length ? 0 : 0.5,
+					vLineWidth: () => 0,
+					hLineColor: (i: number) => (i === 1 ? INK : HAIR),
+				},
+			},
+		],
+	};
+}
+
 /** Two-column notes block — terms / company record. */
 function notesBlock(left: { head: string; body: string }, right: { head: string; body: string }): Content {
 	return {
@@ -364,24 +421,30 @@ export async function generateInvoicePdf(input: PdfInvoiceInput): Promise<Buffer
 }
 
 export async function generateReceiptPdf(input: PdfReceiptInput): Promise<Buffer> {
-	const totalUsd = input.totalUsd ?? input.lineItems.reduce((sum, i) => sum + i.amountUsd, 0);
-	const balanceUsd = input.balanceUsd ?? 0;
+	const invoiceTotalUsd =
+		input.invoiceTotalUsd ?? input.totalUsd ?? input.lineItems.reduce((sum, i) => sum + i.amountUsd, 0);
+	const paidUsd = input.paidUsd ?? input.totalUsd ?? invoiceTotalUsd;
+	const balanceUsd = input.balanceUsd ?? Math.max(0, invoiceTotalUsd - paidUsd);
 	const settled = balanceUsd <= 0.004;
+	const payments = input.payments ?? [];
+	const latest = payments[payments.length - 1];
+	const paymentCount = payments.length;
 
 	const docDefinition: TDocumentDefinitions = {
 		defaultStyle: { font: "Helvetica", fontSize: 10 },
 		pageMargins: [40, 36, 40, 48],
 		footer: pageFooter(input.receiptNumber),
 		content: [
-			masthead("Official receipt", input.receiptNumber, "Paid"),
-			// the stamp — PAID seal next to the amount
+			masthead("Official receipt", input.receiptNumber, settled ? "Paid" : "Partially paid"),
+			// the stamp — the seal describes the invoice's settlement state, so a
+			// part-paid invoice never wears a PAID stamp.
 			{
 				columns: [
 					{
 						width: "auto",
 						table: {
 							widths: ["auto"],
-							body: [[{ text: "PAID", fontSize: 11, bold: true, characterSpacing: 2, margin: [10, 6, 10, 6] }]],
+							body: [[{ text: settled ? "PAID" : "PART PAID", fontSize: 11, bold: true, characterSpacing: 2, margin: [10, 6, 10, 6] }]],
 						},
 						layout: {
 							hLineWidth: () => 1.5,
@@ -394,8 +457,20 @@ export async function generateReceiptPdf(input: PdfReceiptInput): Promise<Buffer
 					{
 						width: "*",
 						stack: [
-							{ text: formatUsd(totalUsd), fontSize: 22, bold: true },
-							{ text: `${input.paymentDate} · via ${input.paymentChannel}`, fontSize: 8.5, color: GRAY, margin: [0, 3, 0, 0] },
+							{
+								text: [
+									{ text: formatUsd(paidUsd), fontSize: 22, bold: true },
+									...(settled ? [] : [{ text: `  of ${formatUsd(invoiceTotalUsd)}`, fontSize: 10, color: GRAY }]),
+								],
+							},
+							{
+								text: paymentCount > 0
+									? `${paymentCount} payment${paymentCount === 1 ? "" : "s"} · latest ${latest.date} · via ${latest.channel}`
+									: `${input.paymentDate} · via ${input.paymentChannel}`,
+								fontSize: 8.5,
+								color: GRAY,
+								margin: [0, 3, 0, 0],
+							},
 						],
 						margin: [16, 0, 0, 0],
 					},
@@ -405,14 +480,18 @@ export async function generateReceiptPdf(input: PdfReceiptInput): Promise<Buffer
 			metaStrip([
 				{ label: "Received from", value: input.clientName, sub: input.clientEmail },
 				{ label: "Invoice", value: input.invoiceNumber, sub: input.chapter ?? undefined },
-				{ label: "Method", value: input.paymentChannel.replace(/_/g, " ").toUpperCase() },
-				{ label: "Reference", value: input.reference },
+				{
+					label: "Method",
+					value: (latest?.channel ?? input.paymentChannel).replace(/_/g, " ").toUpperCase(),
+				},
+				{ label: "Reference", value: latest?.reference || input.reference },
 			]),
 			itemsTable(input.lineItems),
+			...(payments.length > 0 ? [paymentsTable(payments)] : []),
 			totalsTable([
-				{ label: "Invoice total", value: formatUsd(totalUsd), muted: true },
+				{ label: "Invoice total", value: formatUsd(invoiceTotalUsd), muted: true },
 				{ label: "Paid in GHS", value: formatGhsPdf(input.totalGhs), muted: true },
-				{ label: "AMOUNT PAID", value: formatUsd(totalUsd), inverted: true },
+				{ label: "AMOUNT PAID", value: formatUsd(paidUsd), inverted: true },
 				{
 					label: "Balance remaining",
 					value: settled ? `${formatUsd(0)} — settled in full` : formatUsd(balanceUsd),

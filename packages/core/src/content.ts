@@ -2575,7 +2575,6 @@ export const PRE_DEPARTURE_TASKS: PreDepartureTask[] = [
 	// Century's deliverables. The only items that gate completion. The officer closes them (or the system does, from the fact).
 	{ id: "pd-briefing", category: "orientation", owner: "century", required: true, label: "Pre-departure briefing", detail: "Your consultant walks you through arrival, the first week and who to call.", done: false },
 	{ id: "pd-flights", category: "travel", owner: "century", required: true, label: "Flight booked", detail: "Booked by Century NIT, or confirmed if you booked it yourself.", done: false },
-	{ id: "pd-airport", category: "travel", owner: "century", required: true, label: "Airport pickup arranged", detail: "Your university's pickup, or one we arrange. You will get the details before you fly.", done: false },
 	{ id: "pd-visa-copy", category: "documents", owner: "century", required: true, label: "Visa, passport and admission copies filed", detail: "Digital copies in your vault; carry printed copies in your hand luggage.", done: false },
 	// The client's own arrangements with the school and for the move. Reminders, never a gate.
 	{ id: "pd-accommodation", category: "accommodation", owner: "client", required: false, label: "Accommodation confirmed", detail: "On-campus housing or a private rental, arranged with your school.", done: false },

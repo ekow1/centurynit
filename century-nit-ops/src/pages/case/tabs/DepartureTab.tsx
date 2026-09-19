@@ -339,7 +339,7 @@ export function DepartureTab({
 						</p>
 					</div>
 					<p className="muted text-xs" style={{ margin: "0 0 0.5rem" }}>
-						Century's deliverables close by their facts — the booking, the briefing, the pickup, the copies in the vault — not by a tick.
+						Century's deliverables close by their facts — the booking, the briefing, the copies in the vault — not by a tick.
 					</p>
 					<div className="cn-dl">
 						{deliverables.map((task) => {
@@ -347,7 +347,7 @@ export function DepartureTab({
 							const state = task.done ? "done" : waived ? "waived" : "open";
 							const isBusy = busy === task.id;
 							const doneAt = fmtDate(task.doneAt);
-							const byFact = task.id === "pd-flights" || task.id === "pd-briefing" || task.id === "pd-airport" || Boolean(task.evidence);
+							const byFact = task.id === "pd-flights" || task.id === "pd-briefing" || Boolean(task.evidence);
 							let how: string;
 							let action: React.ReactNode = null;
 							if (task.id === "pd-flights") {
@@ -358,9 +358,6 @@ export function DepartureTab({
 							} else if (task.id === "pd-briefing") {
 								how = task.done ? `recorded${dd.briefingAt ? ` · ${fmtDateTime(dd.briefingAt)}` : doneAt ? ` · ${doneAt}` : ""}` : "closes when the briefing is recorded — arrival, the first week, who to call";
 								action = !task.done && !waived && canWork ? <button type="button" className="btn btn--sm btn--secondary" onClick={openFacts}>Record briefing…</button> : null;
-							} else if (task.id === "pd-airport") {
-								how = task.done ? `recorded${dd.pickupBy ? ` · ${dd.pickupBy}${dd.pickupNote ? ` · ${dd.pickupNote}` : ""}` : doneAt ? ` · ${doneAt}` : ""}` : "closes when the pickup is recorded — the university's, or ours";
-								action = !task.done && !waived && canWork ? <button type="button" className="btn btn--sm btn--secondary" onClick={openFacts}>Record pickup…</button> : null;
 							} else if (task.evidence) {
 								how = task.done
 									? `closed by the vault${task.doneBy ? ` · verified by ${task.doneBy}` : ""}${doneAt ? ` · ${doneAt}` : ""}`
@@ -467,7 +464,7 @@ export function DepartureTab({
 
 			<Sheet open={factsOpen} onClose={() => setFactsOpen(false)} title="Arrival facts">
 				<div className="cn-stack">
-					<p className="muted text-sm">What the client flies with. Recording the briefing closes "Pre-departure briefing"; recording the pickup closes "Airport pickup arranged".</p>
+					<p className="muted text-sm">What the client flies with. Recording the briefing closes "Pre-departure briefing".</p>
 					<div className="cn-facts">
 						<label><span className="muted text-xs">Report to the school by</span><input className="input input--sm" type="date" value={f.reportBy} onChange={(e) => setF({ ...f, reportBy: e.target.value })} /></label>
 						<label><span className="muted text-xs">Orientation</span><input className="input input--sm" type="date" value={f.orientationAt} onChange={(e) => setF({ ...f, orientationAt: e.target.value })} /></label>

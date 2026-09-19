@@ -14,7 +14,7 @@ describe("the pre-departure checklist", () => {
 
 	it("has a template where only Century's own deliverables are required — the client's arrangements with the school are reminders", () => {
 		const century = PRE_DEPARTURE_TASKS.filter((t) => t.owner === "century").map((t) => t.id);
-		expect(century).toEqual(expect.arrayContaining(["pd-briefing", "pd-flights", "pd-airport", "pd-visa-copy"]));
+		expect(century).toEqual(expect.arrayContaining(["pd-briefing", "pd-flights", "pd-visa-copy"]));
 		expect(PRE_DEPARTURE_TASKS.filter((t) => t.required).every((t) => t.owner === "century")).toBe(true);
 		expect(PRE_DEPARTURE_TASKS.filter((t) => t.owner === "client").every((t) => !t.required && !t.evidence)).toBe(true);
 	});

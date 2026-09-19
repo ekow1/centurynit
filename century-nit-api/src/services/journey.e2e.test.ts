@@ -347,11 +347,9 @@ describe("the applicant journey, end to end", () => {
 		await updateDepartureDetails(appId, { briefingAt: "2027-06-01T10:00:00.000Z", pickupBy: "University shuttle", reportBy: "2027-08-20T12:00:00.000Z" }, ACTOR);
 		resolved = await resolvePreDepartureTasks(await appRow());
 		expect(resolved.find((t) => t.id === "pd-briefing")).toMatchObject({ done: true, doneBy: "Manager" });
-		expect(resolved.find((t) => t.id === "pd-airport")).toMatchObject({ done: true });
 		expect((await appRow()).departureDetails).toMatchObject({ pickupBy: "University shuttle" });
-		await updateDepartureDetails(appId, { pickupBy: null }, ACTOR);
-		resolved = await resolvePreDepartureTasks(await appRow());
-		expect(resolved.find((t) => t.id === "pd-airport")?.done).toBe(false);
+		// "Airport pickup arranged" is retired — it never appears, however seeded.
+		expect(resolved.find((t) => t.id === "pd-airport")).toBeUndefined();
 
 		// ── The release hold: the letter and the visa documents wait on the milestone ──
 		// No plan settled yet: the client's downloads are refused, staff's never are.

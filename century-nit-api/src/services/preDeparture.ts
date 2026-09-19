@@ -86,7 +86,9 @@ export async function resolvePreDepartureTasks(row: {
 	applicantId: string;
 	preDepartureTasks: unknown;
 }): Promise<PreDepartureTask[]> {
-	const raw = (Array.isArray(row.preDepartureTasks) ? row.preDepartureTasks : []) as Partial<PreDepartureTask>[];
+	// "Airport pickup arranged" was retired — rows seeded before the change
+	// still carry it, so drop it here rather than migrating stored JSON.
+	const raw = ((Array.isArray(row.preDepartureTasks) ? row.preDepartureTasks : []) as Partial<PreDepartureTask>[]).filter((t) => t.id !== "pd-airport");
 	const tasks: PreDepartureTask[] = raw.map((t) => ({
 		id: t.id ?? "",
 		category: t.category,

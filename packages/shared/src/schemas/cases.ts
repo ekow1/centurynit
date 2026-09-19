@@ -334,7 +334,7 @@ export const departureDetailsSchema = z.object({
 	orientationAt: z.string().datetime().nullable().optional(),
 	/** The pre-departure briefing with the consultant. Recording it closes that item. */
 	briefingAt: z.string().datetime().nullable().optional(),
-	/** Airport pickup. Recording who closes that item. */
+	/** Airport pickup — the university's, or one we arrange. */
 	pickupBy: z.string().max(120).nullable().optional(),
 	pickupNote: z.string().max(500).nullable().optional(),
 	accommodationAddress: z.string().max(300).nullable().optional(),

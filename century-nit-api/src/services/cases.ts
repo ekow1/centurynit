@@ -2026,9 +2026,6 @@ export async function updateDepartureDetails(id: string, patch: DepartureDetails
 		if (t.id === "pd-briefing" && patch.briefingAt !== undefined) {
 			return merged.briefingAt ? { ...t, done: true, doneBy: t.done ? t.doneBy : actor.name, doneAt: t.done ? t.doneAt : now } : { ...t, done: false, doneBy: null, doneAt: null };
 		}
-		if (t.id === "pd-airport" && patch.pickupBy !== undefined) {
-			return merged.pickupBy ? { ...t, done: true, doneBy: t.done ? t.doneBy : actor.name, doneAt: t.done ? t.doneAt : now } : { ...t, done: false, doneBy: null, doneAt: null };
-		}
 		return t;
 	});
 	const [updated] = await db

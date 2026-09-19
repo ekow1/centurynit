@@ -352,9 +352,23 @@ function OpsShell() {
 					<span>My availability</span>
 					<span className="ops-menu__k">hours &amp; calendar</span>
 				</Link>
-				<button type="button" className="ops-menu__row" role="menuitem" onClick={pushState.subscription ? pushState.unsubscribe : pushState.subscribe}>
+				<button
+					type="button"
+					className="ops-menu__row"
+					role="menuitem"
+					disabled={pushState.permission === "unsupported" || pushState.permission === "denied"}
+					onClick={pushState.subscription ? pushState.unsubscribe : pushState.subscribe}
+				>
 					<span>Push alerts on this device</span>
-					<span className="ops-menu__k">{pushState.subscription ? "on" : "off"}</span>
+					<span className="ops-menu__k">
+						{pushState.permission === "unsupported"
+							? "n/a"
+							: pushState.permission === "denied"
+								? "blocked"
+								: pushState.subscription
+									? "on"
+									: "off"}
+					</span>
 				</button>
 				<a href={publicSiteUrl()} className="ops-menu__row" role="menuitem">
 					<span>Public site</span>

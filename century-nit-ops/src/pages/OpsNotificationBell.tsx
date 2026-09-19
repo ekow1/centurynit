@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useOpsNotifications } from "../hooks/useOpsNotifications";
+import { usePushNotifications } from "../hooks/usePushNotifications";
 import { useChatHub } from "./ChatHubContext";
 import type { OpsNotification } from "../hooks/useOpsNotifications";
 
@@ -140,6 +141,9 @@ function NotifIcon({ kind }: { kind: IconKind }) {
 
 export function OpsNotificationBell({ onUnread }: { onUnread?: (n: number) => void } = {}) {
 	const { notifications, unreadCount, markRead, markAllRead } = useOpsNotifications();
+	// The bell only mounts inside the authed console shell, so push is live
+	// whenever the browser allows it.
+	const push = usePushNotifications({ isAuthenticated: true });
 	// The shell's nav shows the same count beside Inbox — one stream, two places.
 	useEffect(() => {
 		onUnread?.(unreadCount);
@@ -189,6 +193,14 @@ export function OpsNotificationBell({ onUnread }: { onUnread?: (n: number) => vo
 		if (segment === "chat") return "/inbox";
 		return `/${segment}`;
 	}
+
+	const pushOn = push.permission === "granted" && push.subscription != null;
+	const pushCopy = (() => {
+		if (pushOn) return { strong: "Browser alerts on.", rest: "You will be alerted even when this tab is closed." };
+		if (push.permission === "denied") return { strong: "Alerts blocked.", rest: "Allow notifications in the browser's site settings to turn them on." };
+		if (push.permission === "unsupported") return { strong: "Not supported.", rest: "This browser cannot show notifications." };
+		return { strong: "Browser alerts off.", rest: "Turn them on to get staff alerts outside the console." };
+	})();
 
 	function handleNotifClick(id: string, link?: string | null) {
 		void markRead(id);
@@ -374,6 +386,21 @@ export function OpsNotificationBell({ onUnread }: { onUnread?: (n: number) => vo
 							})}
 						</ul>
 					)}
+
+					<div className="notif-panel__push">
+						<span className={`notif-panel__dot ${pushOn ? "notif-panel__dot--on" : "notif-panel__dot--off"}`} />
+						<p>
+							<strong>{pushCopy.strong}</strong> {pushCopy.rest}
+						</p>
+						{push.permission === "granted" || push.permission === "default" ? (
+							<button
+								type="button"
+								onClick={() => (pushOn ? void push.unsubscribe() : void push.subscribe())}
+							>
+								{pushOn ? "Turn off" : "Turn on"}
+							</button>
+						) : null}
+					</div>
 
 					<div className="notif-panel__foot">
 						<button

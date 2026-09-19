@@ -18,3 +18,12 @@ createRoot(document.getElementById("root")!).render(
 		<App />
 	</StrictMode>,
 );
+
+// Push service worker registration (production / supported browsers)
+if ("serviceWorker" in navigator) {
+	window.addEventListener("load", () => {
+		navigator.serviceWorker.register("/sw.js").catch(() => {
+			/* silent - prototype may run without SW in some environments */
+		});
+	});
+}

@@ -331,6 +331,7 @@ export function TravelCard({
 				subject="Booking"
 				steps={["Decided", "Quoted", "Issued", "Paid", "Booked"]}
 				stepIndex={booked ? 4 : paid ? 3 : invoiceIssued ? 2 : invoice ? 1 : decided ? 0 : -1}
+				hideChain
 				onApprove={canIssueInvoices ? (inv) => setApproving(inv) : undefined}
 			>
 			<div className="cn-stack">
@@ -394,7 +395,7 @@ export function TravelCard({
 						booked && ta.booking && `${ta.booking.confirmationCode ? `PNR ${ta.booking.confirmationCode} · ` : ""}${flightLine(ta.booking)}`,
 						booked && `Booked${ta.updatedAt ? ` ${fmtDay(ta.updatedAt)}` : ""} — the e-ticket is handed over with the papers.`,
 						status === "ticket_paid" && "Buy the ticket and record the PNR; upload the e-ticket — it is handed over with the papers.",
-						!booked && status !== "ticket_paid" && !offPath && "PNR and the e-ticket — held with the papers until the 30%.",
+						!booked && status !== "ticket_paid" && !offPath && "PNR and the e-ticket — held with the papers until the service-fee instalment is paid.",
 					]}
 					action={
 						canWork && status === "ticket_paid" ? (
@@ -412,7 +413,7 @@ export function TravelCard({
 					ownerUserId={ownerUserId}
 					documentType="flight_receipt"
 					title="E-ticket · flight booking receipt"
-					hint="The issued ticket or booking confirmation — filed in the client's vault and released with the papers once the pre-departure milestone is paid."
+					hint="The issued ticket or booking confirmation — filed in the client's vault and released with the papers once the service-fee instalment is paid."
 					canUpload={canUploadArtifacts}
 				/>
 			)}

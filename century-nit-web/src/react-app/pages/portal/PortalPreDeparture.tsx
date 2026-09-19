@@ -187,15 +187,6 @@ function TravelAssistanceInner() {
 	const closedTasks = preDepartureTasks.filter((t) => t.done || Boolean(t.waivedReason)).length;
 	const totalTasks = preDepartureTasks.length;
 
-	const decisionDone = status !== "decision_pending" && Boolean(ta?.decision);
-	const decisionFact =
-		ta?.decision === "yes"
-			? "book with us"
-			: ta?.decision === "no" || status === "declined"
-				? "own booking"
-				: ta?.decision === "hold" || status === "on_hold"
-					? "on hold"
-					: "your call";
 	const ticketDone = showBooked || trip?.status === "paid";
 	const ticketFact = showBooked
 		? `booked${ta?.booking?.confirmationCode ? ` · ${ta.booking.confirmationCode}` : ""}`
@@ -211,23 +202,22 @@ function TravelAssistanceInner() {
 							? "on hold"
 							: "after 1";
 
+	const papersFact = feePaid
+		? `released${application.agencySettledAt ? ` ${day(application.agencySettledAt)}` : ""}`
+		: !milestoneUnlocked
+			? status === "on_hold"
+				? "on hold"
+				: "after your flight"
+			: milestoneUsd
+				? `${ghs(milestoneUsd)} due`
+				: "due";
+
+	// The strip mirrors the four sections below, one name each.
 	const steps: { label: string; done: boolean; fact: string }[] = [
-		{ label: "Flight decision", done: decisionDone, fact: decisionFact },
-		{ label: "Ticket", done: ticketDone, fact: ticketFact },
-		{
-			label: "Milestone",
-			done: feePaid,
-			fact: feePaid
-				? `settled${application.agencySettledAt ? ` ${day(application.agencySettledAt)}` : ""}`
-				: !milestoneUnlocked
-					? status === "on_hold"
-						? "on hold"
-						: "after your flight"
-					: milestoneUsd
-						? `${ghs(milestoneUsd)} due`
-						: "due",
-		},
+		{ label: "Your flight", done: ticketDone, fact: ticketFact },
+		{ label: "Your papers", done: feePaid && docsReleased, fact: papersFact },
 		{ label: "Before you fly", done: checklistDone, fact: `${closedTasks} / ${totalTasks}` },
+		{ label: "Finish", done: Boolean(application.completedAt), fact: application.completedAt ? "file closed" : canComplete ? "ready" : "last step" },
 	];
 	const onStep = steps.findIndex((s) => !s.done);
 
@@ -238,7 +228,7 @@ function TravelAssistanceInner() {
 	// The band. The one thing this chapter needs right now. The flight first;
 	// the fee milestone waits on it.
 	const band = canComplete
-		? { title: "Everything is settled. Close your file", detail: "Fee milestone paid, travel settled, checklist done. Completing hands you to post-arrival support.", cta: <Button variant="inverted" onClick={() => void handleComplete()} arrow>Complete my journey</Button> }
+		? { title: "Everything is settled. Close your file", detail: "Service fee paid, travel settled, checklist done. Completing hands you to post-arrival support.", cta: <Button variant="inverted" onClick={() => void handleComplete()} arrow>Complete my journey</Button> }
 		: status === "decision_pending"
 			? { title: "Tell us how you'd like to fly", detail: "One decision. The flight booking service is part of your package; the only invoice here is the ticket itself.", cta: null }
 			: showWaiting
@@ -250,9 +240,9 @@ function TravelAssistanceInner() {
 						: status === "on_hold"
 							? { title: "Travel is on hold", detail: "Travel assistance is on hold. Resume it, or choose to book your own flight, to unlock this milestone.", cta: null }
 							: (showBooked || status === "declined") && !feePaid
-								? { title: "Settle the fee milestone to release your documents", detail: "Your flight is settled. Your admission letter, visa documents and e-ticket release on payment.", cta: <Button to="/portal/payment-execution" variant="inverted" arrow>Pay the milestone</Button> }
+								? { title: "Settle the service fee to release your papers", detail: "Your flight is settled. Your admission letter, visa documents and e-ticket release on payment.", cta: <Button to="/portal/payment-execution" variant="inverted" arrow>Pay service fee</Button> }
 								: (showBooked || status === "declined") && feePaid && !checklistDone
-									? { title: showBooked ? "Flight booked. Finish the checklist below" : "Travel settled. Finish the checklist below", detail: showBooked ? (ta?.booking?.confirmationCode ? `Keep ${ta.booking.confirmationCode} for check-in.` : "Keep the confirmation code for check-in.") : "Your milestone is paid and your documents are released. The checklist is the last step.", cta: null }
+									? { title: showBooked ? "Flight booked. Finish the checklist below" : "Travel settled. Finish the checklist below", detail: showBooked ? (ta?.booking?.confirmationCode ? `Keep ${ta.booking.confirmationCode} for check-in.` : "Keep the confirmation code for check-in.") : "Your service fee is paid and your papers are released. The checklist is the last step.", cta: null }
 									: { title: "Departure in motion", detail: "Your officer updates this page as each piece settles.", cta: null };
 
 	return (
@@ -299,19 +289,27 @@ function TravelAssistanceInner() {
 
 			<div className="psplit mt-5">
 				<div>
-					{/* 1 · the decision */}
-					<section className="psec">
+					{/* 1 · your flight — the decision inline, then the ticket */}
+					<section className="psec" id="your-flight">
 						<div className="psec__h">
-							<span className={`psec__no${!showDecision ? " psec__no--done" : ""}`}>{showDecision ? "1" : "✓"}</span>
-							<span className="psec__title">How you're flying</span>
+							<span className={`psec__no${ticketDone ? " psec__no--done" : ""}`}>{ticketDone ? "✓" : "1"}</span>
+							<span className="psec__title">Your flight</span>
 							<span className="psec__hint">
-								{status === "decision_pending"
-									? "your call"
-									: status === "on_hold"
-										? "on hold"
-										: status === "declined"
-											? "own booking"
-											: `book with us · chosen${ta?.updatedAt ? ` ${day(ta.updatedAt)}` : ""}`}
+								{showBooked
+									? "booked · ticketed"
+									: trip?.status === "paid"
+										? "ticket paid · booking"
+										: tripDue
+											? "ticket invoice due"
+											: showWaiting
+												? "with your officer"
+												: status === "decision_pending"
+													? "your call"
+													: status === "on_hold"
+														? "on hold"
+														: status === "declined"
+															? "own booking"
+															: "not started"}
 							</span>
 						</div>
 						{showDecision ? (
@@ -343,17 +341,6 @@ function TravelAssistanceInner() {
 								{ta?.assignedOpsUserName ? ` · ${ta.assignedOpsUserName.toUpperCase()} IS YOUR TRAVEL OFFICER` : ""}.
 							</p>
 						)}
-					</section>
-
-					{/* 2 · the flight. Waiting, invoice, or booked */}
-					<section className="psec" id="your-flight">
-						<div className="psec__h">
-							<span className={`psec__no${showBooked ? " psec__no--done" : ""}`}>{showBooked ? "✓" : "2"}</span>
-							<span className="psec__title">Your flight</span>
-							<span className="psec__hint">
-								{showBooked ? "booked · ticketed" : trip?.status === "paid" ? "ticket paid · booking" : tripDue ? "ticket invoice due" : showWaiting ? "with your officer" : "not started"}
-							</span>
-						</div>
 						{showWaiting && (
 							<div className="sharp-card">
 								<p className="eyebrow">{ta?.assignedOpsUserId ? "Your travel officer is on it" : "Request received"}</p>
@@ -413,33 +400,11 @@ function TravelAssistanceInner() {
 								<div className="mt-3">
 									<FlightRows flight={ta.booking} confirmationCode={ta.booking.confirmationCode} />
 								</div>
-								{hasFacts && (
-									<>
-										<p className="eyebrow mt-4">On arrival · recorded by your officer</p>
-										<div className="mt-1">
-											{dd.reportBy && (
-												<div className="pkv"><span className="pkv__k">Report to your school by</span><span className="pkv__v">{day(dd.reportBy)}</span></div>
-											)}
-											{dd.orientationAt && (
-												<div className="pkv"><span className="pkv__k">Orientation</span><span className="pkv__v">{day(dd.orientationAt)}</span></div>
-											)}
-											{dd.briefingAt && (
-												<div className="pkv"><span className="pkv__k">Pre-departure briefing</span><span className="pkv__v">{when(dd.briefingAt)}</span></div>
-											)}
-											{dd.pickupBy && (
-												<div className="pkv"><span className="pkv__k">Airport pickup</span><span className="pkv__v">{dd.pickupBy}{dd.pickupNote ? ` · ${dd.pickupNote}` : ""}</span></div>
-											)}
-											{dd.accommodationAddress && (
-												<div className="pkv"><span className="pkv__k">Accommodation</span><span className="pkv__v">{dd.accommodationAddress}{dd.accommodationMoveInAt ? ` · from ${day(dd.accommodationMoveInAt)}` : ""}</span></div>
-											)}
-											{dd.emergencyContactName && (
-												<div className="pkv"><span className="pkv__k">Emergency contact</span><span className="pkv__v">{dd.emergencyContactName}{dd.emergencyContactRelation ? ` (${dd.emergencyContactRelation})` : ""}{dd.emergencyContactPhone ? ` · ${dd.emergencyContactPhone}` : ""}</span></div>
-											)}
-										</div>
-									</>
-								)}
 								<div className="between mt-3" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
-									<p className="muted" style={{ fontSize: "0.8rem" }}>Keep the confirmation code for check-in.</p>
+									<p className="muted" style={{ fontSize: "0.8rem" }}>
+										Keep the confirmation code for check-in.
+										{!feePaid && " Your e-ticket releases with your papers below once the service-fee instalment is settled."}
+									</p>
 									{trip?.status === "paid" && (
 										<Button variant="secondary" size="sm" onClick={() => downloadReceipt(trip, "Ticket invoice")}>
 											Download receipt
@@ -448,39 +413,36 @@ function TravelAssistanceInner() {
 								</div>
 							</div>
 						)}
-						{!showWaiting && !showInvoice && !showBooked && (
-							<p className="mono muted" style={{ fontSize: "0.75rem" }}>Choose how you'd like to fly above. This section fills in from there.</p>
-						)}
 					</section>
 
-					{/* 3 · the milestone. Locked until the flight is booked, then the release */}
+					{/* 2 · your papers — the service-fee instalment, then what it releases */}
 					<section className="psec">
 						<div className="psec__h">
-							<span className={`psec__no${feePaid ? " psec__no--done" : ""}`}>{feePaid ? "✓" : "3"}</span>
-							<span className="psec__title">Fee milestone</span>
+							<span className={`psec__no${docsReleased ? " psec__no--done" : ""}`}>{docsReleased ? "✓" : "2"}</span>
+							<span className="psec__title">Your papers</span>
 							<span className="psec__hint">
 								{feePaid
-									? `settled${application.agencySettledAt ? ` · ${day(application.agencySettledAt)}` : ""}`
+									? `released${application.agencySettledAt ? ` · fee settled ${day(application.agencySettledAt)}` : ""}`
 									: !milestoneUnlocked
 										? status === "on_hold"
 											? "on hold · unlocks when travel is settled"
 											: "unlocks once your flight is booked"
 										: isInstalment
-											? "pre-departure instalment · releases your documents"
-											: "balance · releases your documents"}
+											? "service fee · pre-departure instalment due"
+											: "service fee · balance due"}
 							</span>
 						</div>
 						{feePaid ? (
 							<p className="mono muted" style={{ fontSize: "0.75rem" }}>
-								SERVICE FEE MILESTONE PAID{application.agencySettledAt ? ` · ${(day(application.agencySettledAt) ?? "").toUpperCase()}` : ""}. YOUR DOCUMENTS ARE RELEASED BELOW.{postArrivalUsd ? ` ${ghs(postArrivalUsd).toUpperCase()} FOLLOWS AFTER ARRIVAL ON YOUR SCHEDULE.` : ""}
+								SERVICE FEE SETTLED{application.agencySettledAt ? ` · ${(day(application.agencySettledAt) ?? "").toUpperCase()}` : ""}. YOUR PAPERS ARE RELEASED BELOW.{postArrivalUsd ? ` ${ghs(postArrivalUsd).toUpperCase()} FOLLOWS AFTER ARRIVAL ON YOUR SCHEDULE.` : ""}
 							</p>
 						) : !milestoneUnlocked ? (
 							<div className="sharp-card">
 								<div className="between" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
 									<div>
-										<p style={{ fontWeight: 700 }}>Pre-departure milestone</p>
+										<p style={{ fontWeight: 700 }}>Service fee · pre-departure instalment</p>
 										<p className="mono muted" style={{ fontSize: "0.68rem", marginTop: "0.3rem" }}>
-											RELEASES YOUR ADMISSION LETTER · VISA DOCUMENTS · E-TICKET
+											SETTLING IT RELEASES YOUR ADMISSION LETTER · VISA DOCUMENTS · E-TICKET
 										</p>
 									</div>
 									{milestoneUsd ? (
@@ -492,17 +454,12 @@ function TravelAssistanceInner() {
 								<p className="muted" style={{ fontSize: "0.85rem", marginTop: "0.35rem" }}>
 									{milestoneLockReason}
 								</p>
-								<div className="mt-3">
-									<a className="btn btn--ghost" href="#your-flight">
-										Go to your flight
-									</a>
-								</div>
 							</div>
 						) : (
 							<div className="sharp-card sharp-card--key">
 								<div className="between" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
 									<div>
-										<p style={{ fontWeight: 700 }}>Pre-departure milestone</p>
+										<p style={{ fontWeight: 700 }}>Service fee · {isInstalment ? "pre-departure instalment" : "balance"}</p>
 										<p className="mono muted" style={{ fontSize: "0.68rem", marginTop: "0.3rem" }}>
 											{application.paymentPlanId
 												? `SERVICE FEE · ${isInstalment ? "INSTALMENT PLAN" : "FULL PAYMENT"} · AGREED AT PACKAGE SELECTION`
@@ -517,25 +474,17 @@ function TravelAssistanceInner() {
 								</div>
 								<p className="muted" style={{ fontSize: "0.85rem", marginTop: "0.35rem" }}>
 									{status === "declined"
-										? "You're booking your own flight. Due before your documents are released."
-										: `Your flight is booked. Due before your documents are released.${isInstalment ? " Any post-arrival remainder follows on your schedule." : ""}`}
+										? "You're booking your own flight. Settling it releases your admission letter, visa documents and papers."
+										: `Your flight is booked. Settling it releases your admission letter, visa documents and e-ticket.${isInstalment ? " Any post-arrival remainder follows on your schedule." : ""}`}
 								</p>
 								<div className="mt-3">
 									<Button to="/portal/payment-execution" variant="primary" arrow>
-										{application.paymentPlanId ? "Pay the fee milestone" : "Choose plan & pay"}
+										{application.paymentPlanId ? "Pay service fee" : "Choose plan & pay"}
 									</Button>
 								</div>
 							</div>
 						)}
-					</section>
-
-					{/* 4 · documents the milestone releases */}
-					<section className="psec">
-						<div className="psec__h">
-							<span className={`psec__no${docsReleased ? " psec__no--done" : ""}`}>{docsReleased ? "✓" : "4"}</span>
-							<span className="psec__title">Your documents</span>
-							<span className="psec__hint">filed by Century NIT{docsHeld > 0 ? ` · ${docsHeld} held` : docsReleased ? " · released" : ""}</span>
-						</div>
+						<p className="eyebrow mt-4">Filed by Century NIT{docsHeld > 0 ? ` · ${docsHeld} held` : docsReleased ? " · released" : ""}</p>
 						{docRows.length > 0 ? (
 							<OfficialDocuments rows={docRows} released={docsReleased} holdReason={documentHoldReasonFor(application)} hidePayCta />
 						) : (
@@ -545,48 +494,80 @@ function TravelAssistanceInner() {
 						)}
 					</section>
 
-					{/* 5 · the shared checklist */}
+					{/* 3 · before you fly — the shared checklist, then what happens on arrival */}
 					<section className="psec">
 						<div className="psec__h">
-							<span className={`psec__no${checklistDone ? " psec__no--done" : ""}`}>{checklistDone ? "✓" : "5"}</span>
+							<span className={`psec__no${checklistDone ? " psec__no--done" : ""}`}>{checklistDone ? "✓" : "3"}</span>
 							<span className="psec__title">Before you fly</span>
 							<span className="psec__hint">yours + your officer's · {closedTasks}/{totalTasks}</span>
 						</div>
 						<PreDepartureChecklist tasks={preDepartureTasks} onToggle={togglePreDepartureTask} locked={Boolean(application.completedAt)} />
-
-						{/* travel is settled. Close the file */}
-						{settled && (
-							<div className="sharp-card next-action mt-3">
-								<p className="eyebrow">Close the chapter</p>
-								<p className="display mt-2" style={{ fontSize: "1.25rem" }}>
-									{showBooked || canComplete ? "You're set to fly" : status === "declined" ? "Travel arranged independently" : "Travel on hold"}
-								</p>
-								<p className="muted mt-1">
-									{canComplete
-										? "Completing moves you to Chapter VI · post-arrival support. Your documents and receipts stay in your vault."
-										: !feePaid
-											? milestoneLockReason ?? "Settle your pre-departure fee milestone to finish."
-											: !checklistDone
-												? "Work through your pre-departure checklist to finish."
-												: "Travel assistance is paused. You can resume it above whenever you're ready."}
-								</p>
-								<div className="row mt-3">
-									{canComplete ? (
-										<Button variant="primary" onClick={() => void handleComplete()} arrow>
-											Complete my journey
-										</Button>
-									) : !feePaid && milestoneUnlocked ? (
-										<Button to="/portal/payment-execution" variant="ghost">
-											Pay the fee milestone
-										</Button>
-									) : (
-										<Button to="/portal/journey" variant="ghost">
-											See your journey
-										</Button>
+						{hasFacts && (
+							<>
+								<p className="eyebrow mt-4">On arrival · recorded by your officer</p>
+								<div className="mt-1">
+									{dd.reportBy && (
+										<div className="pkv"><span className="pkv__k">Report to your school by</span><span className="pkv__v">{day(dd.reportBy)}</span></div>
+									)}
+									{dd.orientationAt && (
+										<div className="pkv"><span className="pkv__k">Orientation</span><span className="pkv__v">{day(dd.orientationAt)}</span></div>
+									)}
+									{dd.briefingAt && (
+										<div className="pkv"><span className="pkv__k">Pre-departure briefing</span><span className="pkv__v">{when(dd.briefingAt)}</span></div>
+									)}
+									{dd.pickupBy && (
+										<div className="pkv"><span className="pkv__k">Airport pickup</span><span className="pkv__v">{dd.pickupBy}{dd.pickupNote ? ` · ${dd.pickupNote}` : ""}</span></div>
+									)}
+									{dd.accommodationAddress && (
+										<div className="pkv"><span className="pkv__k">Accommodation</span><span className="pkv__v">{dd.accommodationAddress}{dd.accommodationMoveInAt ? ` · from ${day(dd.accommodationMoveInAt)}` : ""}</span></div>
+									)}
+									{dd.emergencyContactName && (
+										<div className="pkv"><span className="pkv__k">Emergency contact</span><span className="pkv__v">{dd.emergencyContactName}{dd.emergencyContactRelation ? ` (${dd.emergencyContactRelation})` : ""}{dd.emergencyContactPhone ? ` · ${dd.emergencyContactPhone}` : ""}</span></div>
 									)}
 								</div>
-							</div>
+							</>
 						)}
+					</section>
+
+					{/* 4 · finish — always visible, spells out what's left */}
+					<section className="psec">
+						<div className="psec__h">
+							<span className={`psec__no${canComplete ? " psec__no--done" : ""}`}>{canComplete ? "✓" : "4"}</span>
+							<span className="psec__title">Finish</span>
+							<span className="psec__hint">{canComplete ? "ready to complete" : "the last step"}</span>
+						</div>
+						<div className="sharp-card next-action">
+							<p className="eyebrow">Close the chapter</p>
+							<p className="display mt-2" style={{ fontSize: "1.25rem" }}>
+								{canComplete ? "You're set to fly" : status === "declined" ? "Travel arranged independently" : status === "on_hold" ? "Travel on hold" : "Finish your pre-departure"}
+							</p>
+							<p className="muted mt-1">
+								{canComplete
+									? "Completing moves you to Chapter VI · post-arrival support. Your documents and receipts stay in your vault."
+									: !settled
+										? "The last step, once your travel is settled."
+										: !feePaid
+											? milestoneLockReason ?? "Settle the service-fee instalment in Your papers to finish."
+											: !checklistDone
+												? "Work through your pre-departure checklist above to finish."
+												: "Travel assistance is paused. You can resume it above whenever you're ready."}
+							</p>
+							<div className="row mt-3">
+								{canComplete ? (
+									<Button variant="primary" onClick={() => void handleComplete()} arrow>
+										Complete my journey
+									</Button>
+								) : !feePaid && milestoneUnlocked ? (
+									<Button to="/portal/payment-execution" variant="ghost">
+										Pay service fee
+									</Button>
+								) : (
+									<Button to="/portal/journey" variant="ghost">
+										See your journey
+									</Button>
+								)}
+							</div>
+						</div>
 					</section>
 				</div>
 
@@ -603,16 +584,10 @@ function TravelAssistanceInner() {
 					</div>
 
 					<div className="sharp-card">
-						<p className="eyebrow">Money · Chapter V</p>
+						<p className="eyebrow">What you owe</p>
 						<div style={{ marginTop: "0.4rem" }}>
-							<div className={`pkv${!feePaid && milestoneUnlocked ? " pkv--due" : ""}`}>
-								<span className="pkv__k">Fee milestone</span>
-								<span className={`pkv__v${!feePaid && !milestoneUnlocked ? " muted" : ""}`}>
-									{feePaid ? "settled ✓" : !milestoneUnlocked ? "after your flight" : milestoneUsd ? `${ghs(milestoneUsd)} due` : "due"}
-								</span>
-							</div>
 							<div className={`pkv${tripDue ? " pkv--due" : ""}`}>
-								<span className="pkv__k">Ticket</span>
+								<span className="pkv__k">Ticket · at cost</span>
 								<span className={`pkv__v${tripDue || trip?.status === "paid" ? "" : " muted"}`}>
 									{tripDue
 										? `${formatMoney(trip?.balanceCents ?? 0, "ghs")} due`
@@ -620,7 +595,15 @@ function TravelAssistanceInner() {
 											? `${formatMoney(trip.subtotalCents, "ghs")} paid ✓`
 											: trip?.status === "proforma"
 												? "being issued"
-												: "not yet raised"}
+												: status === "declined"
+													? "own booking"
+													: "not yet raised"}
+								</span>
+							</div>
+							<div className={`pkv${!feePaid && milestoneUnlocked ? " pkv--due" : ""}`}>
+								<span className="pkv__k">Service fee · pre-departure</span>
+								<span className={`pkv__v${!feePaid && !milestoneUnlocked ? " muted" : ""}`}>
+									{feePaid ? "settled ✓" : !milestoneUnlocked ? "after your flight" : milestoneUsd ? `${ghs(milestoneUsd)} due` : "due"}
 								</span>
 							</div>
 							<div className="pkv">

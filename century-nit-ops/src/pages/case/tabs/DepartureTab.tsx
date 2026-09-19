@@ -244,13 +244,13 @@ export function DepartureTab({
 				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }} className="mb-2">
 					<p className="eyebrow" style={{ margin: 0 }}>Papers before they fly</p>
 					<span className="text-xs mono muted">
-						{released ? (dd.releaseOverrideAt ? "released early" : "released") : `held until the ${milestone?.label ?? "pre-departure milestone"}`}
+						{released ? (dd.releaseOverrideAt ? "released early" : "released") : `held until the ${milestone?.label ? `service fee · ${milestone.label.toLowerCase()}` : "service-fee instalment"} is paid`}
 					</span>
 				</div>
 				{milestone ? (
 					<div className={`cn-paper-ms${milestone.paid ? " cn-paper-ms--done" : ""}`}>
 						<div>
-							<b>{milestone.label} · {fmtGhs(milestone.amountCents)}</b>
+							<b>Service fee · {milestone.label} · {fmtGhs(milestone.amountCents)}</b>
 							<small>
 								{milestone.invoiceNumber} · {milestone.paid ? `paid${milestone.paidAt ? ` ${fmtDate(milestone.paidAt)}` : ""} · released the papers` : `issued ${fmtDate(milestone.issuedAt) ?? "—"} · unpaid${milestone.ageDays != null ? ` · ${milestone.ageDays} day${milestone.ageDays === 1 ? "" : "s"}` : ""}`}
 							</small>

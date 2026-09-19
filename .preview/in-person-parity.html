@@ -688,6 +688,309 @@
   </div>
 </section>
 
+<!-- ══════════════════ PAYMENT GATE ══════════════════ -->
+<section class="sec">
+  <h2>+ The payment gate — actions below the invoice lock until it's paid</h2>
+  <p class="sub">What you described: inside each stage tab, the handler's raise-invoice point is a gate. Everything below it locks until the invoice is raised <i>and</i> the client has paid. The gate already half-exists — this makes it explicit and uniform.</p>
+
+  <div class="truth">
+    <div><span class="ok">already gated</span><b>Applications</b><code>feePaid = app.appFeePaid</code> disables every school stepper (<code>ApplicationsTab.tsx:342</code>) — but only as a greyed button with a tooltip. Invisible why.</div>
+    <div><span class="ok">already gated</span><b>Visa</b><code>visaStage === "locked"</code> hides the milestone actions until the fee is paid + consent — the note is there, the chain state isn't.</div>
+    <div><span class="ok">already gated</span><b>Departure</b>Paper release held until the milestone is paid; "Record booking" needs the ticket invoice paid (<code>TravelCard.tsx:277</code>).</div>
+    <div><span class="gap">the gap</span><b>No uniform gate</b>Each tab invented its own lock — a tooltip here, a hidden section there. Staff can't see <b>where in the chain</b> it's stuck: not raised? awaiting approval? waiting on the client's money?</div>
+  </div>
+
+  <h3 class="mt-4" style="font-size:.95rem">The pattern: one gate band, one locked region — Applications tab shown</h3>
+
+  <div class="compare">
+    <div>
+      <div class="variant-label"><span class="tag">before</span> today — a greyed button, no reason</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <div class="sharp-card">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <b style="font-size:.9rem">Application invoice</b>
+            <span class="pill">Issued</span>
+          </div>
+          <div class="pkv mt-2"><span class="pkv__k">INV-2026-0041 · 3 schools</span><span class="pkv__v">GH₵ 2,400</span></div>
+        </div>
+        <div class="sharp-card mt-3">
+          <p class="eyebrow" style="margin:0 0 .5rem">Schools</p>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;border-bottom:1px solid var(--border-light)">
+            <span style="font-size:.82rem">University of Leeds <span class="muted">· Preparing</span></span>
+            <button class="btn btn--sm btn--primary" disabled style="opacity:.4">Submit →</button>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem 0">
+            <span style="font-size:.82rem">KNUST <span class="muted">· Preparing</span></span>
+            <button class="btn btn--sm btn--primary" disabled style="opacity:.4">Submit →</button>
+          </div>
+          <p class="muted mt-2" style="font-size:.7rem">Why is Submit grey? Only a hover tooltip knows.</p>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="variant-label"><span class="tag tag--new">after</span> the gate is a visible band over a locked region</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <div class="sharp-card">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <b style="font-size:.9rem">Application invoice</b>
+            <span class="pill">Issued</span>
+          </div>
+          <div class="pkv mt-2"><span class="pkv__k">INV-2026-0041 · 3 schools</span><span class="pkv__v">GH₵ 2,400</span></div>
+        </div>
+
+        <!-- the gate band -->
+        <div style="margin-top:.9rem;border:1.5px solid var(--foreground);padding:.6rem .8rem;display:flex;align-items:center;gap:.7rem;background:var(--muted)">
+          <span style="font-size:1rem">🔒</span>
+          <div style="flex:1">
+            <p style="margin:0;font-size:.78rem;font-weight:700">Stage work locked — opens itself the moment the client pays</p>
+            <p class="mono" style="margin:.15rem 0 0;font-size:.6rem;letter-spacing:.06em">
+              <span class="muted">RAISED ✓ → APPROVED ✓ → ISSUED ✓ →</span> <b>AWAITING PAYMENT · AUTO</b>
+            </p>
+          </div>
+          <span class="muted" style="font-size:.62rem;white-space:nowrap">paid offline? <a href="#" onclick="return false" style="text-decoration:underline">record it →</a></span>
+        </div>
+
+        <!-- locked region -->
+        <div class="sharp-card" style="margin-top:0;border-top:0;opacity:.45;pointer-events:none">
+          <p class="eyebrow" style="margin:0 0 .5rem">Schools</p>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;border-bottom:1px solid var(--border-light)">
+            <span style="font-size:.82rem">University of Leeds <span class="muted">· Preparing</span></span>
+            <button class="btn btn--sm btn--primary" disabled>Submit →</button>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem 0">
+            <span style="font-size:.82rem">KNUST <span class="muted">· Preparing</span></span>
+            <button class="btn btn--sm btn--primary" disabled>Submit →</button>
+          </div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">The rows stay <b>visible but inert</b> — staff see what's queued without being able to fire it. Hover/focus still reads the rows; actions don't run.</li>
+        <li data-n="2">The chain chip shows <b>exactly where it's stuck</b> — proforma says "AWAITING APPROVAL" (approver sees the Approve button right there), issued says "AWAITING PAYMENT".</li>
+        <li data-n="3">Payment is <b>automatic</b> — the client pays in the portal, the gateway webhook settles the invoice, and the <code>invoice.paid</code> SSE event flips the gate open while the tab is on screen. No staff action. The "record it →" link is a fallback for cash/bank payments only.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 class="mt-4" style="font-size:.95rem">Visa tab — same band, the milestone rail below it</h3>
+  <div class="frame" style="padding:1.1rem 1.25rem;max-width:44rem">
+    <div class="sharp-card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <b style="font-size:.9rem">Visa costs — paid on the client's behalf</b>
+        <span class="pill">Proforma</span>
+      </div>
+      <p class="muted mt-2" style="font-size:.78rem">Awaiting approval — the client cannot see or pay it until it is issued.</p>
+      <div class="pkv mt-2"><span class="pkv__k">Embassy fee + VFS + courier</span><span class="pkv__v">GH₵ 6,800</span></div>
+    </div>
+
+    <div style="margin-top:.9rem;border:1.5px solid var(--foreground);padding:.6rem .8rem;display:flex;align-items:center;gap:.7rem;background:var(--muted)">
+      <span style="font-size:1rem">🔒</span>
+      <div style="flex:1">
+        <p style="margin:0;font-size:.78rem;font-weight:700">Visa work locked — the invoice hasn't been approved yet</p>
+        <p class="mono" style="margin:.15rem 0 0;font-size:.6rem;letter-spacing:.06em">
+          <span class="muted">RAISED ✓ →</span> <b>AWAITING APPROVAL</b> <span class="muted">→ ISSUED → PAID</span>
+        </p>
+      </div>
+      <button class="btn btn--sm btn--primary">Approve &amp; issue</button>
+    </div>
+
+    <div class="sharp-card" style="margin-top:0;border-top:0;opacity:.45;pointer-events:none">
+      <p class="eyebrow" style="margin:0 0 .5rem">Visa application</p>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <span class="pill">Lodge</span><span class="pill">Biometrics</span><span class="pill">Decision</span><span class="pill">Passport collected</span>
+      </div>
+      <p class="muted mt-2" style="font-size:.7rem">Officer notes and document checks still readable; every milestone action inert.</p>
+    </div>
+  </div>
+  <ul class="callouts">
+    <li data-n="1">Visa already hides milestones while <code>visaStage === "locked"</code> — the gate keeps them <b>visible</b> instead, and surfaces the real blocker: the proforma is stuck at approval, not "opens once the visa fee is paid".</li>
+    <li data-n="2">When approval lands → issued → the band flips to "AWAITING PAYMENT · AUTO"; client pays → the rail unlocks live.</li>
+  </ul>
+
+  <h3 class="mt-4" style="font-size:.95rem">Departure tab — ticket invoice gates the booking; milestone gates the papers</h3>
+  <div class="frame" style="padding:1.1rem 1.25rem;max-width:44rem">
+    <div class="sharp-card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <b style="font-size:.9rem">Ticket invoice</b>
+        <span class="pill">Issued</span>
+      </div>
+      <div class="pkv mt-2"><span class="pkv__k">ACC → LHR · one-way</span><span class="pkv__v">GH₵ 9,200</span></div>
+    </div>
+
+    <div style="margin-top:.9rem;border:1.5px solid var(--foreground);padding:.6rem .8rem;display:flex;align-items:center;gap:.7rem;background:var(--muted)">
+      <span style="font-size:1rem">🔒</span>
+      <div style="flex:1">
+        <p style="margin:0;font-size:.78rem;font-weight:700">Booking locked — opens itself the moment the ticket is paid</p>
+        <p class="mono" style="margin:.15rem 0 0;font-size:.6rem;letter-spacing:.06em">
+          <span class="muted">DECIDED ✓ → QUOTED ✓ → ISSUED ✓ →</span> <b>AWAITING PAYMENT · AUTO</b> <span class="muted">→ BOOKED</span>
+        </p>
+      </div>
+      <span class="muted" style="font-size:.62rem;white-space:nowrap">paid offline? <a href="#" onclick="return false" style="text-decoration:underline">record it →</a></span>
+    </div>
+
+    <div class="sharp-card" style="margin-top:0;border-top:0;opacity:.45;pointer-events:none">
+      <p class="eyebrow" style="margin:0 0 .5rem">Flight</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;border-bottom:1px solid var(--border-light)">
+        <span style="font-size:.82rem">Quote KQ101 · 22 Nov</span>
+        <button class="btn btn--sm btn--primary" disabled>Record booking →</button>
+      </div>
+    </div>
+
+    <div class="sharp-card mt-3">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <p class="eyebrow" style="margin:0">Papers before they fly</p>
+        <span class="text-xs mono muted" style="font-size:.62rem">held until the pre-departure milestone</span>
+      </div>
+      <div style="margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap;opacity:.45;pointer-events:none">
+        <span class="pill">Admission letter</span><span class="pill">Visa documents</span><span class="pill">E-ticket</span>
+      </div>
+    </div>
+  </div>
+  <ul class="callouts">
+    <li data-n="1">Departure has <b>two locks</b>: the ticket invoice gates "Record booking" (auto-opens on payment), and the service-fee milestone holds the papers — that one's already milestone-aware, the gate band just makes it readable.</li>
+    <li data-n="2">"Record payment" stays demoted to a link — the client pays the ticket in the portal, the webhook settles it, the booking unlocks.</li>
+  </ul>
+
+  <div class="truth mt-4">
+    <div><span class="ok">shape</span><b>One component</b><code>&lt;PaymentGate invoice={stageInvoice} onRecordPayment&gt;</code> wraps the actions region of each tab. Reads invoice status → renders nothing (no invoice yet → the Raise card above stays enabled, region locks), the chain, or unlocks.</div>
+    <div><span class="ok">per stage</span><b>Same wiring</b>Applications → <code>appInvoice</code> + <code>appFeePaid</code>. Visa → <code>visaInvoice</code> + stage already locked. Departure → ticket invoice + milestone paid. Enrolment → agency invoice + deposit milestone.</div>
+    <div><span class="ok">server side</span><b>Keep API enforcement</b>UI lock is convenience, not security — <code>submitApplication</code>, visa stage moves and booking should keep (or gain) a paid-check server-side so a stale tab can't act on an unpaid invoice.</div>
+    <div><span class="gap">ties to</span><b>Handler-seat fix</b>Only helps once <code>canWork</code> sees stage seats — the seated consultant must be able to raise the invoice in the first place.</div>
+  </div>
+</section>
+
+<!-- ══════════════════ DEPARTURE CONFUSION ══════════════════ -->
+<section class="sec">
+  <h2>+ Departure — why it reads as muddled, on both sides</h2>
+  <p class="sub">The chapter carries <b>two different moneys</b> and calls them almost the same thing. Everything else flows from that.</p>
+
+  <div class="truth">
+    <div><span class="gap">the core flaw</span><b>Two moneys, one chapter, near-identical names</b>The client can owe <b>the ticket</b> (at cost, paid on the Departure page) and <b>the service-fee milestone</b> — line 2 of the <i>agency</i> invoice, 30% instalment or the full-plan balance, paid on a <i>different</i> page (Payment Execution). Portal step 3 literally just says "Milestone". Ops calls it "the pre-departure milestone". Neither says <b>service fee</b>.</div>
+    <div><span class="gap">the hostage moment</span><b>You pay for a ticket you can't have</b>Client pays the ticket → officer books it → but the e-ticket is <b>held with the papers</b> until the service-fee milestone is paid. Deliberate leverage — but the copy says "releases your admission letter and visa documents" and buries that the paid ticket is in the hold too.</div>
+    <div><span class="gap">ops duplication</span><b>The chain is drawn twice</b>TravelCard's 5-step rail already <i>is</i> the chain (Decision→Quote→Issued→Paid→Booked), and "Record booking" was already status-gated. The new gate band repeats the same chain right above it — noise, not clarity. My addition made this tab worse, not better.</div>
+    <div><span class="gap">naming soup</span><b>Five names for one chapter</b><code>travel_assistance</code> (stage id) · "Departure" (tab) · "Chapter V · Departure" (portal) · <code>/portal/pre-departure</code> (route) · "Papers before they fly" (ops). Plus <code>payment_execution</code> — a separate stage id that renders on the same tab.</div>
+    <div><span class="ok">what works</span><b>Keep these</b>Portal's "You are here" band + 4-step strip — one next action. TravelCard's rail facts (PNR, quoted date, issued-by). One live invoice per type. The three-way decision with hold/resume. Papers-release as the leverage point — it's correct, just under-explained.</div>
+  </div>
+
+  <h3 class="mt-4" style="font-size:.95rem">Fix 1 — name the money what it is</h3>
+  <div class="compare">
+    <div>
+      <div class="variant-label"><span class="tag">before</span> two "pay" prompts, no distinction</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <span class="pill">Ticket · GH₵ 9,200 due</span>
+          <span class="pill">Milestone · GH₵ 4,050 due</span>
+        </div>
+        <p class="muted mt-2" style="font-size:.75rem">Which is which? Both say pay. One's the flight, one's the service fee — nothing tells you.</p>
+      </div>
+    </div>
+    <div>
+      <div class="variant-label"><span class="tag tag--new">after</span> every money item says what it buys</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <span class="pill pill--ok">Ticket · at cost · GH₵ 9,200</span>
+          <span class="pill">Service fee · pre-departure instalment · GH₵ 4,050</span>
+        </div>
+        <p class="muted mt-2" style="font-size:.75rem">"Ticket (at cost)" vs "Service fee — pre-departure instalment" — never a bare "milestone" or "pre-departure" again. Same words in ops and portal.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="mt-4" style="font-size:.95rem">Fix 2 — say the hold rule where the money is</h3>
+  <div class="frame" style="padding:1.1rem 1.25rem;max-width:44rem">
+    <div class="sharp-card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <b style="font-size:.9rem">Ticket invoice</b>
+        <span class="pill">Issued</span>
+      </div>
+      <div class="pkv mt-2"><span class="pkv__k">ACC → LHR · one-way</span><span class="pkv__v">GH₵ 9,200</span></div>
+      <p class="muted mt-2" style="font-size:.78rem;border-left:2px solid var(--foreground);padding-left:.6rem">
+        Paid → we book the seat. <b>Your e-ticket releases with your admission letter once the service-fee instalment is settled</b> — it travels with your documents, not alone.
+      </p>
+    </div>
+    <p class="muted mt-2" style="font-size:.72rem">The hold is stated on the invoice the client is about to pay — before the money leaves, not after the surprise.</p>
+  </div>
+
+  <h3 class="mt-4" style="font-size:.95rem">Fix 3 — ops: one chain, not two</h3>
+  <div class="compare">
+    <div>
+      <div class="variant-label"><span class="tag">now</span> band + rail say the same thing</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <div style="border:1.5px solid var(--foreground);padding:.5rem .7rem;background:var(--muted);font-size:.7rem">
+          🔒 Booking locked · <span class="mono" style="font-size:.58rem">DECIDED ✓ → QUOTED ✓ → ISSUED ✓ → PAID · AWAITING → BOOKED</span>
+        </div>
+        <div style="opacity:.45;margin-top:.4rem;font-size:.72rem">
+          1 Decision ✓ · 2 Quote &amp; invoice ✓ · 3 Approved &amp; issued ✓ · 4 Paid ○ · 5 Booked ○
+        </div>
+        <p class="muted mt-2" style="font-size:.7rem">Same chain, twice, adjacent.</p>
+      </div>
+    </div>
+    <div>
+      <div class="variant-label"><span class="tag tag--new">after</span> the rail stays the single chain; the band only locks</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <div style="border:1.5px solid var(--foreground);padding:.5rem .7rem;background:var(--muted);font-size:.7rem">
+          🔒 Booking locked — opens itself the moment the ticket is paid
+        </div>
+        <div style="opacity:.45;margin-top:.4rem;font-size:.72rem">
+          1 Decision ✓ · 2 Quote &amp; invoice ✓ · 3 Approved &amp; issued ✓ · 4 Paid ○ · 5 Booked ○
+        </div>
+        <p class="muted mt-2" style="font-size:.7rem">Band = the lock reason. Rail = the chain. Each does one job.</p>
+      </div>
+    </div>
+  </div>
+  <ul class="callouts">
+    <li data-n="1">Implementation: <code>PaymentGate</code> gains a <code>hideChain</code> flag — Departure passes it because its rail is already the chain. Applications/Visa keep the chain (they had none).</li>
+    <li data-n="2">Rename pass: portal step "Milestone" → "Service fee"; ops "the pre-departure milestone" → "service-fee instalment"; hold copy says <i>e-ticket + admission letter + visa documents</i> explicitly.</li>
+    <li data-n="3">Optional: one "What you owe" block at the top of Departure listing both items — ticket on this page, service fee linking to Payment Execution — so the two moneys are introduced together instead of discovered separately.</li>
+  </ul>
+
+  <h3 class="mt-4" style="font-size:.95rem">The portal arrangement itself — what makes it confusing</h3>
+  <div class="truth">
+    <div><span class="gap">order vs dependency</span><b>§3 links backwards</b>Sections run 1 decision → 2 flight → 3 fee milestone → 4 documents → 5 checklist. But when §3 is locked its own CTA is "Go to your flight" — a link <b>back up</b> the page. And §4 "documents" is just the readout of what §3 buys: two sections for one action.</div>
+    <div><span class="gap">strip ≠ sections</span><b>The map doesn't match the terrain</b>The top strip has 4 steps (decision / ticket / milestone / checklist); the body has 5 sections in different words ("Your flight" = "Ticket", "documents" has no step at all).</div>
+    <div><span class="gap">same money twice</span><b>§3's card ≈ the rail's card</b>Section 3 shows milestone amount + what it releases; the right rail's "Money · Chapter V" shows the same amount + ticket + plan. Two near-identical money readouts on one screen.</div>
+    <div><span class="gap">kitchen-sink card</span><b>"Your flight" carries the arrival facts</b>Report-by, orientation, briefing, airport pickup, accommodation, emergency contact — all post-landing info — sit inside the booked-flight card, far from the checklist they belong to.</div>
+    <div><span class="gap">dead end</span><b>Own-booking leaves §2 empty</b>Choose "I'll book myself" and the flight section renders a muted placeholder forever — a numbered section that never fills.</div>
+    <div><span class="gap">buried finish</span><b>"Close the chapter" hides inside §5</b>Completing needs 3 conditions (travel settled + fee paid + checklist done) but the finish card is nested inside the checklist section as an afterthought.</div>
+  </div>
+
+  <h3 class="mt-4" style="font-size:.95rem">Proposed arrangement — 4 sections that follow the dependency</h3>
+  <div class="compare">
+    <div>
+      <div class="variant-label"><span class="tag">before</span> current layout</div>
+      <div class="frame" style="padding:1rem 1.25rem;font-size:.78rem;line-height:2">
+        <p style="margin:0"><b>Header</b> · "You are here" band · 4-step strip</p>
+        <p style="margin:0">§1 How you're flying <span class="muted">(decision)</span></p>
+        <p style="margin:0">§2 Your flight <span class="muted">(waiting/invoice/booked + arrival facts)</span></p>
+        <p style="margin:0">§3 Fee milestone <span class="muted">(locked → "go back to §2")</span></p>
+        <p style="margin:0">§4 Your documents <span class="muted">(readout of §3)</span></p>
+        <p style="margin:0">§5 Before you fly <span class="muted">(checklist + hidden close card)</span></p>
+        <p class="muted" style="margin:.5rem 0 0">Rail: countdown · Money · officer · after landing</p>
+      </div>
+      <ul class="callouts">
+        <li>5 numbered sections for a 4-step story; money appears in §3 <i>and</i> the rail.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="variant-label"><span class="tag tag--new">after</span> each section answers one question</div>
+      <div class="frame" style="padding:1rem 1.25rem;font-size:.78rem;line-height:2">
+        <p style="margin:0"><b>Header</b> · "You are here" band · strip = the same 4 sections</p>
+        <p style="margin:0">§1 <b>Your flight</b> <span class="muted">(decision inline if unmade → quote → invoice → booked)</span></p>
+        <p style="margin:0">§2 <b>Your papers</b> <span class="muted">(service-fee card with the hold list inside: "pays your fee → releases letter · visa docs · e-ticket")</span></p>
+        <p style="margin:0">§3 <b>Before you fly</b> <span class="muted">(checklist + the arrival facts moved here — briefing, pickup, accommodation)</span></p>
+        <p style="margin:0">§4 <b>Finish</b> <span class="muted">(close card always visible: shows which of the 3 conditions is left)</span></p>
+        <p class="muted" style="margin:.5rem 0 0">Rail: countdown · "What you owe" (ticket → service fee, in pay order) · officer · after landing</p>
+      </div>
+      <ul class="callouts">
+        <li>Milestone + documents merge into one "papers" section — the pay action and what it buys sit in one card.</li>
+        <li>Own-booking: §1 collapses to "booking your own" and §2 opens immediately — no dead section.</li>
+        <li>Arrival facts live with the checklist where they're actionable, not inside the flight card.</li>
+        <li>Finish is always visible and enumerates what's left — no hunting.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
 </div>
 </body>
 </html>

@@ -26,6 +26,8 @@ export function PaymentGate({
 	locked,
 	/** Chain position override for custom step lists (Departure's 5 steps). */
 	stepIndex,
+	/** Hide the chain line — the region below already draws it (Departure rail). */
+	hideChain = false,
 	/** Approvers get the button right on the band when it's a proforma. */
 	onApprove,
 	/** Manual fallback for offline payments; omit to hide the link. */
@@ -39,6 +41,7 @@ export function PaymentGate({
 	paid?: boolean;
 	locked?: boolean;
 	stepIndex?: number;
+	hideChain?: boolean;
 	onApprove?: (invoice: ApiInvoice) => void;
 	onRecordPayment?: () => void;
 	children: ReactNode;
@@ -82,7 +85,7 @@ export function PaymentGate({
 				<span className="payment-gate__lock" aria-hidden>🔒</span>
 				<div className="payment-gate__body">
 					<p className="payment-gate__headline">{headline}</p>
-					{chain}
+					{!hideChain && chain}
 				</div>
 				{invoice?.status === "proforma" && onApprove && (
 					<button type="button" className="btn btn--sm btn--primary" onClick={() => onApprove(invoice)}>

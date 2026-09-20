@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "../../components/ui/Button";
 import { Field, Input, Select, Textarea } from "../../components/ui/Field";
 import {
@@ -56,6 +56,7 @@ import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import { prepareDocumentForUpload } from "../../lib/upload";
 import { downloadReceipt, openInvoiceDocument } from "../../lib/receipt";
 import { useConsultationInvoice } from "../../hooks/useConsultationInvoice";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 /* ========== Profile ========== */
 
@@ -1462,6 +1463,13 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 	if (agencyDueNow)
 		dueBits.push(a.agencyTotal > 0 && !depositPaid ? "deposit" : "service fee");
 	const dueInvoiceLabel = dueBits.length ? dueBits.join(" · ") : null;
+	const nextDueInvoice = appOutstanding
+		? appInvoiceType
+		: visaOutstanding
+			? visaInvoiceType
+			: agencyDueNow
+				? agencyInvoiceType
+				: null;
 	const nextPayPath = appOutstanding
 		? "/portal/application"
 		: visaOutstanding
@@ -1469,6 +1477,18 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 			: a.agencyTotal > 0 && !depositPaid
 				? "/portal/package"
 				: "/portal/payment-execution";
+
+	const [showAllReceipts, setShowAllReceipts] = useState(false);
+	const isMobile = useMediaQuery("(max-width: 959.98px)");
+	const pdueRef = useRef<HTMLDivElement | null>(null);
+	const [pdueVisible, setPdueVisible] = useState(true);
+	useEffect(() => {
+		const el = pdueRef.current;
+		if (!el || typeof IntersectionObserver === "undefined") return;
+		const obs = new IntersectionObserver(([e]) => setPdueVisible(e.isIntersecting));
+		obs.observe(el);
+		return () => obs.disconnect();
+	}, [planView]);
 
 	// Every recorded payment across all invoices, newest first. Shown as the
 	// "Payment receipts" section so the applicant can see what they've paid.
@@ -1520,300 +1540,270 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 
 			{!planView ? (
 				<>
-				{/* the position. Paid / due now / still to come */}
-				<div className="pposition mt-4">
+				{/* the position. Due now carries the action; paid / to-come is a hairline */}
+				<div ref={pdueRef} className={`pdue mt-4${dueNow === 0 ? " pdue--clear" : ""}`}>
 					<div>
-						<p className="eyebrow">Paid to date</p>
-						<p className="pposition__num">
-							<Money usd={totalPaid} />
-						</p>
-					</div>
-					<div className="pposition__due">
 						<p className="eyebrow">Due now</p>
-						<p className="pposition__num">
+						<p className="pdue__amt">
 							<Money usd={dueNow} />
 						</p>
-						{dueInvoiceLabel ? (
-							<p className="mono" style={{ fontSize: "0.65rem", opacity: 0.7, marginTop: "0.2rem" }}>
-								{dueInvoiceLabel}
-							</p>
-						) : null}
-					</div>
-					<div>
-						<p className="eyebrow">Still to come</p>
-						<p className="pposition__num">
-							<Money usd={stillToCome} />
-						</p>
-						<p className="mono muted" style={{ fontSize: "0.65rem", opacity: 0.7, marginTop: "0.2rem" }}>
-							later chapters, in their order
+						<p className="pdue__for">
+							{dueNow > 0
+								? `${dueInvoiceLabel ?? ""}${nextDueInvoice?.dueAt ? ` · due ${new Date(nextDueInvoice.dueAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : ""}`
+								: "Nothing due right now. The next fee arrives with its chapter."}
 						</p>
 					</div>
+					{dueNow > 0 ? (
+						<Button to={nextPayPath} variant="primary" arrow>
+							Pay{dueInvoiceLabel ? ` ${dueInvoiceLabel}` : ""} →
+						</Button>
+					) : null}
+				</div>
+				<div className="pdue2">
+					<div>Paid to date <b><MoneyInline usd={totalPaid} /></b></div>
+					<div>Still to come <b><MoneyInline usd={stillToCome} /></b></div>
 				</div>
 
 				<div className="psplit">
 					<div>
 						{/* the ledger. Every fee as a chapter-numbered row */}
 						<section>
-							<h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.75rem" }}>The ledger</h2>
-							<table className="ptable">
-								<thead>
-									<tr>
-										<th></th>
-										<th>Fee</th>
-										<th>Covers</th>
-										<th>Due</th>
-										<th>Amount</th>
-										<th>Status</th>
-										<th></th>
-									</tr>
-								</thead>
-								<tbody>
-									<tr className={!consultationPaid ? "ptable__now" : undefined}>
-										<td className="ptable__mark">I</td>
-										<td>
-											Consultation fee
-											{consultInvoiceType ? (
-												<span className="ptable__sub">{consultInvoiceType.invoiceNumber}</span>
-											) : null}
-										</td>
-										<td>Your session &amp; assessment</td>
-										<td>At booking</td>
-										<td className="ptable__amt">
-											<Money usd={usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents)} />
-										</td>
-										<td>
-											<span className={`portal-pill${consultationPaid ? " portal-pill--solid" : ""}`}>
-												{consultationPaid ? "Paid" : "Due"}
-											</span>
-										</td>
-										<td>
-											{!consultationPaid ? (
-												<>
-													<Button to="/portal/consultation" size="sm" variant="primary">
-														Pay →
-													</Button>
-													{consultInvoiceType ? <DocLinks invoice={consultInvoiceType} /> : null}
-												</>
-											) : consultInvoiceType ? (
-												<DocLinks invoice={consultInvoiceType} />
-											) : null}
-										</td>
-									</tr>
-									<tr className={a.agencyTotal > 0 && !depositPaid ? "ptable__now" : undefined}>
-										<td className="ptable__mark">II</td>
-										<td>
-											Deposit · 10%
-											{agencyInvoiceType ? (
-												<span className="ptable__sub">{agencyInvoiceType.invoiceNumber}</span>
-											) : null}
-										</td>
-										<td>Enrolment. Assigns your consultant</td>
-										<td>At enrolment</td>
-										<td className="ptable__amt">
-											{a.agencyTotal > 0 ? <Money usd={depositAmt} /> : "N/A"}
-										</td>
-										<td>
-											<span
-												className={`portal-pill${depositPaid ? " portal-pill--solid" : a.agencyTotal > 0 ? "" : " portal-pill--hollow"}`}
-											>
-												{depositPaid ? "Paid" : a.agencyTotal > 0 ? "Due" : "Not yet"}
-											</span>
-										</td>
-										<td>
-											{a.agencyTotal > 0 && !depositPaid ? (
-												<>
-													<Button to="/portal/package" size="sm" variant="primary">
-														Pay →
-													</Button>
-													{agencyInvoiceType ? <DocLinks invoice={agencyInvoiceType} /> : null}
-												</>
-											) : depositPaid && agencyInvoiceType ? (
-												<DocLinks invoice={agencyInvoiceType} />
-											) : null}
-										</td>
-									</tr>
-									<tr className={appOutstanding > 0 ? "ptable__now" : undefined}>
-										<td className="ptable__mark">III</td>
-										<td>
-											Application fee
-											{schoolApplications.length > 0 ? (
-												<span className="ptable__sub">
-													{schoolApplications.length} school
-													{schoolApplications.length === 1 ? "" : "s"}
-												</span>
-											) : null}
-											{appInvoiceType ? (
-												<span className="ptable__sub">{appInvoiceType.invoiceNumber}</span>
-											) : null}
-										</td>
-										<td>Submissions to your selected schools</td>
-										<td>{appPaid ? "N/A" : appOutstanding > 0 ? "Now" : "After school selection"}</td>
-										<td className="ptable__amt">
-											{appInvoiceAmount > 0 ? <Money usd={appInvoiceAmount} /> : "N/A"}
-										</td>
-										<td>
-											<span
-												className={`portal-pill${appPaid ? " portal-pill--solid" : appOutstanding > 0 ? "" : " portal-pill--hollow"}`}
-											>
-												{appPaid ? "Paid" : appOutstanding > 0 ? "Due" : "Not yet"}
-											</span>
-										</td>
-										<td>
-											{appOutstanding > 0 ? (
-												<>
-													<Button to="/portal/application" size="sm" variant="primary">
-														Pay →
-													</Button>
-													{appInvoiceType ? <DocLinks invoice={appInvoiceType} /> : null}
-												</>
-											) : appPaid && appInvoiceType ? (
-												<DocLinks invoice={appInvoiceType} />
-											) : null}
-										</td>
-									</tr>
-									<tr className={visaOutstanding > 0 ? "ptable__now" : undefined}>
-										<td className="ptable__mark">IV</td>
-										<td>
-											Visa fee
-											<span className="ptable__sub">processing + biometrics handling</span>
-											{visaInvoiceType ? (
-												<span className="ptable__sub">{visaInvoiceType.invoiceNumber}</span>
-											) : null}
-										</td>
-										<td>Your visa file</td>
-										<td>When a school admits you</td>
-										<td className="ptable__amt">
-											{visaInvoiceAmount > 0 ? <Money usd={visaInvoiceAmount} /> : "N/A"}
-										</td>
-										<td>
-											<span
-												className={`portal-pill${visaPaid ? " portal-pill--solid" : visaOutstanding > 0 ? "" : " portal-pill--hollow"}`}
-											>
-												{visaPaid ? "Paid" : visaOutstanding > 0 ? "Due" : "Not yet"}
-											</span>
-										</td>
-										<td>
-											{visaOutstanding > 0 ? (
-												<>
-													<Button to="/portal/visa" size="sm" variant="primary">
-														Pay →
-													</Button>
-													{visaInvoiceType ? <DocLinks invoice={visaInvoiceType} /> : null}
-												</>
-											) : visaPaid && visaInvoiceType ? (
-												<DocLinks invoice={visaInvoiceType} />
-											) : null}
-										</td>
-									</tr>
-									<tr
-										className={
-											depositPaid && plan && !settled && (a.paymentPlanId === "full" || a.agencyStageIndex === 0)
-												? "ptable__now"
-												: undefined
-										}
-									>
-										<td className="ptable__mark">V</td>
-										<td>
+							<div className="psec"><span className="psec__title">The ledger</span></div>
+							<div className="pledger">
+								<div className={`pledger__row${!consultationPaid ? " pledger__row--due" : " pledger__row--settled"}`}>
+									<span className="pledger__mark">I</span>
+									<div className="pledger__body">
+										<p className="pledger__name">Consultation fee</p>
+										<p className="pledger__sub">
+											{consultInvoiceType ? `${consultInvoiceType.invoiceNumber} · ` : ""}your session &amp; assessment · at booking
+										</p>
+									</div>
+									<div className="pledger__amt">
+										<Money usd={usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents)} />
+									</div>
+									<span className="pledger__status">
+										<span className={`portal-pill${consultationPaid ? " portal-pill--solid" : ""}`}>
+											{consultationPaid ? "Paid" : "Due"}
+										</span>
+									</span>
+									<div className="pledger__acts">
+										{!consultationPaid ? (
+											<>
+												<Button to="/portal/consultation" size="sm" variant="primary">
+													Pay →
+												</Button>
+												{consultInvoiceType ? <DocLinks invoice={consultInvoiceType} /> : null}
+											</>
+										) : consultInvoiceType ? (
+											<DocLinks invoice={consultInvoiceType} />
+										) : null}
+									</div>
+								</div>
+								<div className={`pledger__row${a.agencyTotal > 0 && !depositPaid ? " pledger__row--due" : depositPaid ? " pledger__row--settled" : ""}`}>
+									<span className="pledger__mark">II</span>
+									<div className="pledger__body">
+										<p className="pledger__name">Deposit · 10%</p>
+										<p className="pledger__sub">
+											{agencyInvoiceType ? `${agencyInvoiceType.invoiceNumber} · ` : ""}enrolment — assigns your consultant · at enrolment
+										</p>
+									</div>
+									<div className="pledger__amt">
+										{a.agencyTotal > 0 ? <Money usd={depositAmt} /> : "N/A"}
+									</div>
+									<span className="pledger__status">
+										<span
+											className={`portal-pill${depositPaid ? " portal-pill--solid" : a.agencyTotal > 0 ? "" : " portal-pill--hollow"}`}
+										>
+											{depositPaid ? "Paid" : a.agencyTotal > 0 ? "Due" : "Not yet"}
+										</span>
+									</span>
+									<div className="pledger__acts">
+										{a.agencyTotal > 0 && !depositPaid ? (
+											<>
+												<Button to="/portal/package" size="sm" variant="primary">
+													Pay →
+												</Button>
+												{agencyInvoiceType ? <DocLinks invoice={agencyInvoiceType} /> : null}
+											</>
+										) : depositPaid && agencyInvoiceType ? (
+											<DocLinks invoice={agencyInvoiceType} />
+										) : null}
+									</div>
+								</div>
+								<div className={`pledger__row${appOutstanding > 0 ? " pledger__row--due" : appPaid ? " pledger__row--settled" : ""}`}>
+									<span className="pledger__mark">III</span>
+									<div className="pledger__body">
+										<p className="pledger__name">Application fee</p>
+										<p className="pledger__sub">
+											{appInvoiceType ? `${appInvoiceType.invoiceNumber} · ` : ""}
+											{schoolApplications.length > 0 ? `${schoolApplications.length} school${schoolApplications.length === 1 ? "" : "s"} · ` : ""}
+											submissions to your selected schools · {appPaid ? "paid" : appOutstanding > 0 ? "now" : "after school selection"}
+										</p>
+									</div>
+									<div className="pledger__amt">
+										{appInvoiceAmount > 0 ? <Money usd={appInvoiceAmount} /> : "N/A"}
+									</div>
+									<span className="pledger__status">
+										<span
+											className={`portal-pill${appPaid ? " portal-pill--solid" : appOutstanding > 0 ? "" : " portal-pill--hollow"}`}
+										>
+											{appPaid ? "Paid" : appOutstanding > 0 ? "Due" : "Not yet"}
+										</span>
+									</span>
+									<div className="pledger__acts">
+										{appOutstanding > 0 ? (
+											<>
+												<Button to="/portal/application" size="sm" variant="primary">
+													Pay →
+												</Button>
+												{appInvoiceType ? <DocLinks invoice={appInvoiceType} /> : null}
+											</>
+										) : appPaid && appInvoiceType ? (
+											<DocLinks invoice={appInvoiceType} />
+										) : null}
+									</div>
+								</div>
+								<div className={`pledger__row${visaOutstanding > 0 ? " pledger__row--due" : visaPaid ? " pledger__row--settled" : ""}`}>
+									<span className="pledger__mark">IV</span>
+									<div className="pledger__body">
+										<p className="pledger__name">Visa fee</p>
+										<p className="pledger__sub">
+											{visaInvoiceType ? `${visaInvoiceType.invoiceNumber} · ` : ""}processing + biometrics handling · your visa file · when a school admits you
+										</p>
+									</div>
+									<div className="pledger__amt">
+										{visaInvoiceAmount > 0 ? <Money usd={visaInvoiceAmount} /> : "N/A"}
+									</div>
+									<span className="pledger__status">
+										<span
+											className={`portal-pill${visaPaid ? " portal-pill--solid" : visaOutstanding > 0 ? "" : " portal-pill--hollow"}`}
+										>
+											{visaPaid ? "Paid" : visaOutstanding > 0 ? "Due" : "Not yet"}
+										</span>
+									</span>
+									<div className="pledger__acts">
+										{visaOutstanding > 0 ? (
+											<>
+												<Button to="/portal/visa" size="sm" variant="primary">
+													Pay →
+												</Button>
+												{visaInvoiceType ? <DocLinks invoice={visaInvoiceType} /> : null}
+											</>
+										) : visaPaid && visaInvoiceType ? (
+											<DocLinks invoice={visaInvoiceType} />
+										) : null}
+									</div>
+								</div>
+								<div
+									className={`pledger__row${
+										depositPaid && plan && !settled && (a.paymentPlanId === "full" || a.agencyStageIndex === 0)
+											? " pledger__row--due"
+											: settled
+												? " pledger__row--settled"
+												: ""
+									}`}
+								>
+									<span className="pledger__mark">V</span>
+									<div className="pledger__body">
+										<p className="pledger__name">
 											{a.paymentPlanId === "installment" ? "Pre-departure milestone" : "Pre-departure milestone · balance"}
-											<span className="ptable__sub">releases your letter, visa documents &amp; e-ticket</span>
-										</td>
-										<td>The balance of your service fee</td>
-										<td>After the visa is approved</td>
-										<td className="ptable__amt">
-											{a.agencyTotal > 0 ? (
-												<Money
-													usd={
-														a.paymentPlanId === "installment"
-															? preDepPortion
-															: Math.max(0, a.agencyTotal - depositAmt)
-													}
-												/>
-											) : (
-												"N/A"
-											)}
-										</td>
-										<td>
-											<span
-												className={`portal-pill${settled ? " portal-pill--solid" : " portal-pill--hollow"}`}
-											>
-												{settled ? "Paid" : depositPaid ? "After the visa" : "Not yet"}
+										</p>
+										<p className="pledger__sub">
+											releases your letter, visa documents &amp; e-ticket · the balance of your service fee · after the visa is approved
+										</p>
+									</div>
+									<div className="pledger__amt">
+										{a.agencyTotal > 0 ? (
+											<Money
+												usd={
+													a.paymentPlanId === "installment"
+														? preDepPortion
+														: Math.max(0, a.agencyTotal - depositAmt)
+												}
+											/>
+										) : (
+											"N/A"
+										)}
+									</div>
+									<span className="pledger__status">
+										<span
+											className={`portal-pill${settled ? " portal-pill--solid" : " portal-pill--hollow"}`}
+										>
+											{settled ? "Paid" : depositPaid ? "After the visa" : "Not yet"}
+										</span>
+									</span>
+									<div className="pledger__acts">
+										{depositPaid && plan && !settled && (a.paymentPlanId === "full" || a.agencyStageIndex === 0) ? (
+											<Button to="/portal/payment-execution" size="sm" variant="primary">
+												Pay →
+											</Button>
+										) : null}
+										{/* This milestone is a line on the service-fee invoice — the documents live there. */}
+										{agencyInvoiceType ? <DocLinks invoice={agencyInvoiceType} /> : null}
+									</div>
+								</div>
+								{(() => {
+									const travelInvoice = travelInvoiceType;
+									if (!travelInvoice) return null;
+									const travelPaid = travelInvoice.status === "paid";
+									return (
+										<div className={`pledger__row${!travelPaid && travelInvoice.status !== "proforma" ? " pledger__row--due" : travelPaid ? " pledger__row--settled" : ""}`}>
+											<span className="pledger__mark">V</span>
+											<div className="pledger__body">
+												<p className="pledger__name">Ticket</p>
+												<p className="pledger__sub">
+													{travelInvoice.invoiceNumber} · flight &amp; transfers · with the milestone
+												</p>
+											</div>
+											<div className="pledger__amt">
+												<Money usd={travelInvoice.subtotalCents / 100} />
+											</div>
+											<span className="pledger__status">
+												<span className={`portal-pill${travelPaid ? " portal-pill--solid" : " portal-pill--hollow"}`}>
+													{travelPaid ? "Paid" : travelInvoice.status === "partial" ? "Part paid" : "Due"}
+												</span>
 											</span>
-										</td>
-										<td>
-											{depositPaid && plan && !settled && (a.paymentPlanId === "full" || a.agencyStageIndex === 0) ? (
+											<div className="pledger__acts">
+												{!travelPaid ? (
+													<>
+														<Button to="/portal/pre-departure" size="sm" variant="primary">
+															Pay →
+														</Button>
+														<DocLinks invoice={travelInvoice} />
+													</>
+												) : (
+													<DocLinks invoice={travelInvoice} />
+												)}
+											</div>
+										</div>
+									);
+								})()}
+								{a.paymentPlanId === "installment" && a.agencyTotal > 0 ? (
+									<div className={`pledger__row${settled ? " pledger__row--settled" : ""}`}>
+										<span className="pledger__mark">VI</span>
+										<div className="pledger__body">
+											<p className="pledger__name">Post-arrival · 40%</p>
+											<p className="pledger__sub">on the schedule you chose · settlement support · after you arrive</p>
+										</div>
+										<div className="pledger__amt">
+											<Money usd={Math.round(a.agencyTotal * (AGENCY_STAGES[2]?.portion ?? 0.4))} />
+										</div>
+										<span className="pledger__status">
+											<span className={`portal-pill${settled ? " portal-pill--solid" : " portal-pill--hollow"}`}>
+												{settled ? "Paid" : a.agencyStageIndex >= 1 ? "On schedule" : "Not yet"}
+											</span>
+										</span>
+										<div className="pledger__acts">
+											{a.agencyStageIndex >= 1 && !settled ? (
 												<Button to="/portal/payment-execution" size="sm" variant="primary">
 													Pay →
 												</Button>
 											) : null}
-											{/* This milestone is a line on the service-fee invoice — the documents live there. */}
 											{agencyInvoiceType ? <DocLinks invoice={agencyInvoiceType} /> : null}
-										</td>
-									</tr>
-									{(() => {
-										const travelInvoice = travelInvoiceType;
-										if (!travelInvoice) return null;
-										const travelPaid = travelInvoice.status === "paid";
-										return (
-											<tr className={!travelPaid && travelInvoice.status !== "proforma" ? "ptable__now" : undefined}>
-												<td className="ptable__mark">V</td>
-												<td>
-													Ticket
-													<span className="ptable__sub">{travelInvoice.invoiceNumber}</span>
-												</td>
-												<td>Flight &amp; transfers</td>
-												<td>With the milestone</td>
-												<td className="ptable__amt">
-													<Money usd={travelInvoice.subtotalCents / 100} />
-												</td>
-												<td>
-													<span className={`portal-pill${travelPaid ? " portal-pill--solid" : " portal-pill--hollow"}`}>
-														{travelPaid ? "Paid" : travelInvoice.status === "partial" ? "Part paid" : "Due"}
-													</span>
-												</td>
-												<td>
-													{!travelPaid ? (
-														<>
-															<Button to="/portal/pre-departure" size="sm" variant="primary">
-																Pay →
-															</Button>
-															<DocLinks invoice={travelInvoice} />
-														</>
-													) : (
-														<DocLinks invoice={travelInvoice} />
-													)}
-												</td>
-											</tr>
-										);
-									})()}
-									{a.paymentPlanId === "installment" && a.agencyTotal > 0 ? (
-										<tr>
-											<td className="ptable__mark">VI</td>
-											<td>
-												Post-arrival · 40%
-												<span className="ptable__sub">on the schedule you chose</span>
-											</td>
-											<td>Settlement support</td>
-											<td>After you arrive</td>
-											<td className="ptable__amt">
-												<Money usd={Math.round(a.agencyTotal * (AGENCY_STAGES[2]?.portion ?? 0.4))} />
-											</td>
-											<td>
-												<span className={`portal-pill${settled ? " portal-pill--solid" : " portal-pill--hollow"}`}>
-													{settled ? "Paid" : a.agencyStageIndex >= 1 ? "On schedule" : "Not yet"}
-												</span>
-											</td>
-											<td>
-												{a.agencyStageIndex >= 1 && !settled ? (
-													<Button to="/portal/payment-execution" size="sm" variant="primary">
-														Pay →
-													</Button>
-												) : null}
-												{agencyInvoiceType ? <DocLinks invoice={agencyInvoiceType} /> : null}
-											</td>
-										</tr>
-									) : null}
-								</tbody>
-							</table>
+										</div>
+									</div>
+								) : null}
+							</div>
 						</section>
 						{/* Second ledger. Deliberately never merged with the one above.
 						    Century NIT does not collect tuition, and a combined total would
@@ -1874,77 +1864,52 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 					{/* Payment receipts. Every recorded payment across all invoices */}
 					{receipts.length > 0 ? (
 						<section className="mt-6">
-							<h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.75rem" }}>Receipts</h2>
-							<table className="ptable">
-								<thead>
-									<tr>
-										<th>Receipt</th>
-										<th>For</th>
-										<th>Method</th>
-										<th>Amount</th>
-										<th>Date</th>
-										<th></th>
-									</tr>
-								</thead>
-								<tbody>
-									{receipts.map((r) => {
-										const inv = invoices.find((i) => i.invoiceNumber === r.invoiceNumber);
-										return (
-											<tr key={r.id}>
-												<td className="mono">{r.invoiceNumber}</td>
-												<td>{INVOICE_TYPE_LABELS[r.invoiceType] ?? r.invoiceType}</td>
-												<td>{r.method}</td>
-												<td className="ptable__amt">
-													<Money usd={r.amountCents / 100} />
-												</td>
-												<td className="ptable__mark">
-													{new Date(r.at).toLocaleDateString(undefined, {
-														year: "numeric",
-														month: "short",
-														day: "numeric",
-													})}
-													{r.reference ? ` · ${r.reference}` : ""}
-												</td>
-												<td>
-													{inv ? (
-														<Button
-															variant="ghost"
-															size="sm"
-															onClick={() => downloadReceipt(inv, INVOICE_TYPE_LABELS[r.invoiceType] ?? "Invoice")}
-														>
-															PDF
-														</Button>
-													) : null}
-												</td>
-											</tr>
-										);
-									})}
-								</tbody>
-							</table>
+							<div className="psec">
+								<span className="psec__title">Receipts · {receipts.length}</span>
+								{receipts.length > 3 ? (
+									<span className="psec__hint">
+										<button type="button" className="jlink" onClick={() => setShowAllReceipts((s) => !s)}>
+											{showAllReceipts ? "Show fewer" : `Show all (${receipts.length})`}
+										</button>
+									</span>
+								) : null}
+							</div>
+							<div>
+								{(showAllReceipts ? receipts : receipts.slice(0, 3)).map((r) => {
+									const inv = invoices.find((i) => i.invoiceNumber === r.invoiceNumber);
+									return (
+										<div key={r.id} className="preceipts__row">
+											<span className="d">
+												{new Date(r.at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+											</span>
+											<span>
+												{r.invoiceNumber} · {INVOICE_TYPE_LABELS[r.invoiceType] ?? r.invoiceType} · {r.method}
+												{r.reference ? <span className="ref">ref {r.reference}</span> : null}
+											</span>
+											<span className="a">
+												<Money usd={r.amountCents / 100} />
+											</span>
+											<span>
+												{inv ? (
+													<button
+														type="button"
+														className="doc-link"
+														onClick={() => downloadReceipt(inv, INVOICE_TYPE_LABELS[r.invoiceType] ?? "Invoice")}
+													>
+														↓ receipt
+													</button>
+												) : null}
+											</span>
+										</div>
+									);
+								})}
+							</div>
 						</section>
 					) : null}
 					</div>
 
-					{/* the rail. Next payment, plan, the fixed order */}
+					{/* the rail. The plan only — the due block carries the action now */}
 					<div className="prail">
-						<div className="sharp-card sharp-card--key">
-							<p className="eyebrow">Next payment</p>
-							{dueNow > 0 ? (
-								<>
-									<p style={{ fontWeight: 700, fontSize: "1.1rem", margin: "0.4rem 0 0.2rem" }}>
-										<Money usd={dueNow} /> · {dueInvoiceLabel}
-									</p>
-									<Button to={nextPayPath} variant="primary" arrow style={{ width: "100%", marginTop: "0.9rem" }}>
-										Pay <MoneyInline usd={dueNow} /> →
-									</Button>
-								</>
-							) : (
-								<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.5 }}>
-									Nothing due right now. The next fee arrives with its chapter.
-								</p>
-							)}
-						</div>
-
 						<div className="sharp-card">
 							<p className="eyebrow">Your plan</p>
 							{a.agencyTotal > 0 ? (
@@ -1976,25 +1941,17 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 							)}
 						</div>
 
-						<div className="sharp-card">
-							<p className="eyebrow">Two pots of money</p>
-							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
-								<strong>Ledger</strong>. Fees to Century NIT, in a fixed chapter order.<br /><br />
-								<strong>Universities</strong>. Tuition and deposits paid to the school itself, on
-								the offer's terms. We never hold university money.
-							</p>
-						</div>
-
-						<div className="sharp-card">
-							<p className="eyebrow">The order is fixed</p>
-							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
-								Deposit at enrolment · application fee at submissions · visa fee after an offer · the
-								milestone once your flight is booked. Your letter, visa documents and e-ticket
-								are released with it.
-							</p>
-						</div>
 					</div>
 				</div>
+
+				{isMobile && dueNow > 0 && !pdueVisible ? (
+					<div className="pstick">
+						<span>Due now · <MoneyInline usd={dueNow} /></span>
+						<Button to={nextPayPath} variant="primary" size="sm">
+							Pay{dueInvoiceLabel ? ` ${dueInvoiceLabel}` : ""} →
+						</Button>
+					</div>
+				) : null}
 				</>
 			) : null}
 

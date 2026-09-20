@@ -7466,50 +7466,123 @@ img.profile-monogram {
 
 /* money. The position band and the chapter ledger */
 
-.pposition {
-	display: grid;
-	grid-template-columns: repeat(3, 1fr);
-	border: 1.5px solid var(--border);
-	margin-bottom: 2rem;
-}
+/* the position band — one due block, then a paid / to-come hairline */
 
-.pposition > div {
-	padding: 1rem 1.25rem;
-	border-right: 1px solid var(--border-light);
-}
-
-.pposition > div:last-child {
-	border-right: none;
-}
-
-.pposition__num {
-	font-family: var(--font-mono);
-	font-size: 1.4rem;
-	font-weight: 700;
-	margin-top: 0.25rem;
-}
-
-.pposition__due {
+.pdue {
 	background: var(--foreground);
 	color: var(--accent-foreground);
+	padding: 1.5rem 1.75rem;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1rem;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 0;
+	border: 1.5px solid var(--foreground);
+}
+.pdue .eyebrow { color: rgba(255, 255, 255, 0.6); }
+.pdue__amt { font-family: var(--font-mono); font-size: 2.4rem; font-weight: 700; letter-spacing: -0.02em; margin-top: 0.3rem; }
+.pdue__amt .money__secondary { color: rgba(255, 255, 255, 0.7); }
+.pdue__for { font-family: var(--font-mono); font-size: 0.68rem; color: rgba(255, 255, 255, 0.7); margin-top: 0.3rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.pdue .btn { background: var(--background); color: var(--foreground); border-color: var(--background); }
+.pdue--clear {
+	background: var(--background);
+	color: var(--foreground);
+	border-color: var(--border);
+}
+.pdue--clear .eyebrow { color: var(--muted-foreground); }
+.pdue--clear .pdue__for { color: var(--muted-foreground); }
+.pdue2 {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	border: 1px solid var(--border-light);
+	border-top: none;
+	margin-bottom: 2rem;
+}
+.pdue2 > div {
+	padding: 0.7rem 1.25rem;
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--muted-foreground);
+}
+.pdue2 > div + div { border-left: 1px solid var(--border-light); }
+.pdue2 b { color: var(--foreground); font-weight: 700; }
+
+/* the ledger — chapter-numbered rows, not a table */
+
+.pledger { border-top: 1.5px solid var(--border); }
+.pledger__row {
+	display: grid;
+	grid-template-columns: 2.5rem minmax(0, 1fr) 9rem 7rem auto;
+	grid-template-areas: "mark body amt status acts";
+	gap: 1rem;
+	align-items: center;
+	padding: 0.85rem 0.25rem;
+	border-bottom: 1px solid var(--border-light);
+}
+.pledger__mark { grid-area: mark; font-family: var(--font-mono); font-size: 0.7rem; font-weight: 700; width: 1.6rem; height: 1.6rem; border: 1px solid var(--border-light); display: flex; align-items: center; justify-content: center; color: var(--foreground); }
+.pledger__row--due .pledger__mark,
+.pledger__row--settled .pledger__mark { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
+.pledger__body { grid-area: body; min-width: 0; }
+.pledger__name { font-weight: 650; font-size: var(--text-sm); }
+.pledger__sub { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted-foreground); margin-top: 0.15rem; }
+.pledger__amt { grid-area: amt; text-align: right; font-family: var(--font-mono); }
+.pledger__amt .money__primary { font-size: 0.95rem; font-weight: 700; }
+.pledger__amt .money__secondary { font-size: 0.65rem; color: var(--muted-foreground); }
+.pledger__status { grid-area: status; text-align: right; }
+.pledger__acts { grid-area: acts; display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem; }
+.pledger__row--due { box-shadow: inset 4px 0 0 var(--foreground); background: var(--muted); padding-left: 0.75rem; }
+.pledger__row--settled { opacity: 0.7; }
+
+/* receipts — a linear list, never a table */
+
+.preceipts__row {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto auto;
+	gap: 1rem;
+	align-items: baseline;
+	padding: 0.6rem 0;
+	border-bottom: 1px solid var(--border-light);
+	font-size: 0.8rem;
+}
+.preceipts__row .d { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted-foreground); }
+.preceipts__row .ref { display: block; font-family: var(--font-mono); font-size: 0.62rem; color: var(--muted-foreground); }
+.preceipts__row .a { font-family: var(--font-mono); font-size: 0.75rem; text-align: right; }
+
+/* the sticky pay bar — only on phones, once the due block scrolls away */
+
+.pstick {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: var(--background);
+	border-top: 1.5px solid var(--border);
+	padding: 0.75rem 1rem;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	z-index: 9000;
+	font-family: var(--font-mono);
+	font-size: 0.72rem;
 }
 
-.pposition__due .eyebrow {
-	color: rgba(255, 255, 255, 0.6);
-}
-
-.pposition__due .mono {
-	color: rgba(255, 255, 255, 0.7);
-}
-
-@media (max-width: 900px) {
-	.pposition {
-		grid-template-columns: 1fr;
+@media (max-width: 959.98px) {
+	.pdue { padding: 1.1rem 1.2rem; }
+	.pdue__amt { font-size: 1.9rem; }
+	.pdue .btn { width: 100%; min-height: 48px; }
+	.pledger__row {
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		grid-template-areas:
+			"mark body status"
+			"amt  acts acts";
+		row-gap: 0.5rem;
 	}
-	.pposition > div {
-		border-right: none;
-		border-bottom: 1px solid var(--border-light);
-	}
+	.pledger__amt { text-align: left; }
+	.pledger__acts { flex-direction: row; justify-content: flex-end; }
+	.pledger__acts .btn { min-height: 44px; display: inline-flex; align-items: center; }
 }
 
 .ptable {
@@ -8045,39 +8118,56 @@ img.profile-monogram {
 	.pnext { flex-direction: column; align-items: flex-start; }
 }
 
-/* ========== Document vault. Count band, chapter-grouped rows ========== */
+/* ========== Document vault. Status strip, chapter-grouped rows ========== */
 
-.dcount {
+.dstrip {
 	display: flex;
 	flex-wrap: wrap;
+	gap: 0.4rem 1.1rem;
+	font-family: var(--font-mono);
+	font-size: 0.7rem;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
 	border: 1.5px solid var(--border);
+	padding: 0.7rem 1rem;
 	background: var(--background);
 }
-.dcount > div { padding: 1rem 1.5rem; border-right: 1px solid var(--border-light); }
-.dcount > div:last-child { border-right: none; }
-.dcount .dcount__n { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; }
-.dcount .dcount__l {
-	font-family: var(--font-mono);
-	font-size: 0.6rem;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
-	color: var(--muted-foreground);
-	margin-top: 0.15rem;
+.dstrip__act { background: var(--foreground); color: var(--background); padding: 0.1rem 0.5rem; }
+
+.dgroup { margin-top: 1.5rem; }
+.dgroup__head {
+	display: flex;
+	align-items: baseline;
+	gap: 0.6rem;
+	border-bottom: 1.5px solid var(--border);
+	padding-bottom: 0.35rem;
 }
-.dcount__act { background: var(--foreground); color: var(--background); margin-left: auto; }
-.dcount__act .dcount__l { color: rgba(255, 255, 255, 0.6); }
+.dgroup__title {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	text-transform: uppercase;
+	letter-spacing: 0.14em;
+}
+.dgroup__meta {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	color: var(--muted-foreground);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	margin-left: auto;
+}
 
 .drow {
 	display: grid;
-	grid-template-columns: 2.2rem 1fr auto auto;
-	gap: 1.25rem;
+	grid-template-columns: 2.2rem minmax(0, 1fr) 8rem 2.5rem;
+	gap: 0.9rem;
 	align-items: center;
-	padding: 1rem 1.25rem;
-	border: 1px solid var(--border-light);
-	border-top: none;
+	padding: 0.9rem 0.5rem;
+	border-bottom: 1px solid var(--border-light);
 	background: var(--background);
 }
-.drow:first-of-type { border-top: 1px solid var(--border-light); }
+.drow__body { min-width: 0; }
+.drow__chev { font-family: var(--font-mono); color: var(--muted-foreground); text-align: right; }
 .drow__mark {
 	font-family: var(--font-mono);
 	font-size: 0.7rem;
@@ -8101,27 +8191,60 @@ img.profile-monogram {
 .drow--locked { opacity: 0.55; }
 .drow__name { font-weight: 650; font-size: var(--text-sm); }
 .drow__hint { font-size: var(--text-xs); color: var(--muted-foreground); margin-top: 0.15rem; }
-.drow__file { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted-foreground); margin-top: 0.3rem; }
+.drow__file {
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	color: var(--muted-foreground);
+	margin-top: 0.3rem;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
 .drow__note {
-	margin-top: 0.5rem;
+	grid-column: 1 / -1;
+	margin-top: 0.2rem;
 	padding: 0.6rem 0.8rem;
 	background: var(--muted);
 	border-left: 3px solid var(--foreground);
 	font-size: var(--text-xs);
 	line-height: 1.5;
 }
-.drow__acts { display: flex; gap: 0.4rem; align-items: center; }
-.drow--open { box-shadow: inset 4px 0 0 var(--foreground); border-color: var(--foreground); border-width: 1.5px; }
+.drow--open { box-shadow: inset 4px 0 0 var(--foreground); }
 .drow[role="button"] { cursor: pointer; }
 
-/* preview sheet — the ops detail-pane pattern, right column on desktop */
+/* the persistent preview pane — the rail's replacement */
+.psplit--vault { grid-template-columns: minmax(0, 1fr) 26rem; }
+.dpane { position: sticky; top: 1rem; align-self: start; min-width: 0; }
+.dpane__empty {
+	border: 1.5px dashed var(--border-light);
+	background: var(--background);
+	min-height: 30rem;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	padding: 2rem;
+}
+.dpane__drop {
+	border: 1px dashed var(--border-light);
+	padding: 1.2rem 1.6rem;
+	margin-top: 1rem;
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	color: var(--muted-foreground);
+}
+
+/* preview sheet — the ops detail-pane pattern, fills the pane */
 .dsheet {
 	border: 1.5px solid var(--border);
 	background: var(--background);
-	padding: 1.1rem 1.25rem;
 	position: relative;
-	align-self: stretch;
+	display: flex;
+	flex-direction: column;
+	max-height: calc(100vh - 3rem);
 }
+.dsheet__body { padding: 1.1rem 1.25rem; flex: 1; overflow: auto; min-height: 0; }
 .dsheet__handle { display: none; }
 .dsheet__close {
 	position: absolute;
@@ -8133,20 +8256,86 @@ img.profile-monogram {
 	font-size: 1rem;
 	cursor: pointer;
 	color: var(--foreground);
+	z-index: 2;
 }
+.seg { display: inline-flex; border: 1px solid var(--border); margin-top: 0.7rem; }
+.seg button {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	padding: 0.35rem 0.8rem;
+	border: none;
+	border-right: 1px solid var(--border);
+	background: var(--background);
+	color: var(--foreground);
+	cursor: pointer;
+}
+.seg button:last-child { border-right: none; }
+.seg button.on { background: var(--foreground); color: var(--background); }
 .dsheet__frame {
 	width: 100%;
 	border: 1px solid var(--border-light);
 	background: var(--muted);
-	min-height: 260px;
+	height: clamp(320px, 60vh, 640px);
 	margin-top: 0.7rem;
 	display: block;
 }
-.dsheet__acts { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.8rem; }
+.dsheet__frame--msg {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	padding: 1rem;
+}
+.dsheet__bar {
+	border-top: 1.5px solid var(--border);
+	padding: 0.7rem 1rem;
+	display: flex;
+	gap: 0.5rem;
+	align-items: center;
+	background: var(--background);
+}
+.dsheet__bar .btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.dsheet__menu { position: relative; margin-left: auto; }
+.dsheet__dots {
+	background: none;
+	border: none;
+	font-family: var(--font-mono);
+	font-size: 1rem;
+	cursor: pointer;
+	padding: 0.4rem 0.6rem;
+	color: var(--foreground);
+}
+.dsheet__menu-list {
+	position: absolute;
+	right: 0;
+	bottom: calc(100% + 0.4rem);
+	background: var(--background);
+	border: 1px solid var(--border);
+	min-width: 10rem;
+	display: flex;
+	flex-direction: column;
+}
+.dsheet__menu-list button {
+	background: none;
+	border: none;
+	border-bottom: 1px solid var(--border-light);
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	text-align: left;
+	padding: 0.8rem 1rem;
+	cursor: pointer;
+	color: var(--foreground);
+}
+.dsheet__menu-list button:last-child { border-bottom: none; }
 .dsheet__hist {
 	list-style: none;
 	padding: 0;
-	margin: 0.4rem 0 0;
+	margin: 0.7rem 0 0;
 	font-family: var(--font-mono);
 	font-size: 0.68rem;
 	display: grid;
@@ -8180,35 +8369,23 @@ img.profile-monogram {
 
 /* assessment section heads + TOC counts reuse .psec / .pindex */
 
-@media (max-width: 900px) {
-	.dcount { display: grid; grid-template-columns: 1fr 1fr; }
-	.dcount > div:nth-child(2n) { border-right: none; }
-	.dcount > div:nth-child(-n + 2) { border-bottom: 1px solid var(--border-light); }
-	.dcount__act { margin-left: 0; }
-	.drow { grid-template-columns: 1.8rem 1fr auto; row-gap: 0.5rem; }
-	.drow__acts { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-	.drow__acts .jlink,
-	.drow__acts .btn {
-		min-height: 44px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border: 1px solid var(--border);
-	}
-	.drow__acts > :only-child { grid-column: 1 / -1; }
+@media (max-width: 959.98px) {
+	.psplit--vault { grid-template-columns: 1fr; }
+	.drow { grid-template-columns: 1.8rem minmax(0, 1fr) auto; row-gap: 0.5rem; }
+	.drow__chev { display: none; }
 	.dsheet {
 		position: fixed;
 		inset: auto 0 0 0;
-		height: 65vh;
+		height: 92vh;
+		max-height: 92vh;
 		background: var(--background);
 		border: none;
 		border-top: 1.5px solid var(--border);
-		overflow: auto;
 		z-index: 9000;
-		padding-top: 0.7rem;
 	}
-	.dsheet__handle { display: block; width: 2.5rem; height: 3px; background: var(--border-light); margin: 0 auto 0.7rem; }
-	.dsheet__frame { min-height: 180px; }
+	.dsheet__handle { display: block; width: 2.5rem; height: 3px; background: var(--border-light); margin: 0.7rem auto 0; flex-shrink: 0; }
+	.dsheet__frame { height: auto; flex: 1; min-height: 11rem; }
+	.dsheet__bar .btn { flex: 1; }
 	.dsheet__backdrop { display: block; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: 8999; }
 }
 

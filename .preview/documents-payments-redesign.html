@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portal — Documents & Payments · layout and responsiveness (proposed)</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1240px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	.banner{font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;background:var(--ink);color:#fff;padding:.35rem .7rem;margin-bottom:.8rem}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem}
+	.jump a{color:inherit}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.5rem clamp(1.25rem,3vw,2.25rem) 2.5rem}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.sidebyside{display:flex;gap:2rem;flex-wrap:wrap;align-items:flex-start}
+	.cap{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.5rem}
+
+	/* ---- portal chrome ---- */
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.title{font-size:1.75rem;font-weight:500;letter-spacing:-.01em;margin-top:.25rem}
+	.lead{color:var(--fg-muted);font-size:.92rem;margin-top:.5rem;max-width:44rem}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap;text-align:center}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--inv{background:#fff;color:var(--ink);border-color:#fff}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.pill{display:inline-flex;align-items:center;padding:.25rem .65rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line-light)}
+	.pill--ul{border-color:var(--ink);color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+	.pkv{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--line-light);font-size:.78rem}
+	.pkv:last-child{border-bottom:none}
+	.pkv .k{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--micro);font-size:.64rem;padding-top:.1rem}
+	.pkv .v{text-align:right;min-width:0}
+	.card{background:#fff;border:1px solid var(--ink);padding:1.1rem}
+	.card--key{border-width:1.5px}
+	.card--inv{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.card--inv .eyebrow{color:rgba(255,255,255,.6)}
+	.card--inv .muted{color:rgba(255,255,255,.7)}
+	.note2{border:1px solid var(--line-light);background:var(--muted-bg);padding:.45rem .7rem;font-size:.75rem;color:var(--fg-muted);margin-top:.4rem}
+	.mt1{margin-top:.5rem}.mt2{margin-top:.8rem}.mt3{margin-top:1rem}
+
+	/* ---- shared doc row anatomy ---- */
+	.dmark{width:1.5rem;height:1.5rem;border:1.5px solid var(--line);display:inline-flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.7rem;font-weight:700;flex-shrink:0}
+	.dmark--on{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.dname{font-weight:600;font-size:.9rem}
+	.dhint{font-size:.75rem;color:var(--fg-muted)}
+	.dfile{font-family:var(--mono);font-size:.68rem;color:var(--fg-muted);margin-top:.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+	.dlinks{font-family:var(--mono);font-size:.68rem;white-space:nowrap}
+	.dlinks a{color:var(--ink);text-decoration:underline}
+	.dlinks a + a{margin-left:.7rem}
+
+	/* ============ DOCUMENTS — proposed ============ */
+	.dstrip{display:flex;flex-wrap:wrap;gap:.4rem 1.1rem;font-family:var(--mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;border:1.5px solid var(--ink);padding:.7rem 1rem;margin-top:1.25rem}
+	.dstrip b{background:var(--ink);color:#fff;padding:.1rem .5rem}
+	.dfilter{display:flex;gap:.4rem;align-items:center;margin-top:.9rem;flex-wrap:wrap}
+	.chip{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;border:1px solid var(--line);padding:.4rem .8rem;background:#fff;cursor:pointer;white-space:nowrap}
+	.chip--on{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.dgroup{margin-top:1.5rem}
+	.dgroup__h{display:flex;align-items:baseline;gap:.6rem;border-bottom:1.5px solid var(--ink);padding-bottom:.35rem;margin-bottom:.1rem}
+	.dgroup__n{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);letter-spacing:.1em;text-transform:uppercase;margin-left:auto}
+	.drow2{display:grid;grid-template-columns:2.2rem minmax(0,1fr) 8rem 2.5rem;gap:.9rem;align-items:center;padding:.8rem .5rem;border-bottom:1px solid var(--line-light)}
+	.drow2__sub{border-bottom:1px solid var(--line-light);padding:0 .5rem .8rem 3.1rem;margin-top:-.4rem}
+	.drow2__sub .note2{margin-top:0;border-left:3px solid var(--ink)}
+	.drow2 .chev{font-family:var(--mono);color:var(--fg-muted);text-align:right}
+
+	.dpane{display:flex;gap:1.75rem;align-items:stretch;margin-top:1.5rem}
+	.dpane__list{flex:1;min-width:0}
+	.dpane__side{width:26rem;flex-shrink:0;position:sticky;top:1rem;align-self:flex-start}
+	.panebox{border:1.5px solid var(--ink);background:#fff;min-height:34rem;display:flex;flex-direction:column}
+	.panebox--empty{border-style:dashed;border-color:var(--line);align-items:center;justify-content:center;text-align:center;padding:2rem}
+	.panebox .body{padding:1rem 1.25rem;flex:1;overflow:auto}
+	.seg{display:inline-flex;border:1px solid var(--ink);margin-top:.7rem}
+	.seg span{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;padding:.35rem .8rem;border-right:1px solid var(--ink)}
+	.seg span:last-child{border-right:none}
+	.seg span.on{background:var(--ink);color:#fff}
+	.panebar{border-top:1.5px solid var(--ink);padding:.7rem 1rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;background:#fff}
+	.frame2{background:var(--muted-bg);border:1px solid var(--line-light);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.7rem;color:var(--fg-muted);margin-top:.7rem;height:60%;min-height:15rem}
+
+	/* ============ PAYMENTS — proposed ============ */
+	.pdue{background:var(--ink);color:#fff;padding:1.5rem 1.75rem;display:flex;flex-wrap:wrap;gap:1rem;justify-content:space-between;align-items:center;margin-top:1.5rem}
+	.pdue .eyebrow{color:rgba(255,255,255,.6)}
+	.pdue .amt{font-family:var(--mono);font-size:2.4rem;font-weight:700;letter-spacing:-.02em;margin-top:.3rem}
+	.pdue .sub{font-family:var(--mono);font-size:.68rem;color:rgba(255,255,255,.7);margin-top:.3rem;letter-spacing:.06em}
+	.pdue--hollow{background:#fff;color:var(--ink);border:1.5px solid var(--ink)}
+	.pdue--hollow .eyebrow{color:var(--fg-muted)}
+	.pdue2{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line-light);border-top:none}
+	.pdue2 > div{padding:.7rem 1.25rem;font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-muted)}
+	.pdue2 > div + div{border-left:1px solid var(--line-light)}
+	.pdue2 b{color:var(--ink)}
+
+	.pledger{margin-top:1.5rem;border-top:1.5px solid var(--ink)}
+	.pledger__row{display:grid;grid-template-columns:2.5rem minmax(0,1fr) 9rem 7rem auto;gap:1rem;align-items:center;padding:.85rem .25rem;border-bottom:1px solid var(--line-light)}
+	.pledger__row--due{box-shadow:inset 4px 0 0 var(--ink);background:var(--muted-bg);padding-left:.75rem}
+	.pledger__row--settled{opacity:.7}
+	.pledger__no{font-family:var(--mono);font-size:.7rem;font-weight:700;width:1.6rem;height:1.6rem;border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+	.pledger__no--on{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.pledger__sub{font-family:var(--mono);font-size:.68rem;color:var(--fg-muted);margin-top:.15rem}
+	.pledger__amt{text-align:right;font-family:var(--mono)}
+	.pledger__amt b{font-size:.95rem}
+	.pledger__amt small{display:block;font-size:.65rem;color:var(--fg-muted)}
+	.pledger__act{display:flex;flex-direction:column;align-items:flex-end;gap:.35rem}
+	.pledger__status{text-align:right}
+
+	.preceipts{margin-top:1.75rem}
+	.preceipts__row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:1rem;align-items:baseline;padding:.6rem 0;border-bottom:1px solid var(--line-light);font-size:.8rem}
+	.preceipts__row .d{font-family:var(--mono);font-size:.68rem;color:var(--fg-muted)}
+	.preceipts__row .ref{display:block;font-family:var(--mono);font-size:.62rem;color:var(--fg-muted)}
+	.preceipts__row .a{font-family:var(--mono);font-size:.75rem;text-align:right}
+
+	/* ---- phones ---- */
+	.phone{width:390px;border:1.5px solid var(--ink);margin:0;background:#fff;padding:1rem;position:relative;overflow:hidden;flex-shrink:0}
+	.phone--tall{min-height:46rem}
+	.dcard2{border:1px solid var(--line);padding:.8rem .9rem;margin-bottom:.6rem}
+	.dcard2 .top{display:flex;align-items:center;gap:.6rem}
+	.dcard2 .acts{display:flex;gap:.5rem;margin-top:.7rem}
+	.dcard2 .acts .btn{flex:1;min-height:44px;display:flex;align-items:center;justify-content:center;padding:.5rem 0}
+	.dcard2 .acts > :only-child{flex:1}
+	.pbar{position:absolute;left:0;right:0;bottom:0;background:#fff;border-top:1.5px solid var(--ink);padding:.75rem 1rem;display:flex;justify-content:space-between;align-items:center;z-index:5}
+	.handle{width:2.5rem;height:3px;background:var(--line-light);margin:0 auto .7rem}
+	.bsheet{position:absolute;left:0;right:0;bottom:0;height:92%;background:#fff;border-top:1.5px solid var(--ink);padding:.7rem 1rem 0;display:flex;flex-direction:column}
+	.bsheet .frame2{height:auto;flex:1;min-height:11rem}
+	.bsheet .pbar{position:static;border-top:1.5px solid var(--ink);margin:0 -1rem;padding:.7rem 1rem}
+	.bsheet .pbar .btn{flex:1;min-height:44px;display:flex;align-items:center;justify-content:center}
+	.strip2{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line-light);margin-top:.8rem}
+	.strip2 > div{padding:.6rem .8rem;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-muted)}
+	.strip2 > div + div{border-left:1px solid var(--line-light)}
+	.strip2 b{display:block;color:var(--ink);font-size:.9rem}
+	.lcard{border-bottom:1px solid var(--line-light);padding:.8rem 0}
+	.lcard .top{display:flex;align-items:center;gap:.6rem}
+	.lcard .bar{display:flex;justify-content:space-between;align-items:flex-end;margin-top:.55rem}
+	.lcard .bar .a{font-family:var(--mono);font-weight:700;font-size:.9rem;text-align:left}
+	.lcard .bar .a small{display:block;font-weight:400;font-size:.62rem;color:var(--fg-muted)}
+	.chipscroll{display:flex;gap:.4rem;overflow:hidden;margin-top:.7rem}
+	.chipscroll .chip{flex-shrink:0}
+
+	/* wiring table */
+	.wiring{border-collapse:collapse;width:100%;margin-top:.5rem}
+	.wiring th,.wiring td{border:1px solid #d4d4d8;font-family:var(--mono);font-size:.7rem;text-align:left;padding:.6rem .8rem;vertical-align:top}
+	.wiring th{text-transform:uppercase;letter-spacing:.1em;font-size:.6rem;background:var(--muted-bg)}
+	.wiring td:first-child{white-space:nowrap;font-weight:700}
+	.wiring code{font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<span class="banner">Mock · proposal — all names, amounts and dates illustrative</span>
+	<h1 class="page">Documents &amp; Payments — layout and responsiveness (proposed)</h1>
+	<p class="note">Both pages were built desktop-first around one pattern: content column + rail. On a phone the rail stacks under everything, the Payments table (7 columns, no overflow wrapper) squashes, and the numbers that matter — what needs you, what's due — end up below the fold. This mock re-cuts both pages around one question each: <b>Documents → “what needs me?”</b>; <b>Payments → “what's due now?”</b></p>
+	<div class="jump"><a href="#a">A · what's wrong</a><a href="#b">B · documents</a><a href="#c">C · payments</a><a href="#d">D · wiring</a></div>
+
+	<!-- ================= SECTION A ================= -->
+	<span class="tag" id="a">A · What's wrong today</span>
+	<div class="mock">
+		<div class="sidebyside">
+			<div style="flex:1;min-width:20rem">
+				<p class="eyebrow" style="border-bottom:1.5px solid var(--ink);padding-bottom:.35rem">Documents · /portal/documents</p>
+				<ul style="margin:.6rem 0 0 1.1rem;font-size:.78rem;display:grid;gap:.4rem">
+					<li><code class="mono">.dcount</code> is a 4-across band; on mobile it becomes 2×2 but the inverted “Needs you” cell breaks the grid rhythm.</li>
+					<li>Rows are one flat list; chapter grouping exists in data (<code class="mono">VaultRow.chapter</code>) but is not expressed visually — verified, in-review, missing and resubmit rows interleave.</li>
+					<li>On desktop the actions column and the inline preview pane compete for width; when the sheet opens the rail disappears — layout jump.</li>
+					<li>Long filenames overflow the mono <code class="mono">.drow__file</code> line; upload/replace is a small text button.</li>
+					<li>Sheet: history and note stack below the frame with no tabs — on mobile you scroll past the PDF to reach the note.</li>
+				</ul>
+			</div>
+			<div style="flex:1;min-width:20rem">
+				<p class="eyebrow" style="border-bottom:1.5px solid var(--ink);padding-bottom:.35rem">Payments · /portal/financial</p>
+				<ul style="margin:.6rem 0 0 1.1rem;font-size:.78rem;display:grid;gap:.4rem">
+					<li>The ledger is a 7-column <code class="mono">&lt;table class="ptable"&gt;</code> with no responsive rule — under 900px it just squeezes; <code class="mono">.ptable__amt{white-space:nowrap}</code> forces overflow and “Covers” wraps into 3-word columns.</li>
+					<li>Receipts is a second 6-column table with the same problem; date + Paystack reference jammed into one cell.</li>
+					<li><code class="mono">.pposition</code> collapses to three tall stacked blocks — “Due now” sits second as an inverted black bar mid-page.</li>
+					<li>The rail with the <b>Pay →</b> CTA and plan summary is static on mobile — the primary action is at the bottom of a long scroll.</li>
+					<li>Inline-styled <code class="mono">&lt;h2&gt;</code>s; “Fee”/“Covers” duplicate the chapter mark; ↓ invoice / ↓ receipt are text-only in the last column and wrap.</li>
+					<li>Payment plan explanation (<code class="mono">view="plan"</code>) shares the same table.</li>
+				</ul>
+			</div>
+		</div>
+	</div>
+
+	<!-- ================= SECTION B · DOCUMENTS ================= -->
+	<span class="tag tag--after" id="b">B · Documents — desktop &amp; mobile</span>
+	<div class="mock">
+		<p class="cap">desktop · ~1200px</p>
+		<!-- header -->
+		<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap">
+			<div>
+				<p class="eyebrow">Chapter III · Documents</p>
+				<p class="title">Document vault</p>
+				<p class="lead">Upload, replace, and track verification of every document in your file.</p>
+			</div>
+			<span class="btn">Upload ↑</span>
+		</div>
+		<!-- position strip -->
+		<div class="dstrip">3 on file · 2 verified · 1 in review · <b>1 needs you</b></div>
+		<!-- filter chips -->
+		<div class="dfilter">
+			<span class="chip">All 8</span>
+			<span class="chip chip--on">Needs you 2</span>
+			<span class="chip">In review 1</span>
+			<span class="chip">Verified 3</span>
+			<span class="pill pill--hollow" style="margin-left:auto">Formats · PDF ≤ 15 MB</span>
+		</div>
+
+		<div class="dpane">
+			<div class="dpane__list">
+				<div class="dgroup">
+					<div class="dgroup__h"><span class="eyebrow" style="color:var(--ink)">III · Your file</span><span class="dgroup__n">2 of 4 complete</span></div>
+					<div class="drow2">
+						<span class="dmark">!</span>
+						<div style="min-width:0">
+							<p class="dname">Bank statement</p>
+							<p class="dfile">statement-aug-final-scan.pdf · 1.2 MB · 14 Sep</p>
+						</div>
+						<span class="pill pill--ul">Resubmit</span>
+						<span class="chev">→</span>
+					</div>
+					<div class="drow2__sub"><p class="note2">Your consultant · 14 Sep: pages 2–3 are missing</p></div>
+					<div class="drow2">
+						<span class="dmark">·</span>
+						<div style="min-width:0">
+							<p class="dname">Academic transcript</p>
+							<p class="dhint">Certified copy</p>
+						</div>
+						<span class="pill pill--hollow">Missing</span>
+						<span class="chev">→</span>
+					</div>
+				</div>
+				<div class="dgroup">
+					<div class="dgroup__h"><span class="eyebrow" style="color:var(--ink)">IV · Visa</span><span class="dgroup__n">nothing needs you here</span></div>
+					<div class="drow2">
+						<span class="dmark dmark--on">●</span>
+						<div style="min-width:0">
+							<p class="dname">Passport</p>
+							<p class="dfile">enoch-enu-passport.pdf · 18/09/2025</p>
+						</div>
+						<span class="pill pill--solid">Verified</span>
+						<span class="chev">→</span>
+					</div>
+				</div>
+			</div>
+			<div class="dpane__side">
+				<div class="panebox panebox--empty">
+					<p class="eyebrow">Preview</p>
+					<p class="mono muted" style="font-size:.72rem;margin-top:.4rem">Select a document</p>
+					<div style="border:1px dashed var(--line);padding:1.2rem 1.6rem;margin-top:1rem;font-family:var(--mono);font-size:.68rem;color:var(--fg-muted)">or drop a file here to upload</div>
+					<div style="margin-top:1.5rem;text-align:left;width:100%;max-width:19rem">
+						<p class="eyebrow">What documents unlock</p>
+						<div class="pkv"><span class="k">Chapter IV</span><span class="v">Visa submission</span></div>
+						<div class="pkv"><span class="k">Chapter V</span><span class="v">Departure proofs</span></div>
+						<div class="pkv"><span class="k">Milestone</span><span class="v">Releases your letters</span></div>
+						<div class="mt2"><span class="btn btn--sm">Upload Academic transcript →</span></div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<p class="cap mt2">selecting a row swaps the empty state for the DocumentSheet shipped today — same pane, no layout shift</p>
+
+		<!-- open state -->
+		<div class="dpane mt3">
+			<div class="dpane__list">
+				<div class="dgroup">
+					<div class="dgroup__h"><span class="eyebrow" style="color:var(--ink)">III · Your file</span><span class="dgroup__n">2 of 4 complete</span></div>
+					<div class="drow2" style="box-shadow:inset 4px 0 0 var(--ink)">
+						<span class="dmark">!</span>
+						<div style="min-width:0">
+							<p class="dname">Bank statement</p>
+							<p class="dfile">statement-aug-final-scan.pdf · 1.2 MB · 14 Sep</p>
+						</div>
+						<span class="pill pill--ul">Resubmit</span>
+						<span class="chev">→</span>
+					</div>
+				</div>
+			</div>
+			<div class="dpane__side">
+				<div class="panebox">
+					<div class="body">
+						<p class="eyebrow">Bank statement · Resubmit</p>
+						<div class="seg"><span class="on">Preview</span><span>Note</span><span>History</span></div>
+						<div class="frame2">PDF · page 1 of 3</div>
+						<p class="mono muted" style="font-size:.68rem;margin-top:.5rem">statement-aug.pdf · 240 KB · uploaded 12 Sep</p>
+					</div>
+					<div class="panebar">
+						<span class="btn btn--ghost btn--sm">Download ↓</span>
+						<span class="btn btn--ghost btn--sm">Open ↗</span>
+						<span class="btn btn--sm">Replace</span>
+						<span class="dlinks" style="margin-left:auto"><a>Remove</a></span>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<p class="cap" style="margin-top:2.5rem">mobile · 390px</p>
+		<div class="sidebyside">
+			<div class="phone">
+				<p class="eyebrow">Chapter III · Documents</p>
+				<div style="display:flex;justify-content:space-between;align-items:baseline">
+					<p class="dname" style="font-size:1.05rem">Document vault</p>
+					<span class="mono muted" style="font-size:.62rem">5 of 8 on file</span>
+				</div>
+				<p class="mono mt1" style="font-size:.62rem;color:var(--fg-muted)">3 on file · 2 verified · 1 in review<br><b style="color:var(--ink)">● 1 needs you</b></p>
+				<div class="chipscroll">
+					<span class="chip">All 8</span><span class="chip chip--on">Needs you 2</span><span class="chip">In review 1</span><span class="chip" style="overflow:hidden;max-width:5.5rem">Verifi…</span>
+				</div>
+				<div class="dgroup" style="margin-top:1rem">
+					<div class="dgroup__h"><span class="eyebrow" style="color:var(--ink)">III · Your file</span><span class="dgroup__n">2 of 4</span></div>
+					<div class="dcard2" style="margin-top:.6rem">
+						<div class="top">
+							<span class="dmark">!</span>
+							<p class="dname">Bank statement</p>
+							<span class="pill pill--ul" style="margin-left:auto">Resubmit</span>
+						</div>
+						<p class="dfile">statement-aug.pdf · 1.2 MB · 14 Sep</p>
+						<p class="note2">Your consultant · 14 Sep: pages 2–3 are missing</p>
+						<div class="acts"><span class="btn btn--ghost">Open</span><span class="btn">Replace</span></div>
+					</div>
+					<div class="dcard2">
+						<div class="top">
+							<span class="dmark">·</span>
+							<p class="dname">Academic transcript</p>
+							<span class="pill pill--hollow" style="margin-left:auto">Missing</span>
+						</div>
+						<p class="dhint mt1">Certified copy</p>
+						<div class="acts"><span class="btn">Upload</span></div>
+					</div>
+				</div>
+				<div class="pbar"><span class="mono" style="font-size:.68rem">2 need you</span><span class="btn btn--sm">Upload transcript →</span></div>
+				<div style="height:4rem"></div>
+			</div>
+			<div class="phone">
+				<div class="bsheet">
+					<div class="handle"></div>
+					<p class="eyebrow">Bank statement · Resubmit</p>
+					<div class="seg"><span class="on">Preview</span><span>Note</span><span>History</span></div>
+					<div class="frame2">PDF · tap to open full screen</div>
+					<p class="note2">Your consultant · 14 Sep: pages 2–3 are missing</p>
+					<div class="pbar" style="margin-top:auto">
+						<span class="btn btn--ghost">Download ↓</span>
+						<span class="btn">Replace</span>
+						<span class="mono" style="font-size:.9rem;flex:0;padding:0 .4rem">⋯</span>
+					</div>
+				</div>
+			</div>
+			<div class="phone">
+				<div class="bsheet" style="height:auto;min-height:55%">
+					<div class="handle"></div>
+					<p class="eyebrow">Replace · Bank statement</p>
+					<p class="mono muted mt1" style="font-size:.66rem">PDF only · ≤ 15 MB · last 3 months, stamped</p>
+					<div class="mt3"><span class="btn" style="display:block;min-height:52px;line-height:52px;padding:0">Choose file</span></div>
+					<div class="mt2"><span class="btn btn--ghost" style="display:block;min-height:44px;line-height:44px;padding:0">Take a photo</span></div>
+					<p class="muted mt2" style="font-size:.72rem">Your consultant sees it within 1–2 working days.</p>
+					<div class="mt3" style="border-top:1px solid var(--line-light);padding-top:.7rem">
+						<div style="height:3px;background:var(--line-light)"><div style="height:3px;width:40%;background:var(--ink)"></div></div>
+						<p class="mono muted mt1" style="font-size:.64rem">statement-sep.pdf · 40% · uploading</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="callout"><b>B — what changed</b><ul>
+		<li>One column of truth: the count becomes a single-line strip and the filter; the rail becomes a persistent preview pane (<code class="mono">.dpane</code>, 26rem, sticky) — empty state holds the dropzone + unlock map, so opening a doc never shifts the list.</li>
+		<li>Chapter marks (III/IV/V) head each group; rows order needs-you → in review → verified → missing; reviewer notes are a bordered inset under the row.</li>
+		<li>The sheet gains a <code class="mono">Preview · Note · History</code> segmented control and a sticky bottom action bar; Remove demoted to a text link.</li>
+		<li>On mobile: sticky bottom bar carries the next action, chips scroll horizontally, preview and upload are both bottom sheets — thumb stays in the bottom third. Tap targets ≥ 44px; body scroll locked while a sheet is open.</li>
+	</ul></div>
+
+	<!-- ================= SECTION C · PAYMENTS ================= -->
+	<span class="tag tag--after" id="c">C · Payments — desktop &amp; mobile</span>
+	<div class="mock">
+		<p class="cap">desktop · ~1200px</p>
+		<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap">
+			<div>
+				<p class="eyebrow">Money</p>
+				<p class="title">Payments &amp; settlements</p>
+			</div>
+			<span class="mono muted" style="font-size:.68rem">6 invoices · 1 due · plan: instalments</span>
+		</div>
+		<div class="pdue">
+			<div>
+				<p class="eyebrow">Due now</p>
+				<p class="amt">USD 220 · GH₵ 3,300</p>
+				<p class="sub">IV · VISA FEE · DUE 28 SEP</p>
+			</div>
+			<span class="btn btn--inv">Pay →</span>
+		</div>
+		<div class="pdue2"><div>Paid to date <b>USD 1,250</b></div><div>Still to come <b>USD 3,400</b></div></div>
+
+		<div class="dpane" style="margin-top:1.5rem">
+			<div class="dpane__list">
+				<div class="pledger">
+					<div class="pledger__row pledger__row--settled">
+						<span class="pledger__no pledger__no--on">I</span>
+						<div style="min-width:0"><p class="dname">Consultation fee <span class="pill pill--solid" style="margin-left:.5rem">Paid</span></p><p class="pledger__sub">INV-2025-0142 · your session &amp; assessment · at booking</p></div>
+						<div class="pledger__amt"><b>USD 75</b><small>GH₵ 1,125</small></div>
+						<span class="pill pill--solid">Paid</span>
+						<div class="pledger__act"><span class="dlinks"><a>↓ inv</a><a>↓ rcpt</a></span></div>
+					</div>
+					<div class="pledger__row pledger__row--settled">
+						<span class="pledger__no pledger__no--on">II</span>
+						<div style="min-width:0"><p class="dname">Service fee · deposit <span class="pill pill--solid" style="margin-left:.5rem">Paid</span></p><p class="pledger__sub">INV-2025-0168 · starts your file · after the package</p></div>
+						<div class="pledger__amt"><b>USD 500</b><small>GH₵ 7,500</small></div>
+						<span class="pill pill--solid">Paid</span>
+						<div class="pledger__act"><span class="dlinks"><a>↓ inv</a><a>↓ rcpt</a></span></div>
+					</div>
+					<div class="pledger__row pledger__row--settled">
+						<span class="pledger__no pledger__no--on">III</span>
+						<div style="min-width:0"><p class="dname">Application fee <span class="pill pill--solid" style="margin-left:.5rem">Paid</span></p><p class="pledger__sub">INV-2025-0187 · 2 schools · after selection</p></div>
+						<div class="pledger__amt"><b>USD 530</b><small>GH₵ 7,950</small></div>
+						<span class="pill pill--solid">Paid</span>
+						<div class="pledger__act"><span class="dlinks"><a>↓ inv</a><a>↓ rcpt</a></span></div>
+					</div>
+					<div class="pledger__row pledger__row--due">
+						<span class="pledger__no">IV</span>
+						<div style="min-width:0"><p class="dname">Visa fee</p><p class="pledger__sub">INV-2025-0204 · processing + biometrics · due 28 Sep</p></div>
+						<div class="pledger__amt"><b>USD 220</b><small>GH₵ 3,300</small></div>
+						<span class="pill">Due</span>
+						<div class="pledger__act"><span class="btn btn--sm">Pay →</span><span class="dlinks"><a>↓ inv</a></span></div>
+					</div>
+					<div class="pledger__row">
+						<span class="pledger__no">V</span>
+						<div style="min-width:0"><p class="dname">Pre-departure milestone</p><p class="pledger__sub">releases your letter, visa docs &amp; e-ticket · after the visa</p></div>
+						<div class="pledger__amt"><b>USD 2,100</b><small>GH₵ 31,500</small></div>
+						<span class="pill pill--hollow">Not yet</span>
+						<div class="pledger__act"></div>
+					</div>
+					<div class="pledger__row">
+						<span class="pledger__no">VI</span>
+						<div style="min-width:0"><p class="dname">Post-arrival remainder</p><p class="pledger__sub">on the schedule you chose · after arrival</p></div>
+						<div class="pledger__amt"><b>USD 1,300</b><small>GH₵ 19,500</small></div>
+						<span class="pill pill--hollow">Not yet</span>
+						<div class="pledger__act"></div>
+					</div>
+				</div>
+
+				<div class="preceipts">
+					<div class="dgroup__h"><span class="eyebrow" style="color:var(--ink)">Receipts · 4</span><span class="dgroup__n">show all</span></div>
+					<div class="preceipts__row"><span class="d">12 Sep</span><span>INV-2025-0187 · Application fee · Card Payment<span class="ref">ref CNIT-9F3A2B</span></span><span class="a">GH₵ 7,950</span><span class="dlinks"><a>↓ receipt</a></span></div>
+					<div class="preceipts__row"><span class="d">04 Sep</span><span>INV-2025-0168 · Deposit · MoMo<span class="ref">ref CNIT-77BQ10</span></span><span class="a">GH₵ 7,500</span><span class="dlinks"><a>↓ receipt</a></span></div>
+					<div class="preceipts__row"><span class="d">18 Aug</span><span>INV-2025-0142 · Consultation · Card Payment<span class="ref">ref CNIT-31XZ</span></span><span class="a">GH₵ 1,125</span><span class="dlinks"><a>↓ receipt</a></span></div>
+				</div>
+			</div>
+			<div class="dpane__side" style="width:22rem">
+				<div class="card card--inv">
+					<p class="eyebrow">Next payment</p>
+					<p style="font-weight:700;margin-top:.4rem">Visa fee</p>
+					<p class="mono" style="font-size:1.3rem;margin-top:.2rem">USD 220 · GH₵ 3,300</p>
+					<p class="mono muted" style="font-size:.66rem;margin-top:.3rem">INV-2025-0204 · issued 15 Sep by Ama Mensah</p>
+					<div class="mt2"><span class="btn btn--inv" style="display:block">Pay →</span></div>
+					<p style="font-size:.7rem;color:rgba(255,255,255,.7);margin-top:.5rem">Paystack · card or mobile money · receipt lands here</p>
+				</div>
+				<div class="card mt2">
+					<p class="eyebrow">Your plan</p>
+					<div class="pkv"><span class="k">Plan</span><span class="v">Instalments</span></div>
+					<div class="pkv"><span class="k">Service fee</span><span class="v">USD 4,130</span></div>
+					<div class="pkv"><span class="k">Deposit 10%</span><span class="v">Paid ✓</span></div>
+					<div class="pkv"><span class="k">Pre-departure 50%</span><span class="v">after the visa</span></div>
+					<div class="pkv"><span class="k">Post-arrival 40%</span><span class="v">your schedule</span></div>
+					<div class="mt2"><span class="btn btn--ghost btn--sm">Change plan</span></div>
+				</div>
+			</div>
+		</div>
+
+		<p class="cap" style="margin-top:2.5rem">mobile · 390px</p>
+		<div class="sidebyside">
+			<div class="phone phone--tall">
+				<p class="eyebrow">Money</p>
+				<p class="dname" style="font-size:1.05rem">Payments &amp; settlements</p>
+				<div class="pdue mt2" style="padding:1.1rem 1.2rem">
+					<div style="width:100%">
+						<p class="eyebrow">Due now</p>
+						<p class="amt" style="font-size:1.9rem">USD 220</p>
+						<p class="sub">GH₵ 3,300 · IV · VISA FEE · DUE 28 SEP</p>
+					</div>
+					<span class="btn btn--inv" style="width:100%;min-height:48px;line-height:48px;padding:0">Pay →</span>
+				</div>
+				<div class="strip2"><div>Paid<b>USD 1,250</b></div><div>To come<b>USD 3,400</b></div></div>
+				<div class="mt3">
+					<div class="lcard">
+						<div class="top"><span class="pledger__no pledger__no--on">I</span><p class="dname">Consultation fee</p><span class="pill pill--solid" style="margin-left:auto">Paid</span></div>
+						<p class="pledger__sub" style="margin-left:2.2rem">INV-2025-0142 · at booking</p>
+						<div class="bar"><span class="a">USD 75<small>GH₵ 1,125</small></span><span class="dlinks"><a>↓ rcpt</a></span></div>
+					</div>
+					<div class="lcard" style="box-shadow:inset 4px 0 0 var(--ink);padding-left:.6rem">
+						<div class="top"><span class="pledger__no">IV</span><p class="dname">Visa fee</p><span class="pill" style="margin-left:auto">Due</span></div>
+						<p class="pledger__sub" style="margin-left:2.2rem">INV-2025-0204 · due 28 Sep</p>
+						<div class="bar"><span class="a">USD 220<small>GH₵ 3,300</small></span><span class="btn btn--sm">Pay →</span></div>
+					</div>
+					<div class="lcard">
+						<div class="top"><span class="pledger__no">V</span><p class="dname">Pre-departure milestone</p><span class="pill pill--hollow" style="margin-left:auto">Not yet</span></div>
+						<p class="pledger__sub" style="margin-left:2.2rem">after the visa</p>
+						<div class="bar"><span class="a">USD 2,100<small>GH₵ 31,500</small></span><span></span></div>
+					</div>
+				</div>
+				<div class="pbar"><span class="mono" style="font-size:.68rem">Due now · USD 220</span><span class="btn btn--sm">Pay visa fee →</span></div>
+			</div>
+			<div class="phone">
+				<p class="eyebrow">Receipts</p>
+				<div class="mt2">
+					<div class="preceipts__row" style="grid-template-columns:1fr auto"><span>INV-2025-0187 · Card Payment<span class="ref">12 Sep · ref CNIT-9F3A2B</span></span><span class="a">GH₵ 7,950<span class="ref" style="text-align:right">↓ receipt</span></span></div>
+					<div class="preceipts__row" style="grid-template-columns:1fr auto"><span>INV-2025-0168 · MoMo<span class="ref">04 Sep · ref CNIT-77BQ10</span></span><span class="a">GH₵ 7,500<span class="ref" style="text-align:right">↓ receipt</span></span></div>
+					<div class="preceipts__row" style="grid-template-columns:1fr auto"><span>INV-2025-0142 · Card Payment<span class="ref">18 Aug · ref CNIT-31XZ</span></span><span class="a">GH₵ 1,125<span class="ref" style="text-align:right">↓ receipt</span></span></div>
+				</div>
+				<div class="card mt3">
+					<p class="eyebrow">Your plan</p>
+					<div class="pkv"><span class="k">Plan</span><span class="v">Instalments</span></div>
+					<div class="pkv"><span class="k">Deposit 10%</span><span class="v">Paid ✓</span></div>
+					<div class="pkv"><span class="k">Pre-departure 50%</span><span class="v">after the visa</span></div>
+					<div class="pkv"><span class="k">Post-arrival 40%</span><span class="v">your schedule</span></div>
+					<div class="mt2"><span class="btn btn--ghost btn--sm">Change plan</span></div>
+				</div>
+				<div class="mt3" style="border:1px solid var(--line-light);padding:.8rem 1rem;display:flex;justify-content:space-between;align-items:center">
+					<span class="eyebrow">Payment execution · Chapter V</span><span class="mono">→</span>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="callout"><b>C — what changed</b><ul>
+		<li><code class="mono">.pposition</code> → one inverted <b>Due now</b> block that contains the Pay → CTA, plus a two-cell hairline for Paid / Still to come. When nothing is due the block turns hollow: “Nothing due right now — next fee arrives with Chapter V”.</li>
+		<li>The 7-column table becomes <code class="mono">.pledger</code> rows (mark | title | amount | status | actions); Covers + Due + invoice no. fold into a mono sub-line; amounts show USD over GH₵; settled rows dim; the due row keeps the inset-bar treatment.</li>
+		<li>Receipts become a linear list — never a table — collapsed to 3 with “Show all”; the Paystack reference moves to a muted second line.</li>
+		<li>The rail stops repeating the position: one inverted “Next payment” card + “Your plan”, sticky. On mobile the due block leads, Pay is 48px full-width, and a sticky bottom bar appears once you scroll past it.</li>
+	</ul></div>
+
+	<!-- ================= SECTION D ================= -->
+	<span class="tag" id="d">D · Wiring</span>
+	<div class="mock">
+		<table class="wiring">
+			<tr><th>Surface</th><th>Change</th></tr>
+			<tr><td>PortalDocumentVault.tsx</td><td>Group rows by <code>chapter</code>, sort by state (needs-you → in review → verified → missing); new <code>.dstrip</code>, <code>.dgroup</code>, <code>.drow2</code> grid; persistent <code>.dpane</code> column ≥960px; <code>DocumentSheet</code> gets a <code>tab</code> state (<code>preview | note | history</code>) and a sticky <code>.dsheet__bar</code>; mobile sheet 92vh + body scroll lock (backdrop already exists); upload pick modal becomes a bottom sheet with a <code>capture="environment"</code> photo input.</td></tr>
+			<tr><td>PortalSections.tsx · PortalFinancial</td><td><code>.pdue</code> block replaces <code>.pposition</code>; <code>.pledger</code> row list replaces <code>&lt;table class="ptable"&gt;</code> (<code>.ptable__now</code> semantics → <code>.pledger__row--due</code>); receipts → <code>.preceipts</code> list with show-all; inline <code>&lt;h2&gt;</code> styles → <code>.psec__title</code>; <code>view="plan"</code> reuses <code>.pledger</code>.</td></tr>
+			<tr><td>app.css</td><td>New rules + <code>@media (max-width: 959.98px)</code> card variants; delete the now-unused <code>.ptable</code> responsive gap. All monochrome — no colour tokens beyond <code>--foreground/--background/--border*/--muted*</code>.</td></tr>
+			<tr><td>Data</td><td>Unchanged — <code>useDocuments</code>, <code>meApi.invoices</code>, <code>openInvoiceDocument</code>, <code>documentsApi.downloadUrl</code>. No server changes.</td></tr>
+			<tr><td>Out of scope</td><td>Payment sheet (MoMo/card) internals, invoice PDFs, ops review flow.</td></tr>
+		</table>
+	</div>
+</div>
+</body>
+</html>

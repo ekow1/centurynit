@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portal — Visa &amp; Applications · layout and timeline (proposed)</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1240px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	.banner{font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;background:var(--ink);color:#fff;padding:.35rem .7rem;margin-bottom:.8rem}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem}
+	.jump a{color:inherit}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.5rem clamp(1.25rem,3vw,2.25rem) 2.5rem}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.sidebyside{display:flex;gap:2rem;flex-wrap:wrap;align-items:flex-start}
+	.cap{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.5rem}
+
+	/* ---- portal chrome ---- */
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.title{font-size:1.75rem;font-weight:500;letter-spacing:-.01em;margin-top:.25rem}
+	.lead{color:var(--fg-muted);font-size:.92rem;margin-top:.5rem;max-width:44rem}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap;text-align:center}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--inv{background:#fff;color:var(--ink);border-color:#fff}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.btn--off{opacity:.45;cursor:not-allowed}
+	.pill{display:inline-flex;align-items:center;padding:.25rem .65rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line-light)}
+	.pkv{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--line-light);font-size:.78rem}
+	.pkv:last-child{border-bottom:none}
+	.pkv .k{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--micro);font-size:.64rem;padding-top:.1rem}
+	.pkv .v{text-align:right;min-width:0}
+	.card{background:#fff;border:1px solid var(--ink);padding:1.1rem}
+	.card--key{border-width:1.5px}
+	.card--inv{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.card--inv .eyebrow{color:rgba(255,255,255,.6)}
+	.card--inv .muted{color:rgba(255,255,255,.7)}
+	.note2{border:1px solid var(--line-light);background:var(--muted-bg);padding:.45rem .7rem;font-size:.75rem;color:var(--fg-muted);margin-top:.4rem}
+	.mt1{margin-top:.5rem}.mt2{margin-top:.8rem}.mt3{margin-top:1rem}
+	.dlinks{font-family:var(--mono);font-size:.68rem;white-space:nowrap}
+	.dlinks a{color:var(--ink);text-decoration:underline}
+	.dlinks a+a{margin-left:.7rem}
+	.jlink{background:none;border:none;padding:0;font:inherit;text-decoration:underline;cursor:pointer;color:inherit;font-family:var(--mono);font-size:.68rem}
+	.jlink--off{opacity:.45;cursor:not-allowed;text-decoration:none}
+	.avatar{width:2.6rem;height:2.6rem;border:1.5px solid var(--ink);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;font-size:.85rem;flex-shrink:0}
+	.avatar--inv{background:var(--ink);color:#fff}
+
+	.psplit{display:grid;grid-template-columns:minmax(0,1fr) 21rem;gap:2rem;align-items:start;margin-top:1.75rem}
+	.prail{display:flex;flex-direction:column;gap:.8rem}
+
+	/* ---- steps ---- */
+	.vsteps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem;margin-top:1.25rem}
+	.vstep{border:1px solid var(--line-light);padding:.7rem .9rem;min-width:0}
+	.vstep .l{font-size:.8rem;font-weight:650}
+	.vstep .d{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);margin-top:.2rem;letter-spacing:.04em}
+	.vstep--done{background:var(--muted-bg)}
+	.vstep--done .l{color:var(--ink)}
+	.vstep--on{border:1.5px solid var(--ink)}
+	.vstep--on .d{color:var(--ink);font-weight:700}
+
+	/* ---- visa hero ---- */
+	.vhero{border:1.5px solid var(--ink);padding:1.4rem 1.75rem;display:flex;flex-wrap:wrap;gap:1rem;justify-content:space-between;align-items:center;margin-top:1.5rem}
+	.vhero--done{background:var(--ink);color:#fff}
+	.vhero--done .eyebrow{color:rgba(255,255,255,.6)}
+	.vhero--done .muted{color:rgba(255,255,255,.75)}
+	.vhero__t{font-size:1.6rem;font-weight:700;letter-spacing:-.01em;margin-top:.3rem}
+	.vhero__sub{font-family:var(--mono);font-size:.7rem;margin-top:.35rem;letter-spacing:.04em}
+	.vhero--hollow{background:#fff;color:var(--ink)}
+	.vmini{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.6rem;margin-top:.8rem}
+	.vmini>div{border:1px solid var(--line-light);padding:.7rem .9rem}
+	.vmini .t{font-weight:650;font-size:.8rem}
+	.vmini .d{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);margin-top:.15rem}
+	.vmini--hot{border:2px solid var(--ink)!important}
+	.vmini--hot .d{color:var(--ink);font-weight:700}
+
+	/* ---- doc rows (visa docs) ---- */
+	.vdoc{display:grid;grid-template-columns:2.2rem minmax(0,1fr) auto auto;gap:.9rem;align-items:center;padding:.75rem .25rem;border-bottom:1px solid var(--line-light)}
+	.vdoc .mark{width:1.5rem;height:1.5rem;border:1.5px solid var(--line);display:inline-flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.7rem;font-weight:700}
+	.vdoc .mark--on{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.vdoc .nm{font-weight:600;font-size:.88rem}
+	.vdoc .hint{font-size:.72rem;color:var(--fg-muted)}
+	.vdoc .btn{min-height:44px;display:inline-flex;align-items:center}
+
+	/* ---- application rows ---- */
+	.settled{border:1px solid var(--line);background:var(--muted-bg);padding:.7rem 1rem;display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;margin-top:.6rem}
+	.settled .mono{font-size:.68rem;color:var(--fg-muted)}
+	.school-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:1rem;align-items:center;border:1px solid var(--line-light);padding:.7rem 1rem;margin-top:.6rem}
+	.school-row .nm{font-weight:600;font-size:.88rem}
+	.school-row .prog{font-size:.72rem;color:var(--fg-muted)}
+	.school-row .amt{font-family:var(--mono);font-size:.75rem;text-align:right}
+	.pledger__row{display:grid;grid-template-columns:2.5rem minmax(0,1fr) 9rem 7rem auto;gap:1rem;align-items:center;padding:.85rem .25rem;border-bottom:1px solid var(--line-light)}
+	.pledger__mark{font-family:var(--mono);font-size:.7rem;font-weight:700;width:1.6rem;height:1.6rem;border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+	.pledger__mark--on{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.pledger__name{font-weight:650;font-size:.88rem}
+	.pledger__sub{font-family:var(--mono);font-size:.68rem;color:var(--fg-muted);margin-top:.15rem}
+	.pledger__amt{text-align:right;font-family:var(--mono)}
+	.pledger__amt b{font-size:.95rem}
+	.pledger__amt small{display:block;font-size:.65rem;color:var(--fg-muted)}
+	.pledger__status{text-align:right}
+	.pledger__acts{display:flex;flex-direction:column;align-items:flex-end;gap:.35rem}
+
+	/* ---- shared timeline, monochrome ---- */
+	.upd2{margin-top:.5rem}
+	.upd2__new{display:flex;align-items:center;gap:.8rem;font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-muted);margin:.9rem 0 .4rem}
+	.upd2__new::after{content:"";flex:1;border-top:1px solid var(--line-light)}
+	.upd2__item{display:grid;grid-template-columns:1.4rem minmax(0,1fr);gap:.7rem;padding:.6rem 0;border-bottom:1px solid var(--line-light)}
+	.upd2__mark{width:.9rem;height:.9rem;border:1.5px solid var(--ink);margin-top:.15rem;position:relative}
+	.upd2__mark--status{background:var(--ink)}
+	.upd2__mark--note{background:#fff}
+	.upd2__mark--docreq{background:linear-gradient(135deg,var(--ink) 50%,#fff 50%)}
+	.upd2__mark--decision{background:var(--ink)}
+	.upd2__mark--decision::after{content:"";position:absolute;inset:.18rem;background:#fff;border-radius:50%}
+	.upd2__mark--handover{background:#fff}
+	.upd2__mark--handover::after{content:"";position:absolute;left:.1rem;right:.1rem;top:50%;border-top:2px solid var(--ink)}
+	.upd2__head{display:flex;gap:.6rem;align-items:baseline;flex-wrap:wrap}
+	.upd2__who{font-weight:650;font-size:.8rem}
+	.upd2__when{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted)}
+	.upd2__kind{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;border:1px solid var(--line-light);color:var(--micro);padding:.1rem .45rem}
+	.upd2__co{font-family:var(--mono);font-size:.6rem;color:var(--fg-muted)}
+	.upd2 ul{list-style:none;margin:.35rem 0 0;padding:0;display:grid;gap:.2rem;font-size:.8rem}
+	.upd2 ul li::before{content:"— ";color:var(--fg-muted)}
+	.upd2__more{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted)}
+
+	/* ---- phones ---- */
+	.phone{width:390px;border:1.5px solid var(--ink);margin:0;background:#fff;padding:1rem;position:relative;overflow:hidden;flex-shrink:0}
+	.phone .vsteps{grid-template-columns:1fr 1fr}
+	.phone .psplit{grid-template-columns:1fr;gap:1rem}
+	.pbar{position:absolute;left:0;right:0;bottom:0;background:#fff;border-top:1.5px solid var(--ink);padding:.75rem 1rem;display:flex;justify-content:space-between;align-items:center;z-index:5}
+
+	/* wiring table */
+	.wiring{border-collapse:collapse;width:100%;margin-top:.5rem}
+	.wiring th,.wiring td{border:1px solid #d4d4d8;font-family:var(--mono);font-size:.7rem;text-align:left;padding:.6rem .8rem;vertical-align:top}
+	.wiring th{text-transform:uppercase;letter-spacing:.1em;font-size:.6rem;background:var(--muted-bg)}
+	.wiring td:first-child{white-space:nowrap;font-weight:700}
+	.wiring code{font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<span class="banner">Mock · proposal — all names, amounts and dates illustrative</span>
+	<h1 class="page">Visa tracking &amp; Applications — layout and shared timeline (proposed)</h1>
+	<p class="note">The visa page states the same facts four times and still reads "in progress" after the grant. The applications page repeats its CTA and keeps offering a switch after visa processing began. And the shared timeline leaks colour, repeats edited briefings verbatim, and files Chapter V updates under Chapter III. This mock gives each page one state block, one readable step strip, and a timeline that coalesces.</p>
+	<div class="jump"><a href="#a">A · what's wrong</a><a href="#b">B · visa</a><a href="#c">C · applications</a><a href="#d">D · timeline</a><a href="#e">E · wiring</a></div>
+
+	<!-- ================= SECTION A ================= -->
+	<span class="tag" id="a">A · What's wrong today</span>
+	<div class="mock">
+		<div class="sidebyside">
+			<div style="flex:1;min-width:18rem">
+				<p class="eyebrow" style="border-bottom:1.5px solid var(--ink);padding-bottom:.35rem">Visa · /portal/visa</p>
+				<ul style="margin:.6rem 0 0 1.1rem;font-size:.78rem;display:grid;gap:.4rem">
+					<li>The same facts render <b>three times</b>: the black "Current update" banner, the 4-step spine (dates in each step), and the rail's "The case file" pkv — then the timeline repeats them a fourth time.</li>
+					<li>Complete still looks in-progress: step 4 "Visa granted · now" narrates the process though <code class="mono">validFrom/validTo/collectedAt</code> exist. No settled hero.</li>
+					<li>"Your visa officer" prints a <b>raw email</b> as the name; the role line is generic.</li>
+					<li>"Your visa documents · 1/5 verified" is a stale checklist competing with the outcome; per-row action is a tiny mono "UPLOAD" text link; the CTA goes to the vault without preselecting the doc.</li>
+					<li>"After the visa" is a paragraph, not a next action. The 4-step spine spends a lot of vertical space on four lines.</li>
+				</ul>
+			</div>
+			<div style="flex:1;min-width:18rem">
+				<p class="eyebrow" style="border-bottom:1.5px solid var(--ink);padding-bottom:.35rem">Applications · /portal/application</p>
+				<ul style="margin:.6rem 0 0 1.1rem;font-size:.78rem;display:grid;gap:.4rem">
+					<li>"Visa processing requested" appears <b>twice</b> with the same CTA (<code class="mono">journey-now</code> banner + section 3 card).</li>
+					<li>The <code class="mono">.psteps4</code> labels are ~0.6rem mono — unreadable; the useful facts under them are tiny.</li>
+					<li>Two equal-weight school cards though one is accepted; the loser still offers "Switch to this offer" after visa processing began; a mini 3-column offer table per card; "arrives once &lt;email&gt; uploads it" printed twice.</li>
+					<li>Section 2 "Application invoice" is a single sentence — no invoice number, no receipt link.</li>
+					<li>Rail "This chapter" uses the handler's email as a value; "How accepting works" is irrelevant once accepted.</li>
+				</ul>
+			</div>
+			<div style="flex:1;min-width:18rem">
+				<p class="eyebrow" style="border-bottom:1.5px solid var(--ink);padding-bottom:.35rem">Shared · ConsultantUpdates</p>
+				<ul style="margin:.6rem 0 0 1.1rem;font-size:.78rem;display:grid;gap:.4rem">
+					<li><b>Colour leaks:</b> fresh-item red gradient, <code class="mono">#92400e</code> doc-req amber, <code class="mono">#0d7a3f</code> decision green, <code class="mono">#5b21b6</code> assign purple.</li>
+					<li><b>Repeated entries:</b> five near-identical departure-briefing blocks (every staff edit re-emits the whole briefing); two identical "Visa appointment" lines.</li>
+					<li><b>Wrong chapter:</b> Chapter V briefing lines render under Chapter III "Updates" — the filter is just <code class="mono">!isVisaUpdate(c)</code>.</li>
+					<li>Author shows "Super Admin" or a raw email. Multi-line bodies are a raw text block.</li>
+				</ul>
+			</div>
+		</div>
+	</div>
+
+	<!-- ================= SECTION B · VISA ================= -->
+	<span class="tag tag--after" id="b">B · Visa — desktop &amp; mobile</span>
+	<div class="mock">
+		<p class="cap">desktop · ~1200px · visa granted</p>
+		<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap">
+			<div>
+				<p class="eyebrow">Chapter IV · Visa</p>
+				<p class="title">Visa tracking</p>
+			</div>
+			<span class="mono muted" style="font-size:.68rem">case CNS-1042 · officer Ama Serwaa</span>
+		</div>
+
+		<!-- state block -->
+		<div class="vhero vhero--done">
+			<div>
+				<p class="eyebrow">Decision · 30 Sep</p>
+				<p class="vhero__t">Visa granted</p>
+				<p class="vhero__sub muted">Valid 12 Oct 2026 → 11 Oct 2028 · passport collected 30 Sep</p>
+			</div>
+			<span class="btn btn--inv">Continue to Departure →</span>
+		</div>
+		<div class="vmini">
+			<div><p class="t">Awaiting officer</p><p class="d">lodged · queued for a visa officer</p></div>
+			<div class="vmini--hot"><p class="t">Appointment</p><p class="d">24 Sep · 09:30 · VFS Accra</p></div>
+			<div><p class="t">Awaiting decision</p><p class="d">biometrics done · with the embassy</p></div>
+		</div>
+		<p class="cap mt1">the same block, hollow + refused: <span class="mono">“Refused · your consultant will review the reasons with you”</span></p>
+
+		<!-- steps, readable -->
+		<div class="vsteps">
+			<div class="vstep vstep--done"><p class="l">Lodged</p><p class="d">18 Sep</p></div>
+			<div class="vstep vstep--done"><p class="l">Biometrics</p><p class="d">24 Sep</p></div>
+			<div class="vstep vstep--done"><p class="l">Decision</p><p class="d">30 Sep</p></div>
+			<div class="vstep vstep--done"><p class="l">Granted</p><p class="d">30 Sep</p></div>
+		</div>
+
+		<div class="psplit">
+			<div>
+				<!-- in-progress variant of the documents list -->
+				<p class="cap">in-progress variant — visa documents</p>
+				<div class="vdoc"><span class="mark mark--on">●</span><div><p class="nm">Passport</p><p class="hint">Valid 6+ months past intake</p></div><span class="pill pill--solid">Verified</span><span></span></div>
+				<div class="vdoc"><span class="mark">○</span><div><p class="nm">Bank statement</p><p class="hint">Last 3 months, stamped</p></div><span class="pill pill--hollow">Missing</span><span class="btn btn--sm">Upload</span></div>
+				<div class="vdoc"><span class="mark">◐</span><div><p class="nm">Academic transcript</p><p class="hint">Certified copy</p></div><span class="pill pill--hollow">In review</span><span></span></div>
+				<p class="mono muted mt1" style="font-size:.62rem">upload jumps to /portal/documents?doc=&lt;type&gt; — the vault opens that row's sheet preselected</p>
+				<p class="cap" style="margin-top:1.2rem">complete variant — the list collapses</p>
+				<div class="settled"><span class="mono">✓</span><span style="font-size:.85rem;font-weight:600">5 documents · 1 verified · archived with your case</span><span class="dlinks" style="margin-left:auto"><a>Open vault</a></span></div>
+			</div>
+			<div class="prail">
+				<div class="card card--key">
+					<p class="eyebrow">Your visa officer</p>
+					<div style="display:flex;gap:.8rem;align-items:center;margin-top:.6rem">
+						<span class="avatar avatar--inv">AS</span>
+						<div>
+							<p style="font-weight:700">Ama Serwaa</p>
+							<p class="muted" style="font-size:.74rem">Visa officer · Accra</p>
+						</div>
+					</div>
+					<div style="display:flex;gap:.5rem;margin-top:.8rem">
+						<span class="btn btn--ghost btn--sm" style="flex:1;min-height:44px;display:flex;align-items:center;justify-content:center">Message</span>
+						<span class="btn btn--ghost btn--sm" style="flex:1;min-height:44px;display:flex;align-items:center;justify-content:center">Book call</span>
+					</div>
+				</div>
+				<div class="card">
+					<p class="eyebrow">Next</p>
+					<p class="pkv" style="border:none;padding-top:.4rem"><span class="k">Chapter V</span><span class="v">Departure</span></p>
+					<span class="btn btn--sm mt1">Book your flight →</span>
+				</div>
+			</div>
+		</div>
+
+		<p class="cap" style="margin-top:2.5rem">mobile · 390px</p>
+		<div class="phone">
+			<p class="eyebrow">Chapter IV · Visa</p>
+			<p class="dname" style="font-size:1.05rem;font-weight:650">Visa tracking</p>
+			<div class="vhero vhero--done mt2" style="padding:1.1rem 1.2rem">
+				<div style="width:100%">
+					<p class="eyebrow">Decision · 30 Sep</p>
+					<p class="vhero__t" style="font-size:1.3rem">Visa granted</p>
+					<p class="vhero__sub muted">Valid 12 Oct 2026 → 11 Oct 2028</p>
+				</div>
+				<span class="btn btn--inv" style="width:100%;min-height:48px;line-height:48px;padding:0">Continue to Departure →</span>
+			</div>
+			<div class="vsteps">
+				<div class="vstep vstep--done"><p class="l">Lodged</p><p class="d">18 Sep</p></div>
+				<div class="vstep vstep--done"><p class="l">Biometrics</p><p class="d">24 Sep</p></div>
+				<div class="vstep vstep--done"><p class="l">Decision</p><p class="d">30 Sep</p></div>
+				<div class="vstep vstep--done"><p class="l">Granted</p><p class="d">30 Sep</p></div>
+			</div>
+			<div class="card mt3">
+				<p class="eyebrow">Your visa officer</p>
+				<div style="display:flex;gap:.7rem;align-items:center;margin-top:.5rem">
+					<span class="avatar avatar--inv" style="width:2.2rem;height:2.2rem">AS</span>
+					<div><p style="font-weight:700;font-size:.88rem">Ama Serwaa</p><p class="muted" style="font-size:.72rem">Visa officer · Accra</p></div>
+				</div>
+				<div style="display:flex;gap:.5rem;margin-top:.7rem">
+					<span class="btn btn--ghost btn--sm" style="flex:1;min-height:44px;display:flex;align-items:center;justify-content:center">Message</span>
+					<span class="btn btn--ghost btn--sm" style="flex:1;min-height:44px;display:flex;align-items:center;justify-content:center">Book call</span>
+				</div>
+			</div>
+			<div class="settled mt3"><span class="mono">✓</span><span style="font-size:.82rem;font-weight:600">5 documents · archived</span><span class="dlinks" style="margin-left:auto"><a>Open vault</a></span></div>
+			<p class="eyebrow mt3">Updates</p>
+			<p class="mono muted mt1" style="font-size:.64rem">3 latest shown · earlier below</p>
+			<div class="upd2">
+				<div class="upd2__item"><span class="upd2__mark upd2__mark--decision"></span><div><div class="upd2__head"><span class="upd2__who">Ama Serwaa</span><span class="upd2__when">30 Sep · 14:02</span><span class="upd2__kind">Decision</span></div><ul><li>Visa granted — valid 12 Oct 2026 → 11 Oct 2028</li></ul></div></div>
+				<div class="upd2__item"><span class="upd2__mark upd2__mark--status"></span><div><div class="upd2__head"><span class="upd2__who">Century NIT</span><span class="upd2__when">30 Sep · 09:15</span><span class="upd2__kind">Status</span></div><ul><li>Passport ready for collection — VFS Accra</li></ul></div></div>
+				<div class="upd2__item"><span class="upd2__mark upd2__mark--note"></span><div><div class="upd2__head"><span class="upd2__who">Ama Serwaa</span><span class="upd2__when">24 Sep · 11:40</span><span class="upd2__kind">Note</span></div><ul><li>Biometrics done. Decision usually lands inside 10 working days.</li></ul></div></div>
+			</div>
+		</div>
+	</div>
+	<div class="callout"><b>B — what changed</b><ul>
+		<li>One state block (<code class="mono">.vhero</code>) replaces banner + case-file card + repeated facts; the three mini states below it are the same component in its other modes (appointment gets the 2px frame — the one date not to miss).</li>
+		<li>Steps become a readable strip (0.8rem labels, mono dates) and own the dates <b>once</b>.</li>
+		<li>Documents list is only a worklist while the visa is in progress; afterwards it collapses to one settled line. Upload rows are 44px buttons deep-linked to <code class="mono">/portal/documents?doc=&lt;type&gt;</code>.</li>
+		<li>Officer card uses a display name + initials avatar, never an email; "After the visa" copy becomes a single "Next" card.</li>
+	</ul></div>
+
+	<!-- ================= SECTION C · APPLICATIONS ================= -->
+	<span class="tag tag--after" id="c">C · Applications — desktop &amp; mobile</span>
+	<div class="mock">
+		<p class="cap">desktop · ~1200px · decision made, visa processing requested</p>
+		<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap">
+			<div>
+				<p class="eyebrow">Chapter III · Applications</p>
+				<p class="title">Your applications</p>
+			</div>
+			<span class="mono muted" style="font-size:.68rem">handler Kofi Owusu · case CNS-1042</span>
+		</div>
+
+		<!-- the one banner -->
+		<div class="vhero vhero--done" style="margin-top:1.5rem">
+			<div>
+				<p class="eyebrow">You are here</p>
+				<p class="vhero__t" style="font-size:1.3rem">Visa processing requested</p>
+				<p class="vhero__sub muted">Oxford accepts you. Your handler lodges the visa file next.</p>
+			</div>
+			<span class="btn btn--inv">Go to your visa →</span>
+		</div>
+
+		<div class="vsteps">
+			<div class="vstep vstep--done"><p class="l">Target schools</p><p class="d">2</p></div>
+			<div class="vstep vstep--done"><p class="l">Invoice</p><p class="d">paid</p></div>
+			<div class="vstep vstep--done"><p class="l">Decisions</p><p class="d">2 of 2</p></div>
+			<div class="vstep vstep--done"><p class="l">Accept</p><p class="d">Oxford</p></div>
+		</div>
+
+		<!-- settled decision row -->
+		<div class="settled" style="margin-top:1.2rem">
+			<span class="mono">✓</span>
+			<span style="font-size:.85rem"><b>Decision</b> · University of Oxford · MSc Computer Science · accepted 18 Sep · <b>visa processing</b></span>
+			<span class="jlink jlink--off" style="margin-left:auto" title="Ask your handler">Change</span>
+		</div>
+		<p class="mono muted mt1" style="font-size:.62rem">“Change” disables once visa processing begins — ask your handler.</p>
+
+		<div class="psplit">
+			<div>
+				<p class="cap">your choice — the accepted school is the only card</p>
+				<div class="card card--key" style="margin-top:.4rem">
+					<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.5rem">
+						<div>
+							<p class="eyebrow">Your choice</p>
+							<p style="font-weight:700;font-size:1.05rem;margin-top:.3rem">University of Oxford</p>
+							<p class="muted" style="font-size:.8rem">MSc Computer Science · Jan 2027 intake</p>
+						</div>
+						<span class="pill pill--solid">Accepted</span>
+					</div>
+					<div class="pkv" style="margin-top:.6rem"><span class="k">Tuition</span><span class="v">USD 32,000 / yr</span></div>
+					<div class="pkv"><span class="k">Deposit</span><span class="v">USD 4,000 · paid 22 Sep ✓</span></div>
+					<div class="pkv"><span class="k">Offer letter</span><span class="v dlinks"><a>↓ offer letter</a></span></div>
+				</div>
+				<p class="cap" style="margin-top:1rem">other offers — compact rows, switch disabled once the visa starts</p>
+				<div class="school-row">
+					<div><p class="nm">University of Manchester</p><p class="prog">MSc Data Science · offer received</p></div>
+					<span class="amt">USD 28,500 / yr</span>
+					<span class="pill pill--hollow">Offer</span>
+					<span class="jlink jlink--off" title="Ask your handler">Switch</span>
+				</div>
+				<p class="cap" style="margin-top:1.4rem">the invoice as a ledger row</p>
+				<div class="pledger__row" style="border-top:1.5px solid var(--ink)">
+					<span class="pledger__mark pledger__mark--on">III</span>
+					<div><p class="pledger__name">Application fee</p><p class="pledger__sub">INV-2026-0142 · submissions to 2 schools · at selection</p></div>
+					<div class="pledger__amt"><b>GH₵ 2</b><small>USD 0.13</small></div>
+					<span class="pledger__status"><span class="pill pill--solid">Paid</span></span>
+					<div class="pledger__acts"><span class="dlinks"><a>↓ inv</a><a>↓ rcpt</a></span></div>
+				</div>
+			</div>
+			<div class="prail">
+				<div class="card card--inv">
+					<p class="eyebrow">Your position</p>
+					<p style="font-size:1.4rem;font-weight:700;margin-top:.3rem">2 offers<br>1 accepted</p>
+					<p class="mono muted mt1" style="font-size:.64rem">VISA FILE IN PREPARATION</p>
+				</div>
+				<div class="card">
+					<p class="eyebrow">This chapter</p>
+					<div class="pkv"><span class="k">Handler</span><span class="v">Kofi Owusu</span></div>
+					<div class="pkv"><span class="k">Schools</span><span class="v">2 applied</span></div>
+					<div class="pkv"><span class="k">Decision</span><span class="v">Oxford · 18 Sep</span></div>
+				</div>
+				<div class="card">
+					<p class="eyebrow">What happens next</p>
+					<p class="muted" style="font-size:.76rem;margin-top:.4rem;line-height:1.6">Your handler lodges the visa file. Nothing is due from you until Chapter IV opens.</p>
+				</div>
+			</div>
+		</div>
+
+		<p class="cap" style="margin-top:2.5rem">mobile · 390px</p>
+		<div class="phone">
+			<p class="eyebrow">Chapter III · Applications</p>
+			<div class="vhero vhero--done mt2" style="padding:1.1rem 1.2rem">
+				<div style="width:100%">
+					<p class="eyebrow">You are here</p>
+					<p class="vhero__t" style="font-size:1.2rem">Visa processing requested</p>
+				</div>
+				<span class="btn btn--inv" style="width:100%;min-height:48px;line-height:48px;padding:0">Go to your visa →</span>
+			</div>
+			<div class="vsteps">
+				<div class="vstep vstep--done"><p class="l">Schools</p><p class="d">2</p></div>
+				<div class="vstep vstep--done"><p class="l">Invoice</p><p class="d">paid</p></div>
+				<div class="vstep vstep--done"><p class="l">Decisions</p><p class="d">2 of 2</p></div>
+				<div class="vstep vstep--done"><p class="l">Accept</p><p class="d">Oxford</p></div>
+			</div>
+			<div class="settled mt2"><span class="mono">✓</span><span style="font-size:.8rem"><b>Oxford</b> · accepted 18 Sep</span><span class="jlink jlink--off" style="margin-left:auto">Change</span></div>
+			<div class="dcard2 card mt2" style="padding:.8rem .9rem">
+				<div style="display:flex;align-items:center;gap:.6rem">
+					<p class="nm" style="font-weight:650">University of Oxford</p>
+					<span class="pill pill--solid" style="margin-left:auto">Accepted</span>
+				</div>
+				<p class="prog muted" style="font-size:.72rem;margin-top:.15rem">MSc Computer Science · Jan 2027</p>
+				<p class="pledger__sub">USD 32,000/yr · deposit paid · <a style="text-decoration:underline">↓ offer letter</a></p>
+			</div>
+			<div class="school-row" style="grid-template-columns:minmax(0,1fr) auto">
+				<div><p class="nm">Manchester</p><p class="prog">MSc Data Science · USD 28,500/yr</p></div>
+				<span class="pill pill--hollow">Offer</span>
+			</div>
+			<div class="pledger__row" style="grid-template-columns:2rem minmax(0,1fr) auto;margin-top:.8rem;border-top:1.5px solid var(--ink)">
+				<span class="pledger__mark pledger__mark--on">III</span>
+				<div><p class="pledger__name">Application fee</p><p class="pledger__sub">INV-2026-0142 · paid</p></div>
+				<div class="pledger__acts"><span class="dlinks"><a>↓ rcpt</a></span></div>
+			</div>
+		</div>
+	</div>
+	<div class="callout"><b>C — what changed</b><ul>
+		<li>The banner owns the state; section 3 collapses to a settled row once accepted. "Change"/"Switch" disable with an "ask your handler" tooltip once visa processing begins — no dead CTAs.</li>
+		<li>Steps use the same readable treatment as the visa strip; facts are the second line at 0.62rem mono.</li>
+		<li>One "Your choice" card for the accepted school; other offers are compact rows. The handler-email string is gone; the offer-letter line becomes a <code class="mono">↓ offer letter</code> link when the file exists.</li>
+		<li>The invoice renders as a <code class="mono">.pledger__row</code> (number · invoice no · amount · status · ↓ inv/↓ rcpt) — same anatomy as Payments.</li>
+	</ul></div>
+
+	<!-- ================= SECTION D · TIMELINE ================= -->
+	<span class="tag tag--after" id="d">D · Shared timeline — monochrome, coalesced, routed</span>
+	<div class="mock">
+		<div class="sidebyside">
+			<div style="flex:1;min-width:20rem">
+				<p class="cap">before — colour chips, repeated briefing, wrong chapter</p>
+				<p class="mono muted" style="font-size:.6rem;margin-bottom:.4rem">markers desaturated for this mock — today they render in the named amber/green/purple</p>
+				<div class="upd2">
+					<div class="upd2__item"><span class="upd2__mark" style="background:var(--line)"></span><div><div class="upd2__head"><span class="upd2__who">Super Admin</span><span class="upd2__when">19 Sep · 10:12</span></div><p class="muted" style="font-size:.78rem;margin-top:.2rem">Report to the school by 30 Sept 2026 / Orientation week begins 21 Sept 2026 / Airport pickup cleared — share your flight / Accommodation letter attached / Emergency contact: +233… / Arrive no earlier than…</p></div></div>
+					<div class="upd2__item"><span class="upd2__mark" style="background:var(--line)"></span><div><div class="upd2__head"><span class="upd2__who">Super Admin</span><span class="upd2__when">19 Sep · 10:11</span></div><p class="muted" style="font-size:.78rem;margin-top:.2rem">Report to the school by 30 Sept 2026 / Orientation week begins 21 Sept 2026 / Airport pickup cleared…</p></div></div>
+					<div class="upd2__item"><span class="upd2__mark" style="background:var(--line)"></span><div><div class="upd2__head"><span class="upd2__who">Super Admin</span><span class="upd2__when">19 Sep · 10:09</span></div><p class="muted" style="font-size:.78rem;margin-top:.2rem">Report to the school by 30 Sept 2026 / Orientation week… <span class="upd2__co">×3 more, identical</span></p></div></div>
+					<div class="upd2__item"><span class="upd2__mark" style="background:var(--line)"></span><div><div class="upd2__head"><span class="upd2__who">kofi@centurynit.com</span><span class="upd2__when">24 Sep · 21:31</span></div><p class="muted" style="font-size:.78rem;margin-top:.2rem">Visa appointment — 24 Sept 2026, 21:31</p></div></div>
+					<div class="upd2__item"><span class="upd2__mark" style="background:var(--line)"></span><div><div class="upd2__head"><span class="upd2__who">kofi@centurynit.com</span><span class="upd2__when">24 Sep · 21:31</span></div><p class="muted" style="font-size:.78rem;margin-top:.2rem">Visa appointment — 24 Sept 2026, 21:31 <span class="upd2__co">(duplicate)</span></p></div></div>
+				</div>
+			</div>
+			<div style="flex:1;min-width:20rem">
+				<p class="cap">after — markers are shapes, edits coalesce, chapters routed</p>
+				<div class="upd2">
+					<div class="upd2__new">New since your last visit</div>
+					<div class="upd2__item"><span class="upd2__mark upd2__mark--decision"></span><div><div class="upd2__head"><span class="upd2__who">Ama Serwaa</span><span class="upd2__when">30 Sep · 14:02</span><span class="upd2__kind">Decision</span></div><ul><li>Visa granted — valid 12 Oct 2026 → 11 Oct 2028</li></ul></div></div>
+					<div class="upd2__item"><span class="upd2__mark upd2__mark--status"></span><div><div class="upd2__head"><span class="upd2__who">Century NIT</span><span class="upd2__when">24 Sep · 21:31</span><span class="upd2__kind">Status</span></div><ul><li>Visa appointment — 24 Sept 2026, 21:31</li></ul></div></div>
+					<div class="upd2__item"><span class="upd2__mark upd2__mark--docreq"></span><div><div class="upd2__head"><span class="upd2__who">Ama Serwaa</span><span class="upd2__when">22 Sep · 09:00</span><span class="upd2__kind">Document</span></div><ul><li>Bank statement — please resubmit, pages 2–3 are missing</li></ul></div></div>
+					<div class="upd2__item"><span class="upd2__mark upd2__mark--note"></span><div><div class="upd2__head"><span class="upd2__who">Century NIT</span><span class="upd2__when">19 Sep · 10:12</span><span class="upd2__kind">Note</span><span class="upd2__co">updated ×5 · show edits</span></div><ul><li>Report to the school by 30 Sept 2026</li><li>Orientation week begins 21 Sept 2026</li><li>Airport pickup cleared — share your flight</li><li>Accommodation letter attached</li></ul><span class="upd2__more">+2 more · filed under Chapter V</span></div></div>
+				</div>
+				<div class="mt3">
+					<p class="cap">marker key</p>
+					<div style="display:flex;gap:1.1rem;flex-wrap:wrap;font-family:var(--mono);font-size:.62rem;color:var(--fg-muted)">
+						<span><span class="upd2__mark upd2__mark--status" style="display:inline-block;vertical-align:-2px"></span> status</span>
+						<span><span class="upd2__mark upd2__mark--note" style="display:inline-block;vertical-align:-2px"></span> note</span>
+						<span><span class="upd2__mark upd2__mark--docreq" style="display:inline-block;vertical-align:-2px"></span> document</span>
+						<span><span class="upd2__mark upd2__mark--decision" style="display:inline-block;vertical-align:-2px"></span> decision</span>
+						<span><span class="upd2__mark upd2__mark--handover" style="display:inline-block;vertical-align:-2px"></span> handover</span>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="callout"><b>D — what changed</b><ul>
+		<li>All markers monochrome shapes (solid / hollow / diagonal / dotted / dashed squares); kind chips are outline only; "new since last visit" is a hairline rule, no gradient.</li>
+		<li><code class="mono">coalesce()</code>: same author + same kind + ≥80% identical text within 24h → one entry with <code class="mono">updated ×5 · last 19 Sep 10:12</code> and a "show edits" toggle.</li>
+		<li>Multi-line bodies render as lists, max 4 lines then "+N more".</li>
+		<li>Chapter routing by content: departure-briefing lines (<code class="mono">Report to the school / Orientation / Airport pickup / Accommodation / Emergency contact / Arriv*</code>) file under Chapter V only; visa lines under IV; the rest under III.</li>
+		<li>Author is always a display name; super-admin edits read "Century NIT".</li>
+	</ul></div>
+
+	<!-- ================= SECTION E · WIRING ================= -->
+	<span class="tag" id="e">E · Wiring</span>
+	<div class="mock">
+		<table class="wiring">
+			<tr><th>Surface</th><th>Change</th></tr>
+			<tr><td>VisaTrackingInner</td><td>New <code>.vhero</code> state block (granted / appointment / awaiting / refused variants) replacing the banner + "The case file" card; <code>.vsteps</code> strip owns the dates once; documents list collapses to a settled line when complete; officer card gets initials avatar + display name; "After the visa" copy → single "Next" card. Keep <code>order</code>, <code>currentIndex</code>, <code>refused</code>, <code>appointmentSoon</code> derivations as they are.</td></tr>
+			<tr><td>PortalApplicationHub</td><td>One <code>journey-now</code> banner owns the state; section 3 → settled decision row with disabled "Change" past visa start; <code>SchoolCard</code> gains compact <code>mode="offer-row"</code> for non-accepted offers; invoice section → <code>.pledger__row</code>; rail drops "How accepting works" once accepted ("What happens next" instead); handler email → display name.</td></tr>
+			<tr><td>ConsultantUpdates</td><td><code>coalesce()</code> helper (author+kind+≥80% identical, 24h window); <code>chapter</code> prop with the briefing-prefix routing regex; body → list with "+N more"; monochrome <code>.upd2</code> markers replace the coloured kinds; "new since last visit" → hairline rule.</td></tr>
+			<tr><td>app.css</td><td>New <code>.vhero/.vsteps/.vmini/.vdoc/.settled/.school-row/.upd2*</code>; delete <code>.upd__item--fresh</code> gradient and the <code>#92400e/#0d7a3f/#5b21b6</code> kinds; reuse <code>.pledger__row</code> from the payments pass. Monochrome only.</td></tr>
+			<tr><td>Server (probable)</td><td><code>me.ts</code> comments mapping — author display name. Verify whether <code>CaseComment.author</code> is already a display name and the email is just a staff profile missing <code>name</code>; if so this is data, not code.</td></tr>
+			<tr><td>Out of scope</td><td>Ops-side update authoring, the departure checklist itself, vault internals.</td></tr>
+		</table>
+	</div>
+</div>
+</body>
+</html>

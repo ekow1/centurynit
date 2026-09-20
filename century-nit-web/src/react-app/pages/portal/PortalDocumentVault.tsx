@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { DOCUMENT_TYPES, REQUIRED_DOCUMENTS, formatBytes } from "century-nit-core";
 import { ApiError, documentsApi, meApi } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
@@ -166,6 +167,31 @@ export function PortalDocumentVault() {
 	useEffect(() => {
 		if (openId && !rows.some((r) => r.id === openId && r.live)) setOpenId(null);
 	}, [openId, rows]);
+
+	// Deep link from the visa checklist: ?doc=<type> opens the sheet when the
+	// file exists; when it doesn't, focus the row — a programmatic file-picker
+	// click outside a user gesture is refused by browsers, so the applicant
+	// opens it with Enter/Space. Fires once, after the first load.
+	const [searchParams] = useSearchParams();
+	const docParamHandled = useRef(false);
+	useEffect(() => {
+		if (docParamHandled.current || liveDocs === null) return;
+		const target = searchParams.get("doc");
+		if (!target) {
+			docParamHandled.current = true;
+			return;
+		}
+		const row = rows.find((r) => r.id === target);
+		if (!row) return;
+		docParamHandled.current = true;
+		if (row.live) {
+			setOpenId(row.id);
+		} else {
+			const el = document.getElementById(`doc-${row.id}`);
+			el?.scrollIntoView({ block: "center" });
+			el?.focus();
+		}
+	}, [searchParams, liveDocs, rows]);
 
 	const sheet =
 		openRow && openRow.live ? (
@@ -413,6 +439,7 @@ export function PortalDocumentVault() {
 										return (
 											<div
 												key={doc.id}
+												id={`doc-${doc.id}`}
 												className={rowCls}
 												role="button"
 												tabIndex={0}

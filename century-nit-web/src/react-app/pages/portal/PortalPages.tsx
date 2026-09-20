@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { apiFetch } from "../../lib/api";
-import { API_PREFIX, JOURNEY_STAGE_LABELS, INVOICE_TYPE_LABELS, LookupValue, MAX_STUDY_CHOICES, PAYMENT_PLAN_LABELS, decisionOf, type JourneyStage, type StudyChoice } from "century-nit-shared";
+import { API_PREFIX, INVOICE_TYPE_LABELS, LookupValue, MAX_STUDY_CHOICES, PAYMENT_PLAN_LABELS, decisionOf, type StudyChoice } from "century-nit-shared";
 import { Button } from "../../components/ui/Button";
 import { Money, MoneyInline } from "../../components/ui/Money";
 import { Field, Select } from "../../components/ui/Field";
@@ -64,7 +64,7 @@ import { prepareDocumentForUpload } from "../../lib/upload";
 
 
 import { ChapterGate } from "./PortalLayout";
-import { ConsultantUpdates, isVisaUpdate } from "./ConsultantUpdates";
+import { ConsultantUpdates, chapterOf, displayAuthor, isVisaUpdate } from "./ConsultantUpdates";
 import { OfficialDocuments, officialRows } from "../../components/OfficialDocuments";
 import { useConsultationInvoice } from "../../hooks/useConsultationInvoice";
 
@@ -3064,15 +3064,17 @@ function ApplicationHubInner() {
 
 	const fund = SCHOOL_FUNDING_TRACKS.find((f) => f.id === application.schoolFundingTrack);
 	const deg = SCHOOL_DEGREE_LEVELS.find((d) => d.id === application.schoolDegreeLevel);
-	const handler = application.assignedStaffName ?? null;
+	// Emails/“Super Admin” display as the studio, never a raw address.
+	const handler = application.assignedStaffName ? displayAuthor(application.assignedStaffName) : null;
 	// Staff names arrive in caps ("ENOCH ENU"). A first name reads better in sentence case.
-	const handlerFirst = handler
+	const handlerFirst = handler && handler !== "Century NIT"
 		? handler.split(" ")[0].charAt(0).toUpperCase() + handler.split(" ")[0].slice(1).toLowerCase()
 		: "your consultant";
 	const n = schoolApplications.length;
 	const filedCount = schoolApplications.filter((r) => r.status !== "Preparing Application").length;
 	const acceptedRow = schoolApplications.find((r) => r.id === application.acceptedSchoolId) ?? null;
 	const acceptedName = acceptedRow ? (liveUniversities.find((u) => u.id === acceptedRow.universityId)?.name ?? acceptedRow.universityName ?? null) : null;
+	const acceptedProgram = acceptedRow ? (livePrograms.find((p) => p.id === acceptedRow.programId)?.name ?? acceptedRow.programName ?? null) : null;
 	const visaConsent = application.visaConsent?.decision ?? null;
 	const invoiceDue = effectiveInv.status === "raised" && (serverInvoice?.balanceCents ?? 0) > 0;
 	const dueLabel = invoiceDue ? formatMoney(serverInvoice?.balanceCents ?? 0, "ghs") : null;
@@ -3381,20 +3383,74 @@ function ApplicationHubInner() {
 								</span>
 							</div>
 							<div className="schools">
-								{schoolApplications.map((row) =>
-									paid ? (
-										<SchoolCard
-											key={row.id}
-											row={row}
-											mode="tracking"
-											handlerFirst={handlerFirst}
-											accepted={application.acceptedSchoolId === row.id}
-											anotherAccepted={Boolean(application.acceptedSchoolId) && application.acceptedSchoolId !== row.id}
-											onAccept={() => acceptOffer(row)}
-										/>
-									) : (
-										<SchoolCard key={row.id} row={row} mode="locked" handlerFirst={handlerFirst} onAskChange={openChat} />
-									),
+								{paid && application.acceptedSchoolId ? (
+									<>
+										{/* the accepted offer is the only card; the rest are rows */}
+										{acceptedRow ? (
+											<SchoolCard
+												key={acceptedRow.id}
+												row={acceptedRow}
+												mode="tracking"
+												handlerFirst={handlerFirst}
+												accepted
+												onAccept={() => acceptOffer(acceptedRow)}
+											/>
+										) : null}
+										{schoolApplications
+											.filter((row) => row.id !== application.acceptedSchoolId)
+											.map((row) => {
+												const uniName =
+													liveUniversities.find((u) => u.id === row.universityId)?.name ?? row.universityName ?? "University";
+												const progName = livePrograms.find((p) => p.id === row.programId)?.name ?? row.programName ?? "";
+												const prog = livePrograms.find((p) => p.id === row.programId);
+												const canSwitch = row.outcome === "Admitted";
+												return (
+													<div key={row.id} className="school-row">
+														<div>
+															<p className="school-row__nm">{uniName}</p>
+															<p className="school-row__prog">{progName}{row.intake ? ` · ${row.intake}` : ""}</p>
+														</div>
+														<span className="school-row__amt">
+															{row.offerTuitionLabel ?? prog?.tuition ?? ""}
+														</span>
+														<StatusPill tone={row.outcome === "Admitted" ? "current" : "neutral"}>{trackLabel(row)}</StatusPill>
+														{canSwitch ? (
+															visaConsent === "continue" ? (
+																<span className="jlink jlink--off" title="Ask your handler to change this">
+																	Switch
+																</span>
+															) : (
+																<button
+																	type="button"
+																	className="jlink"
+																	onClick={() => {
+																		if (window.confirm(`Switch your accepted offer to ${uniName}?`)) void acceptOffer(row);
+																	}}
+																>
+																	Switch
+																</button>
+															)
+														) : null}
+													</div>
+												);
+											})}
+									</>
+								) : (
+									schoolApplications.map((row) =>
+										paid ? (
+											<SchoolCard
+												key={row.id}
+												row={row}
+												mode="tracking"
+												handlerFirst={handlerFirst}
+												accepted={application.acceptedSchoolId === row.id}
+												anotherAccepted={Boolean(application.acceptedSchoolId) && application.acceptedSchoolId !== row.id}
+												onAccept={() => acceptOffer(row)}
+											/>
+										) : (
+											<SchoolCard key={row.id} row={row} mode="locked" handlerFirst={handlerFirst} onAskChange={openChat} />
+										),
+									)
 								)}
 							</div>
 						</section>
@@ -3413,38 +3469,46 @@ function ApplicationHubInner() {
 							<p className="psec__later">
 								Raised by {handlerFirst} once your list is confirmed. Each university's own application fee, paid on your behalf at cost.
 							</p>
-						) : paid && extraInvoices.every((x) => x.status === "paid" || x.balanceCents <= 0) ? (
-							<p className="psec__later">
-								{serverInvoice ? formatMoney(serverInvoice.subtotalCents, "ghs") : formatDualCurrency(inv.amount)} settled in full. Receipt in your Money ledger.
-							</p>
-						) : effectiveInv.status === "estimated" || !serverInvoice ? (
-							<p className="psec__later">
-								Your school list is with {handlerFirst}, who is preparing the invoice. You'll be notified the moment it is ready to pay. The payment card appears here once it is issued.
-							</p>
-						) : (
-							<div className={`sharp-card${paid ? "" : " sharp-card--key"}`}>
-								<InvoiceCard
-									title="Application invoice"
-									invoice={serverInvoice}
-									display="ghs"
-									actions={
-										<>
-											{serverInvoice.status !== "proforma" && serverInvoice.balanceCents > 0 ? (
-												<Button onClick={payInvoice} arrow>
-													Pay {formatMoney(serverInvoice.balanceCents, "ghs")}
-												</Button>
-											) : null}
+						) : serverInvoice ? (
+							<>
+								{/* the invoice as one ledger row, same anatomy as Money */}
+								<div className={`pledger__row${paid ? " pledger__row--settled" : " pledger__row--due"}`} style={{ borderTop: "1.5px solid var(--foreground)" }}>
+									<span className="pledger__mark">III</span>
+									<div className="pledger__body">
+										<p className="pledger__name">Application fee</p>
+										<p className="pledger__sub">
+											{serverInvoice.invoiceNumber} · {plural(n, "school")} ·{" "}
+											{paid
+												? `paid${serverInvoice.updatedAt ? ` ${new Date(serverInvoice.updatedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : ""}`
+												: serverInvoice.status === "proforma"
+													? "being prepared"
+													: `${formatMoney(serverInvoice.balanceCents, "ghs")} due`}
+										</p>
+									</div>
+									<div className="pledger__amt">
+										<b>{formatMoney(serverInvoice.subtotalCents, "ghs")}</b>
+									</div>
+									<span className="pledger__status">
+										<StatusPill tone={paid ? "done" : "current"}>{paid ? "Paid" : serverInvoice.status === "proforma" ? "Preparing" : "Due"}</StatusPill>
+									</span>
+									<div className="pledger__acts">
+										{!paid && serverInvoice.status !== "proforma" && serverInvoice.balanceCents > 0 ? (
+											<Button onClick={payInvoice} size="sm" arrow>
+												Pay {formatMoney(serverInvoice.balanceCents, "ghs")}
+											</Button>
+										) : null}
+										<span>
 											<button type="button" className="doc-link" onClick={() => openInvoiceDocument(serverInvoice, "invoice")}>
 												↓ invoice
-											</button>
+											</button>{" "}
 											{serverInvoice.payments.length > 0 ? (
 												<button type="button" className="doc-link" onClick={() => openInvoiceDocument(serverInvoice, "receipt")}>
 													↓ receipt
 												</button>
 											) : null}
-										</>
-									}
-								/>
+										</span>
+									</div>
+								</div>
 								<p className="pfoot__note mt-3">
 									{plural(n, "school")} · each university's own application fee, paid on your behalf at cost
 									{paid ? "" : " · Paystack, card or mobile money · the receipt lands in Money"}.
@@ -3476,7 +3540,15 @@ function ApplicationHubInner() {
 										/>
 									</div>
 								))}
-							</div>
+							</>
+						) : paid ? (
+							<p className="psec__later">
+								{formatDualCurrency(inv.amount)} settled in full. Receipt in your Money ledger.
+							</p>
+						) : (
+							<p className="psec__later">
+								Your school list is with {handlerFirst}, who is preparing the invoice. You'll be notified the moment it is ready to pay. The payment card appears here once it is issued.
+							</p>
 						)}
 					</section>
 
@@ -3496,28 +3568,47 @@ function ApplicationHubInner() {
 										: `${plural(offersCount, "offer")} in`}
 								</span>
 							</div>
-							{visaConsent === "continue" ? (
-								<div className="sharp-card sharp-card--key">
-									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
-										<div>
-											<p className="eyebrow">{acceptedName ?? `Admitted · ${plural(offersCount, "school")}`}</p>
-											<p className="display mt-1" style={{ fontSize: "1.35rem" }}>
-												Visa processing requested
-											</p>
-											<p className="muted mt-2">
-												{application.pendingHandoff
-													? `We're assigning your ${JOURNEY_STAGE_LABELS[application.pendingHandoff.stage as JourneyStage] ?? application.pendingHandoff.stage} specialist and preparing the visa invoice. You'll be notified once your consultant is confirmed.`
-													: "Your visa specialist is being assigned and the invoice prepared. Follow it on the visa hub."}
-											</p>
-										</div>
-										<Button to="/portal/visa" arrow>
-											Next · Visa &amp; travel
-										</Button>
+							{application.acceptedSchoolId ? (
+								<>
+									{/* once accepted the decision is a fact, not a card */}
+									<div className="settled">
+										<span className="mono">✓</span>
+										<span style={{ fontSize: "0.85rem" }}>
+											<b>Decision</b> · {acceptedName ?? "Your school"}
+											{acceptedProgram ? ` · ${acceptedProgram}` : ""}
+											{acceptedRow?.updatedAt
+												? ` · accepted ${new Date(acceptedRow.updatedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}`
+												: ""}
+											{" "}· <b>{visaConsent === "continue" ? "visa processing" : "visa pending"}</b>
+										</span>
+										{visaConsent === "continue" ? (
+											<span className="jlink jlink--off" style={{ marginLeft: "auto" }} title="Ask your handler to change this">
+												Change
+											</span>
+										) : (
+											<a className="jlink" href="#target-list" style={{ marginLeft: "auto" }}>
+												Change
+											</a>
+										)}
 									</div>
-								</div>
+									{visaConsent === "continue" ? null : (
+										<StageConsentCard
+											stage="visa"
+											currentDecision={application.visaConsent?.decision ?? null}
+											title="Continue to Visa Stage?"
+											lead="Your destination is confirmed. Decide whether you would like Century NIT to handle your visa processing."
+											continueDetail="Your case will be sent to our Operations team to assign a dedicated consultant and prepare your official visa application fee invoice."
+											holdDetail="Need time to review your offers or arrange funding? You can keep your file on hold and return whenever you are ready. No invoices will be raised."
+											optOutDetail="You may choose to handle your visa application independently or decline visa processing."
+											onDecided={() => {
+												void syncFromServer();
+											}}
+										/>
+									)}
+								</>
 							) : (
 								<>
-									{offersCount > 1 && !application.acceptedSchoolId ? (
+									{offersCount > 1 ? (
 										<div className="sharp-card sharp-card--key mb-3">
 											<p className="eyebrow">Admitted · {plural(offersCount, "school")}</p>
 											<p className="display mt-1" style={{ fontSize: "1.2rem" }}>
@@ -3546,7 +3637,7 @@ function ApplicationHubInner() {
 					) : null}
 
 					{/* Updates. Only when the consultant has written on this chapter */}
-					{application.comments.some((c) => !isVisaUpdate(c)) ? (
+					{application.comments.some((c) => chapterOf(c) === "applications") ? (
 						<section className="psec">
 							<div className="psec__h">
 								<span className="psec__no">{offersCount > 0 || application.acceptedSchoolId ? "4" : "3"}</span>
@@ -3556,7 +3647,7 @@ function ApplicationHubInner() {
 							<ConsultantUpdates
 								comments={application.comments}
 								title={`Updates from ${handlerFirst}`}
-								filter={(c) => !isVisaUpdate(c)}
+								chapter="applications"
 								seenKey={`${application.applicationId ?? "case"}:main`}
 								className="mb-3"
 							/>
@@ -3613,7 +3704,21 @@ function ApplicationHubInner() {
 								Each university's own application fee, passed on at cost. Century NIT adds nothing to it. Payment lodges every file within two business days.
 							</p>
 						</div>
-					) : offersCount > 0 || application.acceptedSchoolId ? (
+					) : application.acceptedSchoolId ? (
+						<div className="sharp-card">
+							<p className="eyebrow">What happens next</p>
+							<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.4rem", lineHeight: 1.6 }}>
+								{visaConsent === "continue"
+									? "Your visa file is being prepared. Nothing is asked of you here."
+									: "Decide below whether Century NIT handles your visa — that choice opens Chapter IV."}
+							</p>
+							{visaConsent === "continue" ? (
+								<Button to="/portal/visa" variant="ghost" size="sm" className="mt-3">
+									Chapter IV · Visa · follow your case →
+								</Button>
+							) : null}
+						</div>
+					) : offersCount > 0 ? (
 						<div className="sharp-card">
 							<p className="eyebrow">How accepting works</p>
 							<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.4rem", lineHeight: 1.6 }}>
@@ -4344,6 +4449,12 @@ const VISA_UPDATE_BY_STAGE: Record<string, string> = {
 	complete: "Visa approved. Your visa is complete. Continue to travel assistance.",
 };
 
+/** Two-letter mark for the officer avatar; "Century NIT" → CN. */
+function initialsOf(name: string): string {
+	const parts = name.trim().split(/\s+/);
+	return ((parts[0]?.[0] ?? "?") + (parts[1]?.[0] ?? "")).toUpperCase();
+}
+
 function VisaTrackingInner() {
 	const { application } = useAppState();
 	const nav = useNavigate();
@@ -4387,10 +4498,10 @@ function VisaTrackingInner() {
 			? `Valid ${day(vd.validFrom) ?? "…"} → ${day(vd.validTo) ?? "…"}${vd.collectedAt ? ` · collected ${day(vd.collectedAt)}` : ""}`
 			: "Passport back with the visa. Then Departure";
 	const steps = [
-		{ id: "pending", label: "Application lodged", detail: lodgedDetail || "Your consultant opens your file and lodges the application" },
-		{ id: "biometrics", label: "Appointment & biometrics", detail: appointmentDetail },
-		{ id: "decision", label: "Authority decision", detail: decisionDetail },
-		{ id: "complete", label: "Visa granted", detail: completeDetail },
+		{ id: "pending", label: "Lodged", detail: lodgedDetail || "Your consultant opens your file and lodges the application" },
+		{ id: "biometrics", label: "Biometrics", detail: appointmentDetail },
+		{ id: "decision", label: "Decision", detail: decisionDetail },
+		{ id: "complete", label: "Granted", detail: completeDetail },
 	] as const;
 	// The appointment is the one date the client must not miss.
 	const [now] = useState(() => Date.now());
@@ -4433,17 +4544,23 @@ function VisaTrackingInner() {
 				</div>
 			</header>
 
-			{/* the live state */}
-			<div className="journey-now mt-4">
+			{/* the live state — one block owns the outcome */}
+			<div className={`vhero mt-4${application.visaStatus === "complete" ? " vhero--done" : ""}`}>
 				<div>
-					<p className="eyebrow">Current update</p>
-					<p className="display journey-now__title" style={{ fontSize: "1.15rem" }}>
-						{refused
-							? "The visa authority refused this application"
-							: (VISA_UPDATE_BY_STAGE[application.visaStatus] ?? "Visa case updating…")}
+					<p className="eyebrow">
+						{application.visaStatus === "complete" ? `Decision${vd.decidedAt ? ` · ${day(vd.decidedAt)}` : ""}` : "Current update"}
 					</p>
-					{refused ? (
-						<p className="journey-now__detail">
+					<p className="vhero__t">
+						{application.visaStatus === "complete"
+							? "Visa granted"
+							: refused
+								? "The visa authority refused this application"
+								: (VISA_UPDATE_BY_STAGE[application.visaStatus] ?? "Visa case updating…")}
+					</p>
+					{application.visaStatus === "complete" ? (
+						<p className="vhero__sub">{completeDetail}</p>
+					) : refused ? (
+						<p className="vhero__sub">
 							This is not the end of the road. Your consultant will review the refusal reasons with
 							you and, where it makes sense, reopen your case for a reapplication.
 						</p>
@@ -4454,7 +4571,7 @@ function VisaTrackingInner() {
 						Continue to Departure
 					</Button>
 				) : (
-					<Button to="/portal/home" variant="inverted">
+					<Button to="/portal/home">
 						Message your visa officer →
 					</Button>
 				)}
@@ -4498,73 +4615,93 @@ function VisaTrackingInner() {
 
 			<div className="psplit mt-4">
 				<div>
-					{/* the spine */}
-					<ol className="visa-track">
-						{steps.map((step, index) => {
+					{/* the spine — a strip; the dates live here once */}
+					<div className="vsteps" role="list">
+						{steps.map((step) => {
 							const stepIndex = order.indexOf(step.id);
 							const done = currentIndex >= stepIndex && application.visaStatus !== "locked";
 							const current = application.visaStatus === step.id;
+							const date =
+								step.id === "pending"
+									? (day(vd.submittedAt) ?? "")
+									: step.id === "biometrics"
+										? (day(vd.biometricsAt) ?? when(vd.appointmentAt) ?? "")
+										: step.id === "decision"
+											? (day(vd.decidedAt) ?? "")
+											: (day(vd.collectedAt) ?? day(vd.validFrom) ?? "");
 							return (
-								<li
+								<div
 									key={step.id}
-									className={`visa-track__item${done ? " visa-track__item--done" : ""}${current ? " visa-track__item--current" : ""}`}
+									role="listitem"
+									className={`vstep${done ? " vstep--done" : ""}${current ? " vstep--on" : ""}`}
+									title={step.detail}
 								>
-									<span className="visa-track__dot">{done ? "✓" : index + 1}</span>
-									<div>
-										<strong>
-											{step.label}
-											{current ? (
-												<span className="mono muted" style={{ fontSize: "0.6rem", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 400 }}>
-													{" "}· now
-												</span>
-											) : null}
-										</strong>
-										<p className="muted">{step.detail}</p>
-									</div>
-								</li>
+									<p className="vstep__l">
+										{step.label}
+										{current ? " · now" : ""}
+									</p>
+									{date ? <p className="vstep__d">{date}</p> : null}
+								</div>
 							);
 						})}
-					</ol>
+					</div>
 
-					{/* the checklist. The action item is the underlined one */}
-					{application.visaDocumentChecklist.length > 0 && (
-						<div className="sharp-card mt-4">
-							<div className="between">
-								<p className="eyebrow">Your visa documents</p>
-								<span className="mono muted" style={{ fontSize: "0.75rem" }}>
-									{application.visaDocumentChecklist.filter((x) => x.status === "VERIFIED").length}/
-									{application.visaDocumentChecklist.length} verified
+					{/* the checklist is a worklist while the case is open; afterwards it settles to one line */}
+					{application.visaDocumentChecklist.length > 0 ? (
+						application.visaStatus === "complete" ? (
+							<div className="settled mt-4">
+								<span className="mono">✓</span>
+								<span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+									{application.visaDocumentChecklist.length} documents ·{" "}
+									{application.visaDocumentChecklist.filter((x) => x.status === "VERIFIED").length} verified · archived
+									with your case
 								</span>
+								<Link to="/portal/documents" className="doc-link" style={{ marginLeft: "auto" }}>
+									Open vault
+								</Link>
 							</div>
-							<ul className="vdocs">
-								{application.visaDocumentChecklist.map((x) => (
-									<li key={x.id}>
-										<span title={x.hint}>{x.name}</span>
-										<span
-											className={`vdocs__st${x.status === "VERIFIED" ? " vdocs__st--ok" : x.status === "REJECTED" ? " vdocs__st--fix" : " vdocs__st--wait"}`}
-										>
-											{x.status === "VERIFIED"
-												? "Verified"
-												: x.status === "UPLOADED"
-													? "Under review"
-													: x.status === "REJECTED"
-														? "Re-upload needed"
-														: "Upload"}
-										</span>
-									</li>
-								))}
-							</ul>
-							<div className="row mt-3">
-								<Button to="/portal/documents" variant="secondary" arrow>
-									Upload in your vault
-								</Button>
+						) : (
+							<div className="sharp-card mt-4">
+								<div className="between">
+									<p className="eyebrow">Your visa documents</p>
+									<span className="mono muted" style={{ fontSize: "0.75rem" }}>
+										{application.visaDocumentChecklist.filter((x) => x.status === "VERIFIED").length}/
+										{application.visaDocumentChecklist.length} verified
+									</span>
+								</div>
+								<div>
+									{application.visaDocumentChecklist.map((x) => {
+										const needsAction = x.status === "REJECTED" || x.status === "PENDING_UPLOAD";
+										return (
+											<div key={x.id} className="vdoc">
+												<span className={`vdoc__mark${x.status === "VERIFIED" ? " vdoc__mark--on" : ""}`}>
+													{x.status === "VERIFIED" ? "●" : x.status === "REJECTED" ? "!" : x.status === "UPLOADED" ? "◐" : "○"}
+												</span>
+												<div>
+													<p className="vdoc__nm">{x.name}</p>
+													{x.hint ? <p className="vdoc__hint">{x.hint}</p> : null}
+												</div>
+												<StatusPill
+													tone={x.status === "VERIFIED" ? "done" : x.status === "UPLOADED" ? "current" : x.status === "REJECTED" ? "blocked" : "neutral"}
+												>
+													{x.status === "VERIFIED" ? "Verified" : x.status === "UPLOADED" ? "In review" : x.status === "REJECTED" ? "Resubmit" : "Missing"}
+												</StatusPill>
+												{needsAction ? (
+													<Button to={`/portal/documents?doc=${x.id}`} variant="ghost" size="sm">
+														{x.status === "REJECTED" ? "Replace" : "Upload"}
+													</Button>
+												) : null}
+											</div>
+										);
+									})}
+								</div>
 							</div>
-						</div>
-					)}
+						)
+					) : null}
 
 					<ConsultantUpdates
 						comments={application.comments}
-						filter={isVisaUpdate}
+						chapter="visa"
 						title="Your visa case, as recorded"
 						seenKey={`${application.applicationId ?? "case"}:visa`}
 						showEmpty
@@ -4578,15 +4715,22 @@ function VisaTrackingInner() {
 						<p className="eyebrow">Your visa officer</p>
 						{application.assignedStaffName ? (
 							<>
-								<p style={{ fontWeight: 700, marginTop: "0.5rem" }}>{application.assignedStaffName}</p>
-								<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-									Visa processing
-								</p>
+								<div style={{ display: "flex", gap: "0.8rem", alignItems: "center", marginTop: "0.6rem" }}>
+									<span className="avatar avatar--inv" aria-hidden>
+										{initialsOf(displayAuthor(application.assignedStaffName))}
+									</span>
+									<div>
+										<p style={{ fontWeight: 700 }}>{displayAuthor(application.assignedStaffName)}</p>
+										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+											Visa officer
+										</p>
+									</div>
+								</div>
 								<div style={{ display: "flex", gap: "0.5rem", marginTop: "0.8rem" }}>
-									<Button to="/portal/home" variant="ghost" size="sm">
+									<Button to="/portal/home" variant="ghost" size="sm" style={{ flex: 1, minHeight: 44 }}>
 										Message
 									</Button>
-									<Button to="/portal/appointments" variant="ghost" size="sm">
+									<Button to="/portal/appointments" variant="ghost" size="sm" style={{ flex: 1, minHeight: 44 }}>
 										Book call
 									</Button>
 								</div>
@@ -4599,47 +4743,30 @@ function VisaTrackingInner() {
 					</div>
 
 					<div className="sharp-card">
-						<p className="eyebrow">The case file</p>
-						<div style={{ marginTop: "0.4rem" }}>
-							<div className="pkv">
-								<span className="pkv__k">Visa fee</span>
-								<span className="pkv__v">Paid ✓</span>
-							</div>
-							<div className="pkv">
-								<span className="pkv__k">Lodged</span>
-								<span className="pkv__v muted">
-									{vd.submittedAt ? day(vd.submittedAt) : "Not yet"}
-									{vd.reference ? ` · ${vd.reference}` : ""}
-								</span>
-							</div>
-							<div className="pkv">
-								<span className="pkv__k">Biometrics</span>
-								<span className="pkv__v muted">
-									{vd.biometricsAt ? `${day(vd.biometricsAt)} ✓` : vd.appointmentAt ? when(vd.appointmentAt) : "Not yet"}
-								</span>
-							</div>
-							<div className="pkv">
-								<span className="pkv__k">Decision</span>
-								<span className="pkv__v muted">
-									{application.visaStatus === "complete"
-										? `Approved ${vd.decidedAt ? day(vd.decidedAt) : ""} ✓`
-										: refused
-											? "Refused"
-											: "Pending"}
-								</span>
-							</div>
-						</div>
-					</div>
-
-					<div className="sharp-card">
-						<p className="eyebrow">After the visa</p>
-						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
-							{application.visaStatus === "complete"
-								? "Chapter V · Departure is open. Your flight first, then the pre-departure milestone."
-								: refused
-									? "Departure stays closed while the refusal is reviewed. Your consultant will let you know the next step."
-									: "Once approved, Chapter V · Departure opens: your flight first, then the pre-departure milestone. Your letter and visa documents release with the milestone."}
-						</p>
+						<p className="eyebrow">Next</p>
+						{application.visaStatus === "complete" ? (
+							<>
+								<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem" }}>
+									Chapter V · Departure
+								</p>
+								<Button to="/portal/pre-departure" size="sm" className="mt-2" arrow>
+									Book your flight
+								</Button>
+							</>
+						) : refused ? (
+							<>
+								<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem" }}>
+									Your consultant reviews the refusal with you
+								</p>
+								<Button to="/portal/home" variant="ghost" size="sm" className="mt-2">
+									Message →
+								</Button>
+							</>
+						) : (
+							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem" }}>
+								Chapter V opens once approved
+							</p>
+						)}
 					</div>
 				</div>
 			</div>

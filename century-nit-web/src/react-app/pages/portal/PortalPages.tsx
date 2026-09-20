@@ -2643,21 +2643,12 @@ export function PortalConsultation() {
 								<span className="psec__title">Messages</span>
 								<span className="psec__hint">from your consultant</span>
 							</div>
-							<div className="sharp-card">
-								<ol className="cn-timeline">
-									{[...liveConsultation.comments].reverse().map((cm) => (
-										<li key={cm.id} className="cn-timeline__item">
-											<div className="cn-timeline__head">
-												<span className="cn-timeline__summary">{cm.author}</span>
-												<time className="cn-timeline__when" dateTime={cm.at}>
-													{new Date(cm.at).toLocaleDateString()}
-												</time>
-											</div>
-											<p className="cn-timeline__detail">{cm.text}</p>
-										</li>
-									))}
-								</ol>
-							</div>
+							<ConsultantUpdates
+								comments={liveConsultation.comments}
+								title={`Messages from ${liveConsultation.assignedOfficerName?.split(" ")[0] ?? "your consultant"}`}
+								seenKey={`consultation:${liveConsultation.id}`}
+								showEmpty
+							/>
 						</section>
 					) : null}
 				</div>
@@ -3562,9 +3553,13 @@ function ApplicationHubInner() {
 								<span className="psec__title">Updates</span>
 								<span className="psec__hint">from {handlerFirst}</span>
 							</div>
-							<div className="sharp-card">
-								<ConsultantUpdates comments={application.comments} title={`Updates from ${handlerFirst}`} filter={(c) => !isVisaUpdate(c)} className="mb-3" />
-							</div>
+							<ConsultantUpdates
+								comments={application.comments}
+								title={`Updates from ${handlerFirst}`}
+								filter={(c) => !isVisaUpdate(c)}
+								seenKey={`${application.applicationId ?? "case"}:main`}
+								className="mb-3"
+							/>
 						</section>
 					) : null}
 				</div>
@@ -4567,13 +4562,14 @@ function VisaTrackingInner() {
 						</div>
 					)}
 
-					<div className="sharp-card mt-4">
-						<ConsultantUpdates
-							comments={application.comments}
-							filter={isVisaUpdate}
-							title="Your visa case, as recorded"
-						/>
-					</div>
+					<ConsultantUpdates
+						comments={application.comments}
+						filter={isVisaUpdate}
+						title="Your visa case, as recorded"
+						seenKey={`${application.applicationId ?? "case"}:visa`}
+						showEmpty
+						className="mt-4"
+					/>
 				</div>
 
 				{/* the rail */}

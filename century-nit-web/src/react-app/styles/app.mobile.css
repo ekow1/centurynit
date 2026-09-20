@@ -472,3 +472,16 @@
 		font-size: 0.62em;
 	}
 }
+
+/* ── Consultant updates — mobile ────────────────────────────────────────── */
+@media (max-width: 959.98px) {
+	.upd-card { margin-left: -0.85rem; margin-right: -0.85rem; border-left: 0; border-right: 0; }
+	.upd__item, .upd__new { padding-left: 1.5rem; }
+	.upd::before { left: 0.4rem; }
+	.upd__mark, .upd__new::before { left: 0.14rem; width: 0.48rem; height: 0.48rem; }
+	.upd__who { display: none; }
+	.upd__act .doc-link { display: block; width: 100%; text-align: left; padding: 0.45rem 0; }
+	.upd__body {
+		display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+	}
+}

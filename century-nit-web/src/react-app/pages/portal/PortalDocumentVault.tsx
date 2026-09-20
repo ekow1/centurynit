@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { DOCUMENT_TYPES, REQUIRED_DOCUMENTS } from "century-nit-core";
 import { ApiError, documentsApi, meApi } from "century-nit-core/api";
-import { openInNewTab } from "century-nit-core";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import type { ApplicantDocument } from "century-nit-shared";
@@ -10,6 +9,8 @@ import { UploadProgressModal, type UploadStage } from "../../components/portal/U
 import { prepareDocumentForUpload } from "../../lib/upload";
 import { useAppState, documentsReleasedFor, documentHoldReasonFor } from "../../context/AppState";
 import { OfficialDocuments, officialRows } from "../../components/OfficialDocuments";
+import { DocumentSheet, STATUS_META } from "../../components/portal/DocumentSheet";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 /**
  * The applicant's document vault. Fully server-backed.
@@ -24,13 +25,6 @@ import { OfficialDocuments, officialRows } from "../../components/OfficialDocume
  * localStorage demo" path. The demo path has been removed: there is no
  * fabricated upload and no fallback store, only the real one.
  */
-
-const STATUS_META: Record<string, { label: string; pill: string }> = {
-	missing: { label: "Missing", pill: "portal-pill--hollow" },
-	uploaded: { label: "In review", pill: "portal-pill--hollow" },
-	verified: { label: "Verified", pill: "portal-pill--solid" },
-	rejected: { label: "Resubmit", pill: "portal-pill--act" },
-};
 
 /** API vocabulary → the vault's. PENDING_UPLOAD never reaches a listing. */
 const LIVE_STATUS: Record<string, string> = {
@@ -60,6 +54,7 @@ type VaultRow = {
 	status: string;
 	fileName: string | null;
 	uploadedAt: string | null;
+	history: ApplicantDocument[];
 };
 
 export function PortalDocumentVault() {
@@ -67,6 +62,9 @@ export function PortalDocumentVault() {
 	const [allDocs, setAllDocs] = useState<ApplicantDocument[]>([]);
 	const { toast } = useNotifier();
 	const [liveDocs, setLiveDocs] = useState<Map<string, ApplicantDocument> | null>(null);
+	const [docHistory, setDocHistory] = useState<Map<string, ApplicantDocument[]>>(new Map());
+	const [openId, setOpenId] = useState<string | null>(null);
+	const isMobile = useMediaQuery("(max-width: 900px)");
 	const [loadError, setLoadError] = useState<string | null>(null);
 	const [busyId, setBusyId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -107,7 +105,20 @@ export function PortalDocumentVault() {
 			const seen = new Set(base.map((d) => d.id));
 			const list = [...base, ...visa.filter((d) => !seen.has(d.id)), ...departure.filter((d) => !seen.has(d.id) && !visa.some((v) => v.id === d.id))];
 			if (list.length > 0) setRequired(list);
-			setLiveDocs(new Map(res.documents.map((d) => [d.documentType, d])));
+			// The list is newest-first per type. Replaced rows stay as REJECTED
+			// for 30 days, so the current doc is the first non-REJECTED row.
+			const grouped = new Map<string, ApplicantDocument[]>();
+			for (const d of res.documents) {
+				const list = grouped.get(d.documentType) ?? [];
+				list.push(d);
+				grouped.set(d.documentType, list);
+			}
+			const current = new Map<string, ApplicantDocument>();
+			for (const [type, docs] of grouped) {
+				current.set(type, docs.find((d) => d.status !== "REJECTED") ?? docs[0]);
+			}
+			setLiveDocs(current);
+			setDocHistory(grouped);
 			setAllDocs(res.documents);
 		} catch (err) {
 			// Signed-out is no longer reachable here (RequireAuth gates the
@@ -134,6 +145,7 @@ export function PortalDocumentVault() {
 			status: live ? (LIVE_STATUS[live.status] ?? "uploaded") : "missing",
 			fileName: live?.fileName ?? null,
 			uploadedAt: live?.uploadedAt ?? live?.createdAt ?? null,
+			history: docHistory.get(meta.id) ?? [],
 		};
 	});
 	const groups: { chapter: VaultRow["chapter"]; label: string; numeral: string | null }[] = [
@@ -148,6 +160,30 @@ export function PortalDocumentVault() {
 	const needsYouCount = rows.filter((d) => d.status === "missing" || d.status === "rejected").length;
 	const allUploaded = uploadedCount === rows.length;
 	const allVerified = allUploaded && verifiedCount === rows.length;
+	const openRow = openId ? (rows.find((r) => r.id === openId && r.live) ?? null) : null;
+
+	useEffect(() => {
+		if (openId && !rows.some((r) => r.id === openId && r.live)) setOpenId(null);
+	}, [openId, rows]);
+
+	const sheet =
+		openRow && openRow.live ? (
+			<DocumentSheet
+				row={{ id: openRow.id, name: openRow.name, status: openRow.status, live: openRow.live, history: openRow.history }}
+				onClose={() => setOpenId(null)}
+				onReplace={() => handleUpload(openRow.id)}
+				onRemove={
+					openRow.status !== "verified"
+						? () => {
+								void handleRemove(openRow).then((ok) => {
+									if (ok) setOpenId(null);
+								});
+							}
+						: undefined
+				}
+				busy={busyId === openRow.id}
+			/>
+		) : null;
 
 	function handleUpload(id: string) {
 		setError(null);
@@ -242,6 +278,7 @@ export function PortalDocumentVault() {
 				},
 			});
 			setLiveDocs((current) => new Map(current ?? []).set(saved.documentType, saved));
+			setDocHistory((h) => new Map(h).set(saved.documentType, [saved, ...(h.get(saved.documentType) ?? [])]));
 			setActiveUpload(null);
 			toast.success(`${file.name} uploaded.`);
 		} catch (err) {
@@ -254,26 +291,8 @@ export function PortalDocumentVault() {
 		}
 	}
 
-	async function handlePreview(row: VaultRow) {
-		if (!row.live) {
-			toast.info("Upload this document first to preview it.");
-			return;
-		}
-		setBusyId(row.id);
-		setError(null);
-		try {
-			await openInNewTab(documentsApi.downloadUrl(row.live.id));
-		} catch (err) {
-			const msg = readableError(err, "Could not open that document.");
-			setError(msg);
-			toast.error(msg);
-		} finally {
-			setBusyId(null);
-		}
-	}
-
-	async function handleRemove(row: VaultRow) {
-		if (!row.live) return;
+	async function handleRemove(row: VaultRow): Promise<boolean> {
+		if (!row.live) return false;
 		setBusyId(row.id);
 		setError(null);
 		try {
@@ -283,13 +302,20 @@ export function PortalDocumentVault() {
 				next.delete(row.live!.documentType);
 				return next;
 			});
+			setDocHistory((h) => {
+				const next = new Map(h);
+				next.set(row.live!.documentType, (next.get(row.live!.documentType) ?? []).filter((d) => d.id !== row.live!.id));
+				return next;
+			});
 			toast.success(`${row.fileName ?? row.name} removed.`);
+			return true;
 		} catch (err) {
 			// A verified document is refused with 409. That rule is the server's,
 			// and its message already explains what to do instead.
 			const msg = readableError(err, "Could not remove that document.");
 			setError(msg);
 			toast.error(msg);
+			return false;
 		} finally {
 			setBusyId(null);
 		}
@@ -378,12 +404,18 @@ export function PortalDocumentVault() {
 									{grows.map((doc) => {
 										const statusMeta = STATUS_META[doc.status] ?? STATUS_META.missing;
 										const busy = busyId === doc.id;
-										const rowCls =
-											doc.status === "verified" ? "drow drow--ok" : doc.status === "rejected" ? "drow drow--now" : "drow";
+										const rowCls = `${
+											doc.status === "verified" ? "drow drow--ok" : doc.status === "rejected" ? "drow drow--now" : "drow"
+										}${openId === doc.id ? " drow--open" : ""}`;
 										const mark =
 											doc.status === "verified" ? "✓" : doc.status === "rejected" ? "!" : doc.status === "uploaded" ? "…" : "·";
 										return (
-											<div key={doc.id} className={rowCls}>
+											<div
+												key={doc.id}
+												className={rowCls}
+												role={doc.fileName ? "button" : undefined}
+												onClick={doc.fileName ? () => setOpenId(doc.id) : undefined}
+											>
 												<span className="drow__mark">{mark}</span>
 												<div>
 													<p className="drow__name">{doc.name}</p>
@@ -404,18 +436,29 @@ export function PortalDocumentVault() {
 												<span className="drow__acts">
 													{doc.fileName ? (
 														<>
-															<button type="button" className="jlink" onClick={() => void handlePreview(doc)} disabled={busy}>
-																Preview
+															<button
+																type="button"
+																className="jlink"
+																onClick={(e) => {
+																	e.stopPropagation();
+																	setOpenId(doc.id);
+																}}
+																disabled={busy}
+															>
+																Open
 															</button>
 															{doc.status !== "verified" ? (
-																<>
-																	<button type="button" className="jlink" onClick={() => handleUpload(doc.id)} disabled={busy}>
-																		{busy ? "Uploading…" : "Replace"}
-																	</button>
-																	<button type="button" className="jlink" onClick={() => void handleRemove(doc)} disabled={busy}>
-																		Remove
-																	</button>
-																</>
+																<button
+																	type="button"
+																	className="jlink"
+																	onClick={(e) => {
+																		e.stopPropagation();
+																		handleUpload(doc.id);
+																	}}
+																	disabled={busy}
+																>
+																	{busy ? "Uploading…" : "Replace"}
+																</button>
 															) : null}
 														</>
 													) : (
@@ -466,7 +509,10 @@ export function PortalDocumentVault() {
 					) : null}
 				</div>
 
-				{/* the rail */}
+				{/* the rail — on desktop the preview sheet takes its place */}
+				{!isMobile && sheet ? (
+					sheet
+				) : (
 				<div className="prail">
 					<div className="sharp-card sharp-card--key">
 						<p className="eyebrow">The count</p>
@@ -505,7 +551,15 @@ export function PortalDocumentVault() {
 						</p>
 					</div>
 				</div>
+				)}
 			</div>
+
+			{isMobile && sheet ? (
+				<>
+					<div className="dsheet__backdrop" onClick={() => setOpenId(null)} />
+					{sheet}
+				</>
+			) : null}
 
 			{pickDocId ? (() => {
 				const doc = rows.find((r) => r.id === pickDocId);

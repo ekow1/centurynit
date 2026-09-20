@@ -8111,6 +8111,48 @@ img.profile-monogram {
 	line-height: 1.5;
 }
 .drow__acts { display: flex; gap: 0.4rem; align-items: center; }
+.drow--open { box-shadow: inset 4px 0 0 var(--foreground); border-color: var(--foreground); border-width: 1.5px; }
+.drow[role="button"] { cursor: pointer; }
+
+/* preview sheet — the ops detail-pane pattern, right column on desktop */
+.dsheet {
+	border: 1.5px solid var(--border);
+	background: var(--background);
+	padding: 1.1rem 1.25rem;
+	position: relative;
+	align-self: stretch;
+}
+.dsheet__handle { display: none; }
+.dsheet__close {
+	position: absolute;
+	top: 0.7rem;
+	right: 0.8rem;
+	background: none;
+	border: none;
+	font-family: var(--font-mono);
+	font-size: 1rem;
+	cursor: pointer;
+	color: var(--foreground);
+}
+.dsheet__frame {
+	width: 100%;
+	border: 1px solid var(--border-light);
+	background: var(--muted);
+	min-height: 260px;
+	margin-top: 0.7rem;
+	display: block;
+}
+.dsheet__acts { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.8rem; }
+.dsheet__hist {
+	list-style: none;
+	padding: 0;
+	margin: 0.4rem 0 0;
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	display: grid;
+	gap: 0.3rem;
+}
+.dsheet__backdrop { display: none; }
 
 .portal-pill--act { border-width: 1.5px; text-decoration: underline; text-underline-offset: 3px; }
 
@@ -8139,7 +8181,35 @@ img.profile-monogram {
 /* assessment section heads + TOC counts reuse .psec / .pindex */
 
 @media (max-width: 900px) {
-	.drow { grid-template-columns: 1.8rem 1fr; row-gap: 0.5rem; }
+	.dcount { display: grid; grid-template-columns: 1fr 1fr; }
+	.dcount > div:nth-child(2n) { border-right: none; }
+	.dcount > div:nth-child(-n + 2) { border-bottom: 1px solid var(--border-light); }
+	.dcount__act { margin-left: 0; }
+	.drow { grid-template-columns: 1.8rem 1fr auto; row-gap: 0.5rem; }
+	.drow__acts { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+	.drow__acts .jlink,
+	.drow__acts .btn {
+		min-height: 44px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: 1px solid var(--border);
+	}
+	.drow__acts > :only-child { grid-column: 1 / -1; }
+	.dsheet {
+		position: fixed;
+		inset: auto 0 0 0;
+		height: 65vh;
+		background: var(--background);
+		border: none;
+		border-top: 1.5px solid var(--border);
+		overflow: auto;
+		z-index: 9000;
+		padding-top: 0.7rem;
+	}
+	.dsheet__handle { display: block; width: 2.5rem; height: 3px; background: var(--border-light); margin: 0 auto 0.7rem; }
+	.dsheet__frame { min-height: 180px; }
+	.dsheet__backdrop { display: block; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: 8999; }
 }
 
 /* ========== Assessment form. Numbered heads + counted TOC ========== */

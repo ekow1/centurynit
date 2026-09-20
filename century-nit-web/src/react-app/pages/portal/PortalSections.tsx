@@ -55,6 +55,7 @@ import { getMfaEnrollment, type MfaEnrollmentStatus } from "../../lib/api";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import { prepareDocumentForUpload } from "../../lib/upload";
 import { downloadReceipt, openInvoiceDocument } from "../../lib/receipt";
+import { useConsultationInvoice } from "../../hooks/useConsultationInvoice";
 
 /* ========== Profile ========== */
 
@@ -1012,6 +1013,7 @@ const JMAP_HINT: Record<ChapterId, string> = {
  */
 export function PortalJourney() {
 	const { journeyPhase, application, schoolApplications, stageStatuses, chapterUnlocks, booking } = useAppState();
+	const { invoice: consultInvoice } = useConsultationInvoice();
 	const current = journeyPhase.stage;
 
 	const currentIdx = PORTAL_STAGE_ORDER.indexOf(current);
@@ -1214,6 +1216,28 @@ export function PortalJourney() {
 					<div className="sharp-card">
 						<p className="eyebrow">Money</p>
 						<div style={{ marginTop: "0.4rem" }}>
+							<div className="pkv">
+								<span className="pkv__k">Consultation</span>
+								<span className="pkv__v">
+									{booking.paymentStatus === "success" ? (
+										<>
+											Paid ✓
+											{consultInvoice && consultInvoice.payments.length > 0 ? (
+												<button
+													type="button"
+													className="doc-link"
+													style={{ marginLeft: "0.4rem" }}
+													onClick={() => openInvoiceDocument(consultInvoice, "receipt")}
+												>
+													↓ receipt
+												</button>
+											) : null}
+										</>
+									) : (
+										"Due"
+									)}
+								</span>
+							</div>
 							<div className="pkv">
 								<span className="pkv__k">Deposit</span>
 								<span className="pkv__v">{depositState}</span>

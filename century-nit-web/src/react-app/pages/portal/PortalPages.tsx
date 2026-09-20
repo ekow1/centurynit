@@ -66,6 +66,7 @@ import { prepareDocumentForUpload } from "../../lib/upload";
 import { ChapterGate } from "./PortalLayout";
 import { ConsultantUpdates, isVisaUpdate } from "./ConsultantUpdates";
 import { OfficialDocuments, officialRows } from "../../components/OfficialDocuments";
+import { useConsultationInvoice } from "../../hooks/useConsultationInvoice";
 
 /* ========== Journey ========== */
 
@@ -2141,6 +2142,7 @@ export function PortalConsultation() {
 	const [liveApplication, setLiveApplication] = useState<ApiApplication | null>(null);
 	const [loading, setLoading] = useState(true);
 	const { join, joining, error: joinError, overlay } = useJoinMeeting({ onReschedule: () => nav("/portal/appointments") });
+	const { invoice: consultInvoice, loaded: consultInvoiceLoaded } = useConsultationInvoice();
 
 	const refreshLiveCase = useCallback(async () => {
 		try {
@@ -2326,9 +2328,18 @@ export function PortalConsultation() {
 		? (["nationality", "dob", "degree", "degreeLevel", "intake"] as const).filter((k) => !profile[k])
 		: [];
 	const consultationFeeUsd = usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents);
+	const consultPaidCents = consultInvoice ? consultInvoice.subtotalCents - consultInvoice.balanceCents : null;
+	const consultPayments = consultInvoice ? [...consultInvoice.payments].sort((a, b) => a.at.localeCompare(b.at)) : [];
+	const lastConsultPayment = consultPayments.length > 0 ? consultPayments[consultPayments.length - 1] : null;
 
 	const steps: { label: string; done: boolean; fact: string }[] = [
-		{ label: "Booked", done: Boolean(activeRef), fact: activeRef ? `${bookedDay ?? "paid"} · paid` : "not booked" },
+		{
+			label: "Booked",
+			done: Boolean(activeRef),
+			fact: activeRef
+				? `${bookedDay ?? "paid"} · ${consultInvoice ? (consultPaidCents === 0 ? `${formatMoney(0, "ghs")} · covered` : `${formatMoney(consultPaidCents ?? 0, "ghs")} paid`) : "paid"}`
+				: "not booked",
+		},
 		{
 			label: "With your consultant",
 			done: Boolean(activeOfficer) || workflowStatus === "IN_PROGRESS" || workflowStatus === "COMPLETED",
@@ -2667,15 +2678,59 @@ export function PortalConsultation() {
 
 					<div className="sharp-card">
 						<p className="eyebrow">Money · Chapter I</p>
+						{consultInvoice ? (
+							<p className="mono muted" style={{ fontSize: "0.68rem", marginTop: "0.3rem" }}>
+								{consultInvoice.invoiceNumber} · paid{" "}
+								{new Date(lastConsultPayment?.at ?? consultInvoice.updatedAt).toLocaleDateString(undefined, {
+									day: "numeric",
+									month: "short",
+									year: "numeric",
+								})}
+							</p>
+						) : null}
 						<div style={{ marginTop: "0.4rem" }}>
 							<div className="pkv">
 								<span className="pkv__k">Consultation fee</span>
-								<span className="pkv__v">{formatDualCurrency(consultationFeeUsd)} paid ✓</span>
+								<span className="pkv__v">
+									{consultInvoice && consultPaidCents !== null
+										? consultPaidCents === 0
+											? `${formatMoney(0, "ghs")} · covered`
+											: `${formatMoney(consultPaidCents, "ghs")} paid ✓`
+										: `${formatDualCurrency(consultationFeeUsd)} paid ✓`}
+								</span>
 							</div>
-							<div className="pkv">
-								<span className="pkv__k">Receipt</span>
-								<span className="pkv__v muted">in your Money ledger</span>
-							</div>
+							{consultInvoice && lastConsultPayment ? (
+								<p className="muted" style={{ fontSize: "0.68rem" }}>
+									≈ {formatMoney(consultPaidCents ?? 0, "usd")} · {lastConsultPayment.method}
+									{lastConsultPayment.reference ? ` · ref ${lastConsultPayment.reference}` : ""}
+								</p>
+							) : null}
+						</div>
+						{consultInvoice ? (
+							<>
+								<div style={{ display: "flex", gap: "0.75rem", marginTop: "0.6rem" }}>
+									<button type="button" className="doc-link" onClick={() => openInvoiceDocument(consultInvoice, "invoice")}>
+										↓ invoice
+									</button>
+									{consultInvoice.payments.length > 0 ? (
+										<button type="button" className="doc-link" onClick={() => openInvoiceDocument(consultInvoice, "receipt")}>
+											↓ receipt
+										</button>
+									) : null}
+								</div>
+								<p className="muted" style={{ fontSize: "0.7rem", marginTop: "0.5rem" }}>
+									Opens the PDF the office emailed you. Same document, byte for byte.
+								</p>
+							</>
+						) : consultInvoiceLoaded ? (
+							<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.6rem" }}>
+								Receipt is being written up. It appears here within a minute — refresh, or find it under Money.
+							</p>
+						) : null}
+						<div style={{ marginTop: "0.8rem" }}>
+							<Button to="/portal/financial" variant="ghost" size="sm">
+								Open Money →
+							</Button>
 						</div>
 					</div>
 

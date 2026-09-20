@@ -9,6 +9,7 @@ import {
 	type MessageActionsConfig,
 } from "century-nit-chat-ui";
 import { useCommunicationChat } from "../../hooks/useCommunicationChat";
+import { useChatStream } from "../../hooks/useChatStream";
 import { useAiChat } from "../../hooks/useAiChat";
 import { useAppState } from "../../context/AppState";
 
@@ -122,17 +123,62 @@ export function CommunicationCenter() {
 		}
 	}, []);
 
+	// The badge has to work while the window is closed — that's its whole job.
+	// Context loads once on mount and refreshes on any inbound SSE message;
+	// the 30s refresh only matters while the window is open.
+	useEffect(() => {
+		void loadContext();
+	}, [loadContext]);
 	useEffect(() => {
 		if (!open) return;
-		void loadContext();
 		const id = setInterval(loadContext, 30_000);
 		return () => clearInterval(id);
 	}, [open, loadContext]);
+
+	// Peek card: the last inbound staff message floats above the launcher
+	// while the window is closed. Dismissed ids are remembered for the session.
+	const [peek, setPeek] = useState<{ id: string; who: string; text: string } | null>(null);
+	const peekDismissed = useRef<Set<string>>(new Set());
+
+	useChatStream(useCallback((ev) => {
+		if (ev.type !== "chat.message") return;
+		const m = ev.message;
+		if (m.senderOpsUserId == null) return; // own message — no badge, no peek
+		if (!open) {
+			void loadContext();
+			if (!peekDismissed.current.has(m.id)) {
+				setPeek({ id: m.id, who: m.senderName ?? "Century NIT", text: m.content });
+			}
+		}
+	}, [open, loadContext]));
+
+	useEffect(() => {
+		if (open) setPeek(null);
+	}, [open]);
+
+	// Esc collapses the window to the launcher.
+	useEffect(() => {
+		if (!open) return;
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") setOpen(false);
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [open]);
 
 	const totalUnread = useMemo(
 		() => context?.conversations.reduce((sum, c) => sum + c.unreadCount, 0) ?? 0,
 		[context],
 	);
+	// Per-channel badges: support threads type "support"; the officer's thread is
+	// the stage/case/applicant thread — everything that isn't the support desk.
+	const channelUnread = useMemo(() => {
+		const convs = context?.conversations ?? [];
+		return {
+			support: convs.filter((c) => c.type === "support").reduce((s, c) => s + c.unreadCount, 0),
+			officer: convs.filter((c) => c.type !== "support").reduce((s, c) => s + c.unreadCount, 0),
+		};
+	}, [context]);
 
 	const officer = useMemo(() => officerCard(context), [context]);
 	const isOfficerAssigned = officer !== null;
@@ -325,47 +371,105 @@ export function CommunicationCenter() {
 
 	const officerFirstName = officer?.name.split(" ")[0] ?? "your officer";
 
+	const headMeta =
+		activeChannel === "support"
+			? { ini: "CS", name: "Century Support", sub: "Desk open · replies within the hour", ai: false }
+			: activeChannel === "officer"
+				? {
+						ini: (officer?.name ?? "··").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase(),
+						name: officer?.name ?? "Assigned officer",
+						sub: officer ? `${officer.role || "Officer"}${officer.branch ? ` · ${officer.branch}` : ""}` : "Being assigned",
+						ai: false,
+					}
+				: { ini: "AI", name: "Century AI", sub: "Instant · knows your journey stage", ai: true };
+
 	return (
 		<>
-			{/* Floating Square Launcher Button */}
-			<button
-				type="button"
-				onClick={() => {
-					setOpen((prev) => !prev);
-					if (!open) void handleSelectChannel("support");
-				}}
-				style={launcherSquareBtnStyle}
-				aria-label="Open Chat"
-			>
-				<svg
-					width="20"
-					height="20"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					strokeWidth="2"
-					strokeLinecap="square"
-					strokeLinejoin="miter"
+			{/* Launcher: live badge + last-message peek. The badge is SSE-fed and
+			    works while the window is closed — that is its whole job. */}
+			<div className="cchat-launch">
+				{!open && peek ? (
+					<button
+						type="button"
+						className="cchat-peek"
+						onClick={() => setOpen(true)}
+					>
+						<b>{peek.who}</b>
+						{peek.text.slice(0, 90)}{peek.text.length > 90 ? "…" : ""}
+						<span
+							className="cchat-peek__x"
+							role="button"
+							tabIndex={0}
+							aria-label="Dismiss preview"
+							onClick={(e) => {
+								e.stopPropagation();
+								peekDismissed.current.add(peek.id);
+								setPeek(null);
+							}}
+							onKeyDown={(e) => {
+								if (e.key === "Enter" || e.key === " ") {
+									e.stopPropagation();
+									peekDismissed.current.add(peek.id);
+									setPeek(null);
+								}
+							}}
+						>
+							✕
+						</span>
+					</button>
+				) : null}
+				<button
+					type="button"
+					className="cchat-fab"
+					onClick={() => {
+						setOpen((prev) => !prev);
+						if (!open) void handleSelectChannel("support");
+					}}
+					aria-label={open ? "Close chat" : "Open chat"}
 				>
-					<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-				</svg>
-				{totalUnread > 0 && <span style={unreadSquareBadgeStyle}>{totalUnread}</span>}
-			</button>
+					{open ? (
+						<span style={{ fontSize: "14px", lineHeight: 1 }}>✕</span>
+					) : (
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="square"
+							strokeLinejoin="miter"
+						>
+							<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+						</svg>
+					)}
+					{totalUnread > 0 && !open && <span className="cchat-fab__badge">{totalUnread}</span>}
+				</button>
+			</div>
 
 			{/* Floating Hub Window */}
 			{open && (
-				<div style={{ ...windowContainerStyle, ...(expanded ? windowExpandedStyle : {}) }} className="cn-chat">
-					{/* Header */}
-					<header style={headerStyle}>
-						<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-							<span style={{ ...indicatorDotStyle, background: "#ffffff" }} />
-							<span style={headerTitleStyle}>CHAT</span>
+				<div className={`cchat-win cn-chat${expanded ? " cchat-win--xl" : ""}`}>
+					{/* Header = who you're talking to, not the word "chat" */}
+					<header className="cchat-win__head">
+						<span className={`cchat-ava${headMeta.ai ? " cchat-ava--ai" : ""}`}>{headMeta.ini}</span>
+						<div className="cchat-win__who">
+							<p className="cchat-win__name">{headMeta.name}</p>
+							<p className="cchat-win__sub">{headMeta.sub}</p>
 						</div>
-						<div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+						<div className="cchat-win__ctl">
 							<button
 								type="button"
+								onClick={() => setOpen(false)}
+								title="Minimize"
+								aria-label="Minimize"
+							>
+								—
+							</button>
+							<button
+								type="button"
+								className="cchat-win__xl"
 								onClick={() => setExpanded((prev) => !prev)}
-								style={controlBtnStyle}
 								title={expanded ? "Restore" : "Expand"}
 								aria-label={expanded ? "Restore" : "Expand"}
 							>
@@ -374,7 +478,6 @@ export function CommunicationCenter() {
 							<button
 								type="button"
 								onClick={() => setOpen(false)}
-								style={controlBtnStyle}
 								title="Close"
 								aria-label="Close"
 							>
@@ -383,31 +486,41 @@ export function CommunicationCenter() {
 						</div>
 					</header>
 
-					{/* Channel Tabs */}
-					<nav style={channelNavStyle} aria-label="Chat Channels">
+					{/* Channel tabs carry their own unread counts */}
+					<nav className="cchat-tabs" aria-label="Chat channels">
 						<button
 							type="button"
 							onClick={() => handleSelectChannel("support")}
-							style={{ ...channelBtnStyle, ...(activeChannel === "support" ? activeChannelBtnStyle : {}) }}
+							className={activeChannel === "support" ? "on" : ""}
 						>
-							SUPPORT
+							Support
+							{channelUnread.support > 0 && <span className="u">{channelUnread.support}</span>}
 						</button>
 						<button
 							type="button"
 							onClick={() => handleSelectChannel("officer")}
-							style={{ ...channelBtnStyle, ...(activeChannel === "officer" ? activeChannelBtnStyle : {}) }}
+							className={activeChannel === "officer" ? "on" : ""}
 						>
-							OFFICER
-							{isOfficerAssigned && <span style={assignedDotStyle} />}
+							{officer ? officer.name.split(" ")[0] : "Officer"}
+							{channelUnread.officer > 0 && <span className="u">{channelUnread.officer}</span>}
 						</button>
 						<button
 							type="button"
 							onClick={() => handleSelectChannel("ai")}
-							style={{ ...channelBtnStyle, ...(activeChannel === "ai" ? activeChannelBtnStyle : {}) }}
+							className={activeChannel === "ai" ? "on" : ""}
 						>
 							AI
 						</button>
 					</nav>
+
+					{/* Context strip: what this thread is for, right now */}
+					<div className="cchat-strip">
+						{activeChannel === "support"
+							? "Triage queue · your file is attached automatically"
+							: activeChannel === "officer"
+								? `${officer?.stageLabel ?? "Officer"} · direct thread`.toUpperCase()
+								: `Context: ${journeyPhase.label}${pendingAction ? ` · ${pendingAction.title}` : ""}`.toUpperCase()}
+					</div>
 
 					{/* Error Notification */}
 					{error && (
@@ -439,23 +552,6 @@ export function CommunicationCenter() {
 								</div>
 							) : (
 								<div style={streamContainerStyle}>
-									{/* Channel header card */}
-									<div style={officerHeaderCardStyle}>
-										<div>
-											<div style={{ fontWeight: 700, fontSize: "12px", color: "#000000", letterSpacing: "0.04em" }}>
-												{activeChannel === "support" ? "CENTURY SUPPORT DESK" : officer?.name.toUpperCase() ?? "ASSIGNED OFFICER"}
-											</div>
-											<div style={{ fontSize: "10px", color: "#52525b", fontFamily: "monospace" }}>
-												{activeChannel === "support"
-													? "24/7 HELPDESK & TRIAGE"
-													: `${officer?.role.toUpperCase() ?? ""} · ${officer?.branch.toUpperCase() ?? ""}`}
-											</div>
-										</div>
-										<span style={stagePillStyle}>
-											{activeChannel === "support" ? "SUPPORT" : (officer?.stageLabel ?? "OFFICER").toUpperCase()}
-										</span>
-									</div>
-
 									{/* Messages. Shared MessageList */}
 									<MessageList
 										messages={chat.messages}
@@ -540,18 +636,6 @@ export function CommunicationCenter() {
 						{/* AI channel. Scripted, local-only */}
 						{activeChannel === "ai" && (
 							<div style={streamContainerStyle}>
-								<div style={officerHeaderCardStyle}>
-									<div>
-										<div style={{ fontWeight: 700, fontSize: "12px", color: "#000000", letterSpacing: "0.04em" }}>
-											CENTURY AI
-										</div>
-										<div style={{ fontSize: "10px", color: "#52525b", fontFamily: "monospace" }}>
-											KNOWLEDGE ASSISTANT
-										</div>
-									</div>
-									<span style={stagePillStyle}>AI ENGINE</span>
-								</div>
-
 								<div style={messageListStyle}>
 									{aiMessages.map((m) => {
 										const isMe = m.sender === "user";
@@ -644,80 +728,6 @@ export function CommunicationCenter() {
 /* themselves via --cn-chat-* tokens. AI keeps its inline bubbles since it's  */
 /* a scripted local-only surface with no server backing.                      */
 
-const launcherSquareBtnStyle: CSSProperties = {
-	position: "fixed",
-	bottom: "24px",
-	right: "24px",
-	zIndex: 9999,
-	width: "52px",
-	height: "52px",
-	background: "#18181b",
-	color: "#ffffff",
-	border: "1px solid #000000",
-	borderRadius: "0px",
-	boxShadow: "4px 4px 0 rgba(0,0,0,0.25)",
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "center",
-	cursor: "pointer",
-	transition: "transform 0.15s ease",
-};
-
-const unreadSquareBadgeStyle: CSSProperties = {
-	position: "absolute",
-	top: "-6px",
-	right: "-6px",
-	background: "#ffffff",
-	color: "#18181b",
-	fontSize: "10px",
-	fontWeight: 800,
-	fontFamily: "monospace",
-	padding: "1px 5px",
-	border: "1px solid #18181b",
-	borderRadius: "0px",
-};
-
-const windowContainerStyle: CSSProperties = {
-	position: "fixed",
-	bottom: "24px",
-	right: "24px",
-	zIndex: 9999,
-	width: "360px",
-	height: "600px",
-	maxHeight: "calc(100vh - 48px)",
-	background: "#ffffff",
-	border: "1px solid #18181b",
-	borderRadius: "0px",
-	boxShadow: "6px 6px 0 rgba(0,0,0,0.18)",
-	display: "flex",
-	flexDirection: "column",
-	overflow: "hidden",
-	color: "#18181b",
-	transition: "width 0.2s ease, height 0.2s ease, transform 0.2s ease",
-};
-
-const windowExpandedStyle: CSSProperties = {
-	width: "800px",
-	maxHeight: "calc(100vh - 48px)",
-	maxWidth: "calc(100vw - 48px)",
-};
-
-const headerStyle: CSSProperties = {
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "space-between",
-	padding: "12px 16px",
-	background: "#ffffff",
-	borderBottom: "1px solid #f4f4f5",
-};
-
-const indicatorDotStyle: CSSProperties = {
-	width: "6px",
-	height: "6px",
-	background: "#18181b",
-	borderRadius: "0px",
-};
-
 const resolvedBarStyle: CSSProperties = {
 	padding: "8px 12px",
 	fontSize: "10px",
@@ -759,64 +769,6 @@ const attachRemoveStyle: CSSProperties = {
 	padding: 0,
 };
 
-const headerTitleStyle: CSSProperties = {
-	fontSize: "13px",
-	fontWeight: 700,
-	fontFamily: "system-ui, -apple-system, sans-serif",
-	color: "#18181b",
-};
-
-const controlBtnStyle: CSSProperties = {
-	background: "transparent",
-	border: "none",
-	color: "#71717a",
-	width: "28px",
-	height: "28px",
-	borderRadius: "0px",
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "center",
-	cursor: "pointer",
-	fontSize: "14px",
-	transition: "background 0.2s ease, color 0.2s ease",
-};
-
-const channelNavStyle: CSSProperties = {
-	display: "grid",
-	gridTemplateColumns: "1fr 1fr 1fr",
-	borderBottom: "1px solid #f4f4f5",
-	background: "#fafafa",
-};
-
-const channelBtnStyle: CSSProperties = {
-	padding: "12px 8px",
-	background: "transparent",
-	border: "none",
-	borderBottom: "2px solid transparent",
-	color: "#71717a",
-	fontSize: "12px",
-	fontWeight: 600,
-	fontFamily: "system-ui, -apple-system, sans-serif",
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "center",
-	gap: "6px",
-	cursor: "pointer",
-	transition: "color 0.2s ease",
-};
-
-const activeChannelBtnStyle: CSSProperties = {
-	color: "#18181b",
-	borderBottomColor: "#18181b",
-};
-
-const assignedDotStyle: CSSProperties = {
-	width: "4px",
-	height: "4px",
-	background: "#10b981",
-	borderRadius: "0px",
-};
-
 const bodyStyle: CSSProperties = {
 	display: "flex",
 	flexDirection: "column",
@@ -829,26 +781,6 @@ const streamContainerStyle: CSSProperties = {
 	flexDirection: "column",
 	flex: 1,
 	minHeight: 0,
-};
-
-const officerHeaderCardStyle: CSSProperties = {
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "space-between",
-	padding: "12px 16px",
-	background: "#ffffff",
-	borderBottom: "1px solid #f4f4f5",
-};
-
-const stagePillStyle: CSSProperties = {
-	fontSize: "10px",
-	fontFamily: "system-ui, -apple-system, sans-serif",
-	fontWeight: 600,
-	color: "#52525b",
-	background: "#f4f4f5",
-	border: "none",
-	padding: "2px 8px",
-	borderRadius: "12px",
 };
 
 const emptySupportPromptStyle: CSSProperties = {
@@ -921,14 +853,15 @@ const myBubbleStyle: CSSProperties = {
 	background: "#18181b",
 	color: "#ffffff",
 	border: "none",
-	borderRadius: "16px 16px 4px 16px",
+	borderRadius: "0",
 };
 
 const theirBubbleStyle: CSSProperties = {
 	background: "#f4f4f5",
 	color: "#18181b",
 	border: "none",
-	borderRadius: "16px 16px 16px 4px",
+	borderLeft: "2.5px solid #5b21b6",
+	borderRadius: "0",
 };
 
 const bubbleAuthorStyle: CSSProperties = {
@@ -1006,9 +939,10 @@ const aiInputStyle: CSSProperties = {
 	flex: 1,
 	background: "#f4f4f5",
 	border: "1px solid transparent",
-	borderRadius: "20px",
+	borderRadius: "0",
+	borderColor: "#e4e4e7",
 	color: "#18181b",
-	padding: "10px 16px",
+	padding: "10px 14px",
 	fontSize: "13px",
 	fontFamily: "system-ui, -apple-system, sans-serif",
 	outline: "none",
@@ -1019,7 +953,7 @@ const aiSendBtnStyle: CSSProperties = {
 	background: "#18181b",
 	color: "#ffffff",
 	border: "none",
-	borderRadius: "50%",
+	borderRadius: "0",
 	width: "36px",
 	height: "36px",
 	display: "flex",

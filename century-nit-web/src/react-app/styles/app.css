@@ -10680,3 +10680,96 @@ a.portal-ch--on:hover {
 .dfile__sec { padding: 0.8rem 1.15rem; border-bottom: 1.5px solid rgba(255,255,255,0.35); }
 .dfile__sec:last-child { border-bottom: 0; }
 .dfile__sec .eyebrow { display: block; margin-bottom: 0.35rem; }
+
+/* ══ Communication Center — launcher, peek, window ══ */
+.cchat-launch {
+	position: fixed; right: 1.5rem; bottom: calc(1.5rem + var(--shell-bottom, 0px));
+	z-index: 9990; display: flex; flex-direction: column; align-items: flex-end; gap: 0.55rem;
+}
+.cchat-fab {
+	position: relative; width: 52px; height: 52px; flex-shrink: 0;
+	background: var(--foreground); color: var(--background);
+	border: 1.5px solid var(--foreground);
+	display: flex; align-items: center; justify-content: center;
+	cursor: pointer; box-shadow: 3px 3px 0 rgba(0,0,0,0.2);
+	transition: transform 0.15s ease;
+}
+.cchat-fab:active { transform: scale(0.94); }
+.cchat-fab__badge {
+	position: absolute; top: -7px; right: -7px; min-width: 18px; height: 18px;
+	background: var(--bad, #b91c1c); color: #fff;
+	font-family: var(--font-mono); font-size: 9.5px; font-weight: 700;
+	display: flex; align-items: center; justify-content: center;
+	padding: 0 4px; border: 1.5px solid var(--background);
+}
+.cchat-peek {
+	position: relative; max-width: 15rem; text-align: left;
+	background: var(--foreground); color: var(--background);
+	font-size: 0.68rem; line-height: 1.45; padding: 0.55rem 1.6rem 0.55rem 0.8rem;
+	border: none; cursor: pointer; box-shadow: 3px 3px 0 rgba(0,0,0,0.2);
+}
+.cchat-peek b {
+	display: block; font-family: var(--font-mono); font-size: 0.54rem;
+	text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.6; margin-bottom: 0.15rem;
+}
+.cchat-peek__x {
+	position: absolute; top: 0.25rem; right: 0.35rem; font-size: 0.6rem;
+	opacity: 0.55; cursor: pointer; padding: 0.15rem;
+}
+.cchat-peek__x:hover { opacity: 1; }
+
+.cchat-win {
+	position: fixed; right: 1.5rem; bottom: calc(1.5rem + var(--shell-bottom, 0px));
+	z-index: 9991; width: 370px; height: min(600px, calc(100dvh - 3rem));
+	background: var(--background); border: 1.5px solid var(--foreground);
+	box-shadow: 5px 5px 0 rgba(0,0,0,0.15);
+	display: flex; flex-direction: column; overflow: hidden;
+	transition: width 0.2s ease, height 0.2s ease;
+}
+.cchat-win--xl { width: min(800px, calc(100vw - 3rem)); }
+.cchat-win__head {
+	display: flex; align-items: center; gap: 0.6rem;
+	padding: 0.6rem 0.9rem; border-bottom: 1.5px solid var(--foreground);
+}
+.cchat-ava {
+	width: 1.8rem; height: 1.8rem; flex-shrink: 0;
+	background: var(--foreground); color: var(--background);
+	display: flex; align-items: center; justify-content: center;
+	font-family: var(--font-mono); font-size: 0.6rem; font-weight: 700;
+}
+.cchat-ava--ai { background: var(--accent, #5b21b6); }
+.cchat-win__who { flex: 1; min-width: 0; }
+.cchat-win__name { font-size: 0.78rem; font-weight: 700; line-height: 1.15; }
+.cchat-win__sub {
+	font-family: var(--font-mono); font-size: 0.55rem;
+	color: var(--muted-foreground); margin-top: 0.1rem;
+	white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cchat-win__ctl { display: flex; gap: 2px; }
+.cchat-win__ctl button {
+	width: 26px; height: 26px; border: 0; background: none;
+	color: var(--muted-foreground); cursor: pointer; font-size: 12px;
+	display: flex; align-items: center; justify-content: center;
+}
+.cchat-win__ctl button:hover { color: var(--foreground); background: var(--muted); }
+.cchat-tabs { display: flex; border-bottom: 1.5px solid var(--foreground); }
+.cchat-tabs button {
+	flex: 1; padding: 0.55rem 0.3rem; background: none; border: 0;
+	border-right: 1px solid var(--border-light);
+	font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase;
+	letter-spacing: 0.09em; color: var(--muted-foreground); cursor: pointer;
+	display: flex; align-items: center; justify-content: center; gap: 0.35rem;
+}
+.cchat-tabs button:last-child { border-right: 0; }
+.cchat-tabs button.on { color: var(--foreground); font-weight: 700; box-shadow: inset 0 -2.5px 0 var(--foreground); }
+.cchat-tabs .u {
+	min-width: 14px; height: 14px; background: var(--bad, #b91c1c); color: #fff;
+	font-size: 8px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 3px;
+}
+.cchat-strip {
+	padding: 0.45rem 0.9rem; background: var(--muted);
+	border-bottom: 1px solid var(--border-light);
+	font-family: var(--font-mono); font-size: 0.56rem;
+	color: var(--muted-foreground); letter-spacing: 0.05em;
+	white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}

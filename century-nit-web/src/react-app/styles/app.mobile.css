@@ -485,3 +485,18 @@
 		display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 	}
 }
+
+/* ══ Dashboard home — mobile ══ */
+@media (max-width: 959.98px) {
+	.dash-refs { display: none; }
+	.dash-hero__title { font-size: 1.5rem; }
+	.dband { flex-direction: column; align-items: stretch; gap: 0.9rem; }
+	.dband__act .btn, .dband__act a { width: 100%; justify-content: center; text-align: center; }
+	.dband__chip { white-space: normal; text-align: center; }
+	.jrail { flex-wrap: wrap; }
+	.jrail__step { flex: 1 1 33%; padding: 0.55rem 0.5rem; gap: 0.4rem; border-bottom: 1px solid var(--border-light); }
+	.jrail__name { font-size: 0.62rem; }
+	.jrail__step--locked { flex: 0 0 auto; justify-content: center; }
+	.jrail__step--locked .jrail__name { display: none; }
+	.nli__s { font-size: 0.54rem; }
+}

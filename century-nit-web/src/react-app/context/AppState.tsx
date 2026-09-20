@@ -1046,17 +1046,10 @@ export function getPendingAction(
 		}
 	}
 
-	// Server-backed appointment awaiting the applicant's confirmation.
-	if (booking.consultationPhase === "awaiting_confirmation") {
-		return {
-			kind: "appointment",
-			label: "Confirm",
-			title: "Confirm your consultation",
-			detail:
-				"We proposed a time for your consultation. Confirm it or pick another slot.",
-			to: "/portal/appointments",
-		};
-	}
+	// consultationPhase "awaiting_confirmation" means the slot is booked and the
+	// *branch* is confirming it — confirming is a staff-only operation
+	// (confirmConsultationSlot), so there is no applicant action here. The
+	// dashboard renders this state as status, not a task.
 
 	// Departure. One order for both Departure pages: the flight first, the
 	// fee milestone after it (it releases the papers), then the checklist

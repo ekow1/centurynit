@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../components/ui/Button";
 import { useAppState } from "../../context/AppState";
-import { PROCESS_STAGES, type ProcessStageId } from "century-nit-core";
+import type { ProcessStageId } from "century-nit-core";
 import {
 	CHAPTERS,
 	PORTAL_STAGE_ORDER,
@@ -103,6 +103,8 @@ function chapterStateOf(
 	return done ? "done" : "locked";
 }
 
+type DueInvoice = { invoiceNumber: string; balanceCents: number };
+
 /** Overview - one glance: what to do next, where you are, and who is on it. */
 export function DashboardHome() {
 	const {
@@ -118,18 +120,12 @@ export function DashboardHome() {
 	const current = journeyPhase.stage;
 	const stageCta = currentStageCta(current, application.proceedStatus);
 	const meta = STAGE_META[current];
-	const stageMeta = PROCESS_STAGES.find((s) => s.id === current);
-
-	// Reference ID depends on the stage:
-	// consultation ref exists once the consultation is booked+paid,
-	// application ID exists once the application invoice is paid.
-	const consultationRef = booking.confirmationId;
-	const applicationId = application.appNumber;
 
 	const currentChapter = PORTAL_STEP_CHAPTER[current as PortalStepId] as ChapterId | undefined;
+	const currentChapterMeta = currentChapter ? CHAPTERS.find((c) => c.id === currentChapter) : undefined;
 
 	/* Rail data: money position, next appointment, documents on file */
-	const [money, setMoney] = useState<{ paid: number; due: number; next: string | null } | null>(null);
+	const [money, setMoney] = useState<{ paid: number; due: number; dueList: DueInvoice[] } | null>(null);
 	const [nextAppt, setNextAppt] = useState<Booking | null>(null);
 	const [docsOnFile, setDocsOnFile] = useState<number | null>(null);
 
@@ -149,15 +145,12 @@ export function DashboardHome() {
 				const paid =
 					live
 						.filter((i) => i.status === "paid")
-						.reduce((n, i) => n + i.subtotalCents - i.balanceCents, 0) / 100 +
-					(booking.paymentStatus === "success" ? 0 : 0);
-				const dueList = live.filter((i) => i.balanceCents > 0 && i.status !== "proforma");
+						.reduce((n, i) => n + i.subtotalCents - i.balanceCents, 0) / 100;
+				const dueList = live
+					.filter((i) => i.balanceCents > 0 && i.status !== "proforma")
+					.map((i) => ({ invoiceNumber: i.invoiceNumber, balanceCents: i.balanceCents }));
 				const due = dueList.reduce((n, i) => n + i.balanceCents, 0) / 100;
-				setMoney({
-					paid,
-					due,
-					next: dueList[0] ? `${dueList[0].invoiceNumber}` : null,
-				});
+				setMoney({ paid, due, dueList });
 			})
 			.catch(() => {});
 		bookingsApi
@@ -183,23 +176,37 @@ export function DashboardHome() {
 
 	const offersCount = schoolApplications.filter((s) => s.outcome === "Admitted").length;
 
+	// Refs resolve from the server-side booking first — `booking.confirmationId`
+	// is localStorage-backed and reads "Not booked" on a fresh device/session
+	// even though the case exists.
+	const consultationRef = nextAppt?.reference ?? booking.confirmationId;
+	const applicationId = application.appNumber;
+
+	// Booked-but-not-yet-confirmed is a staff-side wait, not a client task.
+	const slotConfirming = Boolean(nextAppt) && booking.consultationPhase === "awaiting_confirmation";
+
 	return (
 		<div className="portal-page dash-home">
-			<header className="dash-home__hero">
-				<p className="eyebrow">Overview</p>
-				<h1 className="page-title mt-1">
-					Welcome{authUser ? `, ${authUser.name.split(" ")[0]}` : ""}
-				</h1>
-				<p className="lead mt-2">
-					One glance at your journey. Where you are, what needs you, and who is on your file.
-				</p>
+			<header className="dash-hero">
+				<div>
+					<p className="eyebrow">Overview</p>
+					<h1 className="dash-hero__title">
+						Welcome{authUser ? `, ${authUser.name.split(" ")[0]}` : ""}
+					</h1>
+					<p className="dash-hero__line">
+						<span className={`dash-hero__dot${pendingAction ? "" : " dash-hero__dot--ok"}`} />
+						{currentChapterMeta ? `Ch. ${currentChapterMeta.numeral} · ${currentChapterMeta.label}` : meta.title}
+						{" — "}
+						{slotConfirming
+							? "consultation booked, slot being confirmed"
+							: pendingAction
+								? pendingAction.title.toLowerCase()
+								: (STAGE_SHORT[current] ?? meta.title).toLowerCase()}
+					</p>
+				</div>
 				<div className="dash-refs">
-					<span className="dash-ref">
-						Application ID · <strong>{applicationId ?? "Not issued"}</strong>
-					</span>
-					<span className="dash-ref">
-						Consultation reference · <strong>{consultationRef ?? "Not booked"}</strong>
-					</span>
+					<span className="dash-ref">APP · <strong>{applicationId ?? "not issued"}</strong></span>
+					<span className="dash-ref">CONS · <strong>{consultationRef ?? "not booked"}</strong></span>
 				</div>
 			</header>
 
@@ -219,52 +226,92 @@ export function DashboardHome() {
 				/>
 			)}
 
-			{/* The one ask. Action required, else where you stand */}
-			{current !== "proceed" && (pendingAction ? (
-				<div className="action-now mt-5">
-					<div>
-						<p className="eyebrow">Action required</p>
-						<p className="display action-now__title">{pendingAction.title}</p>
-						<p className="action-now__detail">{pendingAction.detail}</p>
-					</div>
-					<Button to={pendingAction.to} variant="primary" arrow>
-						{pendingAction.label}
-					</Button>
-				</div>
-			) : (
-				<div className="journey-now mt-5">
-					<div>
-						<p className="eyebrow">You are here</p>
-						<p className="display journey-now__title">
-							{STAGE_SHORT[current] ?? stageMeta?.label ?? journeyPhase.label}
-						</p>
-						<p className="journey-now__detail">{meta.desc}</p>
-						{journeyPhase.nextUnlock ? (
-							<p className="journey-now__detail">{journeyPhase.nextUnlock}</p>
-						) : null}
-					</div>
-					<Button to={cta.to} variant="inverted" arrow>
-						{cta.label}
-					</Button>
-				</div>
-			))}
-
-			{/* The six chapters, at a glance. The journey map's edge into home */}
+			{/* The one band: action when something needs the applicant, status when
+			    the wait is on our side. Never both, never a staff-only verb. */}
 			{current !== "proceed" && (
-				<div className="jmini mt-4">
+				pendingAction ? (
+					<div className="dband mt-5">
+						<div className="dband__main">
+							<p className="eyebrow">Action required</p>
+							<p className="dband__title">{pendingAction.title}</p>
+							<p className="dband__detail">{pendingAction.detail}</p>
+						</div>
+						<div className="dband__act">
+							<Button to={pendingAction.to} variant="primary" arrow>
+								{pendingAction.label}
+							</Button>
+						</div>
+					</div>
+				) : nextAppt ? (
+					<div className="dband dband--wait mt-5">
+						<div className="dband__main">
+							<p className="eyebrow">Up next</p>
+							<p className="dband__title">
+								{current === "new" || current === "consultation"
+									? "Your consultation is booked"
+									: nextAppt.serviceName}
+							</p>
+							<p className="dband__detail">
+								{slotConfirming
+									? "The branch is confirming the slot — nothing for you to do. If it moves, you'll see it here and in your email."
+									: "Confirmed. Join from your appointments page, or move the slot free up to 24h before."}
+							</p>
+							<div className="dband__appt">
+								<div className="dband__date">
+									<b>{new Date(nextAppt.startsAt).getDate()}</b>
+									<span>{new Date(nextAppt.startsAt).toLocaleDateString(undefined, { month: "short" })}</span>
+								</div>
+								<div>
+									<p className="dband__apptname">{nextAppt.serviceName}</p>
+									<p className="dband__apptmeta">
+										{new Date(nextAppt.startsAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+										{" · "}{nextAppt.type === "online" ? "Online" : "In person"}
+										{nextAppt.employeeName ? ` · ${nextAppt.employeeName}` : ""}
+										{nextAppt.reference ? ` · ${nextAppt.reference}` : ""}
+										{nextAppt.rescheduleRequestedAt ? " · reschedule asked" : ""}
+									</p>
+								</div>
+								<span className={`dband__chip${slotConfirming ? "" : " dband__chip--ok"}`}>
+									{slotConfirming ? "Confirming" : "Confirmed"}
+								</span>
+							</div>
+						</div>
+						<div className="dband__act">
+							<Button to="/portal/appointments" variant="secondary" arrow>
+								Manage appointment
+							</Button>
+						</div>
+					</div>
+				) : (
+					<div className="dband dband--wait mt-5">
+						<div className="dband__main">
+							<p className="eyebrow">You are here</p>
+							<p className="dband__title">{STAGE_SHORT[current] ?? meta.title}</p>
+							<p className="dband__detail">{meta.desc}</p>
+							{journeyPhase.nextUnlock ? <p className="dband__detail">{journeyPhase.nextUnlock}</p> : null}
+						</div>
+						<div className="dband__act">
+							<Button to={cta.to} variant="secondary" arrow>
+								{cta.label}
+							</Button>
+						</div>
+					</div>
+				)
+			)}
+
+			{/* The six chapters as one slim rail */}
+			{current !== "proceed" && (
+				<div className="jrail mt-4">
 					{CHAPTERS.map((ch) => {
 						const st = chapterStateOf(ch.id, current, stageStatuses);
 						return (
 							<Link
 								key={ch.id}
 								to={CHAPTER_PATH[ch.id]}
-								className={`jmini--${st === "current" ? "now" : st}`}
+								className={`jrail__step jrail__step--${st === "current" ? "now" : st}`}
 							>
-								<span className="jmini__n">{st === "done" ? "✓" : ch.numeral}</span>
-								<p className="jmini__name">{ch.label}</p>
-								<p className="jmini__st">
-									{st === "done" ? "Done" : st === "current" ? "You are here" : "Locked"}
-								</p>
+								<span className="jrail__n">{st === "done" ? "✓" : ch.numeral}</span>
+								<span className="jrail__name">{ch.label}</span>
 							</Link>
 						);
 					})}
@@ -274,21 +321,25 @@ export function DashboardHome() {
 			{current !== "proceed" && (
 				<div className="psplit mt-5">
 					<div>
-						{/* Now. The live detail of the chapter you are in */}
-						<div className="psec">
-							<span className="psec__title">Now · {CHAPTERS.find((c) => c.id === currentChapter)?.label ?? meta.title}</span>
-							<span className="psec__hint">
-								{currentChapter === "apply" && schoolApplications.length > 0
-									? `${schoolApplications.length} school${schoolApplications.length === 1 ? "" : "s"} filed`
-									: (STAGE_SHORT[current] ?? stageMeta?.label ?? "")}
-							</span>
-						</div>
-						<div className="nowlist">
-							{currentChapter === "apply" && schoolApplications.length > 0 ? (
-								<>
-									{schoolApplications.map((s) => (
-										<div key={s.id} className="nowlist__row">
-											<span>
+						{/* Needs you — real open items, not the stage blurb */}
+						<div className="ncard">
+							<div className="ncard__h">
+								<p className="eyebrow">
+									{currentChapter === "apply" && schoolApplications.length > 0
+										? "Now · Applications"
+										: "Needs you"}
+								</p>
+								<span className="ncard__r">
+									{currentChapter === "apply" && schoolApplications.length > 0
+										? `${schoolApplications.length} school${schoolApplications.length === 1 ? "" : "s"} filed`
+										: `${(pendingAction ? 1 : 0) + (money?.dueList.length ?? 0) || "all clear"}`}
+								</span>
+							</div>
+							<div className="ncard__b">
+								{currentChapter === "apply" && schoolApplications.length > 0 ? (
+									schoolApplications.map((s) => (
+										<div key={s.id} className="nli">
+											<span className="nli__t">
 												<strong>{s.universityName ?? "University"}</strong>
 												{s.programName ? ` · ${s.programName}` : ""}
 											</span>
@@ -296,119 +347,96 @@ export function DashboardHome() {
 												{s.outcome ?? s.status}
 											</span>
 										</div>
-									))}
-									<div className="nowlist__row nowlist__foot">
-										<span>
-											{offersCount > 0
-												? `${offersCount} offer${offersCount === 1 ? "" : "s"} in. Accepting one opens the visa chapter.`
-												: "Your handler lodges each file and chases replies. Changes land here first."}
-										</span>
-										<Link to="/portal/application" className="jlink">Open applications →</Link>
-									</div>
-								</>
-							) : (
-								<>
-									<div className="nowlist__row nowlist__lead" style={{ borderBottom: "none" }}>
-										<span>{meta.desc}</span>
-									</div>
-									<div className="nowlist__row nowlist__foot">
-										<span>{STAGE_SHORT[current] ?? stageMeta?.label ?? ""} · chapter {currentChapter ? CHAPTERS.find((c) => c.id === currentChapter)?.numeral : ""}</span>
-										<Link to={cta.to} className="jlink">{cta.label} →</Link>
-									</div>
-								</>
-							)}
+									))
+								) : (
+									<>
+										{pendingAction ? (
+											<div className="nli">
+												<span className="nli__t">{pendingAction.title}</span>
+												<Link to={pendingAction.to} className="nli__s nli__s--warn">{pendingAction.label} →</Link>
+											</div>
+										) : null}
+										{money?.dueList.map((i) => (
+											<div key={i.invoiceNumber} className="nli">
+												<span className="nli__t">Invoice {i.invoiceNumber}</span>
+												<span className="nli__s nli__s--warn"><MoneyStack usd={i.balanceCents / 100} /> due</span>
+											</div>
+										))}
+										{nextAppt ? (
+											<div className="nli">
+												<span className="nli__t">{nextAppt.serviceName}</span>
+												<span className="nli__s nli__s--ok">
+													{slotConfirming ? "Booked" : "Confirmed"} · {new Date(nextAppt.startsAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+												</span>
+											</div>
+										) : null}
+										{!pendingAction && (money?.dueList.length ?? 0) === 0 && !nextAppt ? (
+											<div className="nli">
+												<span className="nli__t muted">Nothing waiting on you — the file is moving.</span>
+											</div>
+										) : null}
+									</>
+								)}
+							</div>
+							<div className="ncard__f">
+								<span>
+									{currentChapter === "apply" && schoolApplications.length > 0
+										? offersCount > 0
+											? `${offersCount} offer${offersCount === 1 ? "" : "s"} in. Accepting one opens the visa chapter.`
+											: "Your handler lodges each file and chases replies."
+										: "Everything else is moving on its own."}
+								</span>
+								<Link to="/portal/journey" className="jlink">Journey map →</Link>
+							</div>
 						</div>
-
-						<p className="mt-3">
-							<Link to="/portal/journey" className="jlink">Open the journey map →</Link>
-						</p>
 					</div>
 
-					{/* The rail. Money, calendar, people, documents */}
+					{/* The rail. One "file" card: money, people, documents — then updates */}
 					<div className="prail">
-						<div className="sharp-card sharp-card--key sharp-card--invert">
-							<p className="eyebrow" style={{ color: "rgba(255,255,255,0.6)" }}>Money</p>
-							{money ? (
-								<>
-									<div className="pkv" style={{ borderColor: "rgba(255,255,255,0.3)" }}>
-										<span className="pkv__k" style={{ color: "rgba(255,255,255,0.72)" }}>Paid to date</span>
-										<span className="pkv__v"><MoneyStack usd={money.paid} /></span>
-									</div>
-									<div className="pkv" style={{ borderColor: "rgba(255,255,255,0.3)" }}>
-										<span className="pkv__k" style={{ color: "rgba(255,255,255,0.72)" }}>Due now</span>
-										<span className="pkv__v">{money.due > 0 ? <MoneyStack usd={money.due} /> : "N/A"}</span>
-									</div>
-								</>
-							) : (
-								<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", color: "rgba(255,255,255,0.7)" }}>
-									Loading your ledger…
-								</p>
-							)}
-							<p style={{ marginTop: "0.8rem" }}>
-								<Link to="/portal/financial" className="jlink" style={{ color: "rgba(255,255,255,0.85)" }}>Open the ledger →</Link>
-							</p>
-						</div>
-
-						<div className="sharp-card">
-							<p className="eyebrow">Next appointment</p>
-							{nextAppt ? (
-								<>
-									<div className="appt-mini">
-										<div className="appt-mini__date">
-											<b>{new Date(nextAppt.startsAt).getDate()}</b>
-											<span>{new Date(nextAppt.startsAt).toLocaleDateString(undefined, { month: "short" })}</span>
+						<div className="sharp-card sharp-card--key sharp-card--invert dfile">
+							<div className="dfile__sec">
+								<p className="eyebrow" style={{ color: "rgba(255,255,255,0.6)" }}>Money</p>
+								{money ? (
+									<>
+										<div className="pkv" style={{ borderColor: "rgba(255,255,255,0.3)" }}>
+											<span className="pkv__k" style={{ color: "rgba(255,255,255,0.72)" }}>Paid to date</span>
+											<span className="pkv__v"><MoneyStack usd={money.paid} /></span>
 										</div>
-										<div>
-											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{nextAppt.serviceName}</p>
-											<p className="mono muted" style={{ fontSize: "0.62rem" }}>
-												{new Date(nextAppt.startsAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
-												{" · "}{nextAppt.type === "online" ? "Online" : "In person"}
-												{nextAppt.employeeName ? ` · ${nextAppt.employeeName}` : ""}
-												{nextAppt.rescheduleRequestedAt ? " · reschedule asked" : ""}
-											</p>
+										<div className="pkv" style={{ borderColor: "rgba(255,255,255,0.3)" }}>
+											<span className="pkv__k" style={{ color: "rgba(255,255,255,0.72)" }}>Due now</span>
+											<span className="pkv__v">{money.due > 0 ? <MoneyStack usd={money.due} /> : "N/A"}</span>
 										</div>
-									</div>
-									<p style={{ marginTop: "0.8rem" }}>
-										<Link to="/portal/appointments" className="jlink">Join / manage →</Link>
+									</>
+								) : (
+									<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", color: "rgba(255,255,255,0.7)" }}>
+										Loading your ledger…
 									</p>
-								</>
-							) : (
-								<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem" }}>
-									Nothing scheduled.
+								)}
+								<p style={{ marginTop: "0.6rem" }}>
+									<Link to="/portal/financial" className="jlink" style={{ color: "rgba(255,255,255,0.85)" }}>Open the ledger →</Link>
 								</p>
-							)}
-						</div>
-
-						<div className="sharp-card">
-							<p className="eyebrow">Your people</p>
-							<div style={{ marginTop: "0.4rem" }}>
-								<div className="pkv">
-									<span className="pkv__k">Consultant</span>
+							</div>
+							<div className="dfile__sec">
+								<p className="eyebrow" style={{ color: "rgba(255,255,255,0.6)" }}>Your people</p>
+								<div className="pkv" style={{ borderColor: "rgba(255,255,255,0.3)" }}>
+									<span className="pkv__k" style={{ color: "rgba(255,255,255,0.72)" }}>Consultant</span>
 									<span className="pkv__v">{booking.consultantName ?? application.assignedStaffName ?? "Assigning…"}</span>
 								</div>
-								<div className="pkv">
-									<span className="pkv__k">Handler</span>
+								<div className="pkv" style={{ borderColor: "rgba(255,255,255,0.3)" }}>
+									<span className="pkv__k" style={{ color: "rgba(255,255,255,0.72)" }}>Handler</span>
 									<span className="pkv__v">{application.assignedStaffName ?? "N/A"}</span>
 								</div>
-								<div className="pkv">
-									<span className="pkv__k">Travel officer</span>
+								<div className="pkv" style={{ borderColor: "rgba(255,255,255,0.3)" }}>
+									<span className="pkv__k" style={{ color: "rgba(255,255,255,0.72)" }}>Travel officer</span>
 									<span className="pkv__v">{application.travelAssistance?.assignedOpsUserName ?? "assigned later"}</span>
 								</div>
 							</div>
-							<p className="muted" style={{ fontSize: "0.72rem", marginTop: "0.6rem" }}>
-								Message any of them through the chat, bottom right.
-							</p>
-						</div>
-
-						<div className="sharp-card">
-							<p className="eyebrow">Documents</p>
-							<div className="pkv" style={{ marginTop: "0.4rem" }}>
-								<span className="pkv__k">On file</span>
-								<span className="pkv__v"><strong>{docsOnFile !== null ? `${docsOnFile}` : "N/A"}</strong></span>
+							<div className="dfile__sec">
+								<p className="eyebrow" style={{ color: "rgba(255,255,255,0.6)" }}>
+									Documents · {docsOnFile !== null ? `${docsOnFile} on file` : "…"}
+								</p>
+								<Link to="/portal/documents" className="jlink" style={{ color: "rgba(255,255,255,0.85)" }}>Open the vault →</Link>
 							</div>
-							<p style={{ marginTop: "0.8rem" }}>
-								<Link to="/portal/documents" className="jlink">Open the vault →</Link>
-							</p>
 						</div>
 
 						{/* From your file. The consultant's latest notes, newest first */}

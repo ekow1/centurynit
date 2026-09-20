@@ -13,13 +13,17 @@
 export async function openInNewTab(
 	urlPromise: Promise<{ url: string } | string>,
 ): Promise<void> {
-	const tab = window.open("", "_blank", "noopener,noreferrer");
+	// No `noopener` in the feature string: the spec makes window.open return
+	// null for it, which read as "popup blocked" on every click. Sever the
+	// opener by hand once we hold the handle.
+	const tab = window.open("", "_blank");
 	if (!tab) {
 		// Even a synchronous open was refused. Still settle the promise so a
 		// rejection isn't unhandled, then tell the caller to surface it.
 		void urlPromise.catch(() => {});
 		throw new Error("Your browser blocked the new tab — allow pop-ups for this site and try again.");
 	}
+	tab.opener = null;
 	try {
 		const resolved = await urlPromise;
 		tab.location.href = typeof resolved === "string" ? resolved : resolved.url;

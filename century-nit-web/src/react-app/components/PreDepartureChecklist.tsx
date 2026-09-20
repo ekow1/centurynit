@@ -4,9 +4,9 @@ import { Button } from "./ui/Button";
 
 /**
  * The client's side of the pre-departure checklist. The same list the
- * departure officer works from in the case. The client ticks their own
- * items (uploading proof where an item asks for it); Century's items are
- * shown as progress the officer closes.
+ * departure officer works from in the case. One list, open items first:
+ * the client ticks their own items (uploading proof where an item asks for
+ * it); Century's items carry an owner chip and a read-only tick.
  */
 export function PreDepartureChecklist({
 	tasks,
@@ -26,83 +26,19 @@ export function PreDepartureChecklist({
 			</div>
 		);
 	}
-	const mine = tasks.filter((t) => (t.owner ?? "client") === "client");
-	const theirs = tasks.filter((t) => t.owner === "century");
-	const required = tasks.filter((t) => t.required !== false);
 	const closed = (t: PreDepartureTask) => t.done || Boolean(t.waivedReason);
+	// One list: what you can still do on top, then theirs, done items last.
+	const ordered = [...tasks].sort((a, b) => {
+		const ac = closed(a) ? 1 : 0;
+		const bc = closed(b) ? 1 : 0;
+		if (ac !== bc) return ac - bc;
+		const ao = (a.owner ?? "client") === "client" ? 0 : 1;
+		const bo = (b.owner ?? "client") === "client" ? 0 : 1;
+		return ao - bo;
+	});
+	const required = tasks.filter((t) => t.required !== false);
 	const requiredDone = required.filter(closed).length;
 	const docName = (id: string) => DOCUMENT_TYPES.find((d) => d.id === id)?.name ?? id;
-
-	const Row = ({ t, editable }: { t: PreDepartureTask; editable: boolean }) => {
-		const isClosed = closed(t);
-		return (
-			<li style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start", padding: "0.6rem 0", borderBottom: "1px solid var(--border-light)" }}>
-				<button
-					type="button"
-					onClick={() => editable && !t.evidence && onToggle(t.id)}
-					disabled={!editable || Boolean(t.evidence)}
-					aria-label={t.done ? `Untick ${t.label}` : `Tick ${t.label}`}
-					style={{
-						width: "22px",
-						height: "22px",
-						flexShrink: 0,
-						marginTop: "0.1rem",
-						border: "2px solid",
-						borderColor: isClosed ? "var(--foreground)" : "var(--border)",
-						background: isClosed ? "var(--foreground)" : "transparent",
-						color: "var(--background)",
-						fontSize: "0.75rem",
-						fontWeight: 700,
-						cursor: editable ? "pointer" : "default",
-						padding: 0,
-					}}
-				>
-					{t.done ? "✓" : t.waivedReason ? "–" : ""}
-				</button>
-				<div style={{ flex: 1, minWidth: 0 }}>
-					<p style={{ fontWeight: isClosed ? 400 : 600, textDecoration: t.done ? "line-through" : "none", opacity: isClosed ? 0.7 : 1 }}>
-						{t.label}
-						{t.required === false ? <span className="muted"> · optional</span> : null}
-					</p>
-					{t.detail ? (
-						<p className="muted" style={{ fontSize: "0.85rem" }}>
-							{t.detail}
-						</p>
-					) : null}
-					{t.evidence && !t.done ? (
-						<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.2rem" }}>
-							{t.proofStatus === "UPLOADED"
-								? `${docName(t.evidence)} uploaded. Your consultant is checking it; this closes once it is verified.`
-								: t.proofStatus === "REJECTED"
-									? `${docName(t.evidence)} was not accepted. Please upload it again.`
-									: `Proof needed: ${docName(t.evidence)}.`}{" "}
-							{t.proofStatus !== "UPLOADED" ? (
-								<Button to="/portal/documents" variant="ghost" className="btn--sm">
-									{t.proofStatus === "REJECTED" ? "Re-upload in your vault" : "Upload to your vault"}
-								</Button>
-							) : null}
-						</p>
-					) : null}
-					{t.evidence && t.done ? (
-						<p className="muted" style={{ fontSize: "0.8rem" }}>
-							{docName(t.evidence)} verified{t.doneBy && t.doneBy !== "client" ? ` by ${t.doneBy}` : ""}
-						</p>
-					) : null}
-					{t.waivedReason ? (
-						<p className="muted" style={{ fontSize: "0.8rem" }}>
-							Waived by your consultant · {t.waivedReason}
-						</p>
-					) : null}
-					{t.done && !t.evidence && t.doneBy && t.doneBy !== "client" ? (
-						<p className="muted" style={{ fontSize: "0.8rem" }}>
-							Done by {t.doneBy}
-							{t.doneAt ? ` · ${new Date(t.doneAt).toLocaleDateString(undefined, { dateStyle: "medium" })}` : ""}
-						</p>
-					) : null}
-				</div>
-			</li>
-		);
-	};
 
 	return (
 		<div className="sharp-card">
@@ -116,30 +52,60 @@ export function PreDepartureChecklist({
 				{requiredDone === required.length ? "Everything Century NIT owes you is done. You can complete your journey below." : "Century NIT closes what it does for you; your own list is a set of reminders for the move. Tick them as you go, they never hold you back."}
 			</p>
 
-			{mine.length > 0 ? (
-				<>
-					<p className="eyebrow mt-4" style={{ fontSize: "0.7rem" }}>
-						Your own reminders
-					</p>
-					<ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-						{mine.map((t) => (
-							<Row key={t.id} t={t} editable={!locked} />
-						))}
-					</ul>
-				</>
-			) : null}
-			{theirs.length > 0 ? (
-				<>
-					<p className="eyebrow mt-4" style={{ fontSize: "0.7rem" }}>
-						What Century NIT does for you
-					</p>
-					<ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-						{theirs.map((t) => (
-							<Row key={t.id} t={t} editable={false} />
-						))}
-					</ul>
-				</>
-			) : null}
+			<ul className="chk">
+				{ordered.map((t) => {
+					const isClosed = closed(t);
+					const isMine = (t.owner ?? "client") === "client";
+					const editable = isMine && !locked;
+					return (
+						<li key={t.id} className="chk__row">
+							<button
+								type="button"
+								className={`chk__tick${isClosed ? " chk__tick--on" : ""}${isMine ? "" : " chk__tick--staff"}`}
+								onClick={() => editable && !t.evidence && onToggle(t.id)}
+								disabled={!editable || Boolean(t.evidence)}
+								aria-label={t.done ? `Untick ${t.label}` : `Tick ${t.label}`}
+							>
+								{t.done ? "✓" : t.waivedReason ? "–" : ""}
+							</button>
+							<div className="chk__body">
+								<p className={`chk__nm${t.done ? " chk__nm--done" : ""}${isClosed && !t.done ? " chk__nm--closed" : ""}`}>
+									{t.label}
+									{t.required === false ? <span className="muted"> · optional</span> : null}
+								</p>
+								{t.detail ? <p className="chk__hint">{t.detail}</p> : null}
+								{t.evidence && !t.done ? (
+									<p className="chk__hint">
+										{t.proofStatus === "UPLOADED"
+											? `${docName(t.evidence)} uploaded. Your consultant is checking it; this closes once it is verified.`
+											: t.proofStatus === "REJECTED"
+												? `${docName(t.evidence)} was not accepted. Please upload it again.`
+												: `Proof needed: ${docName(t.evidence)}.`}
+									</p>
+								) : null}
+								{t.evidence && t.done ? (
+									<p className="chk__hint">
+										{docName(t.evidence)} verified{t.doneBy && t.doneBy !== "client" ? ` by ${t.doneBy}` : ""}
+									</p>
+								) : null}
+								{t.waivedReason ? <p className="chk__hint">Waived by your consultant · {t.waivedReason}</p> : null}
+								{t.done && !t.evidence && t.doneBy && t.doneBy !== "client" ? (
+									<p className="chk__hint">
+										Done by {t.doneBy}
+										{t.doneAt ? ` · ${new Date(t.doneAt).toLocaleDateString(undefined, { dateStyle: "medium" })}` : ""}
+									</p>
+								) : null}
+							</div>
+							<span className={`chk__owner${isMine ? " chk__owner--you" : ""}`}>{isMine ? "You" : "Century NIT"}</span>
+							{t.evidence && !t.done && t.proofStatus !== "UPLOADED" ? (
+								<Button to={`/portal/documents?doc=${t.evidence}`} variant="ghost" size="sm" className="chk__act">
+									{t.proofStatus === "REJECTED" ? "Re-upload ↑" : "Upload ↑"}
+								</Button>
+							) : null}
+						</li>
+					);
+				})}
+			</ul>
 		</div>
 	);
 }

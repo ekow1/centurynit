@@ -48,6 +48,7 @@ export function OfficialDocuments({
 	released,
 	holdReason,
 	hidePayCta = false,
+	variant = "cards",
 }: {
 	rows: OfficialRow[];
 	/** The pre-departure fee milestone is paid, or a manager released early. */
@@ -55,6 +56,8 @@ export function OfficialDocuments({
 	holdReason: string;
 	/** The pay CTA lives elsewhere on the page (the departure chapter keeps one pay button). */
 	hidePayCta?: boolean;
+	/** "rows" is the departure chapter's document list; "cards" keeps the shared look. */
+	variant?: "cards" | "rows";
 }) {
 	const [busy, setBusy] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -74,6 +77,56 @@ export function OfficialDocuments({
 		} finally {
 			setBusy(null);
 		}
+	}
+
+	if (variant === "rows") {
+		return (
+			<div>
+				{rows.map((row) => {
+					const locked = row.gated && !released;
+					const date =
+						row.kind === "document"
+							? (row.doc.uploadedAt ?? row.doc.createdAt)
+							: null;
+					return (
+						<div key={`${row.kind}-${row.id}`} className={`vdoc${locked ? " vdoc--held" : ""}`}>
+							<span className={`vdoc__mark${locked ? "" : " vdoc__mark--on"}`}>{locked ? "○" : "●"}</span>
+							<div>
+								<p className="vdoc__nm">{row.label}</p>
+								<p className="vdoc__hint">
+									Filed by Century NIT{date ? ` · ${new Date(date).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : ""}
+								</p>
+							</div>
+							<span className={`portal-pill ${locked ? "portal-pill--hollow" : "portal-pill--solid"}`}>
+								{locked ? "Held until fee" : "Released"}
+							</span>
+							{locked ? null : (
+								<Button variant="ghost" size="sm" onClick={() => void open(row)} disabled={busy === row.id} style={{ minHeight: 44 }}>
+									{busy === row.id ? "Opening…" : "Download ↓"}
+								</Button>
+							)}
+						</div>
+					);
+				})}
+				{held.length > 0 ? (
+					<p className="muted mt-2" style={{ fontSize: "0.78rem" }}>
+						All {held.length} release together once the service fee settles. {holdReason}
+					</p>
+				) : null}
+				{held.length > 0 && !hidePayCta ? (
+					<div className="row mt-3">
+						<Button to="/portal/payment-execution" arrow>
+							Pay the fee milestone
+						</Button>
+					</div>
+				) : null}
+				{error ? (
+					<p className="muted mt-2" style={{ fontSize: "0.85rem" }}>
+						{error}
+					</p>
+				) : null}
+			</div>
+		);
 	}
 
 	return (

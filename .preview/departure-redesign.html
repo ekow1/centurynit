@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portal — Departure · layout and responsiveness (proposed)</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1240px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	.banner{font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;background:var(--ink);color:#fff;padding:.35rem .7rem;margin-bottom:.8rem}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem}
+	.jump a{color:inherit}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.5rem clamp(1.25rem,3vw,2.25rem) 2.5rem}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.sidebyside{display:flex;gap:2rem;flex-wrap:wrap;align-items:flex-start}
+	.cap{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.5rem}
+
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.title{font-size:1.75rem;font-weight:500;letter-spacing:-.01em;margin-top:.25rem}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap;text-align:center}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--inv{background:#fff;color:var(--ink);border-color:#fff}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.btn--off{opacity:.45;cursor:not-allowed}
+	.pill{display:inline-flex;align-items:center;padding:.25rem .65rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line-light)}
+	.pkv{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--line-light);font-size:.78rem}
+	.pkv:last-child{border-bottom:none}
+	.pkv .k{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--micro);font-size:.64rem;padding-top:.1rem}
+	.pkv .v{text-align:right;min-width:0}
+	.card{background:#fff;border:1px solid var(--ink);padding:1.1rem}
+	.card--key{border-width:1.5px}
+	.card--inv{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.card--inv .eyebrow{color:rgba(255,255,255,.6)}
+	.card--inv .muted{color:rgba(255,255,255,.7)}
+	.mt1{margin-top:.5rem}.mt2{margin-top:.8rem}.mt3{margin-top:1rem}
+	.dlinks{font-family:var(--mono);font-size:.68rem;white-space:nowrap}
+	.dlinks a{color:var(--ink);text-decoration:underline}
+	.dlinks a+a{margin-left:.7rem}
+	.jlink{background:none;border:none;padding:0;font:inherit;text-decoration:underline;cursor:pointer;color:inherit;font-family:var(--mono);font-size:.68rem}
+	.jlink--off{opacity:.45;cursor:not-allowed;text-decoration:none}
+	.avatar{width:2.6rem;height:2.6rem;border:1.5px solid var(--ink);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;font-size:.85rem;flex-shrink:0}
+	.avatar--inv{background:var(--ink);color:#fff}
+
+	.psplit{display:grid;grid-template-columns:minmax(0,1fr) 21rem;gap:2rem;align-items:start;margin-top:1.75rem}
+	.prail{display:flex;flex-direction:column;gap:.8rem}
+	.psec{margin-top:1.75rem}
+	.psec__h{display:flex;align-items:baseline;gap:.6rem;margin-bottom:.6rem}
+	.psec__no{font-family:var(--mono);font-size:.7rem;font-weight:700;width:1.6rem;height:1.6rem;border:1px solid var(--line);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+	.psec__no--done{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.psec__title{font-weight:700;font-size:.95rem}
+	.psec__st{margin-left:auto;font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);text-transform:uppercase;letter-spacing:.08em}
+
+	.vsteps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem;margin-top:1.25rem}
+	.vstep{border:1px solid var(--line-light);padding:.7rem .9rem;min-width:0}
+	.vstep .l{font-size:.8rem;font-weight:650}
+	.vstep .d{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);margin-top:.2rem;letter-spacing:.04em}
+	.vstep--done{background:var(--muted-bg)}
+	.vstep--on{border:1.5px solid var(--ink)}
+	.vstep--on .d{color:var(--ink);font-weight:700}
+
+	.vhero{border:1.5px solid var(--ink);padding:1.4rem 1.75rem;display:flex;flex-wrap:wrap;gap:1rem;justify-content:space-between;align-items:center;margin-top:1.5rem}
+	.vhero--done{background:var(--ink);color:#fff}
+	.vhero--done .eyebrow{color:rgba(255,255,255,.6)}
+	.vhero--done .muted{color:rgba(255,255,255,.75)}
+	.vhero__t{font-size:1.6rem;font-weight:700;letter-spacing:-.01em;margin-top:.3rem}
+	.vhero__sub{font-family:var(--mono);font-size:.7rem;margin-top:.35rem;letter-spacing:.04em}
+
+	/* departure hero = vhero + countdown tile */
+	.dhero{gap:1.5rem}
+	.dtile{border:1.5px solid currentColor;padding:.8rem 1.1rem;text-align:center;min-width:9rem}
+	.dtile .n{font-family:var(--mono);font-size:1.7rem;font-weight:700;line-height:1}
+	.dtile .d{font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;margin-top:.35rem}
+	.dtile--hollow{border-style:dashed;color:var(--fg-muted)}
+
+	/* decision picker — the grid that doesn't exist today */
+	.picks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.8rem}
+	.pick{border:1.5px solid var(--ink);background:#fff;padding:1rem;text-align:left;cursor:pointer;font-family:var(--sans);min-height:64px}
+	.pick .t{font-weight:700;font-size:.88rem}
+	.pick .s{font-size:.74rem;color:var(--fg-muted);margin-top:.25rem;line-height:1.5}
+	.pick--on{background:var(--ink);color:#fff}
+	.pick--on .s{color:rgba(255,255,255,.7)}
+
+	/* boarding pass */
+	.bpass{border:1.5px solid var(--ink);margin-top:.4rem}
+	.bpass__top{display:flex;justify-content:space-between;align-items:baseline;padding:.9rem 1.25rem;border-bottom:1px dashed var(--line);gap:1rem}
+	.bpass__route{display:flex;gap:1.5rem;align-items:baseline}
+	.bpass__code{font-family:var(--mono);font-size:1.6rem;font-weight:700;letter-spacing:.02em}
+	.bpass__pt{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);margin-top:.15rem}
+	.bpass__bot{display:flex;gap:1.5rem;flex-wrap:wrap;padding:.7rem 1.25rem;font-family:var(--mono);font-size:.68rem;align-items:center}
+	.bpass__conf{border:1px solid var(--ink);padding:.25rem .6rem;letter-spacing:.12em}
+	.bpass__arr{margin-left:auto}
+
+	.pledger__row{display:grid;grid-template-columns:2.5rem minmax(0,1fr) 9rem 7rem auto;gap:1rem;align-items:center;padding:.85rem .25rem;border-bottom:1px solid var(--line-light)}
+	.pledger__mark{font-family:var(--mono);font-size:.7rem;font-weight:700;width:1.6rem;height:1.6rem;border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+	.pledger__mark--on{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.pledger__name{font-weight:650;font-size:.88rem}
+	.pledger__sub{font-family:var(--mono);font-size:.68rem;color:var(--fg-muted);margin-top:.15rem}
+	.pledger__amt{text-align:right;font-family:var(--mono)}
+	.pledger__amt b{font-size:.95rem}
+	.pledger__amt small{display:block;font-size:.65rem;color:var(--fg-muted)}
+	.pledger__status{text-align:right}
+	.pledger__acts{display:flex;flex-direction:column;align-items:flex-end;gap:.35rem}
+	.pledger__row--due{box-shadow:inset 4px 0 0 var(--ink);background:var(--muted-bg);padding-left:.75rem}
+	.pledger__row--settled{opacity:.7}
+	.pledger__row--locked{opacity:.55}
+
+	.settled{border:1px solid var(--line);background:var(--muted-bg);padding:.7rem 1rem;display:flex;gap:.8rem;align-items:center;flex-wrap:wrap}
+	.settled .mono{font-size:.68rem;color:var(--fg-muted)}
+
+	.vdoc{display:grid;grid-template-columns:2.2rem minmax(0,1fr) auto auto;gap:.9rem;align-items:center;padding:.75rem .25rem;border-bottom:1px solid var(--line-light)}
+	.vdoc:last-child{border-bottom:none}
+	.vdoc .mark{width:1.5rem;height:1.5rem;border:1.5px solid var(--line);display:inline-flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.7rem;font-weight:700}
+	.vdoc .mark--on{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.vdoc .nm{font-weight:600;font-size:.88rem}
+	.vdoc .hint{font-size:.72rem;color:var(--fg-muted)}
+	.vdoc .btn{min-height:44px;display:inline-flex;align-items:center}
+	.vdoc--held{opacity:.6}
+
+	.arrive{border:1.5px solid var(--ink);padding:1rem 1.25rem}
+	.arrive__grid{display:grid;grid-template-columns:1fr 1fr;gap:0 2rem;margin-top:.3rem}
+
+	.chk{display:grid;grid-template-columns:2.75rem minmax(0,1fr) auto auto;gap:.8rem;align-items:center;padding:.55rem 0;border-bottom:1px solid var(--line-light)}
+	.chk:last-child{border-bottom:none}
+	.chk__tick{width:44px;height:44px;border:1.5px solid var(--ink);background:#fff;display:flex;align-items:center;justify-content:center;font-size:1rem;cursor:pointer;font-family:var(--sans)}
+	.chk__tick--on{background:var(--ink);color:#fff}
+	.chk__tick--staff{border-style:dashed;cursor:default;color:var(--fg-muted)}
+	.chk__nm{font-weight:600;font-size:.85rem}
+	.chk__hint{font-size:.72rem;color:var(--fg-muted)}
+	.chk__own{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;border:1px solid var(--line-light);padding:.15rem .45rem;color:var(--micro);white-space:nowrap}
+	.chk__own--you{border-color:var(--ink);color:var(--ink)}
+
+	.phone{width:390px;border:1.5px solid var(--ink);margin:0;background:#fff;padding:1rem 1rem 4.5rem;position:relative;overflow:hidden;flex-shrink:0}
+	.phone .vsteps{grid-template-columns:1fr 1fr}
+	.phone .psplit{grid-template-columns:1fr;gap:1rem}
+	.phone .picks{grid-template-columns:1fr}
+	.phone .pledger__row{grid-template-columns:2.2rem minmax(0,1fr) auto;grid-template-areas:"mark body status" "mark amt acts"}
+	.phone .pledger__amt{text-align:left}
+	.phone .pledger__acts{flex-direction:row;justify-content:flex-end}
+	.phone .pledger__acts .btn{min-height:44px;display:inline-flex;align-items:center}
+	.phone .vdoc{grid-template-columns:2rem minmax(0,1fr) auto;grid-template-areas:"mark body pill" "mark acts acts"}
+	.phone .vdoc .btn{grid-area:acts;justify-self:end}
+	.phone .chk{grid-template-columns:2.75rem minmax(0,1fr) auto;grid-template-areas:"tick body own" "tick act act"}
+	.pbar{position:absolute;left:0;right:0;bottom:0;background:#fff;border-top:1.5px solid var(--ink);padding:.75rem 1rem;display:flex;justify-content:space-between;align-items:center;z-index:5}
+
+	.wiring{border-collapse:collapse;width:100%;margin-top:.5rem}
+	.wiring th,.wiring td{border:1px solid #d4d4d8;font-family:var(--mono);font-size:.7rem;text-align:left;padding:.6rem .8rem;vertical-align:top}
+	.wiring th{text-transform:uppercase;letter-spacing:.1em;font-size:.6rem;background:var(--muted-bg)}
+	.wiring td:first-child{white-space:nowrap;font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<span class="banner">Mock · proposal — all names, amounts and dates illustrative</span>
+	<h1 class="page">Departure — layout and responsiveness (proposed)</h1>
+	<p class="note">The departure chapter restates its state on four surfaces, shouts settled facts in ALL-CAPS mono, and buries the most useful content — the on-arrival facts and the checklist — under three identical cards. The decision picker's grid class doesn't exist, so it stacks at every width. This mock gives the page one hero with a countdown tile, a real 3-column picker, a boarding-pass card, ledger rows for both payments, and a single owner-chipped checklist.</p>
+	<div class="jump"><a href="#a">A · what's wrong</a><a href="#b">B · desktop</a><a href="#c">C · mobile</a><a href="#d">D · wiring</a></div>
+
+	<!-- ================= SECTION A ================= -->
+	<span class="tag" id="a">A · What's wrong today</span>
+	<div class="mock">
+		<div class="sidebyside">
+			<div style="flex:1;min-width:20rem">
+				<ul style="margin:.2rem 0 0 1.1rem;font-size:.78rem;display:grid;gap:.4rem">
+					<li><b>Four surfaces restate the same state:</b> the <code class="mono">journey-now</code> band, the <code class="mono">.psteps4</code> facts, each <code class="mono">.psec__hint</code>, and the rail's "What you owe" pkv — "ticket invoice due" is written four times.</li>
+					<li><b>The decision picker has no grid:</b> <code class="mono">portal-grid portal-grid--3</code> — the <code class="mono">--3</code> rule doesn't exist in app.css, so the three <code class="mono">.pick</code> cards stack single-column at every width (~297–310).</li>
+					<li><b>Shouting mono:</b> settled states render as ALL-CAPS mono sentences ("BOOKED WITH CENTURY NIT · X IS YOUR TRAVEL OFFICER."); <code class="mono">assignedOpsUserName</code> can be an email → an uppercased email.</li>
+					<li><b>Section 2 "Your papers" mixes two things:</b> the service-fee milestone (a payment) and the released documents (files); the payment card repeats the band CTA and the Finish card repeats it again — three CTAs to one route.</li>
+					<li><b>Section 4 "Finish" is always rendered,</b> mostly as a paragraph explaining why you can't finish yet — dead weight until <code class="mono">canComplete</code>.</li>
+				</ul>
+			</div>
+			<div style="flex:1;min-width:20rem">
+				<ul style="margin:.2rem 0 0 1.1rem;font-size:.78rem;display:grid;gap:.4rem">
+					<li><b>Checklist:</b> inline-styled <code class="mono">&lt;li&gt;</code>s with 22px tick buttons (below the 44px floor), owner split as two lists ("mine / theirs"), evidence rows link to the vault without preselecting the doc.</li>
+					<li><b>On-arrival facts</b> (report-by, orientation, briefing, pickup, accommodation, emergency contact) are pkv rows buried under the checklist inside section 3 — the most concrete info on the page, hidden last.</li>
+					<li><b>Rail:</b> countdown ink card says "Not booked" most of the time; "What you owe" duplicates sections 1–2; "After landing" is a paragraph. On mobile the rail — countdown included — drops below everything.</li>
+					<li><b>Flight details</b> (<code class="mono">FlightRows</code>) are inline key/value pairs with no boarding-pass hierarchy — route and time are the important bits.</li>
+					<li><b>Bottom line:</b> 6+ <code class="mono">sharp-card</code>s of nearly identical weight — no hierarchy between "act now" and "for reference".</li>
+				</ul>
+			</div>
+		</div>
+	</div>
+
+	<!-- ================= SECTION B · DESKTOP ================= -->
+	<span class="tag tag--after" id="b">B · Desktop — mid-flow and settled</span>
+	<div class="mock">
+		<p class="cap">state 1 · mid-flow — ticket invoice due, papers held, checklist 3/7</p>
+		<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap">
+			<div>
+				<p class="eyebrow">Chapter V · Departure</p>
+				<p class="title">Departure · University of Oxford</p>
+			</div>
+			<span class="mono muted" style="font-size:.68rem">MSc Computer Science · Oct 2026 · visa valid 12 Oct 2026 → 11 Oct 2028</span>
+		</div>
+
+		<div class="vhero vhero--done dhero">
+			<div style="min-width:16rem">
+				<p class="eyebrow">You are here</p>
+				<p class="vhero__t" style="font-size:1.3rem">Pay your ticket invoice</p>
+				<p class="vhero__sub muted">BA0078 is held for you · ticketing completes once the invoice settles</p>
+			</div>
+			<div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
+				<div class="dtile" style="border-color:#fff">
+					<p class="n">12</p>
+					<p class="d">days · ACC → LHR · 3 Oct 09:40</p>
+				</div>
+				<span class="btn btn--inv">Pay GH₵ 6,200 →</span>
+			</div>
+		</div>
+
+		<div class="vsteps">
+			<div class="vstep vstep--done"><p class="l">Flight</p><p class="d">booked BA0078</p></div>
+			<div class="vstep vstep--on"><p class="l">Papers</p><p class="d">GH₵ 9,450 due</p></div>
+			<div class="vstep"><p class="l">Before you fly</p><p class="d">3 of 7</p></div>
+			<div class="vstep"><p class="l">Finish</p><p class="d">last step</p></div>
+		</div>
+
+		<div class="psplit">
+			<div>
+				<div class="psec" style="margin-top:0">
+					<div class="psec__h"><span class="psec__no">1</span><span class="psec__title">Your flight</span><span class="psec__st">booked · Century NIT</span></div>
+					<div class="bpass">
+						<div class="bpass__top">
+							<div class="bpass__route">
+								<div><p class="bpass__code">ACC</p><p class="bpass__pt">Accra · dep 09:40</p></div>
+								<div style="font-family:var(--mono)">→</div>
+								<div><p class="bpass__code">LHR</p><p class="bpass__pt">London · arr 16:05</p></div>
+							</div>
+							<span class="pill pill--solid">Ticketed</span>
+						</div>
+						<div class="bpass__bot">
+							<span>British Airways · BA0078</span>
+							<span class="muted">Sat 3 Oct 2026</span>
+							<span class="bpass__conf">CONF KX7Q2M</span>
+						</div>
+					</div>
+					<p class="muted mt2" style="font-size:.78rem">Booked with Century NIT · travel officer Ama Serwaa.</p>
+					<div class="pledger__row pledger__row--due" style="border-top:1.5px solid var(--ink);margin-top:.8rem">
+						<span class="pledger__mark pledger__mark--on">V</span>
+						<div><p class="pledger__name">Ticket</p><p class="pledger__sub">INV-2026-0311 · airline fare at cost · due now</p></div>
+						<div class="pledger__amt"><b>GH₵ 6,200</b><small>≈ USD 410</small></div>
+						<span class="pledger__status"><span class="pill">Due</span></span>
+						<div class="pledger__acts"><span class="btn btn--sm">Pay →</span><span class="dlinks"><a>↓ inv</a></span></div>
+					</div>
+				</div>
+
+				<div class="psec">
+					<div class="psec__h"><span class="psec__no">2</span><span class="psec__title">Service fee</span><span class="psec__st">due</span></div>
+					<div class="pledger__row pledger__row--due" style="border-top:1.5px solid var(--ink)">
+						<span class="pledger__mark pledger__mark--on">V</span>
+						<div><p class="pledger__name">Pre-departure instalment</p><p class="pledger__sub">INV-2026-0318 · releases your papers below · due now</p></div>
+						<div class="pledger__amt"><b>GH₵ 9,450</b><small>≈ USD 625</small></div>
+						<span class="pledger__status"><span class="pill">Due</span></span>
+						<div class="pledger__acts"><span class="btn btn--sm">Pay →</span><span class="dlinks"><a>↓ inv</a></span></div>
+					</div>
+					<p class="muted mt2" style="font-size:.75rem">Settling releases your admission letter, visa documents and e-ticket. GH₵ 2,000 follows after arrival, on your schedule.</p>
+				</div>
+
+				<div class="psec">
+					<div class="psec__h"><span class="psec__no">3</span><span class="psec__title">Your papers</span><span class="psec__st">held until fee</span></div>
+					<div class="vdoc vdoc--held"><span class="mark">○</span><div><p class="nm">Admission letter</p><p class="hint">Filed by Century NIT · 14 Sep</p></div><span class="pill pill--hollow">Held until fee</span><span></span></div>
+					<div class="vdoc vdoc--held"><span class="mark">○</span><div><p class="nm">Visa documents</p><p class="hint">Filed by Century NIT · 30 Sep</p></div><span class="pill pill--hollow">Held until fee</span><span></span></div>
+					<div class="vdoc vdoc--held"><span class="mark">○</span><div><p class="nm">E-ticket</p><p class="hint">Filed by Century NIT · 2 Oct</p></div><span class="pill pill--hollow">Held until fee</span><span></span></div>
+					<p class="muted mt1" style="font-size:.72rem">All three release together once the service fee settles.</p>
+				</div>
+
+				<div class="psec">
+					<div class="psec__h"><span class="psec__no">4</span><span class="psec__title">Before you fly</span><span class="psec__st">3 of 7</span></div>
+					<div class="arrive">
+						<div style="display:flex;justify-content:space-between;align-items:baseline">
+							<p class="eyebrow">On arrival</p>
+							<span class="mono muted" style="font-size:.6rem">recorded by your officer · updated 19 Sep</span>
+						</div>
+						<div class="arrive__grid">
+							<div class="pkv"><span class="k">Report by</span><span class="v">30 Oct 2026</span></div>
+							<div class="pkv"><span class="k">Orientation</span><span class="v">21 Oct 2026</span></div>
+							<div class="pkv"><span class="k">Briefing</span><span class="v">5 Oct · 18:00 · Zoom</span></div>
+							<div class="pkv"><span class="k">Pickup</span><span class="v">Kofi · arrivals hall B</span></div>
+							<div class="pkv"><span class="k">Accommodation</span><span class="v">Halls B-214 · from 3 Oct</span></div>
+							<div class="pkv"><span class="k">Emergency</span><span class="v">Ama Serwaa (cousin) · +233…</span></div>
+						</div>
+					</div>
+					<div class="mt2">
+						<div class="chk"><span class="chk__tick chk__tick--on">✓</span><div><p class="chk__nm">Confirm your flight details</p></div><span class="chk__own chk__own--you">You</span><span></span></div>
+						<div class="chk"><span class="chk__tick chk__tick--on">✓</span><div><p class="chk__nm">Book airport pickup</p></div><span class="chk__own">Century NIT</span><span></span></div>
+						<div class="chk"><span class="chk__tick chk__tick--on">✓</span><div><p class="chk__nm">Accommodation confirmed</p></div><span class="chk__own">Century NIT</span><span></span></div>
+						<div class="chk"><span class="chk__tick"></span><div><p class="chk__nm">Travel insurance</p><p class="chk__hint">Upload your policy certificate</p></div><span class="chk__own chk__own--you">You</span><span class="btn btn--ghost btn--sm" style="min-height:44px;display:inline-flex;align-items:center">Upload ↑</span></div>
+						<div class="chk"><span class="chk__tick"></span><div><p class="chk__nm">Pre-departure briefing</p><p class="chk__hint">5 Oct · 18:00 · link arrives by email</p></div><span class="chk__own chk__own--you">You</span><span></span></div>
+						<div class="chk"><span class="chk__tick chk__tick--staff">·</span><div><p class="chk__nm">Currency &amp; forex advice</p></div><span class="chk__own">Century NIT</span><span></span></div>
+						<div class="chk"><span class="chk__tick"></span><div><p class="chk__nm">Emergency contact recorded</p></div><span class="chk__own chk__own--you">You</span><span></span></div>
+					</div>
+				</div>
+
+				<p class="mono muted mt3" style="font-size:.64rem">Finish unlocks when: ✓ flight · ○ service fee · ○ checklist 3/7</p>
+			</div>
+
+			<div class="prail">
+				<div class="card card--key">
+					<p class="eyebrow">Travel officer</p>
+					<div style="display:flex;gap:.8rem;align-items:center;margin-top:.6rem">
+						<span class="avatar avatar--inv">AS</span>
+						<div><p style="font-weight:700">Ama Serwaa</p><p class="muted" style="font-size:.74rem">Travel officer</p></div>
+					</div>
+					<div style="display:flex;gap:.5rem;margin-top:.8rem">
+						<span class="btn btn--ghost btn--sm" style="flex:1;min-height:44px;display:flex;align-items:center;justify-content:center">Message</span>
+						<span class="btn btn--ghost btn--sm" style="flex:1;min-height:44px;display:flex;align-items:center;justify-content:center">Book call</span>
+					</div>
+				</div>
+				<div class="card">
+					<p class="eyebrow">After landing</p>
+					<div class="pkv"><span class="k">Check-in</span><span class="v">Message us on landing</span></div>
+					<div class="pkv"><span class="k">Enrolment</span><span class="v">Week of 21 Oct</span></div>
+					<div class="pkv"><span class="k">First month</span><span class="v">Officer check-in call</span></div>
+				</div>
+			</div>
+		</div>
+
+		<!-- ============ settled state ============ -->
+		<p class="cap" style="margin-top:3rem">state 2 · settled — booked, fee paid, papers released, checklist done, 12 days</p>
+		<div class="vhero vhero--done dhero">
+			<div style="min-width:16rem">
+				<p class="eyebrow">You are here</p>
+				<p class="vhero__t" style="font-size:1.3rem">Ready to complete your journey</p>
+				<p class="vhero__sub muted">everything on file · flight in 12 days</p>
+			</div>
+			<div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
+				<div class="dtile" style="border-color:#fff">
+					<p class="n">12</p>
+					<p class="d">days · ACC → LHR · 3 Oct 09:40</p>
+				</div>
+				<span class="btn btn--inv">Complete my journey →</span>
+			</div>
+		</div>
+		<div class="vsteps">
+			<div class="vstep vstep--done"><p class="l">Flight</p><p class="d">booked BA0078</p></div>
+			<div class="vstep vstep--done"><p class="l">Papers</p><p class="d">released</p></div>
+			<div class="vstep vstep--done"><p class="l">Before you fly</p><p class="d">7 of 7</p></div>
+			<div class="vstep vstep--on"><p class="l">Finish</p><p class="d">complete</p></div>
+		</div>
+		<div class="settled mt3"><span class="mono">✓</span><span style="font-size:.85rem;font-weight:600">Service fee · settled 18 Sep · GH₵ 2,000 follows after arrival</span><span class="dlinks" style="margin-left:auto"><a>↓ rcpt</a></span></div>
+		<div class="vdoc mt2"><span class="mark mark--on">●</span><div><p class="nm">Admission letter</p><p class="hint">Filed by Century NIT · 14 Sep</p></div><span class="pill pill--solid">Released</span><span class="btn btn--ghost btn--sm" style="min-height:44px;display:inline-flex;align-items:center">Download ↓</span></div>
+		<div class="vdoc"><span class="mark mark--on">●</span><div><p class="nm">Visa documents</p><p class="hint">Filed by Century NIT · 30 Sep</p></div><span class="pill pill--solid">Released</span><span class="btn btn--ghost btn--sm" style="min-height:44px;display:inline-flex;align-items:center">Download ↓</span></div>
+		<div class="vdoc"><span class="mark mark--on">●</span><div><p class="nm">E-ticket · BA0078</p><p class="hint">Filed by Century NIT · 2 Oct</p></div><span class="pill pill--solid">Released</span><span class="btn btn--ghost btn--sm" style="min-height:44px;display:inline-flex;align-items:center">Download ↓</span></div>
+	</div>
+	<div class="callout"><b>B — what changed</b><ul>
+		<li>One <code class="mono">.dhero</code> owns the state: band title + one detail line + countdown tile + single CTA; inverted when there's an action, hollow when waiting on the officer. The countdown leaves the rail — it belongs with the state it counts down to.</li>
+		<li>The picker becomes a real 3-column <code class="mono">.picks</code> grid (1 column under 600px); once decided, <code class="mono">FlightRows</code> → a <code class="mono">.bpass</code> boarding pass (route big, times under the codes, confirmation in a mono box) plus one normal-case settled sentence.</li>
+		<li>Payment and papers split: section 2 is the service-fee <code class="mono">.pledger__row</code> only; section 3 is documents-only <code class="mono">.vdoc</code> rows with one hold line under the group.</li>
+		<li>On-arrival facts promoted to a bordered <code class="mono">.arrive</code> card above the checklist — 2-column pkv grid, "recorded by your officer" stamp.</li>
+		<li>Checklist: one list, 44px ticks, owner chip instead of two lists, evidence rows carry a 44px <code class="mono">Upload ↑</code> deep-linked <code class="mono">?doc=&lt;evidence&gt;</code>.</li>
+		<li>Finish isn't a section: the hero becomes the complete block when <code class="mono">canComplete</code>, else one muted unlock line at the page foot.</li>
+	</ul></div>
+
+	<!-- ================= SECTION C · MOBILE ================= -->
+	<span class="tag tag--after" id="c">C · Mobile — 390px</span>
+	<div class="mock">
+		<div class="sidebyside">
+			<div class="phone">
+				<p class="eyebrow">Chapter V · Departure</p>
+				<p style="font-size:1.05rem;font-weight:650">Departure · Oxford</p>
+				<div class="vhero vhero--done mt2" style="padding:1.1rem 1.2rem">
+					<div style="width:100%">
+						<p class="eyebrow">You are here</p>
+						<p class="vhero__t" style="font-size:1.2rem">Pay your ticket invoice</p>
+					</div>
+					<div class="dtile" style="border-color:#fff;width:100%">
+						<p class="n">12</p>
+						<p class="d">days · ACC → LHR · 3 Oct 09:40</p>
+					</div>
+					<span class="btn btn--inv" style="width:100%;min-height:48px;line-height:48px;padding:0">Pay GH₵ 6,200 →</span>
+				</div>
+				<div class="vsteps">
+					<div class="vstep vstep--done"><p class="l">Flight</p><p class="d">BA0078</p></div>
+					<div class="vstep vstep--on"><p class="l">Papers</p><p class="d">fee due</p></div>
+					<div class="vstep"><p class="l">Checklist</p><p class="d">3 of 7</p></div>
+					<div class="vstep"><p class="l">Finish</p><p class="d">last</p></div>
+				</div>
+				<p class="eyebrow mt3">Your flight</p>
+				<div class="bpass mt1">
+					<div class="bpass__top" style="padding:.7rem .9rem">
+						<div class="bpass__route" style="gap:.9rem">
+							<div><p class="bpass__code" style="font-size:1.25rem">ACC</p><p class="bpass__pt">09:40</p></div>
+							<div style="font-family:var(--mono)">→</div>
+							<div><p class="bpass__code" style="font-size:1.25rem">LHR</p><p class="bpass__pt">16:05</p></div>
+						</div>
+						<span class="pill pill--solid">Ticketed</span>
+					</div>
+					<div class="bpass__bot" style="padding:.6rem .9rem"><span>BA · BA0078</span><span class="bpass__conf">KX7Q2M</span></div>
+				</div>
+				<p class="eyebrow mt3">Service fee</p>
+				<div class="pledger__row pledger__row--due" style="border-top:1.5px solid var(--ink)">
+					<span class="pledger__mark pledger__mark--on">V</span>
+					<div><p class="pledger__name">Pre-departure</p><p class="pledger__sub">INV-2026-0318 · GH₵ 9,450</p></div>
+					<span class="pledger__status"><span class="pill">Due</span></span>
+					<div class="pledger__acts"><span class="btn btn--sm">Pay →</span></div>
+				</div>
+				<p class="eyebrow mt3">On arrival</p>
+				<div class="arrive mt1" style="padding:.8rem .9rem">
+					<div class="pkv"><span class="k">Report by</span><span class="v">30 Oct</span></div>
+					<div class="pkv"><span class="k">Orientation</span><span class="v">21 Oct</span></div>
+					<div class="pkv"><span class="k">Pickup</span><span class="v">Kofi · hall B</span></div>
+					<div class="pkv"><span class="k">Accommodation</span><span class="v">B-214 · 3 Oct</span></div>
+				</div>
+				<p class="eyebrow mt3">Before you fly</p>
+				<div class="chk"><span class="chk__tick chk__tick--on">✓</span><div><p class="chk__nm">Flight confirmed</p></div><span class="chk__own chk__own--you">You</span></div>
+				<div class="chk"><span class="chk__tick"></span><div><p class="chk__nm">Travel insurance</p></div><span class="chk__own chk__own--you">You</span></div>
+				<div class="chk"><span class="chk__tick"></span><div><p class="chk__nm">Briefing · 5 Oct</p></div><span class="chk__own chk__own--you">You</span></div>
+				<p class="mono muted mt3" style="font-size:.6rem">Finish unlocks when: ✓ flight · ○ fee · ○ 3/7</p>
+				<div class="pbar"><span class="mono" style="font-size:.68rem">Ticket · GH₵ 6,200 due</span><span class="btn btn--sm">Pay →</span></div>
+			</div>
+			<div class="phone">
+				<p class="cap">the decision picker — one column on a phone, three on desktop</p>
+				<p class="eyebrow mt2">Your flight · decide</p>
+				<div class="picks mt2">
+					<div class="pick pick--on"><p class="t">Century NIT books it</p><p class="s">We hold the fare, you pay the ticket invoice at cost.</p></div>
+					<div class="pick"><p class="t">I'll book my own</p><p class="s">Share the e-ticket; your officer syncs pickup and arrival.</p></div>
+					<div class="pick"><p class="t">Not yet</p><p class="s">Hold while you confirm dates with the school.</p></div>
+				</div>
+				<p class="cap" style="margin-top:1.2rem">officer card stacks under the content</p>
+				<div class="card mt2">
+					<div style="display:flex;gap:.7rem;align-items:center">
+						<span class="avatar avatar--inv" style="width:2.2rem;height:2.2rem">AS</span>
+						<div><p style="font-weight:700;font-size:.88rem">Ama Serwaa</p><p class="muted" style="font-size:.72rem">Travel officer</p></div>
+					</div>
+					<div style="display:flex;gap:.5rem;margin-top:.7rem">
+						<span class="btn btn--ghost btn--sm" style="flex:1;min-height:44px;display:flex;align-items:center;justify-content:center">Message</span>
+						<span class="btn btn--ghost btn--sm" style="flex:1;min-height:44px;display:flex;align-items:center;justify-content:center">Book call</span>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="callout"><b>C — what changed</b><ul>
+		<li>Hero first (countdown tile full-width under the title, CTA 48px), steps 2×2, then boarding pass → ledger card → arrival card → checklist → officer → finish line.</li>
+		<li>Sticky <code class="mono">.pbar</code> only while a payment is due: <code class="mono">Ticket · GH₵ 6,200 due · Pay →</code>.</li>
+		<li>Picker 1-column; ledger rows re-grid to cards; checklist ticks stay 44px.</li>
+	</ul></div>
+
+	<!-- ================= SECTION D · WIRING ================= -->
+	<span class="tag" id="d">D · Wiring</span>
+	<div class="mock">
+		<table class="wiring">
+			<tr><th>Surface</th><th>Change</th></tr>
+			<tr><td>PortalPreDeparture.tsx</td><td><code>.dhero</code> replaces band + countdown card + "What you owe" (countdown tile + single CTA inside); <code>.vsteps</code> (reused from the visa pass) replaces <code>.psteps4</code>; section hints shrink to one state word; header gains school/programme/visa-validity meta line.</td></tr>
+			<tr><td>Decision picker</td><td>Add the missing <code>.portal-grid--3</code> rule (or a dedicated <code>.picks</code> grid); ≥64px tall picks, 1 column under 600px.</td></tr>
+			<tr><td>FlightRows → .bpass</td><td>Route big (ACC → LHR), times under the codes, carrier + flight no + confirmation mono box, status pill. ALL-CAPS mono sentences → one normal-case <code>Booked with Century NIT · travel officer {displayAuthor(assignedOpsUserName)}</code> line.</td></tr>
+			<tr><td>Payments</td><td>Ticket invoice + pre-departure instalment → <code>.pledger__row</code> (reuse classes from the payments pass); service-fee section is payment-only; settled → <code>.settled</code> row; locked → <code>--locked</code> dimmed + reason line.</td></tr>
+			<tr><td>Papers</td><td><code>OfficialDocuments</code> rows → <code>.vdoc</code> anatomy (mark · name · "Filed by Century NIT · date" · Held/Released pill · 44px Download ↓); one hold line under the group.</td></tr>
+			<tr><td>PreDepartureChecklist</td><td>One list, 44px ticks, owner chip (<code>you</code>/<code>Century NIT</code>) replaces the two lists; evidence rows carry <code>Upload ↑</code> ghost buttons to <code>/portal/documents?doc=&lt;evidence&gt;</code> (vault deep link already shipped); on-arrival facts → bordered <code>.arrive</code> card above the list.</td></tr>
+			<tr><td>Finish</td><td>Not a section: <code>canComplete</code> → the hero's inverted <code>Complete my journey →</code>; else one muted foot line <code>Finish unlocks when: ✓ flight · ○ fee · ○ checklist n/7</code>.</td></tr>
+			<tr><td>Rail</td><td>Travel officer card (avatar initials via <code>displayAuthor</code>, Message / Book call 44px) + "After landing" 3-row pkv. Countdown and "What you owe" leave the rail.</td></tr>
+			<tr><td>app.css</td><td>New <code>.dhero/.dtile/.picks/.pick/.bpass/.arrive/.chk*</code>; reuse <code>.vhero/.vsteps/.vdoc/.pledger__row/.settled/.avatar/.jlink</code>; <code>@media (max-width:959.98px)</code> + <code>(max-width:600px)</code> variants. Monochrome tokens only.</td></tr>
+			<tr><td>Out of scope</td><td>API/ops changes; all derivations (<code>status</code>, <code>tripDue</code>, <code>milestoneUnlocked</code>, <code>feePaid</code>, <code>canComplete</code>, <code>band</code>) unchanged.</td></tr>
+		</table>
+	</div>
+</div>
+</body>
+</html>

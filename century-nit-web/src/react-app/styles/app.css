@@ -1837,6 +1837,10 @@ body.nav-open {
 .portal-grid--2 {
 		grid-template-columns: 1fr 1fr;
 	}
+
+.portal-grid--3 {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
 }
 
 .portal-grid--align-start {
@@ -3085,11 +3089,6 @@ img.profile-monogram {
 	gap: 1rem;
 }
 
-.next-action {
-	border-width: 2px;
-	background: var(--muted);
-}
-
 /* visa state block + step strip + checklist rows */
 
 .vhero {
@@ -3217,6 +3216,321 @@ img.profile-monogram {
 	font-size: 0.72rem;
 	color: var(--muted-foreground);
 	margin: 0.1rem 0 0;
+}
+
+.vdoc--held {
+	opacity: 0.7;
+}
+
+/* departure — the single state block at the top of the chapter */
+
+.dhero {
+	border: 1.5px solid var(--foreground);
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 1.4rem;
+	padding: 1.5rem 1.6rem;
+	align-items: center;
+}
+
+.dhero--act {
+	background: var(--foreground);
+	color: var(--accent-foreground);
+	border-color: var(--foreground);
+}
+
+.dhero--act .muted,
+.dhero--act .eyebrow {
+	color: rgba(255, 255, 255, 0.65);
+}
+
+.dhero--act .dtile {
+	border-color: rgba(255, 255, 255, 0.45);
+}
+
+.dhero__t {
+	font-family: var(--font-display);
+	font-size: 1.7rem;
+	font-weight: 700;
+	line-height: 1.1;
+	margin: 0.3rem 0 0;
+}
+
+.dhero__d {
+	font-size: 0.88rem;
+	margin: 0.5rem 0 0;
+	opacity: 0.75;
+	max-width: 34rem;
+}
+
+.dhero__side {
+	display: flex;
+	flex-direction: column;
+	gap: 0.8rem;
+	align-items: stretch;
+	min-width: 15rem;
+}
+
+.dtile {
+	border: 1.5px solid currentColor;
+	padding: 0.7rem 1rem;
+	font-family: var(--font-mono);
+	text-align: left;
+}
+
+.dtile__n {
+	font-size: 1.5rem;
+	font-weight: 700;
+	line-height: 1.1;
+	margin: 0;
+}
+
+.dtile__d {
+	font-size: 0.62rem;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	margin: 0.2rem 0 0;
+	opacity: 0.7;
+}
+
+/* the three-way flight decision as a real grid */
+
+.picks {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 0.8rem;
+}
+
+.picks > * {
+	min-height: 64px;
+}
+
+/* the boarding pass card for a found/booked flight */
+
+.bpass {
+	border: 1.5px solid var(--foreground);
+}
+
+.bpass__top {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+	gap: 1rem;
+	align-items: center;
+	padding: 1.1rem 1.2rem;
+}
+
+.bpass__code {
+	font-family: var(--font-mono);
+	font-size: 1.6rem;
+	font-weight: 700;
+	line-height: 1;
+	margin: 0;
+}
+
+.bpass__pt {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	color: var(--muted-foreground);
+	margin: 0.3rem 0 0;
+}
+
+.bpass__mid {
+	text-align: center;
+	font-size: 1rem;
+}
+
+.bpass__mid .bpass__pt {
+	margin-top: 0.15rem;
+}
+
+.bpass__bot {
+	border-top: 1px dashed var(--border);
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 0.8rem;
+	flex-wrap: wrap;
+	padding: 0.7rem 1.2rem;
+	font-size: 0.78rem;
+}
+
+.bpass__conf {
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	border: 1px solid var(--foreground);
+	padding: 0.2rem 0.55rem;
+	letter-spacing: 0.06em;
+}
+
+/* on-arrival facts — the concrete info, above the checklist */
+
+.arrive {
+	border: 1.5px solid var(--foreground);
+	padding: 1.1rem 1.2rem;
+}
+
+.arrive__grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0 1.6rem;
+	margin-top: 0.4rem;
+}
+
+/* the pre-departure checklist — one list, 44px ticks */
+
+.chk {
+	list-style: none;
+	margin: 0.9rem 0 0;
+	padding: 0;
+	border-top: 1px solid var(--border-light);
+}
+
+.chk__row {
+	display: grid;
+	grid-template-columns: 44px minmax(0, 1fr) auto auto;
+	gap: 0.9rem;
+	align-items: center;
+	padding: 0.5rem 0;
+	border-bottom: 1px solid var(--border-light);
+}
+
+.chk__tick {
+	width: 44px;
+	height: 44px;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.8rem;
+	padding: 0;
+	position: relative;
+}
+
+.chk__tick::before {
+	content: "";
+	width: 22px;
+	height: 22px;
+	border: 1.5px solid var(--foreground);
+	position: absolute;
+}
+
+.chk__tick:disabled {
+	cursor: default;
+}
+
+.chk__tick--staff::before {
+	border-color: var(--border-light);
+}
+
+.chk__tick--on::before {
+	background: var(--foreground);
+}
+
+.chk__tick--on {
+	color: var(--background);
+	font-weight: 700;
+}
+
+.chk__tick--staff {
+	color: var(--foreground);
+}
+
+.chk__tick:focus-visible {
+	outline: 2px solid var(--foreground);
+	outline-offset: 2px;
+}
+
+.chk__nm {
+	font-size: 0.88rem;
+	font-weight: 600;
+	margin: 0;
+}
+
+.chk__nm--done {
+	text-decoration: line-through;
+	color: var(--muted-foreground);
+	font-weight: 400;
+}
+
+.chk__nm--closed {
+	color: var(--muted-foreground);
+	font-weight: 400;
+}
+
+.chk__hint {
+	font-size: 0.72rem;
+	color: var(--muted-foreground);
+	margin: 0.15rem 0 0;
+}
+
+.chk__owner {
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	border: 1px solid var(--border-light);
+	color: var(--muted-foreground);
+	padding: 0.2rem 0.45rem;
+}
+
+.chk__owner--you {
+	border-color: var(--foreground);
+	color: var(--foreground);
+}
+
+.chk__act {
+	min-height: 44px;
+}
+
+/* ledger row dimmed while it waits for a precondition */
+
+.pledger__row--locked {
+	opacity: 0.65;
+}
+
+.pledger__mark--on {
+	background: var(--foreground);
+	color: var(--background);
+	border-color: var(--foreground);
+}
+
+/* finish is a footnote, not a section */
+
+.finishline {
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--muted-foreground);
+	margin: 2rem 0 0;
+}
+
+@media (max-width: 959.98px) {
+	.dhero {
+		grid-template-columns: minmax(0, 1fr);
+		padding: 1.3rem 1.2rem;
+	}
+
+	.dhero__side {
+		min-width: 0;
+	}
+
+	.dhero__side .btn {
+		width: 100%;
+		min-height: 48px;
+	}
+}
+
+@media (max-width: 600px) {
+	.picks {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.arrive__grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
 }
 
 .avatar {

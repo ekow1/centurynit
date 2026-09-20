@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { InvoiceCard, formatMoney } from "century-nit-core/ui";
 import { openInvoiceDocument } from "../../lib/receipt";
 import { useAppState, hasSettledPlan } from "../../context/AppState";
@@ -6,6 +6,8 @@ import { Button } from "../../components/ui/Button";
 import { ChapterGate } from "./PortalLayout";
 import { PreDepartureChecklist } from "../../components/PreDepartureChecklist";
 import { OfficialDocuments, officialRows } from "../../components/OfficialDocuments";
+import { displayAuthor } from "./ConsultantUpdates";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { documentsReleasedFor, documentHoldReasonFor, milestoneLockReasonFor, milestoneUnlockedFor } from "../../context/AppState";
 import { documentsApi } from "century-nit-core/api";
 import type { ApplicantDocument } from "century-nit-shared";
@@ -69,6 +71,16 @@ function TravelAssistanceInner() {
 
 	const ta = application.travelAssistance;
 	const [busy, setBusy] = useState(false);
+	const isMobile = useMediaQuery("(max-width: 959.98px)");
+	const heroRef = useRef<HTMLDivElement | null>(null);
+	const [heroVisible, setHeroVisible] = useState(true);
+	useEffect(() => {
+		const el = heroRef.current;
+		if (!el || typeof IntersectionObserver === "undefined") return;
+		const obs = new IntersectionObserver(([e]) => setHeroVisible(e.isIntersecting));
+		obs.observe(el);
+		return () => obs.disconnect();
+	}, []);
 
 	// The real ticket invoice from the server: its status (proforma / issued /
 	// paid) is what decides whether there is anything to pay.
@@ -201,9 +213,10 @@ function TravelAssistanceInner() {
 	];
 	const onStep = steps.findIndex((s) => !s.done);
 
+	const officerName = ta?.assignedOpsUserName ? displayAuthor(ta.assignedOpsUserName) : null;
 	const waitingLine = !ta?.assignedOpsUserId
 		? "Your request has been sent to our travel team. A travel officer will be assigned and will prepare your ticket invoice."
-		: `${ta.assignedOpsUserName ? `${ta.assignedOpsUserName} is` : "Your travel officer is"} finding your flight and preparing the ticket invoice. You'll be able to pay it here once it's ready.`;
+		: `${officerName ? `${officerName} is` : "Your travel officer is"} finding your flight and preparing the ticket invoice. You'll be able to pay it here once it's ready.`;
 
 	// The band. The one thing this chapter needs right now. The flight first;
 	// the fee milestone waits on it.
@@ -214,7 +227,7 @@ function TravelAssistanceInner() {
 			: showWaiting
 				? { title: "Your travel officer is finding your flight", detail: waitingLine, cta: null }
 				: tripDue
-					? { title: `Pay the ticket invoice · ${formatMoney(trip?.balanceCents ?? 0, "ghs")} due`, detail: `The airline ticket, at cost. ${ta?.assignedOpsUserName ?? "Your travel officer"} books the seat as soon as it's paid and posts the confirmation here.`, cta: <Button variant="inverted" onClick={() => void payTicketing()} arrow>Pay now</Button> }
+					? { title: `Pay the ticket invoice · ${formatMoney(trip?.balanceCents ?? 0, "ghs")} due`, detail: `The airline ticket, at cost. ${officerName ?? "Your travel officer"} books the seat as soon as it's paid and posts the confirmation here.`, cta: <Button variant="inverted" onClick={() => void payTicketing()} arrow>Pay now</Button> }
 					: trip?.status === "paid" && !showBooked
 						? { title: "Ticket paid. Your officer is booking", detail: "The fare is settled. Your travel officer is booking the flight and will post the confirmation here.", cta: null }
 						: status === "on_hold"
@@ -243,28 +256,36 @@ function TravelAssistanceInner() {
 				</div>
 			</header>
 
-			{/* You are here */}
-			<div className="journey-now mt-4">
-				<div>
+			{/* You are here — one block: state, countdown, the single CTA */}
+			<div ref={heroRef} className={`dhero mt-4${band.cta ? " dhero--act" : ""}`}>
+				<div className="dhero__main">
 					<p className="eyebrow">You are here</p>
-					<p className="display journey-now__title" style={{ fontSize: "1.3rem" }}>{band.title}</p>
-					<p className="journey-now__detail">{band.detail}</p>
+					<p className="dhero__t">{band.title}</p>
+					<p className="dhero__d muted">{band.detail}</p>
 				</div>
-				{band.cta}
+				<div className="dhero__side">
+					<div className={`dtile${flightAt ? "" : " dtile--hollow"}`}>
+						<p className="dtile__n">
+							{flightAt ? (flyDays !== null && flyDays > 0 ? `${flyDays} days` : flyDays === 0 ? "Today" : "Flown") : "—"}
+						</p>
+						<p className="dtile__d">
+							{flightAt
+								? `To ${ta?.booking?.to ?? ta?.flight?.to ?? "your destination"} · ${when(flightAt)}`
+								: "Flight not booked"}
+						</p>
+					</div>
+					{band.cta}
+				</div>
 			</div>
 
 			{/* the strip. The same four dependencies the sections below follow */}
-			<div className="psteps4">
-				{steps.map((s, i) => {
-					const st = s.done ? "done" : i === onStep ? "on" : "pending";
-					return (
-						<div key={s.label} className={`pstep${st === "done" ? " pstep--done" : st === "on" ? " pstep--on" : ""}`}>
-							<span className="pstep__m">{s.done ? "✓" : i + 1}</span>
-							<span className="pstep__l">{s.label}</span>
-							<span className="pstep__s">{s.fact}</span>
-						</div>
-					);
-				})}
+			<div className="vsteps">
+				{steps.map((s, i) => (
+					<div key={s.label} className={`vstep${s.done ? " vstep--done" : i === onStep ? " vstep--on" : ""}`}>
+						<p className="vstep__l">{s.label}</p>
+						{s.fact ? <p className="vstep__d">{s.fact}</p> : null}
+					</div>
+				))}
 			</div>
 
 			<div className="psplit mt-5">
@@ -294,7 +315,7 @@ function TravelAssistanceInner() {
 						</div>
 						{showDecision ? (
 							<>
-								<div className="portal-grid portal-grid--3">
+								<div className="picks">
 									<button type="button" className={`pick${ta?.decision === "yes" ? " pick--on" : ""}`} onClick={() => void handleDecision("yes")} disabled={busy}>
 										<span style={{ fontWeight: 700, fontSize: "0.92rem" }}>Book with us</span>
 										<span className="muted" style={{ display: "block", fontSize: "0.78rem", marginTop: "0.4rem", lineHeight: 1.5 }}>We find the flight, you pay the ticket invoice here, and we book it for you.</span>
@@ -316,10 +337,13 @@ function TravelAssistanceInner() {
 								)}
 							</>
 						) : (
-							<p className="mono muted" style={{ fontSize: "0.75rem" }}>
-								{showBooked ? "BOOKED WITH CENTURY NIT" : "BOOKING WITH CENTURY NIT"}
-								{ta?.assignedOpsUserName ? ` · ${ta.assignedOpsUserName.toUpperCase()} IS YOUR TRAVEL OFFICER` : ""}.
-							</p>
+							<div className="settled">
+								<span className="mono">✓</span>
+								<span style={{ fontSize: "0.85rem" }}>
+									<b>{showBooked ? "Booked" : "Booking"} with Century NIT</b>
+									{officerName ? ` · travel officer ${officerName}` : ""}
+								</span>
+							</div>
 						)}
 						{showWaiting && (
 							<div className="sharp-card">
@@ -333,7 +357,7 @@ function TravelAssistanceInner() {
 									<>
 										<p className="eyebrow">Flight found</p>
 										<div className="mt-2 mb-3">
-											<FlightRows flight={ta.flight} />
+											<BoardingPass flight={ta.flight} />
 										</div>
 									</>
 								)}
@@ -379,105 +403,90 @@ function TravelAssistanceInner() {
 						)}
 						{showBooked && ta?.booking && (
 							<div className="sharp-card sharp-card--key">
-								<div className="between" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
-									<p className="eyebrow">Booked · confirmed</p>
-									<span className="portal-pill portal-pill--solid">Ticketed</span>
-								</div>
+								<p className="eyebrow">Booked · confirmed</p>
 								<div className="mt-3">
-									<FlightRows flight={ta.booking} confirmationCode={ta.booking.confirmationCode} />
+									<BoardingPass flight={ta.booking} confirmationCode={ta.booking.confirmationCode} ticketed />
 								</div>
-								<div className="between mt-3" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
-									<p className="muted" style={{ fontSize: "0.8rem" }}>
-										Keep the confirmation code for check-in.
-										{!feePaid && " Your e-ticket releases with your papers below once the service-fee instalment is settled."}
-									</p>
-									{trip?.status === "paid" && (
-										<span>
-											<button type="button" className="doc-link" onClick={() => openInvoiceDocument(trip, "invoice")}>
-												↓ invoice
-											</button>
-											<button type="button" className="doc-link" onClick={() => openInvoiceDocument(trip, "receipt")}>
-												↓ receipt
-											</button>
-										</span>
-									)}
-								</div>
+								<p className="muted mt-3" style={{ fontSize: "0.8rem" }}>
+									Keep the confirmation code for check-in.
+									{!feePaid && " Your e-ticket releases with your papers below once the service-fee instalment is settled."}
+								</p>
 							</div>
 						)}
 					</section>
 
-					{/* 2 · your papers — the service-fee instalment, then what it releases */}
+					{/* 2 · service fee — the payment only; papers sit in the next section */}
 					<section className="psec">
 						<div className="psec__h">
-							<span className={`psec__no${docsReleased ? " psec__no--done" : ""}`}>{docsReleased ? "✓" : "2"}</span>
-							<span className="psec__title">Your papers</span>
+							<span className={`psec__no${feePaid ? " psec__no--done" : ""}`}>{feePaid ? "✓" : "2"}</span>
+							<span className="psec__title">Service fee</span>
 							<span className="psec__hint">
-								{feePaid
-									? `released${application.agencySettledAt ? ` · fee settled ${day(application.agencySettledAt)}` : ""}`
-									: !milestoneUnlocked
-										? status === "on_hold"
-											? "on hold · unlocks when travel is settled"
-											: "unlocks once your flight is booked"
-										: isInstalment
-											? "service fee · pre-departure instalment due"
-											: "service fee · balance due"}
+								{feePaid ? "settled" : !milestoneUnlocked ? "after your flight" : "due"}
 							</span>
 						</div>
 						{feePaid ? (
-							<p className="mono muted" style={{ fontSize: "0.75rem" }}>
-								SERVICE FEE SETTLED{application.agencySettledAt ? ` · ${(day(application.agencySettledAt) ?? "").toUpperCase()}` : ""}. YOUR PAPERS ARE RELEASED BELOW.{postArrivalUsd ? ` ${ghs(postArrivalUsd).toUpperCase()} FOLLOWS AFTER ARRIVAL ON YOUR SCHEDULE.` : ""}
-							</p>
-						) : !milestoneUnlocked ? (
-							<div className="sharp-card">
-								<div className="between" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
-									<div>
-										<p style={{ fontWeight: 700 }}>Service fee · pre-departure instalment</p>
-										<p className="mono muted" style={{ fontSize: "0.68rem", marginTop: "0.3rem" }}>
-											SETTLING IT RELEASES YOUR ADMISSION LETTER · VISA DOCUMENTS · E-TICKET
-										</p>
-									</div>
-									{milestoneUsd ? (
-										<span className="mono" style={{ fontWeight: 700, fontSize: "1.05rem" }}>
-											{ghs(milestoneUsd)} <span className="muted" style={{ fontWeight: 400, fontSize: "0.8rem" }}>· ${milestoneUsd.toLocaleString()}</span>
-										</span>
-									) : null}
-								</div>
-								<p className="muted" style={{ fontSize: "0.85rem", marginTop: "0.35rem" }}>
-									{milestoneLockReason}
-								</p>
+							<div className="settled">
+								<span className="mono">✓</span>
+								<span style={{ fontSize: "0.85rem" }}>
+									<b>Service fee</b> · settled{application.agencySettledAt ? ` ${day(application.agencySettledAt)}` : ""}
+									{postArrivalUsd ? ` · ${ghs(postArrivalUsd)} follows after arrival` : ""}
+								</span>
 							</div>
 						) : (
-							<div className="sharp-card sharp-card--key">
-								<div className="between" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
-									<div>
-										<p style={{ fontWeight: 700 }}>Service fee · {isInstalment ? "pre-departure instalment" : "balance"}</p>
-										<p className="mono muted" style={{ fontSize: "0.68rem", marginTop: "0.3rem" }}>
-											{application.paymentPlanId
-												? `SERVICE FEE · ${isInstalment ? "INSTALMENT PLAN" : "FULL PAYMENT"} · AGREED AT PACKAGE SELECTION`
-												: "CHOOSE YOUR PAYMENT PLAN FIRST"}
+							<>
+								<div className={`pledger__row${milestoneUnlocked ? " pledger__row--due" : " pledger__row--locked"}`} style={{ borderTop: "1.5px solid var(--foreground)" }}>
+									<span className={`pledger__mark${milestoneUnlocked ? " pledger__mark--on" : ""}`}>V</span>
+									<div className="pledger__body">
+										<p className="pledger__name">Service fee · {isInstalment ? "pre-departure instalment" : "balance"}</p>
+										<p className="pledger__sub">
+											{!milestoneUnlocked
+												? (milestoneLockReason ?? "unlocks once your flight is settled")
+												: `${application.paymentPlanId ? (PAYMENT_PLANS.find((p) => p.id === application.paymentPlanId)?.name ?? "plan") : "choose your plan first"} · releases your admission letter, visa documents & e-ticket`}
 										</p>
 									</div>
-									{milestoneUsd ? (
-										<span className="mono" style={{ fontWeight: 700, fontSize: "1.05rem" }}>
-											{ghs(milestoneUsd)} <span className="muted" style={{ fontWeight: 400, fontSize: "0.8rem" }}>· ${milestoneUsd.toLocaleString()}</span>
-										</span>
-									) : null}
+									<div className="pledger__amt">
+										{milestoneUsd ? (
+											<>
+												<b>{ghs(milestoneUsd)}</b>
+												<small>${milestoneUsd.toLocaleString()}</small>
+											</>
+										) : (
+											<b>—</b>
+										)}
+									</div>
+									<span className="pledger__status">
+										<span className={`portal-pill${milestoneUnlocked ? "" : " portal-pill--hollow"}`}>{milestoneUnlocked ? "Due" : "Locked"}</span>
+									</span>
+									<div className="pledger__acts">
+										{milestoneUnlocked ? (
+											<Button to="/portal/payment-execution" size="sm" arrow>
+												{application.paymentPlanId ? "Pay service fee" : "Choose plan & pay"}
+											</Button>
+										) : null}
+									</div>
 								</div>
-								<p className="muted" style={{ fontSize: "0.85rem", marginTop: "0.35rem" }}>
-									{status === "declined"
-										? "You're booking your own flight. Settling it releases your admission letter, visa documents and papers."
-										: `Your flight is booked. Settling it releases your admission letter, visa documents and e-ticket.${isInstalment ? " Any post-arrival remainder follows on your schedule." : ""}`}
-								</p>
-								<div className="mt-3">
-									<Button to="/portal/payment-execution" variant="primary" arrow>
-										{application.paymentPlanId ? "Pay service fee" : "Choose plan & pay"}
-									</Button>
-								</div>
-							</div>
+								{milestoneUnlocked ? (
+									<p className="muted mt-2" style={{ fontSize: "0.78rem" }}>
+										{status === "declined"
+											? "You're booking your own flight. Settling it releases your admission letter, visa documents and papers."
+											: `Settling releases your admission letter, visa documents and e-ticket.${isInstalment ? " Any post-arrival remainder follows on your schedule." : ""}`}
+									</p>
+								) : null}
+							</>
 						)}
-						<p className="eyebrow mt-4">Filed by Century NIT{docsHeld > 0 ? ` · ${docsHeld} held` : docsReleased ? " · released" : ""}</p>
+					</section>
+
+					{/* 3 · your papers — the files Century holds for you */}
+					<section className="psec">
+						<div className="psec__h">
+							<span className={`psec__no${docsReleased && docRows.length > 0 ? " psec__no--done" : ""}`}>{docsReleased && docRows.length > 0 ? "✓" : "3"}</span>
+							<span className="psec__title">Your papers</span>
+							<span className="psec__hint">
+								{docRows.length === 0 ? "nothing filed yet" : docsHeld > 0 ? `${docsHeld} held until fee` : "released"}
+							</span>
+						</div>
 						{docRows.length > 0 ? (
-							<OfficialDocuments rows={docRows} released={docsReleased} holdReason={documentHoldReasonFor(application)} hidePayCta />
+							<OfficialDocuments rows={docRows} released={docsReleased} holdReason={documentHoldReasonFor(application)} hidePayCta variant="rows" />
 						) : (
 							<p className="mono muted" style={{ fontSize: "0.75rem" }}>
 								Your admission letter and visa documents appear here as your consultant files them.
@@ -485,18 +494,20 @@ function TravelAssistanceInner() {
 						)}
 					</section>
 
-					{/* 3 · before you fly — the shared checklist, then what happens on arrival */}
+					{/* 4 · before you fly — the arrival facts first, then the checklist */}
 					<section className="psec">
 						<div className="psec__h">
-							<span className={`psec__no${checklistDone ? " psec__no--done" : ""}`}>{checklistDone ? "✓" : "3"}</span>
+							<span className={`psec__no${checklistDone ? " psec__no--done" : ""}`}>{checklistDone ? "✓" : "4"}</span>
 							<span className="psec__title">Before you fly</span>
-							<span className="psec__hint">yours + your officer's · {closedTasks}/{totalTasks}</span>
+							<span className="psec__hint">{closedTasks} of {totalTasks}</span>
 						</div>
-						<PreDepartureChecklist tasks={preDepartureTasks} onToggle={togglePreDepartureTask} locked={Boolean(application.completedAt)} />
 						{hasFacts && (
-							<>
-								<p className="eyebrow mt-4">On arrival · recorded by your officer</p>
-								<div className="mt-1">
+							<div className="arrive">
+								<div className="between" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
+									<p className="eyebrow">On arrival</p>
+									<span className="mono muted" style={{ fontSize: "0.62rem" }}>recorded by your officer</span>
+								</div>
+								<div className="arrive__grid">
 									{dd.reportBy && (
 										<div className="pkv"><span className="pkv__k">Report to your school by</span><span className="pkv__v">{day(dd.reportBy)}</span></div>
 									)}
@@ -516,113 +527,43 @@ function TravelAssistanceInner() {
 										<div className="pkv"><span className="pkv__k">Emergency contact</span><span className="pkv__v">{dd.emergencyContactName}{dd.emergencyContactRelation ? ` (${dd.emergencyContactRelation})` : ""}{dd.emergencyContactPhone ? ` · ${dd.emergencyContactPhone}` : ""}</span></div>
 									)}
 								</div>
-							</>
+							</div>
 						)}
+						<div className="mt-3">
+							<PreDepartureChecklist tasks={preDepartureTasks} onToggle={togglePreDepartureTask} locked={Boolean(application.completedAt)} />
+						</div>
 					</section>
 
-					{/* 4 · finish — always visible, spells out what's left */}
-					<section className="psec">
-						<div className="psec__h">
-							<span className={`psec__no${canComplete ? " psec__no--done" : ""}`}>{canComplete ? "✓" : "4"}</span>
-							<span className="psec__title">Finish</span>
-							<span className="psec__hint">{canComplete ? "ready to complete" : "the last step"}</span>
-						</div>
-						<div className="sharp-card next-action">
-							<p className="eyebrow">Close the chapter</p>
-							<p className="display mt-2" style={{ fontSize: "1.25rem" }}>
-								{canComplete ? "You're set to fly" : status === "declined" ? "Travel arranged independently" : status === "on_hold" ? "Travel on hold" : "Finish your pre-departure"}
-							</p>
-							<p className="muted mt-1">
-								{canComplete
-									? "Completing moves you to Chapter VI · post-arrival support. Your documents and receipts stay in your vault."
-									: !settled
-										? "The last step, once your travel is settled."
-										: !feePaid
-											? milestoneLockReason ?? "Settle the service-fee instalment in Your papers to finish."
-											: !checklistDone
-												? "Work through your pre-departure checklist above to finish."
-												: "Travel assistance is paused. You can resume it above whenever you're ready."}
-							</p>
-							<div className="row mt-3">
-								{canComplete ? (
-									<Button variant="primary" onClick={() => void handleComplete()} arrow>
-										Complete my journey
-									</Button>
-								) : !feePaid && milestoneUnlocked ? (
-									<Button to="/portal/payment-execution" variant="ghost">
-										Pay service fee
-									</Button>
-								) : (
-									<Button to="/portal/journey" variant="ghost">
-										See your journey
-									</Button>
-								)}
-							</div>
-						</div>
-					</section>
+					{/* finish is a state, not a section */}
+					<p className="finishline">
+						{application.completedAt
+							? `✓ File closed ${day(application.completedAt)}`
+							: `Finish unlocks when: ${settled ? "✓" : "○"} flight · ${feePaid ? "✓" : "○"} fee · ${checklistDone ? "✓" : "○"} checklist ${closedTasks}/${totalTasks}`}
+					</p>
 				</div>
 
-				{/* the rail. Countdown, money, officer, what happens after */}
+				{/* the rail. The officer, then what happens after — money lives in the hero and the ledger */}
 				<div className="prail">
-					<div className="sharp-card sharp-card--key sharp-card--invert">
-						<p className="eyebrow" style={{ color: "rgba(255,255,255,0.6)" }}>Countdown</p>
-						<p style={{ fontSize: "1.6rem", fontWeight: 700, marginTop: "0.3rem" }}>
-							{flightAt ? (flyDays !== null && flyDays > 0 ? `${flyDays} day${flyDays === 1 ? "" : "s"}` : flyDays === 0 ? "Today" : "Flown") : "Not booked"}
-						</p>
-						<p className="mono" style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.7)", marginTop: "0.15rem" }}>
-							{flightAt ? `TO ${when(flightAt)?.toUpperCase() ?? ""}` : "FLIGHT DATE SHOWS HERE ONCE TICKETED"}
-						</p>
-					</div>
-
-					<div className="sharp-card">
-						<p className="eyebrow">What you owe</p>
-						<div style={{ marginTop: "0.4rem" }}>
-							<div className={`pkv${tripDue ? " pkv--due" : ""}`}>
-								<span className="pkv__k">Ticket · at cost</span>
-								<span className={`pkv__v${tripDue || trip?.status === "paid" ? "" : " muted"}`}>
-									{tripDue
-										? `${formatMoney(trip?.balanceCents ?? 0, "ghs")} due`
-										: trip?.status === "paid"
-											? `${formatMoney(trip.subtotalCents, "ghs")} paid ✓`
-											: trip?.status === "proforma"
-												? "being issued"
-												: status === "declined"
-													? "own booking"
-													: "not yet raised"}
-								</span>
-							</div>
-							<div className={`pkv${!feePaid && milestoneUnlocked ? " pkv--due" : ""}`}>
-								<span className="pkv__k">Service fee · pre-departure</span>
-								<span className={`pkv__v${!feePaid && !milestoneUnlocked ? " muted" : ""}`}>
-									{feePaid ? "settled ✓" : !milestoneUnlocked ? "after your flight" : milestoneUsd ? `${ghs(milestoneUsd)} due` : "due"}
-								</span>
-							</div>
-							<div className="pkv">
-								<span className="pkv__k">Plan</span>
-								<span className="pkv__v">{application.paymentPlanId ? PAYMENT_PLANS.find((p) => p.id === application.paymentPlanId)?.name ?? application.paymentPlanId : "not chosen"}</span>
-							</div>
-							{isInstalment && (
-								<div className="pkv">
-									<span className="pkv__k">After arrival</span>
-									<span className="pkv__v muted">{postArrivalUsd ? `${ghs(postArrivalUsd)} ` : ""}on your schedule</span>
-								</div>
-							)}
-						</div>
-					</div>
-
-					<div className="sharp-card">
+					<div className="sharp-card sharp-card--key">
 						<p className="eyebrow">Your travel officer</p>
-						{ta?.assignedOpsUserName ? (
+						{officerName ? (
 							<>
-								<p style={{ fontWeight: 700, marginTop: "0.5rem" }}>{ta.assignedOpsUserName}</p>
-								<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-									Travel
-								</p>
+								<div style={{ display: "flex", gap: "0.8rem", alignItems: "center", marginTop: "0.6rem" }}>
+									<span className="avatar avatar--inv" aria-hidden>
+										{initialsOf(officerName)}
+									</span>
+									<div>
+										<p style={{ fontWeight: 700 }}>{officerName}</p>
+										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+											Travel officer
+										</p>
+									</div>
+								</div>
 								<div style={{ display: "flex", gap: "0.5rem", marginTop: "0.8rem" }}>
-									<Button to="/portal/home" variant="ghost" size="sm">
+									<Button to="/portal/home" variant="ghost" size="sm" style={{ flex: 1, minHeight: 44 }}>
 										Message
 									</Button>
-									<Button to="/portal/appointments" variant="ghost" size="sm">
+									<Button to="/portal/appointments" variant="ghost" size="sm" style={{ flex: 1, minHeight: 44 }}>
 										Book call
 									</Button>
 								</div>
@@ -636,16 +577,44 @@ function TravelAssistanceInner() {
 
 					<div className="sharp-card">
 						<p className="eyebrow">After landing</p>
-						<p className="muted" style={{ fontSize: "var(--text-sm)", lineHeight: 1.6, marginTop: "0.5rem" }}>
-							Post-arrival support continues. Check in when you land, enrolment week, and any issues in
-							your first month. Completing this chapter closes your file.
-						</p>
+						<div style={{ marginTop: "0.4rem" }}>
+							<div className="pkv"><span className="pkv__k">Check-in on landing</span><span className="pkv__v">Message your officer</span></div>
+							<div className="pkv"><span className="pkv__k">Enrolment week</span><span className="pkv__v">Report by {day(dd.reportBy) ?? "date to follow"}</span></div>
+							<div className="pkv"><span className="pkv__k">First month</span><span className="pkv__v">Support continues</span></div>
+						</div>
 					</div>
 				</div>
 			</div>
+
+			{/* the pay action stays a thumb away while money is due */}
+			{isMobile && !heroVisible && (tripDue || (!feePaid && milestoneUnlocked && milestoneUsd)) ? (
+				<div className="pstick">
+					{tripDue ? (
+						<>
+							<span>Ticket · {formatMoney(trip?.balanceCents ?? 0, "ghs")} due</span>
+							<Button variant="primary" size="sm" onClick={() => void payTicketing()}>
+								Pay →
+							</Button>
+						</>
+					) : (
+						<>
+							<span>Service fee · {ghs(milestoneUsd)} due</span>
+							<Button to="/portal/payment-execution" variant="primary" size="sm">
+								Pay →
+							</Button>
+						</>
+					)}
+				</div>
+			) : null}
 			{paySheet.sheet}
 		</div>
 	);
+}
+
+/** Two-letter mark for the officer avatar; "Century NIT" → CN. */
+function initialsOf(name: string): string {
+	const parts = name.trim().split(/\s+/);
+	return ((parts[0]?.[0] ?? "?") + (parts[1]?.[0] ?? "")).toUpperCase();
 }
 
 function fmtWhen(iso?: string): string {
@@ -654,33 +623,29 @@ function fmtWhen(iso?: string): string {
 	return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-function FlightRows({ flight, confirmationCode }: { flight: TravelFlight; confirmationCode?: string }) {
-	const route = [flight.from, flight.to].filter(Boolean).join(" → ");
-	const rows: [string, string][] = [];
-	if (confirmationCode) rows.push(["Confirmation code", confirmationCode]);
-	if (flight.carrier || flight.flightNumber) rows.push(["Flight", [flight.carrier, flight.flightNumber].filter(Boolean).join(" ")]);
-	if (route) rows.push(["Route", route]);
-	if (flight.departAt) rows.push(["Departs", fmtWhen(flight.departAt)]);
-	if (flight.arriveAt) rows.push(["Arrives", fmtWhen(flight.arriveAt)]);
+/** The flight as a boarding pass: route big, times under the codes, conf in a box. */
+function BoardingPass({ flight, confirmationCode, ticketed = false }: { flight: TravelFlight; confirmationCode?: string | null; ticketed?: boolean }) {
 	return (
-		<div style={{ display: "grid", gap: "0.5rem" }}>
-			{rows.map(([k, v]) => (
-				<QuoteRow key={k} label={k} value={v} />
-			))}
-			{flight.notes && (
-				<p className="muted" style={{ fontSize: "0.85rem" }}>
-					{flight.notes}
-				</p>
-			)}
-		</div>
-	);
-}
-
-function QuoteRow({ label, value }: { label: string; value: string }) {
-	return (
-		<div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.9rem" }}>
-			<span className="muted">{label}</span>
-			<span style={{ fontWeight: 500 }}>{value}</span>
+		<div className="bpass">
+			<div className="bpass__top">
+				<div className="bpass__leg">
+					<p className="bpass__code">{flight.from ?? "—"}</p>
+					{flight.departAt ? <p className="bpass__pt">dep {fmtWhen(flight.departAt)}</p> : null}
+				</div>
+				<div className="bpass__mid">
+					<span aria-hidden>→</span>
+					<p className="bpass__pt">{[flight.carrier, flight.flightNumber].filter(Boolean).join(" ")}</p>
+				</div>
+				<div className="bpass__leg" style={{ textAlign: "right" }}>
+					<p className="bpass__code">{flight.to ?? "—"}</p>
+					{flight.arriveAt ? <p className="bpass__pt">arr {fmtWhen(flight.arriveAt)}</p> : null}
+				</div>
+				{ticketed ? <span className="portal-pill portal-pill--solid">Ticketed</span> : null}
+			</div>
+			<div className="bpass__bot">
+				{confirmationCode ? <span className="bpass__conf">CONF {confirmationCode}</span> : null}
+				{flight.notes ? <span className="muted">{flight.notes}</span> : null}
+			</div>
 		</div>
 	);
 }

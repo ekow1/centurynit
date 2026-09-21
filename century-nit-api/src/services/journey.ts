@@ -131,5 +131,6 @@ export async function journeyForApplicant(
 			application?.stage && (JOURNEY_STAGES as string[]).includes(application.stage)
 				? (application.stage as JourneyStage)
 				: null,
+		scopeStages: application?.scopeStages ?? null,
 	});
 }

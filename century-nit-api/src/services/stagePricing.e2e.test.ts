@@ -1,11 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { asc, eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { applicants, applications, consultations, invoiceLines, invoices, opsUsers, servicePackages, users } from "../db/schema.js";
-import { setApplicationPackage } from "./cases.js";
+import { applicants, applications, consultations, invoiceEvents, invoiceLines, invoices, opsUsers, servicePackages, users } from "../db/schema.js";
+import { serializeApplication, setApplicationPackage } from "./cases.js";
 import { completeConsultationAssessment } from "./consultations.js";
 import { recordPayment } from "./invoice.js";
-import { fireDueTrigger } from "./serviceFee.js";
+import { fireDueTrigger, reconcileDueTriggers } from "./serviceFee.js";
 import { processConsentDecision } from "../routes/me.js";
 
 /**
@@ -122,9 +122,12 @@ describe("stage-priced plans", () => {
 			actor: ACTOR,
 		});
 		const appId = application!.id;
-		// The case carries the offer the client brought and the recommended shape.
+		// The case carries the offer the client brought. The recommended shape is
+		// *derived* (recommendation → intent), never copied: scopeStages is the
+		// accepted plan and stays null until one is.
 		expect(application!.university).toBe("University of Leeds");
-		expect(application!.scopeStages).toEqual(["visa", "departure"]);
+		expect(application!.scopeStages).toBeNull();
+		expect((await serializeApplication(application!)).plannedStages).toEqual(["visa", "departure"]);
 		expect(application!.stage).toBe("document_verification");
 		await processConsentDecision({ userId: CLIENT_ID, stage: "application", decision: "continue" });
 
@@ -156,7 +159,11 @@ describe("stage-priced plans", () => {
 		expect(ids).toContain("visa_grant");
 		expect(ids).not.toContain("transcript");
 
-		// Tidy: this client is reused by the next test.
+	});
+
+	// Each walk starts from a clean client.
+	beforeEach(async () => {
+		if (!dbAvailable) return;
 		await wipe();
 		await seed();
 	});
@@ -236,9 +243,45 @@ describe("stage-priced plans", () => {
 		const stillVoid = await db.select().from(invoices).where(sql`${invoices.applicationId} = ${appId} AND ${invoices.status} = 'void'`);
 		expect(stillVoid).toHaveLength(2);
 
-		// ── Removing a paid-for stage is refused ─────────────────────────
+		// ── Shrinking: a stage that never opened comes off; one that opened is owed ──
+		// Departure has not opened (its line is undated): it can come off, and the
+		// bundle discount it carried goes with it.
+		await setApplicationPackage({ id: appId, packageCode: "non_scholarship", degreeLevel: "Master's", stages: ["admissions", "visa"] });
+		({ row, lines } = await agencyInvoice(appId));
+		expect(lines.map((l) => [l.position, l.dueOn])).toEqual([
+			[0, "acceptance"],
+			[1, "offer"],
+			[2, "visa_open"],
+		]);
+		expect(row.subtotalCents).toBe(140_000);
+		const shrinkEvents = await db.select().from(invoiceEvents).where(eq(invoiceEvents.invoiceId, row.id));
+		expect(shrinkEvents.some((e) => e.action === "lines_removed")).toBe(true);
+		// Nothing was paid ahead, so no refund is flagged.
+		expect(shrinkEvents.some((e) => e.action === "refund_due")).toBe(false);
+
+		// The visa file opens (a stage move by hand, without the hook) — the
+		// reconciliation sweep dates the line the hook would have.
+		await db.update(applications).set({ stage: "visa_processing" }).where(eq(applications.id, appId));
+		const rec = await reconcileDueTriggers();
+		expect(rec.stamped).toBeGreaterThanOrEqual(1);
+		({ row, lines } = await agencyInvoice(appId));
+		expect(lines[2].dueAt).not.toBeNull();
+		expect(await reconcileDueTriggers()).toMatchObject({ stamped: 0 });
+
+		// Now Visa has opened: it is owed, and cannot come off.
 		await expect(
-			setApplicationPackage({ id: appId, packageCode: "non_scholarship", degreeLevel: "Master's", stages: ["admissions", "visa"] }),
+			setApplicationPackage({ id: appId, packageCode: "non_scholarship", degreeLevel: "Master's", stages: ["admissions"] }),
 		).rejects.toMatchObject({ code: "PACKAGE_LOCKED" });
+
+		// Paying ahead and then dropping an unopened stage flags the refund for finance.
+		await setApplicationPackage({ id: appId, packageCode: "non_scholarship", degreeLevel: "Master's", stages: ["admissions", "visa", "departure"] });
+		({ row, lines } = await agencyInvoice(appId));
+		const paidSoFar = 35_000;
+		await recordPayment({ invoiceId: row.id, amountCents: row.subtotalCents - paidSoFar, method: "card", actor: ACTOR });
+		await setApplicationPackage({ id: appId, packageCode: "non_scholarship", degreeLevel: "Master's", stages: ["admissions", "visa"] });
+		const afterRefund = await db.select().from(invoiceEvents).where(eq(invoiceEvents.invoiceId, row.id));
+		expect(afterRefund.some((e) => e.action === "refund_due")).toBe(true);
+		const [reduced] = await db.select().from(invoices).where(eq(invoices.id, row.id));
+		expect(reduced.subtotalCents).toBe(140_000);
 	});
 });

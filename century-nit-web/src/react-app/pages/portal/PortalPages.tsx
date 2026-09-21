@@ -481,8 +481,12 @@ function SchoolPackageInner() {
 	);
 	// The stages on the plan — a contiguous segment of the journey. The case
 	// already carries the recommended shape (or the booking intent) as its scope.
-	const [stages, setStages] = useState<ServiceStage[]>(() => normaliseScope(application.scopeStages ?? null));
+	const [stages, setStages] = useState<ServiceStage[]>(() => normaliseScope(application.scopeStages ?? application.plannedStages ?? null));
 	const [recommendedStages, setRecommendedStages] = useState<ServiceStage[] | null>(null);
+	const plannedKey = (application.scopeStages ?? application.plannedStages ?? []).join(",");
+	useEffect(() => {
+		setStages(normaliseScope(application.scopeStages ?? application.plannedStages ?? null));
+	}, [plannedKey]); // eslint-disable-line react-hooks/exhaustive-deps
 	const [extending, setExtending] = useState(false);
 	const [recommendedTrack, setRecommendedTrack] = useState<SchoolFundingTrack | null>(null);
 	const [recommendedLevel, setRecommendedLevel] = useState<SchoolDegreeLevel | null>(null);
@@ -529,9 +533,8 @@ function SchoolPackageInner() {
 		const applyRec = (rec?: { recPackage?: string | null; recProgram?: string | null; recStages?: string[] | null }) => {
 			if (!rec) return;
 			// An empty recommendation is the full journey — the consultant left every stage on.
-			const recScope = normaliseScope(rec.recStages && rec.recStages.length > 0 ? rec.recStages : null);
-			setRecommendedStages(recScope);
-			if (!application.scopeStages && !hasSchoolPackage(application)) setStages(recScope);
+			// Tags the advisor's picks; the default itself comes from the server's plannedStages.
+			setRecommendedStages(normaliseScope(rec.recStages && rec.recStages.length > 0 ? rec.recStages : null));
 			if (rec.recPackage) {
 				const p = rec.recPackage.toLowerCase();
 				let track: SchoolFundingTrack | null = null;

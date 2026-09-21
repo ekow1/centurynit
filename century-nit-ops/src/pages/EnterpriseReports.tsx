@@ -122,7 +122,8 @@ export function EnterpriseReports() {
 			const completed = apps.filter((a) => a.stage === "completed" && inWindow(a.updatedAt, from, to)).length;
 			const decided = apps.filter((a) => inWindow(a.visaDetails?.decidedAt, from, to));
 			const approved = decided.filter((a) => a.visaOutcome === "approved").length;
-			const departed = apps.filter((a) => a.stage === "completed" && inWindow(a.updatedAt, from, to)).length;
+			// A plan that stops at the offer or the visa completes without a departure — it must not count as one.
+			const departed = apps.filter((a) => a.stage === "completed" && (a.scopeStages == null || a.scopeStages.includes("departure")) && inWindow(a.updatedAt, from, to)).length;
 			return { landed: landed.length, enrolled, conversion: landed.length > 0 ? Math.round((enrolled / landed.length) * 100) : null, held, noShow, booked: heldIn.length, opened, completed, decided: decided.length, approved, approval: decided.length > 0 ? Math.round((approved / decided.length) * 100) : null, departed };
 		};
 		return { cur: count(win.from, win.to), prev: win.prevFrom ? count(win.prevFrom, win.prevTo) : null };

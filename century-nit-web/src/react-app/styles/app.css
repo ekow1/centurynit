@@ -11522,3 +11522,17 @@ a.portal-ch--on:hover {
 		display: none;
 	}
 }
+
+/* A chapter the plan does not include: not locked, not theirs. Still a link — its page says why. */
+.portal-ch--off {
+	cursor: pointer;
+}
+
+.portal-ch--off .portal-ch__l {
+	text-decoration: line-through;
+	text-decoration-color: rgba(255, 255, 255, 0.5);
+}
+
+.portal-ch--off .portal-ch__m {
+	border-style: dotted;
+}

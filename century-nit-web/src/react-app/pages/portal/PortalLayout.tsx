@@ -98,7 +98,16 @@ export function PortalLayout() {
 	// next chapter is open; the last open one is current.
 	const unlocked = CHAPTER_NAV.map((c) => c.ids.some((id) => chapterUnlocks[id]));
 	const lastOpen = unlocked.lastIndexOf(true);
-	const chapterState = (i: number): "done" | "current" | "locked" => (!unlocked[i] ? "locked" : i < lastOpen ? "done" : "current");
+	// A chapter the accepted plan does not include is not locked — it is not
+	// theirs. Applications for a client who brought an offer; Visa and
+	// Departure for a plan that stops at the offer.
+	const scope = application.scopeStages ?? null;
+	const offPlan = (c: (typeof CHAPTER_NAV)[number]) => {
+		if (!scope) return false;
+		const stage = c.ids.includes("application") ? "admissions" : c.ids.includes("visa") ? "visa" : c.ids.includes("travel_assistance") ? "departure" : null;
+		return stage != null && !scope.includes(stage);
+	};
+	const chapterState = (i: number): "done" | "current" | "locked" | "off" => (offPlan(CHAPTER_NAV[i]) ? "off" : !unlocked[i] ? "locked" : i < lastOpen ? "done" : "current");
 	const activeChapter = CHAPTER_NAV.findIndex((c) => c.prefixes.some((pre) => pathname.startsWith(pre)));
 	const kickerChapter = activeChapter >= 0 ? CHAPTER_NAV[activeChapter] : lastOpen >= 0 ? CHAPTER_NAV[lastOpen] : null;
 
@@ -131,7 +140,13 @@ export function PortalLayout() {
 						const state = chapterState(i);
 						const on = activeChapter === i;
 						const meta = PORTAL_CHAPTERS.find((pc) => pc.id === c.ids[0]);
-						return state === "locked" ? (
+						return state === "off" ? (
+							<NavLink key={c.numeral} to={c.to} className="portal-ch portal-ch--locked portal-ch--off" title="Not part of your plan">
+								<span className="portal-ch__m">—</span>
+								<span className="portal-ch__l">{c.label}</span>
+								<span className="portal-ch__s">not part of your plan</span>
+							</NavLink>
+						) : state === "locked" ? (
 							<span key={c.numeral} className="portal-ch portal-ch--locked" title={meta?.unlockHint ?? "Locked"} aria-disabled="true">
 								<span className="portal-ch__m">{c.numeral}</span>
 								<span className="portal-ch__l">{c.label}</span>

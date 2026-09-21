@@ -1038,7 +1038,10 @@ export function ConsultationDetail({
 								</button>
 							))}
 						</div>
-						<p className="muted text-xs" style={{ marginTop: "0.4rem" }}>The plan can only be widened from what the client chose — narrowing is theirs to do in the builder.</p>
+						<p className="muted text-xs" style={{ marginTop: "0.4rem" }}>
+							The plan can only be widened from what the client chose — narrowing is theirs to do in the builder.
+							{" "}Can't verify the {consultation.entryIntent === "visa" ? "offer" : "visa"}? Don't stall the case: choose <b>Widen</b> and add {consultation.entryIntent === "visa" ? "Admissions — the client enters there instead and the offer is simply not used" : "Visa (and Admissions if the offer is doubtful too) — the client enters earlier"}. <b>Not viable</b> closes the consultation with no case.
+						</p>
 					</div>
 					) : (
 					<div style={{ marginBottom: "1.25rem" }}>

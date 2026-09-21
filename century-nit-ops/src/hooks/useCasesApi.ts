@@ -219,6 +219,7 @@ function toApplication(row: ApiApplication): MockApplication {
 		checklist: row.checklist,
 		fundingTrack: row.fundingTrack ?? "",
 		scopeStages: row.scopeStages ?? null,
+		plannedStages: row.plannedStages ?? undefined,
 		notes: row.notes ?? "",
 		comments: row.comments,
 		requestedDocuments: row.requestedDocuments,

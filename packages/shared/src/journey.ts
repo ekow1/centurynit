@@ -7,6 +7,7 @@ import {
 	type TravelAssistanceStatus,
 } from "./schemas/cases.js";
 import { PORTAL_STAGE_LABELS } from "./labels.js";
+import { normaliseScope } from "./stages.js";
 import { ownershipCapabilityFor, roleHasCapability } from "./schemas/ops.js";
 
 /**
@@ -90,6 +91,12 @@ export type JourneySignals = {
 	preDepartureDone: boolean;
 	/** `applications.stage`, when an application exists. */
 	coarseStage: JourneyStage | null;
+	/**
+	 * The stages on the accepted plan; null (a legacy case, or no plan yet)
+	 * is the full journey. The journey ends at the plan's exit: a plan that
+	 * stops at Visa is complete when the visa is approved and the fee settled.
+	 */
+	scopeStages?: string[] | null;
 };
 
 export type JourneyChapterUnlocks = {
@@ -188,7 +195,17 @@ function facts(s: JourneySignals): Facts {
 	// The pre-departure milestone: the balance on a full plan, the second
 	// milestone on instalments. Post-arrival is aftercare and never gates.
 	const planSettled = preDepartureFeePaid(s);
-	const isCompleted = taResolved && planSettled && s.preDepartureDone;
+	// Where the plan ends. A plan that stops short of Departure is complete
+	// when its last stage is done and its fee is settled — there is no
+	// flight, no checklist, no arrival to wait for.
+	const scope = normaliseScope(s.scopeStages ?? null);
+	const exit = scope[scope.length - 1];
+	const isCompleted =
+		exit === "departure"
+			? taResolved && planSettled && s.preDepartureDone
+			: exit === "visa"
+				? s.visaDone && s.agencySettled
+				: s.hasAdmitted && s.agencySettled;
 	return {
 		...s,
 		hasProceeded: s.proceedStatus === "accepted",

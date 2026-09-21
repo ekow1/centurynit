@@ -19,13 +19,10 @@ import {
 
 
 
-	intentScope,
-	normaliseScope,
-	type ServiceIntent,
 } from "century-nit-shared";
 
 
-import { documentChecklistFor } from "./documentChecklist.js";
+import { plannedStagesFor, documentChecklistFor } from "./documentChecklist.js";
 import { canonicalBranchId } from "./availability.js";
 
 import { db } from "../db/index.js";
@@ -564,7 +561,7 @@ export async function serializeConsultation(row: ConsultationRow, forApplicant =
 	const documentChecklist = await documentChecklistFor({
 		ownerUserId: applicant?.userId ?? null,
 		recommendedPackage: (row.assessmentResult as { recPackage?: string } | null)?.recPackage ?? null,
-		scopeStages: (row.assessmentResult as { recStages?: string[] } | null)?.recStages?.length ? (row.assessmentResult as unknown as { recStages: string[] }).recStages : null,
+		recStages: (row.assessmentResult as { recStages?: string[] } | null)?.recStages ?? null,
 		entryIntent: (applicant?.profile as { entryIntent?: string } | null)?.entryIntent ?? null,
 	});
 
@@ -1073,13 +1070,13 @@ export async function completeConsultationAssessment(input: {
 		label,
 		checked: false,
 	}));
-	// The plan's starting shape: the consultant's recommendation, else what the
-	// client said at booking. A visa or departure entry brings its own offer —
-	// it becomes the case's school so everything downstream reads it.
+	// The plan's shape is not copied onto the case — the recommendation lives
+	// on the assessment and the booking intent on the profile; `scopeStages`
+	// is written once, when a plan is accepted. A visa or departure entry
+	// brings its own offer, which becomes the case's school so everything
+	// downstream reads it.
 	const profile = (applicant.profile ?? {}) as ApplicantProfile;
-	const recScope = input.result.recStages?.length ? input.result.recStages : intentScope(profile.entryIntent as ServiceIntent | undefined);
-	const startScope = normaliseScope(recScope);
-	const bringsOffer = !startScope.includes("admissions");
+	const bringsOffer = !plannedStagesFor({ recStages: input.result.recStages, entryIntent: profile.entryIntent }).includes("admissions");
 
 	const created = await db.transaction(async (tx) => {
 		const txDb = tx as unknown as typeof db;
@@ -1109,9 +1106,6 @@ export async function completeConsultationAssessment(input: {
 				// The application is locked until the client consents to start it.
 				proceedStatus: "invited",
 				fundingTrack: input.result.recPackage || null,
-				// Recorded now so the checklist and the builder know the shape; the
-				// accepted plan overwrites it.
-				scopeStages: startScope,
 				notes: input.result.notes || "Opened from a completed consultation assessment.",
 				checklist,
 				requestedDocuments: row.requestedDocuments ?? [],

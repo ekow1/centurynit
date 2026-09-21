@@ -19,7 +19,9 @@ export function EnrolmentTab({ app, caseInvoices, canIssueInvoices, canWork, fla
 	const [addStages, setAddStages] = useState<ServiceStage[] | undefined>(undefined);
 	const [savingPlan, setSavingPlan] = useState(false);
 	// The plan's scope. A case that predates scopes bought the full journey.
-	const scope = app.fundingTrack ? normaliseScope(app.scopeStages ?? null) : null;
+	// The accepted plan; before acceptance the recommendation is shown as such, never as the plan.
+	const accepted = app.scopeStages ? normaliseScope(app.scopeStages) : null;
+	const scope = accepted ?? (app.fundingTrack ? normaliseScope(null) : null);
 	const missing = scope ? SERVICE_STAGES.filter((st) => !scope.includes(st)) : [];
 	// The moment to offer the next stage: an offer is in and Visa is not on the plan.
 	const hasOffer = (app.schoolApplications ?? []).some((sc) => sc.outcome === "Admitted");
@@ -65,8 +67,9 @@ export function EnrolmentTab({ app, caseInvoices, canIssueInvoices, canWork, fla
 					<div>
 						<p className="muted text-xs">Plan</p>
 						<p>
-							{scope ? scopeLabel(scope) : "Not chosen"}
-							{missing.length > 0 && <span className="muted text-xs"> · without {missing.map((st) => SERVICE_STAGE_LABELS[st]).join(" & ")}</span>}
+							{accepted ? scopeLabel(accepted) : app.plannedStages ? `Recommended: ${scopeLabel(app.plannedStages)}` : "Not chosen"}
+							{accepted && missing.length > 0 && <span className="muted text-xs"> · without {missing.map((st) => SERVICE_STAGE_LABELS[st]).join(" & ")}</span>}
+							{!accepted && app.plannedStages && <span className="muted text-xs"> · not accepted yet</span>}
 						</p>
 					</div>
 					<div><p className="muted text-xs">Payment plan</p><p>{PAYMENT_PLAN_LABELS[app.paymentPlanId ?? ""] ?? "Not chosen"}</p></div>

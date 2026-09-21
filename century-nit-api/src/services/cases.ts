@@ -32,12 +32,13 @@ import {
 	stageLines,
 	SERVICE_STAGE_LABELS,
 	SERVICE_STAGES,
+	type ServiceStage,
 } from "century-nit-shared";
 import { serviceFeeFor, type SchoolFundingTrack } from "century-nit-core/content";
 import { canonicalBranchId } from "./availability.js";
 import { normalizeTravelStatus } from "./travelAssistance.js";
 import { livePermissions } from "./roles.js";
-import { documentChecklistForApplication, visaDocumentChecklistFor } from "./documentChecklist.js";
+import { documentChecklistForApplication, plannedStagesFor, visaDocumentChecklistFor } from "./documentChecklist.js";
 // Comments and document requests target either record; the consultation half lives next door.
 import { applicantUserIdOfConsultation, getConsultation } from "./consultations.js";
 import type { z } from "zod";
@@ -289,6 +290,16 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 	// Scoped to this application, not the applicant — an earlier application's
 	// tracks must not appear on this one.
 	const schoolList = await listSchoolsForApplication(row.id);
+	// The recommendation, only until a plan is accepted — it pre-fills the builder.
+	const assessmentForPlan =
+		row.scopeStages || !row.consultationId
+			? null
+			: await db
+					.select({ assessmentResult: consultations.assessmentResult })
+					.from(consultations)
+					.where(eq(consultations.id, row.consultationId))
+					.limit(1)
+					.then((r) => r[0]?.assessmentResult ?? null);
 
 	const pendingHandoff = await pendingHandoffForApplication(row.id);
 	// The journey coordinator rides on the applicant, not the case row.
@@ -354,6 +365,11 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		declinedReason: row.declinedReason,
 		fundingTrack: row.fundingTrack,
 		scopeStages: row.scopeStages ?? null,
+		plannedStages: plannedStagesFor({
+			scopeStages: row.scopeStages ?? null,
+			recStages: (assessmentForPlan as { recStages?: string[] } | null)?.recStages ?? null,
+			entryIntent: (applicant?.profile as { entryIntent?: string } | null)?.entryIntent ?? null,
+		}),
 		targetSchoolCount: row.targetSchoolCount ?? null,
 		acceptedSchoolId: row.acceptedSchoolId ?? null,
 		offerAcceptedAt: row.offerAcceptedAt?.toISOString() ?? null,
@@ -1813,6 +1829,26 @@ export async function setApplicationStage(
 	const hasAdmitted = schoolTracks.schools.some((s) => s.outcome === "Admitted") || (row.scopeStages != null && !scopeHas(row.scopeStages, "admissions"));
 	const hasVisaInvoice = clientInvoices.some((i) => i.type === "visa");
 
+	// ── A plan that stops short completes at its exit ───────────────────
+	// Admissions only is done at the offer; a plan ending at Visa is done at
+	// the approval. Neither has a flight, a checklist or an arrival to wait
+	// for, so `completed` is reached straight from the exit stage.
+	const scopeNow = row.scopeStages ? normaliseScope(row.scopeStages) : null;
+	if (stage === "completed" && scopeNow && !scopeNow.includes("departure")) {
+		const exit = scopeNow[scopeNow.length - 1];
+		const exitDone =
+			exit === "visa"
+				? row.visaStage === "complete" && row.visaOutcome === "approved"
+				: schoolTracks.schools.some((s) => s.outcome === "Admitted");
+		if (!exitDone) {
+			throw new HttpError(409, "STAGE_ADVANCE_BLOCKED", exit === "visa" ? "Cannot complete: the visa is not approved." : "Cannot complete: no offer has been recorded.");
+		}
+		if (!row.agencySettled) {
+			throw new HttpError(409, "STAGE_ADVANCE_BLOCKED", "Cannot complete: the service fee is not settled.");
+		}
+		return finishAdvance(row, stage, actor, applicant);
+	}
+
 	// ── Guard: the stage must be on the client's plan ───────────────────
 	// A case that bought Admissions only stops at the offer; the next
 	// chapter is sold, not opened. A legacy case (no scope) is the full journey.
@@ -1877,6 +1913,17 @@ export async function setApplicationStage(
 	// The visa invoice is the officer's to raise from the case — nothing
 	// raises itself on a stage move.
 
+	return finishAdvance(row, stage, actor, applicant);
+}
+
+/** The write half of a stage advance: the row, the trail, the client, the handoff. */
+async function finishAdvance(
+	row: ApplicationRow,
+	stage: JourneyStage,
+	actor: Actor,
+	applicant: Awaited<ReturnType<typeof getApplicant>>,
+): Promise<ApplicationRow> {
+	const id = row.id;
 	const [updated] = await db
 		.update(applications)
 		.set({ stage, updatedAt: new Date() })
@@ -2391,6 +2438,14 @@ import { milestoneSplit, stagePricesFor } from "./fees.js";
 
 type PackageOutcome = { application: ApplicationRow; proformaInvoice: typeof invoices.$inferSelect | null };
 
+/** Which stage an agency line pays for — from its label; null on a full-journey split line. */
+function lineStage(l: { label: string }): ServiceStage | null {
+	if (l.label.startsWith("Admissions")) return "admissions";
+	if (l.label === "Visa") return "visa";
+	if (l.label.startsWith("Departure")) return "departure";
+	return null;
+}
+
 /**
  * Bind the client's plan: the track (package), the stages on it, the
  * degree level and the school allowance — and raise the service fee the
@@ -2524,20 +2579,83 @@ export async function setApplicationPackage(input: {
 				throw new HttpError(409, "PACKAGE_LOCKED", "Payments are recorded on the current plan — the track cannot change. Void the service-fee invoice to start over.");
 			}
 			const removed = prevScope.filter((st) => !scope.includes(st));
+			const existing = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, live.id)).orderBy(invoiceLines.position);
+			let removedCents = 0;
 			if (removed.length > 0) {
-				throw new HttpError(409, "PACKAGE_LOCKED", `Payments are recorded — stages can be added, not removed (${removed.map((st) => SERVICE_STAGE_LABELS[st]).join(", ")}). Void the service-fee invoice to start over.`);
+				// A stage that never opened comes off: its lines are unfired and, since
+				// lines are paid in order, unpaid unless the client paid ahead. A stage
+				// whose file has opened is owed under the withdrawal rule — it cannot
+				// be removed here; finance credits or voids from Invoices.
+				const removedLines = existing.filter((l) => removed.includes(lineStage(l) as ServiceStage));
+				const opened = removedLines.filter((l) => l.dueAt != null);
+				if (opened.length > 0) {
+					throw new HttpError(
+						409,
+						"PACKAGE_LOCKED",
+						`${removed.map((st) => SERVICE_STAGE_LABELS[st]).join(", ")} has already opened — it is owed under the plan. Credit or void the service-fee invoice from Invoices instead.`,
+					);
+				}
+				if (!live.subtotalCents || existing.length === 0 || removedLines.length === 0) {
+					// A full journey bought as one is a deposit / pre-departure / post-arrival
+					// split, not stage lines — nothing maps to the stage, so it cannot be
+					// trimmed line by line. (A full journey reached by extension has stage
+					// lines and trims fine.)
+					throw new HttpError(409, "PACKAGE_LOCKED", "This plan's invoice is one split, not per-stage lines. Credit or void it from Invoices, then record the new plan.");
+				}
+				for (const l of removedLines) await tx.delete(invoiceLines).where(eq(invoiceLines.id, l.id));
+				removedCents = removedLines.reduce((n, l) => n + l.amountCents, 0);
+				const kept = existing.filter((l) => !removedLines.some((r) => r.id === l.id));
+				for (const [i, l] of kept.entries()) await tx.update(invoiceLines).set({ position: i }).where(eq(invoiceLines.id, l.id));
+				const newSubtotal = live.subtotalCents - removedCents;
+				await tx.insert(invoiceEvents).values({
+					invoiceId: live.id,
+					action: "lines_removed",
+					actor: input.actor?.opsUserId ? actorName : "client",
+					detail: `Plan reduced: ${removed.map((st) => SERVICE_STAGE_LABELS[st]).join(" + ")} removed before opening · −${(removedCents / 100).toFixed(2)}`,
+				});
+				if (paidCents > newSubtotal) {
+					// Paid ahead for a stage that will not happen: finance issues the credit.
+					const refund = paidCents - newSubtotal;
+					await tx.insert(invoiceEvents).values({ invoiceId: live.id, action: "refund_due", actor: "system", detail: `Paid ${(paidCents / 100).toFixed(2)} against ${(newSubtotal / 100).toFixed(2)} — refund due ${(refund / 100).toFixed(2)}` });
+					await tx.insert(caseComments).values({
+						targetType: "application",
+						targetId: app.id,
+						kind: "status",
+						text: `Refund due: ${(refund / 100).toFixed(2)} USD — the client paid ahead for ${removed.map((st) => SERVICE_STAGE_LABELS[st]).join(" + ")}, now off the plan. Issue a credit note from Invoices.`,
+						authorName: "Century NIT",
+						authorOpsUserId: null,
+					});
+				}
 			}
 			const added = quote.stageLines.filter((l) => !prevScope.includes(l.stage));
 			if (added.length === 0) {
+				if (removedCents > 0) {
+					await tx
+						.update(invoices)
+						.set({ subtotalCents: live.subtotalCents - removedCents, note: `Service package: ${planName} · ${scopeLabel(scope)}`, dueAt: await nextUncoveredDueAt(live.id, paidCents, txDb), updatedAt: new Date() })
+						.where(eq(invoices.id, live.id));
+					const updated = await bind();
+					await tx.insert(caseComments).values({
+						targetType: "application",
+						targetId: app.id,
+						kind: "status",
+						text: `Plan reduced: ${removed.map((st) => SERVICE_STAGE_LABELS[st]).join(" + ")} removed · now ${scopeLabel(scope)}${onBehalf}`,
+						authorName: actorName,
+						authorOpsUserId: input.actor?.opsUserId ?? null,
+					});
+					const [fresh] = await tx.select().from(invoices).where(eq(invoices.id, live.id)).limit(1);
+					return { application: updated, proformaInvoice: fresh ?? live };
+				}
 				// Same plan — only the facts changed.
 				const updated = await bind();
 				return { application: updated, proformaInvoice: live };
 			}
-			const existing = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, live.id)).orderBy(invoiceLines.position);
+			// New lines go after whatever is left on the invoice.
+			const existingPositions = existing.length - (removed.length > 0 ? existing.filter((l) => removed.includes(lineStage(l) as ServiceStage)).length : 0);
 			// Stages added to a plan open on their own events; only a brand-new
 			// entry (Admissions added in front of a visa entry) is due on acceptance,
 			// which stageLines handles through the admissions split.
-			const lines = stageLines(added, split, existing.length, quote.bundleDiscountCents);
+			const lines = stageLines(added, split, existingPositions, quote.bundleDiscountCents);
 			const addedCents = lines.reduce((n, l) => n + l.amountCents, 0);
 			await tx.insert(invoiceLines).values(
 				lines.map(({ stage: _stage, ...l }) => ({ invoiceId: live.id, ...l, dueAt: l.dueOn === "acceptance" ? new Date() : null })),
@@ -2545,7 +2663,7 @@ export async function setApplicationPackage(input: {
 			await tx
 				.update(invoices)
 				.set({
-					subtotalCents: live.subtotalCents + addedCents,
+					subtotalCents: live.subtotalCents + addedCents - removedCents,
 					note: `Service package: ${planName} · ${scopeLabel(scope)}`,
 					// The invoice falls due with its first unpaid dated line.
 					dueAt: await nextUncoveredDueAt(live.id, paidCents, txDb),

@@ -86,13 +86,14 @@ export function PackageSheet({
 	useEffect(() => {
 		if (!open) return;
 		setPackageCode((app.fundingTrack as PackageCode) || "");
-		setStages(normaliseScope([...(app.scopeStages ?? SERVICE_STAGES), ...(addStages ?? [])]));
+		// The plan as it stands — accepted scope, else the recommendation, else the booking intent — plus anything the caller asks to add.
+		setStages(normaliseScope([...(app.scopeStages ?? app.plannedStages ?? SERVICE_STAGES), ...(addStages ?? [])]));
 		setDegreeLevel(SCHOOL_DEGREE_LEVELS.some((d) => d.id === app.degreeLevel) ? app.degreeLevel : "");
 		setSchools(app.targetSchoolCount ? String(app.targetSchoolCount) : "");
 		setPlan(app.paymentPlanId || "");
 		setReason("");
 		setError(null);
-	}, [open, app.fundingTrack, app.scopeStages, app.degreeLevel, app.targetSchoolCount, app.paymentPlanId, addStages]);
+	}, [open, app.fundingTrack, app.scopeStages, app.plannedStages, app.degreeLevel, app.targetSchoolCount, app.paymentPlanId, addStages]);
 
 	const selected = packages?.find((p) => p.code === packageCode) ?? null;
 	// Admissions by track (the package); Visa and Departure flat, from the fee catalogue.

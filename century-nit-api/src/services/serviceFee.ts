@@ -1,4 +1,4 @@
-import { and, asc, eq, ne, desc, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, desc, sql } from "drizzle-orm";
 import {
 	isFullScope,
 	milestoneLines,
@@ -13,7 +13,7 @@ import {
 } from "century-nit-shared";
 import { AGENCY_STAGES } from "century-nit-core/content";
 import { db } from "../db/index.js";
-import { applicants, applications, caseComments, invoiceLines, invoicePayments, invoices, travelAssistanceRequests } from "../db/schema.js";
+import { applicants, applications, caseComments, invoiceEvents, invoiceLines, invoicePayments, invoices, schoolApplications, travelAssistanceRequests } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import { exchangeRate, milestoneSplit, postArrivalCatalogue } from "./fees.js";
 import { nextUncoveredDueAt } from "./invoice.js";
@@ -139,6 +139,61 @@ export async function fireDueTrigger(applicationId: string, trigger: DueTrigger)
 		.set({ dueAt: new Date() })
 		.where(and(eq(invoiceLines.invoiceId, inv.id), eq(invoiceLines.dueOn, trigger), sql`${invoiceLines.dueAt} IS NULL`));
 	await refreshInvoiceDueAt(inv.id);
+}
+
+/**
+ * The safety net under the due triggers. Billing a milestone depends on the
+ * case event being recorded through the path that fires it; a stage moved
+ * by hand, a backfilled outcome or a missed hook would leave a line owed
+ * but undated — unbilled, silently. Once a day this reads the case state
+ * itself and stamps any line whose event has plainly happened. Idempotent:
+ * only null `dueAt` lines are touched, and each stamp is audited.
+ */
+export async function reconcileDueTriggers(now = new Date()): Promise<{ stamped: number; invoices: number }> {
+	const rows = await db
+		.select({
+			lineId: invoiceLines.id,
+			invoiceId: invoiceLines.invoiceId,
+			dueOn: invoiceLines.dueOn,
+			appId: applications.id,
+			stage: applications.stage,
+			visaStage: applications.visaStage,
+			visaOutcome: applications.visaOutcome,
+			departureDetails: applications.departureDetails,
+		})
+		.from(invoiceLines)
+		.innerJoin(invoices, eq(invoices.id, invoiceLines.invoiceId))
+		.innerJoin(applications, eq(applications.id, invoices.applicationId))
+		.where(and(eq(invoices.type, "agency"), ne(invoices.status, "void"), sql`${invoiceLines.dueAt} IS NULL`, sql`${invoiceLines.dueOn} IN ('offer','visa_open','visa_approved','arrival')`));
+	if (rows.length === 0) return { stamped: 0, invoices: 0 };
+	const admittedApps = new Set(
+		(
+			await db
+				.select({ applicationId: schoolApplications.applicationId })
+				.from(schoolApplications)
+				.where(and(inArray(schoolApplications.applicationId, [...new Set(rows.map((r) => r.appId))]), eq(schoolApplications.outcome, "Admitted")))
+		).map((r) => r.applicationId),
+	);
+	const pastVisaOpen = new Set(["visa_processing", "travel_assistance", "payment_execution", "completed"]);
+	const touched = new Set<string>();
+	let stamped = 0;
+	for (const r of rows) {
+		const happened =
+			r.dueOn === "offer"
+				? admittedApps.has(r.appId)
+				: r.dueOn === "visa_open"
+					? pastVisaOpen.has(r.stage) || (r.visaStage != null && r.visaStage !== "locked")
+					: r.dueOn === "visa_approved"
+						? r.visaOutcome === "approved"
+						: Boolean((r.departureDetails as { arrivedAt?: string | null } | null)?.arrivedAt);
+		if (!happened) continue;
+		await db.update(invoiceLines).set({ dueAt: now }).where(and(eq(invoiceLines.id, r.lineId), sql`${invoiceLines.dueAt} IS NULL`));
+		await db.insert(invoiceEvents).values({ invoiceId: r.invoiceId, action: "due_reconciled", actor: "system", detail: `"${r.dueOn}" had happened but the line was undated — stamped by the daily reconciliation` });
+		touched.add(r.invoiceId);
+		stamped += 1;
+	}
+	for (const invoiceId of touched) await refreshInvoiceDueAt(invoiceId);
+	return { stamped, invoices: touched.size };
 }
 
 /**

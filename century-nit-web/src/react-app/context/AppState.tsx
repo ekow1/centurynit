@@ -274,8 +274,10 @@ export type ApplicationData = {
 	schoolFundingTrack: SchoolFundingTrack | "";
 	schoolDegreeLevel: SchoolDegreeLevel | "";
 	targetSchoolCount?: number;
-	/** The stages on the plan; null until a package is chosen (a legacy case is the full journey). */
+	/** The stages on the *accepted* plan; null until one is accepted (a legacy case with a package is the full journey). */
 	scopeStages?: ServiceStage[] | null;
+	/** Derived on the server: the plan as it stands (accepted → recommended → booking intent → full). What the builder pre-fills from. */
+	plannedStages?: ServiceStage[];
 	/** The admitted school the client is going with. */
 	acceptedSchoolId?: string | null;
 	offerAcceptedAt?: string | null;
@@ -2466,7 +2468,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					schoolFundingTrack: (a.fundingTrack as SchoolFundingTrack) || prev.schoolFundingTrack,
 					schoolDegreeLevel: (a.degreeLevel as SchoolDegreeLevel) || prev.schoolDegreeLevel,
 					targetSchoolCount: a.targetSchoolCount ?? prev.targetSchoolCount,
-					scopeStages: a.scopeStages ?? prev.scopeStages ?? null,
+					scopeStages: a.scopeStages ?? null,
+					plannedStages: a.plannedStages ?? prev.plannedStages,
 					acceptedSchoolId: a.acceptedSchoolId ?? null,
 					offerAcceptedAt: a.offerAcceptedAt ?? null,
 					visaStatus: (a.visaStage as VisaStatus) || prev.visaStatus,

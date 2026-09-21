@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { DEFAULT_REQUIRED_DOCUMENT_IDS, VISA_DOCUMENT_IDS, documentTypesFor } from "century-nit-core/content";
-import { ENTRY_EVIDENCE_IDS, STAGE_DOCUMENT_IDS, intentScope, normaliseScope, type ServiceIntent } from "century-nit-shared";
+import { ENTRY_EVIDENCE_IDS, STAGE_DOCUMENT_IDS, intentScope, normaliseScope, type ServiceIntent, type ServiceStage } from "century-nit-shared";
 import type { DocumentChecklistItem } from "century-nit-shared";
 import { db } from "../db/index.js";
 import { applicantDocuments, applications, consultations, servicePackages } from "../db/schema.js";
@@ -16,12 +16,14 @@ import { applicantDocuments, applications, consultations, servicePackages } from
 export async function requiredDocumentIdsFor(input: {
 	applicationPackageId?: string | null;
 	recommendedPackage?: string | null;
-	/** The plan's stages; null is the full journey. Entry evidence comes first, then each stage's set. */
+	/** The accepted plan's stages; null until accepted. */
 	scopeStages?: readonly string[] | null;
-	/** Where the client said they were at booking — pre-fills the scope before a plan exists. */
+	/** The consultant's recommendation, before acceptance. */
+	recStages?: readonly string[] | null;
+	/** Where the client said they were at booking — before any recommendation. */
 	entryIntent?: string | null;
 }): Promise<string[]> {
-	const scope = normaliseScope(input.scopeStages ?? (input.entryIntent ? intentScope(input.entryIntent as ServiceIntent) : null));
+	const scope = plannedStagesFor(input);
 	const entry = scope[0];
 	const admissionsIds = scope.includes("admissions") ? await admissionsDocumentIdsFor(input) : [];
 	const ids = [
@@ -31,6 +33,24 @@ export async function requiredDocumentIdsFor(input: {
 		...(scope.includes("departure") ? STAGE_DOCUMENT_IDS.departure : []),
 	];
 	return [...new Set(ids)];
+}
+
+/**
+ * The plan as it stands, from the one place each input lives: the accepted
+ * scope on the case (truth), else the consultant's recommendation, else what
+ * the client said at booking, else the full journey. Nothing is copied
+ * between them — a builder pre-fills from this, the ledger and the gates
+ * read `scopeStages` only.
+ */
+export function plannedStagesFor(input: {
+	scopeStages?: readonly string[] | null;
+	recStages?: readonly string[] | null;
+	entryIntent?: string | null;
+}): ServiceStage[] {
+	if (input.scopeStages) return normaliseScope(input.scopeStages);
+	if (input.recStages && input.recStages.length > 0) return normaliseScope(input.recStages);
+	if (input.entryIntent) return intentScope(input.entryIntent as ServiceIntent);
+	return normaliseScope(null);
 }
 
 /** The Admissions set is the package's — by track — with the standard set behind it. */
@@ -63,6 +83,7 @@ export async function documentChecklistFor(input: {
 	applicationPackageId?: string | null;
 	recommendedPackage?: string | null;
 	scopeStages?: readonly string[] | null;
+	recStages?: readonly string[] | null;
 	entryIntent?: string | null;
 }): Promise<DocumentChecklistItem[]> {
 	const ids = await requiredDocumentIdsFor(input);
@@ -117,19 +138,23 @@ export async function documentChecklistForApplication(applicationId: string): Pr
 	const { getApplicant } = await import("./cases.js");
 	const applicant = await getApplicant(row.applicantId);
 	let recommended: string | null = null;
-	if (!row.packageId && row.consultationId) {
+	let recStages: string[] | null = null;
+	if (row.consultationId && (!row.packageId || !row.scopeStages)) {
 		const [c] = await db
 			.select({ assessmentResult: consultations.assessmentResult })
 			.from(consultations)
 			.where(eq(consultations.id, row.consultationId))
 			.limit(1);
-		recommended = (c?.assessmentResult as { recPackage?: string } | null)?.recPackage ?? null;
+		const rec = c?.assessmentResult as { recPackage?: string; recStages?: string[] } | null;
+		recommended = rec?.recPackage ?? null;
+		recStages = rec?.recStages ?? null;
 	}
 	return documentChecklistFor({
 		ownerUserId: applicant?.userId ?? null,
 		applicationPackageId: row.packageId,
 		recommendedPackage: recommended,
 		scopeStages: row.scopeStages ?? null,
+		recStages,
 		entryIntent: (applicant?.profile as { entryIntent?: string } | null)?.entryIntent ?? null,
 	});
 }

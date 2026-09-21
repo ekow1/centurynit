@@ -277,8 +277,10 @@ export interface MockApplication {
 	submittedDate: string;
 	checklist: { id: string; label: string; checked: boolean }[];
 	fundingTrack: string;
-	/** The stages on the client's plan; null until a package is chosen (a legacy case is the full journey). */
+	/** The stages on the *accepted* plan — what the ledger and the gates read. Null until a plan is accepted. */
 	scopeStages?: string[] | null;
+	/** Derived on the server, never stored: the plan as it stands (accepted → recommended → booking intent → full). What a builder pre-fills from. */
+	plannedStages?: string[];
 	notes: string;
 	comments?: CaseComment[];
 	requestedDocuments?: string[];

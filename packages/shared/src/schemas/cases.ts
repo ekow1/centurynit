@@ -754,8 +754,18 @@ export const applicationSchema = z.object({
 	declinedReason: z.string().nullable(),
 	fundingTrack: z.string().nullable(),
 	targetSchoolCount: z.number().int().nullable().optional(),
-	/** The stages on the client's plan; null until a package is chosen (a legacy case is the full journey). */
+	/**
+	 * The stages on the *accepted* plan — the one truth the ledger, the
+	 * gates and the checklist read. Null until a plan is accepted (a legacy
+	 * case with a package is the full journey).
+	 */
 	scopeStages: z.array(serviceStageSchema).nullable().optional(),
+	/**
+	 * Derived, never stored: the plan as it stands — the accepted scope, else
+	 * the consultant's recommendation, else what the client said at booking,
+	 * else the full journey. What a builder pre-fills from.
+	 */
+	plannedStages: z.array(serviceStageSchema).optional(),
 	/** The admitted school the client accepted. Visa, deposit and departure hang off it. */
 	acceptedSchoolId: z.string().uuid().nullable().optional(),
 	offerAcceptedAt: z.string().datetime().nullable().optional(),

@@ -147,18 +147,18 @@ section{position:relative}
 .route-ctl__btn:last-child{border-right:0}
 .route-ctl__btn.is-on{background:var(--foreground);color:#fff}
 .route{list-style:none;display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-top:var(--thin)}
-.route__stage{padding:1.6rem 1.4rem 1.6rem 0;position:relative;border-right:1px solid var(--border-light);transition:opacity .25s}
+.route__stage{padding:2rem 2rem 1.9rem .35rem;position:relative;border-right:1px solid var(--border-light);transition:opacity .25s}
 .route__stage:last-child{border-right:0}
-.route__rail{display:flex;align-items:center;height:.5rem;margin-bottom:1.1rem}
+.route__rail{display:flex;align-items:center;height:.5rem;margin-bottom:1.5rem}
 .route__dot{width:.55rem;height:.55rem;background:var(--foreground);flex:none}
 .route__seg{flex:1;height:1px;background:var(--border)}
 .route__stage:last-child .route__seg{display:none}
 .route__no{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.14em;color:var(--muted-foreground)}
 .route__name{font-family:var(--display);font-size:1.55rem;font-weight:600;letter-spacing:-.02em;margin:.3rem 0 .25rem}
 .route__req{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.09em;color:#b45309}
-.route__list{list-style:none;margin-top:.7rem;font-size:.8rem;color:var(--muted-foreground);line-height:1.9}
+.route__list{list-style:none;margin-top:.95rem;font-size:.8rem;color:var(--muted-foreground);line-height:1.9}
 .route__list li::before{content:"— ";color:#b45309}
-.route__fee{margin-top:.9rem;font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;border:var(--thin);display:inline-block;padding:.3rem .6rem;width:max-content}
+.route__fee{margin-top:1.15rem;font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;border:var(--thin);display:inline-block;padding:.3rem .6rem;width:max-content}
 .route__stage--entry{background:transparent}
 .route__stage--entry .route__dot{background:#b45309}
 .route__stage--entry .route__fee{border-color:var(--foreground);font-weight:700}
@@ -172,16 +172,16 @@ section{position:relative}
 .route-foot p{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground)}
 @media(max-width:860px){
 	.route{grid-template-columns:1fr 1fr}
-	.route__stage{border-right:0;border-bottom:1px solid var(--border-light);padding:1.2rem 1rem 1.2rem 0}
+	.route__stage{border-right:0;border-bottom:1px solid var(--border-light);padding:1.5rem 1rem 1.5rem .35rem}
 }
 @media(max-width:560px){.route{grid-template-columns:1fr}}
 
 /* consequence strip — what the chosen scope sets up */
 .fx{display:grid;grid-template-columns:repeat(4,1fr);border:var(--thin);border-bottom:0;margin-top:2.2rem;background:#fff}
-.fx__cell{padding:1.3rem 1.4rem;border-bottom:var(--thin);border-right:1px solid var(--border-light)}
+.fx__cell{padding:1.7rem 1.7rem 1.6rem;border-bottom:var(--thin);border-right:1px solid var(--border-light)}
 .fx__cell:last-child{border-right:0}
 .fx__k{font-family:var(--font-mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.12em;color:#b45309}
-.fx__cell h5{font-family:var(--display);font-size:1.05rem;font-weight:600;letter-spacing:-.01em;margin:.4rem 0 .35rem}
+.fx__cell h5{font-family:var(--display);font-size:1.05rem;font-weight:600;letter-spacing:-.01em;margin:.55rem 0 .5rem}
 .fx__cell p{font-size:.78rem;color:var(--muted-foreground);line-height:1.55}
 .fx__cell ul{list-style:none;font-size:.78rem;color:var(--muted-foreground);line-height:1.8}
 .fx__cell li.on{color:var(--foreground);font-weight:600}

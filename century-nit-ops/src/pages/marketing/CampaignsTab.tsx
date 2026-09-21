@@ -256,6 +256,7 @@ export function CampaignsTab() {
 						<RateTile label="Skipped" value={`${report.data.totals.skipped}`} sub="suppressed/unsub" />
 						<RateTile label="Failed" value={`${report.data.totals.failed}`} sub="" />
 					</div>
+					{report.data.timeline.length > 0 && <TimelineBars timeline={report.data.timeline} />}
 					{report.data.topLinks.length > 0 && (
 						<div className="mkt-toplinks">
 							<div className="label">Top links</div>
@@ -365,6 +366,26 @@ export function CampaignsTab() {
 			/>
 			{toast && <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />}
 		</>
+	);
+}
+
+/** Hourly sent/opened/clicked — simple proportional bars, newest at right. */
+function TimelineBars({ timeline }: { timeline: CampaignReport["timeline"] }) {
+	const hours = timeline.slice(-48);
+	const max = Math.max(1, ...hours.map((h) => h.sent), ...hours.map((h) => h.opened));
+	return (
+		<div className="mkt-section">
+			<h4>First {hours.length}h — sent ▪ opened ▫ clicked</h4>
+			<div className="mkt-timeline" role="img" aria-label="Hourly send and engagement">
+				{hours.map((h) => (
+					<div key={h.hour} className="mkt-timeline__col" title={`${new Date(h.hour).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit" })} — ${h.sent} sent, ${h.opened} opened, ${h.clicked} clicked`}>
+						<div className="mkt-timeline__bar mkt-timeline__bar--sent" style={{ height: `${(h.sent / max) * 100}%` }} />
+						<div className="mkt-timeline__bar mkt-timeline__bar--opened" style={{ height: `${(h.opened / max) * 100}%` }} />
+						<div className="mkt-timeline__bar mkt-timeline__bar--clicked" style={{ height: `${(h.clicked / max) * 100}%` }} />
+					</div>
+				))}
+			</div>
+		</div>
 	);
 }
 

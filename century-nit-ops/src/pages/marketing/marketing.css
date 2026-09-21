@@ -73,6 +73,14 @@
 .mkt-toplink { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 13px; border-top: 1px solid var(--border, #e2e2e2); }
 .mkt-toplink__url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.8; }
 
+/* Hourly engagement bars */
+.mkt-timeline { display: flex; align-items: flex-end; gap: 2px; height: 90px; }
+.mkt-timeline__col { flex: 1; min-width: 4px; display: flex; align-items: flex-end; justify-content: center; gap: 1px; height: 100%; }
+.mkt-timeline__bar { width: 30%; min-width: 1px; }
+.mkt-timeline__bar--sent { background: var(--fg, #111); }
+.mkt-timeline__bar--opened { background: transparent; border: 1px solid var(--fg, #111); }
+.mkt-timeline__bar--clicked { background: repeating-linear-gradient(45deg, var(--fg, #111), var(--fg, #111) 1px, transparent 1px, transparent 3px); }
+
 /* Schedule row on draft campaigns */
 .mkt-schedule { display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; }
 .mkt-schedule input[type="datetime-local"] { font-size: 12px; padding: 2px 6px; }

@@ -610,7 +610,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				action: "assign",
 				record: a,
 				title: `${a.applicantName}`,
-				subtitle: `Needs handler · ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage} · ${a.country || "—"}`,
+				subtitle: `Needs handler · ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage}${a.scopeStages ? ` · ${scopeLabel(a.scopeStages)}` : ""} · ${a.country || "—"}`,
 				meta: stageMeta(a),
 				branch: a.branch,
 				owner: "— open",

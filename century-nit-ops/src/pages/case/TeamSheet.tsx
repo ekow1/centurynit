@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { JOURNEY_STAGE_LABELS, type CaseSeat, type CaseTeam, type JourneyStage } from "century-nit-shared";
+import { JOURNEY_STAGE_LABELS, normaliseScope, serviceStageForJourney, type CaseSeat, type CaseTeam, type JourneyStage } from "century-nit-shared";
 import { Sheet } from "century-nit-core/ui";
 import type { MockApplication } from "century-nit-core/ops";
 import { useCases } from "../../hooks/useCases";
@@ -77,6 +77,15 @@ export function TeamSheet({
 		}
 	}
 
+	// The plan decides which stages can hold a seat — a stage the client
+	// skipped never opens one, so it isn't listed as "open ahead".
+	const scope = app.scopeStages ? normaliseScope(app.scopeStages) : null;
+	const onPlan = (stage: string) => {
+		if (scope == null) return true;
+		const svc = serviceStageForJourney(stage);
+		return svc == null || scope.includes(svc);
+	};
+
 	const seatRows: { seat: CaseSeat; key: string }[] = [
 		...(team?.owner ? [{ seat: team.owner, key: "owner" }] : []),
 		...(team?.coordinator ? [{ seat: team.coordinator, key: "coordinator" }] : []),
@@ -122,12 +131,19 @@ export function TeamSheet({
 						))}
 						{seatRows.length === 0 && <p className="hsheet__empty">Nobody is seated on this case yet.</p>}
 
-						{(team.openStages ?? []).map((s) => (
-							<div key={`open-${s}`} className="hsheet__row hsheet__row--open">
-								<span>— open · {stageLabel(s)}</span>
-								<span className="hsheet__hint">seats when the chapter opens</span>
-							</div>
-						))}
+						{(team.openStages ?? []).map((s) =>
+							onPlan(s) ? (
+								<div key={`open-${s}`} className="hsheet__row hsheet__row--open">
+									<span>— open · {stageLabel(s)}</span>
+									<span className="hsheet__hint">seats when the stage opens</span>
+								</div>
+							) : (
+								<div key={`open-${s}`} className="hsheet__row" style={{ opacity: 0.45 }}>
+									<span style={{ textDecoration: "line-through" }}>— {stageLabel(s)}</span>
+									<span className="hsheet__hint">not on this plan</span>
+								</div>
+							),
+						)}
 					</div>
 
 					{canManage && (

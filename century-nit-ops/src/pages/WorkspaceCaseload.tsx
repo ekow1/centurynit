@@ -11,6 +11,7 @@ import { Sheet } from "century-nit-core/ui";
 import { DelegateSheet } from "./case/DelegateSheet";
 import { Toast } from "./OpsDialogs";
 import { JOURNEY_STAGES, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import { ScopeChip } from "../components/ScopeRoute";
 import type { PendingTask } from "../lib/pendingTasks";
 import { FilterGroup } from "./FilterGroup";
 import { PreviewPane } from "./TaskPreview";
@@ -71,6 +72,8 @@ type Row = {
 	step: number;
 	total: number;
 	sub: string;
+	/** The case's plan — the scope chip; null on consultations. */
+	scopeStages: string[] | null;
 	updatedAt: string;
 	/** Days without movement when stalled; 0 otherwise. */
 	stalled: number;
@@ -189,6 +192,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 				step: idx >= 0 ? idx + 1 : 1,
 				total: JOURNEY_STAGES.length,
 				sub: [a.university || "No university yet", a.status, open > 0 ? `${open} checklist item${open === 1 ? "" : "s"} open` : null].filter(Boolean).join(" · "),
+				scopeStages: a.scopeStages ?? null,
 				updatedAt,
 				stalled: stalledDays(updatedAt, done),
 				link: `/applications?id=${a.id}`,
@@ -214,6 +218,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 				step: CONSULTATION_STEP[c.status] ?? 1,
 				total: 4,
 				sub: [c.type, c.targetCountry || null, c.dateTime].filter(Boolean).join(" · "),
+				scopeStages: null,
 				updatedAt,
 				stalled: stalledDays(updatedAt, done),
 				link: `/consultations?id=${c.id}`,
@@ -540,6 +545,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 												</div>
 												<div className="ops-client__sub" title={r.sub}>
 													{r.sub}
+													{r.scopeStages ? <> <ScopeChip scopeStages={r.scopeStages} /></> : null}
 												</div>
 												<div className="ops-client__foot" onClick={(e) => e.stopPropagation()}>
 													<span className="ops-client__meta">

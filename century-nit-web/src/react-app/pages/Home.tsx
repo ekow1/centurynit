@@ -10,6 +10,7 @@ import {
 	articles,
 	company,
 	coreServices,
+	CONSULTATION_FEE,
 	destinations,
 	processSteps,
 	programs,
@@ -21,7 +22,33 @@ import {
 	getUniversity,
 	videoTestimonials,
 } from "century-nit-core";
+import { SERVICE_STAGES, SERVICE_STAGE_LABELS } from "century-nit-shared";
 import { STAGE_SHORT } from "../data/stageLabels";
+
+/** The purchasable stage strip — consultation is the entry, the rest compose. */
+const STAGE_NUMERAL = ["I", "II", "III"];
+const STAGE_REQ: Record<string, string> = {
+	admissions: "Counsel · docs · offers",
+	visa: "File · biometrics · interview",
+	departure: "Flight · briefing · landing",
+};
+const STAGE_INCLUDES: Record<string, string[]> = {
+	admissions: [
+		"Counselling & programme shortlist",
+		"Admission documentation per university",
+		"Submission + offer tracking",
+	],
+	visa: ["Embassy-ready visa file", "Forms filed, biometrics booked", "Mock interview + decision tracking"],
+	departure: ["Flight & housing coordination", "Pre-departure briefing", "First-week check-in"],
+};
+/** Which journey stage each à-la-carte service belongs to. */
+const SERVICE_STAGE_TAG: Record<string, string> = {
+	counseling: "Stage I · Admissions",
+	"admission-docs": "Stage I · Admissions",
+	"visa-docs": "Stage II · Visa",
+	"study-visa": "Stage II · Visa",
+	travel: "Stage III · Departure",
+};
 
 const baseHeroSlides: Omit<HeroSlide, "primary" | "secondary">[] = [
 	{
@@ -248,31 +275,159 @@ export function Home() {
 
 			<hr className="section-rule" />
 
-			{/* Core services */}
+			{/* Services — the journey composes; à la carte below */}
 			<section className="section texture-grid">
 				<div className="container">
 					<div className="section__head">
 						<div>
 							<p className="eyebrow">What we offer</p>
-							<h2 className="section-title">Our services</h2>
+							<h2 className="section-title">It starts with a consultation. Then the stages you pick.</h2>
+							<p className="lead" style={{ maxWidth: "36rem", marginTop: ".7rem" }}>
+								The consultation opens your file. What you choose there sets the form, the stages, the
+								documents — everything that follows.
+							</p>
 						</div>
-						<Link to="/visa-services" className="link-arrow">
-							Visa desk →
+						<Link to="/student-services" className="link-arrow">
+							Student services →
 						</Link>
 					</div>
-					<div className="card-grid card-grid--3">
-						{coreServices.map((s) => (
-							<Link key={s.id} to={`/services/${s.id}`} className="card card--pad card--hover">
-								<span className="eyebrow">{s.id.replace("-", " ")}</span>
-								<h3 className="display mt-2" style={{ fontSize: "1.45rem" }}>
-									{s.title}
-								</h3>
-								<p className="mt-2 muted" style={{ fontSize: "1.05rem" }}>
-									{s.description}
+
+					{/* the stages */}
+					<div className="jrn">
+						<div className="jrn__stage jrn__stage--entry">
+							<p className="jrn__stno">Stage 0 — always</p>
+							<h3>Consultation</h3>
+							<p className="jrn__req">The door in</p>
+							<ul className="jrn__inc">
+								<li>Online or in person — Accra or Kumasi</li>
+								<li>You pick your scope here</li>
+								<li>Your file opens the same day</li>
+							</ul>
+							<p className="jrn__prc">
+								Fixed fee<b>US${CONSULTATION_FEE}</b>
+							</p>
+							<span className="jrn__arr" aria-hidden>→</span>
+						</div>
+						{SERVICE_STAGES.map((stage, i) => (
+							<div key={stage} className="jrn__stage">
+								<p className="jrn__stno">
+									Stage {STAGE_NUMERAL[i]}
+									{i > 0 ? ` — needs ${STAGE_NUMERAL[i - 1]}` : ""}
 								</p>
-								<span className="card__cta">Learn more →</span>
-							</Link>
+								<h3>{SERVICE_STAGE_LABELS[stage]}</h3>
+								<p className="jrn__req">{STAGE_REQ[stage]}</p>
+								<ul className="jrn__inc">
+									{STAGE_INCLUDES[stage].map((x) => (
+										<li key={x}>{x}</li>
+									))}
+								</ul>
+								<p className="jrn__prc">
+									Stage fee<b>quoted at consultation</b>
+								</p>
+								{i < SERVICE_STAGES.length - 1 && (
+									<span className="jrn__arr" aria-hidden>→</span>
+								)}
+							</div>
 						))}
+					</div>
+
+					{/* the three ways to buy it */}
+					<div className="scopes">
+						<Link className="scope" to="/start">
+							<p className="eyebrow">Just admissions</p>
+							<h4>Admissions only</h4>
+							<div className="scope__stages"><span>I · Admissions</span></div>
+							<p className="scope__meta">
+								Counselling to offer letter.<br />Visa help added later if you want it.
+							</p>
+							<p className="scope__save">Stage I fee</p>
+						</Link>
+						<Link className="scope" to="/start">
+							<p className="eyebrow">Most common</p>
+							<h4>Admissions + Visa</h4>
+							<div className="scope__stages"><span>I · Admissions</span><span>II · Visa</span></div>
+							<p className="scope__meta">
+								Offer in hand, visa filed.<br />Add Departure any time before you fly.
+							</p>
+							<p className="scope__save">Two stages · less than à la carte</p>
+						</Link>
+						<Link className="scope scope--hero" to="/start">
+							<span className="scope__tag">Best value</span>
+							<p className="eyebrow">The whole way</p>
+							<h4>Full journey</h4>
+							<div className="scope__stages"><span>I</span><span>II</span><span>III</span></div>
+							<p className="scope__meta">
+								Counselling to first-week check-in.<br />One plan, one portal, priced as a bundle.
+							</p>
+							<p className="scope__save">Bundle — the parts cost more apart</p>
+						</Link>
+					</div>
+
+					{/* what the choice sets up */}
+					<p className="eyebrow" style={{ marginTop: "1.8rem", marginBottom: ".8rem" }}>
+						Chosen at the consultation — example: <b>Visa only</b>
+					</p>
+					<div className="fx">
+						<div className="fx__cell">
+							<p className="fx__k">Consultation form</p>
+							<h5>Asks visa questions, not school questions</h5>
+							<p>Destination, intake date, prior refusals, sponsor — the intake adapts to the scope you pick.</p>
+						</div>
+						<div className="fx__cell">
+							<p className="fx__k">Stages</p>
+							<h5>Unlocked · skipped · recommended</h5>
+							<ul>
+								<li className="off">I · Admissions — skipped</li>
+								<li className="on">II · Visa — unlocked</li>
+								<li>III · Departure — recommended later</li>
+							</ul>
+						</div>
+						<div className="fx__cell">
+							<p className="fx__k">Documents</p>
+							<h5>The checklist matches the scope</h5>
+							<ul>
+								<li>Offer letter / CAS or I-20</li>
+								<li>Bank statements &amp; sponsor</li>
+								<li className="off">Transcripts — not asked</li>
+							</ul>
+						</div>
+						<div className="fx__cell">
+							<p className="fx__k">Portal</p>
+							<h5>Your file opens scoped</h5>
+							<p>Stages, tasks and invoices are generated for what you bought — nothing extra, nothing missing.</p>
+						</div>
+					</div>
+
+					{/* à la carte */}
+					<div style={{ marginTop: "3rem" }}>
+						<p className="eyebrow" style={{ marginBottom: ".8rem" }}>À la carte — just need one thing?</p>
+						<div className="svc">
+							{coreServices.map((s, i) => (
+								<Link key={s.id} to={`/services/${s.id}`} className="svc__row">
+									<span className="svc__num">{String.fromCharCode(65 + i)}</span>
+									<span className="svc__name">
+										{s.title}
+										<small>Part of {SERVICE_STAGE_TAG[s.id] ?? "the journey"}</small>
+									</span>
+									<ul className="svc__del">
+										{s.deliverables.slice(0, 2).map((d) => (
+											<li key={d}>{d}</li>
+										))}
+									</ul>
+									<span className="svc__dur">{s.duration}</span>
+									<span className="svc__go">→</span>
+								</Link>
+							))}
+						</div>
+					</div>
+
+					<div className="svc__foot">
+						<p>
+							Every engagement starts with one consultation — <b>online or in person</b>
+						</p>
+						<Link className="btn btn--sm" to="/start">
+							Book consultation →
+						</Link>
 					</div>
 				</div>
 			</section>

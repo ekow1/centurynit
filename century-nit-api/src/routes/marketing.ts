@@ -87,6 +87,12 @@ const templateSchema = z.object({
 	footer: z.string().nullable(),
 	isCustom: z.boolean(),
 	createdBy: z.string().nullable(),
+	blocks: z.unknown().nullable(),
+	preheader: z.string().nullable(),
+	fromName: z.string().nullable(),
+	replyTo: z.string().nullable(),
+	usedFor: z.string(),
+	isPreset: z.boolean(),
 	createdAt: z.string(),
 	updatedAt: z.string(),
 });
@@ -157,15 +163,16 @@ const createTemplateBodySchema = z.object({
 	header: z.string().optional().nullable(),
 	body: z.string().min(1, "Body is required"),
 	footer: z.string().optional().nullable(),
+	blocks: z.unknown().optional().nullable(),
+	preheader: z.string().optional().nullable(),
+	fromName: z.string().optional().nullable(),
+	replyTo: z.string().optional().nullable(),
+	usedFor: z.enum(["campaigns", "automations", "both"]).optional(),
+	isCustom: z.boolean().optional(),
 });
 
-const updateTemplateBodySchema = z.object({
-	name: z.string().min(1).optional(),
-	type: z.string().optional(),
-	subject: z.string().optional().nullable(),
-	header: z.string().optional().nullable(),
+const updateTemplateBodySchema = createTemplateBodySchema.partial().extend({
 	body: z.string().min(1).optional(),
-	footer: z.string().optional().nullable(),
 });
 
 /* ── Router ──────────────────────────────────────────────────────────────── */
@@ -350,11 +357,11 @@ marketingRouter.openapi(
 				);
 			}
 
-			if (!campaign.mailingListId) {
+			if (!campaign.mailingListId && !campaign.segmentId) {
 				throw new HttpError(
 					400,
-					"NO_MAILING_LIST",
-					"Campaign has no mailing list assigned",
+					"NO_AUDIENCE",
+					"Campaign has no audience — pick a mailing list or a live segment",
 				);
 			}
 
@@ -459,7 +466,9 @@ marketingRouter.openapi(
 					"application/json": {
 						schema: z.object({
 							subject: z.string().min(1),
-							body: z.string().min(1),
+							body: z.string().optional(),
+							blocks: z.unknown().optional(),
+							preheader: z.string().optional(),
 							sampleName: z.string().optional(),
 							sampleEmail: z.string().email().optional(),
 						}),
@@ -1780,7 +1789,12 @@ marketingRouter.openapi(
 					header: body.header ?? null,
 					body: body.body,
 					footer: body.footer ?? null,
-					isCustom: true,
+					blocks: (body.blocks as never) ?? null,
+					preheader: body.preheader ?? null,
+					fromName: body.fromName ?? null,
+					replyTo: body.replyTo ?? null,
+					usedFor: body.usedFor ?? "both",
+					isCustom: body.isCustom ?? true,
 					createdBy: staff?.opsUserId ?? null,
 				})
 				.returning();
@@ -1849,6 +1863,11 @@ marketingRouter.openapi(
 			if (body.header !== undefined) updateData.header = body.header;
 			if (body.body !== undefined) updateData.body = body.body;
 			if (body.footer !== undefined) updateData.footer = body.footer;
+			if (body.blocks !== undefined) updateData.blocks = body.blocks;
+			if (body.preheader !== undefined) updateData.preheader = body.preheader;
+			if (body.fromName !== undefined) updateData.fromName = body.fromName;
+			if (body.replyTo !== undefined) updateData.replyTo = body.replyTo;
+			if (body.usedFor !== undefined) updateData.usedFor = body.usedFor;
 
 			const [updated] = await db
 				.update(emailTemplate)

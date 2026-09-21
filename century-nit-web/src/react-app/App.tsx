@@ -11,7 +11,7 @@ import { Footer } from "./components/layout/Footer";
 import { MobileTabBar } from "./components/layout/MobileTabBar";
 import { Home } from "./pages/Home";
 import { StartJourney } from "./pages/StartJourney";
-import { NewsletterConfirm, NewsletterUnsubscribe } from "./pages/NewsletterStatus";
+import { NewsletterConfirm, NewsletterPreferences, NewsletterUnsubscribe } from "./pages/NewsletterStatus";
 import { RequireAuth } from "./pages/apply/RequireAuth";
 
 /**
@@ -144,6 +144,7 @@ function AppShell() {
 					    silently falls through to the homepage. */}
 					<Route path="/newsletter/confirm" element={<NewsletterConfirm />} />
 					<Route path="/newsletter/unsubscribe" element={<NewsletterUnsubscribe />} />
+					<Route path="/newsletter/preferences" element={<NewsletterPreferences />} />
 
 					{/* Single entry into the journey */}
 					<Route path="/start" element={<StartJourney />} />

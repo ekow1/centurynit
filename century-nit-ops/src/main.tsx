@@ -7,6 +7,7 @@ import { createRoot } from "react-dom/client";
 import "century-nit-core/styles/base.css";
 import "century-nit-core/styles/components.css";
 import "./styles/app.css";
+import "./pages/marketing/marketing.css";
 import "century-nit-core/styles/base.mobile.css";
 import "./styles/app.mobile.css";
 import "./styles/scheduling.css";

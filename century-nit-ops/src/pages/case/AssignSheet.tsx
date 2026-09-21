@@ -75,7 +75,7 @@ export function AssignSheet({
 	/** "Leave it open" — refer the file to the chosen branch without a handler. */
 	onLeaveOpen?: (branch: string) => Promise<unknown>;
 }) {
-	const { roleCatalog } = useOpsAuth();
+	const { roleCatalog, opsUser } = useOpsAuth();
 	const permissions = useMemo(
 		() => Object.fromEntries(roleCatalog.map((r) => [r.id, r.permissions])),
 		[roleCatalog],
@@ -109,7 +109,14 @@ export function AssignSheet({
 		// The previous handler is pinned first only where keeping them is a real
 		// option (keepName is set) — otherwise they're just another row.
 		const keep = keepOpsUserId && keepName ? atBranch.find((s) => s.opsUserId === keepOpsUserId) : undefined;
-		const rest = keep ? atBranch.filter((s) => s.opsUserId !== keepOpsUserId) : [...atBranch];
+		let rest = keep ? atBranch.filter((s) => s.opsUserId !== keepOpsUserId) : [...atBranch];
+		// Admin-tier users can own casework but never appear in the roster —
+		// offer the signed-in user a self-assign row above the list.
+		const self =
+			opsUser?.opsUserId && opsUser.role && canOwnStage(opsUser.role, stage, permissions) && opsUser.opsUserId !== keepOpsUserId
+				? opsUser
+				: null;
+		if (self) rest = rest.filter((s) => s.opsUserId !== self.opsUserId);
 		// Lightest load first — a heavy load dims but never blocks a pick. A
 		// preferred capability (visa staff for a visa entrant) sorts ahead of load.
 		const prefers = (s: AssignableStaff) => (preferCapability && s.role ? (roleHasCapability(s.role, preferCapability, permissions) ? 0 : 1) : 0);
@@ -118,8 +125,8 @@ export function AssignSheet({
 				prefers(a) - prefers(b) ||
 				(a.openCases ?? 0) + (a.openStageSeats ?? 0) - ((b.openCases ?? 0) + (b.openStageSeats ?? 0)),
 		);
-		return { keep, rest };
-	}, [staff, stage, pickBranch, permissions, keepOpsUserId, keepName, preferCapability]);
+		return { keep, rest, self };
+	}, [staff, stage, pickBranch, permissions, keepOpsUserId, keepName, preferCapability, opsUser]);
 	const preferred = (s: AssignableStaff) => Boolean(preferCapability && s.role && roleHasCapability(s.role, preferCapability, permissions));
 
 	const loadOf = (s: AssignableStaff) =>
@@ -192,6 +199,24 @@ export function AssignSheet({
 			{/* 2 · Handler */}
 			<p className="hsheet__eyebrow">2 · Handler</p>
 			<div className="hsheet__list" role="radiogroup" aria-label="Handler">
+				{eligible.self && (
+					<button
+						type="button"
+						role="radio"
+						aria-checked={pickHandler === eligible.self.opsUserId}
+						className={`hsheet__row${pickHandler === eligible.self.opsUserId ? " hsheet__row--on" : ""}`}
+						onClick={() => setPickHandler(eligible.self!.opsUserId)}
+					>
+						<span>
+							<span className="hsheet__you">You</span>
+							<span className="hsheet__presence" data-presence="available" aria-hidden="true" />
+							{eligible.self.name}
+						</span>
+						<span className="hsheet__hint">
+							{eligible.self.role} · take this case
+						</span>
+					</button>
+				)}
 				{eligible.keep && (
 					<button
 						type="button"

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Assign sheet — take it yourself</title>
+<style>
+:root{--foreground:#000;--muted:#f5f5f5;--muted-foreground:#52525b;--border:#000;--border-light:#a3a3a3;--thin:1px solid var(--border);--font-mono:ui-monospace,"Cascadia Code",Menlo,monospace;--display:"Fraunces",Georgia,serif;--sans:"Inter",system-ui,sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);color:var(--foreground);background:#e9e9e9;font-size:15px;padding:2rem;display:flex;gap:2rem;flex-wrap:wrap;align-items:flex-start}
+.frame{background:#fff;border:var(--thin);width:30rem;box-shadow:8px 8px 0 rgba(0,0,0,.12)}
+.frame__head{border-bottom:var(--thin);padding:1rem 1.4rem;display:flex;justify-content:space-between;align-items:center}
+.frame__head h1{font-family:var(--display);font-size:1.2rem;font-weight:600}
+.frame__head .x{font-family:var(--font-mono);font-size:.8rem}
+.frame__body{padding:1.2rem 1.4rem 1.4rem}
+.frame__cap{font-family:var(--font-mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.14em;color:var(--muted-foreground);margin-bottom:.6rem;text-align:center}
+.sheet-label{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.14em;color:var(--muted-foreground);margin:1.1rem 0 .45rem}
+.sheet-label:first-child{margin-top:0}
+.row{display:flex;justify-content:space-between;align-items:center;gap:1rem;border:var(--thin);border-bottom:0;padding:.7rem .9rem;font-size:.88rem;cursor:pointer;background:#fff}
+.row:last-child{border-bottom:var(--thin)}
+.row:hover{background:var(--muted)}
+.row .hint{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground);text-align:right}
+.row--on{background:var(--foreground);color:#fff}
+.row--on .hint{color:#a1a1aa}
+.pres{display:inline-block;width:.5rem;height:.5rem;background:#16a34a;margin-right:.5rem}
+.pres.off{background:#a3a3a3}
+/* the new self row */
+.row--self{border:1.5px solid var(--foreground);border-bottom:1.5px solid var(--foreground);position:relative}
+.row--self + .row{border-top:0}
+.row--self .you{background:#b45309;color:#fff;font-family:var(--font-mono);font-size:.5rem;text-transform:uppercase;letter-spacing:.1em;padding:.15rem .4rem;margin-right:.5rem}
+.foot{display:flex;justify-content:flex-end;gap:.6rem;margin-top:1.3rem}
+.btn{border:var(--thin);background:#fff;padding:.55rem 1.1rem;font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;cursor:pointer}
+.btn--p{background:var(--foreground);color:#fff}
+.note{max-width:22rem;font-size:.82rem;color:var(--muted-foreground);line-height:1.6}
+.note h2{font-family:var(--display);font-size:1.3rem;color:var(--foreground);margin-bottom:.6rem}
+.note li{margin:.4rem 0 .4rem 1.1rem}
+.note b{color:var(--foreground)}
+</style>
+</head>
+<body>
+
+<div class="frame">
+	<div class="frame__head"><h1>Handler · Visa</h1><span class="x">×</span></div>
+	<div class="frame__body">
+		<p class="sheet-label">1 · Handling branch</p>
+		<div class="row"><span>Accra HQ</span><span class="hint">holds the file · refer…</span></div>
+
+		<p class="sheet-label">2 · Handler</p>
+		<div class="row row--self row--on"><span><span class="you">You</span><span class="pres"></span>Ekow Admin</span><span class="hint">super admin · take this case</span></div>
+		<div class="row"><span><span class="pres"></span>Ama Serwaa</span><span class="hint">consultant · fits this entry · 3 cases</span></div>
+		<div class="row"><span><span class="pres"></span>Kofi Mensah</span><span class="hint">consultant · 5 cases · 2 seats</span></div>
+		<div class="row"><span><span class="pres off"></span>Yaa Boateng</span><span class="hint">consultant · 4 cases</span></div>
+		<div class="row"><span>— Leave it open</span><span class="hint">stays in the queue</span></div>
+
+		<p class="sheet-label">3 · Coverage</p>
+		<div class="row"><span>This stage only</span><span class="hint">seat re-opens at the next chapter</span></div>
+		<div class="row row--on"><span>Rest of the case</span><span class="hint">they carry every remaining chapter</span></div>
+
+		<div class="foot"><button class="btn btn--p">Set handler</button></div>
+	</div>
+</div>
+
+<div class="note">
+	<h2>What changes</h2>
+	<p style="margin-bottom:.8rem">Admin-tier roles can own casework, but the roster never lists them — the sheet only renders eligible consultants. The fix is one pinned row at the top of the handler list:</p>
+	<ul>
+		<li><b>"You" row, pinned first</b> — shows when the signed-in user is <b>super_admin, manager, or sys admin</b> (anyone with <code>assign_work</code> / own-stage rights). Amber <b>You</b> chip, presence dot, role + "take this case" hint.</li>
+		<li><b>Selectable like any row</b> — picking it submits the current user's own <code>opsUserId</code>; coverage and referral still apply, so a super admin can take "rest of the case" end-to-end.</li>
+		<li><b>Respects the rules</b> — hidden when the stage genuinely can't be theirs (no own:* capability), hidden when they're already the handler.</li>
+		<li><b>Roster unchanged below</b> — consultants still sort by fit and load; the self row just sits above them.</li>
+	</ul>
+	<p style="margin-top:.8rem">Backend already accepts it — the assign endpoint only checks the target can own the stage, and the recent admin-capability change covers that. This is purely the UI surface.</p>
+</div>
+
+</body>
+</html>

@@ -760,6 +760,20 @@
 	line-height: 1.5;
 }
 
+/* The self-assign row — pinned first for roles that may own casework but
+   never appear in the roster (super admin, manager, admin). */
+.hsheet__you {
+	display: inline-block;
+	background: #b45309;
+	color: #fff;
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	padding: 0.1rem 0.35rem;
+	margin-right: 0.45rem;
+}
+
 .hsheet__empty {
 	padding: 0.7rem 0.8rem;
 	font-size: var(--text-sm);

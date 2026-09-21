@@ -311,8 +311,8 @@ export function Home() {
 					</div>
 
 					<div className="xp">
-						<div className="xp__tabs" role="tablist" aria-label="Explore">
-							{EXPLORE_TABS.map((t) => (
+						<div className="xp__rail" role="tablist" aria-label="Explore">
+							{EXPLORE_TABS.map((t, i) => (
 								<button
 									key={t.id}
 									type="button"
@@ -321,11 +321,17 @@ export function Home() {
 									className="xp__tab"
 									onClick={() => setExplore(t.id)}
 								>
-									{t.label}
-									<small>{t.caption}</small>
+									<span className="no">{String(i + 1).padStart(2, "0")}</span>
+									<span className="nm">
+										{t.label}
+										<small>{t.caption}</small>
+									</span>
+									<span className="go" aria-hidden>→</span>
 								</button>
 							))}
+							<p className="xp__cta">Not sure? The consultation picks for you.</p>
 						</div>
+						<div className="xp__body">
 
 						{explore === "d" && (
 							<div className="xp__pane" data-open>
@@ -417,11 +423,12 @@ export function Home() {
 							</div>
 						)}
 
-						<div className="xp__foot">
-							<p>{EXPLORE_TABS.find((t) => t.id === explore)?.foot}</p>
-							<Link className="link-arrow" to={EXPLORE_TABS.find((t) => t.id === explore)?.to ?? "/"}>
-								View all →
-							</Link>
+							<div className="xp__foot">
+								<p>{EXPLORE_TABS.find((t) => t.id === explore)?.foot}</p>
+								<Link className="link-arrow" to={EXPLORE_TABS.find((t) => t.id === explore)?.to ?? "/"}>
+									View all →
+								</Link>
+							</div>
 						</div>
 					</div>
 				</div>

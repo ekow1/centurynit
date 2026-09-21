@@ -11323,58 +11323,96 @@ a.portal-ch--on:hover {
 
 /* ============ Explore — destinations · universities · programs · funding ============ */
 .xp {
-	border: var(--thin);
+	display: grid;
+	grid-template-columns: 19rem 1fr;
 	background: #fff;
 }
-.xp__tabs {
-	display: flex;
-	border-bottom: var(--thin);
-	overflow-x: auto;
-}
-.xp__tab {
-	flex: 1;
-	min-width: 9rem;
-	padding: 1rem 1.2rem;
-	border: 0;
-	border-right: 1px solid var(--border-light);
-	background: #fff;
-	font-family: var(--font-mono);
-	font-size: 0.62rem;
-	text-transform: uppercase;
-	letter-spacing: 0.12em;
-	cursor: pointer;
-	text-align: left;
+.xp__rail {
+	border-right: var(--thin);
 	display: flex;
 	flex-direction: column;
-	gap: 0.2rem;
+}
+.xp__tab {
+	border: 0;
+	border-bottom: 1px solid var(--border-light);
+	background: transparent;
+	text-align: left;
+	padding: 1.3rem 1.4rem 1.3rem 0;
+	cursor: pointer;
+	display: grid;
+	grid-template-columns: 2.2rem 1fr auto;
+	gap: 0.9rem;
+	align-items: baseline;
+	transition: background 0.12s;
 	color: var(--foreground);
 }
-.xp__tab:last-child {
-	border-right: 0;
+.xp__tab:hover {
+	background: var(--muted);
 }
-.xp__tab small {
-	font-size: 0.52rem;
-	letter-spacing: 0.06em;
+.xp__tab .no {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
 	color: var(--muted-foreground);
-	text-transform: none;
-	font-family: var(--font-sans, inherit);
 }
-.xp__tab[aria-selected="true"] {
-	background: var(--foreground);
-	color: #fff;
+.xp__tab .nm {
+	font-family: var(--font-display, inherit);
+	font-size: 1.35rem;
+	font-weight: 600;
+	letter-spacing: -0.02em;
+	line-height: 1.1;
 }
-.xp__tab[aria-selected="true"] small {
-	color: #a1a1aa;
+.xp__tab .nm small {
+	display: block;
+	font-family: var(--font-mono);
+	font-size: 0.55rem;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	font-weight: 400;
+	color: var(--muted-foreground);
+	margin-top: 0.3rem;
+}
+.xp__tab .go {
+	font-family: var(--font-mono);
+	font-size: 0.7rem;
+	color: var(--muted-foreground);
+}
+.xp__tab[aria-selected="true"] .nm {
+	text-decoration: underline;
+	text-underline-offset: 0.3rem;
+	text-decoration-thickness: 2px;
+}
+.xp__tab[aria-selected="true"] .no {
+	color: var(--foreground);
+	font-weight: 700;
+}
+.xp__tab[aria-selected="true"] .go {
+	color: #fbbf24;
+}
+.xp__cta {
+	margin-top: auto;
+	padding: 1.1rem 1.4rem 1.1rem 0;
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	color: var(--muted-foreground);
+}
+.xp__body {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	padding-left: 1.5rem;
 }
 .xp__pane {
-	padding: 1.6rem;
+	padding: 0 0 1.5rem;
+	flex: 1;
 }
 .xp__foot {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
 	border-top: var(--thin);
-	padding: 1rem 1.6rem;
+	padding: 0.95rem 0 0;
 	gap: 1rem;
 	flex-wrap: wrap;
 }
@@ -11384,6 +11422,46 @@ a.portal-ch--on:hover {
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
 	color: var(--muted-foreground);
+}
+/* the narrower pane wants two columns, not three */
+.xp__pane .card-grid--3,
+.xp__pane .card-grid--2 {
+	grid-template-columns: 1fr 1fr;
+}
+@media (max-width: 900px) {
+	.xp {
+		grid-template-columns: 1fr;
+	}
+	.xp__rail {
+		border-right: 0;
+		border-bottom: var(--thin);
+		flex-direction: row;
+		overflow-x: auto;
+	}
+	.xp__tab {
+		border-bottom: 0;
+		padding: 1rem 1.2rem 1rem 0;
+		grid-template-columns: auto 1fr;
+		min-width: 9.5rem;
+	}
+	.xp__tab .go {
+		display: none;
+	}
+	.xp__cta {
+		display: none;
+	}
+	.xp__body {
+		padding-left: 0;
+	}
+	.xp__pane {
+		padding-top: 1.2rem;
+	}
+}
+@media (max-width: 640px) {
+	.xp__pane .card-grid--3,
+	.xp__pane .card-grid--2 {
+		grid-template-columns: 1fr;
+	}
 }
 
 /* chips pinned on the card image */
@@ -11488,8 +11566,5 @@ a.portal-ch--on:hover {
 	}
 	.fund__dead {
 		display: none;
-	}
-	.xp__pane {
-		padding: 1rem;
 	}
 }

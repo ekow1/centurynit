@@ -9156,7 +9156,7 @@ a.portal-ch--on:hover {
 	align-items: center;
 	gap: 0.5rem;
 	margin: 0 calc(-1 * max(0.9rem, var(--safe-r))) 0 calc(-1 * max(0.9rem, var(--safe-l)));
-	padding: 0.5rem max(0.9rem, var(--safe-r)) 0.5rem max(0.9rem, var(--safe-l));
+	padding: 0.42rem max(0.9rem, var(--safe-r)) 0.42rem max(0.9rem, var(--safe-l));
 	background: var(--foreground);
 	color: var(--background);
 	text-decoration: none;
@@ -9939,6 +9939,23 @@ a.portal-ch--on:hover {
 }
 
 /* ---------- Notification panel (bell dropdown) ---------- */
+
+/* Unread count anchored to the bell button's top-right corner. The background
+   ring lifts it clear of the glyph; tokens, square-edged. */
+
+.notif__count {
+	position: absolute;
+	top: 3px;
+	right: 1px;
+	min-width: 14px;
+	height: 14px;
+	padding: 0 3px;
+	background: var(--foreground);
+	color: var(--background);
+	box-shadow: 0 0 0 1.5px var(--background);
+	font: 700 0.55rem/14px var(--font-mono);
+	text-align: center;
+}
 
 .notif-panel__head {
 	display: flex;

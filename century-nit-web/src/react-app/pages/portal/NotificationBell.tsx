@@ -239,28 +239,7 @@ export function NotificationBell() {
 					<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
 					<path d="M13.73 21a2 2 0 0 1-3.46 0" />
 				</svg>
-				{unreadCount > 0 ? (
-					<span
-						style={{
-							position: "absolute",
-							top: "2px",
-							right: "2px",
-							background: "#18181b",
-							color: "#ffffff",
-							fontSize: "0.6rem",
-							fontWeight: 700,
-							padding: "0.15rem 0.35rem",
-							borderRadius: 0,
-							minWidth: "16px",
-							textAlign: "center",
-							lineHeight: 1,
-							fontFamily: "var(--font-mono)",
-							border: "2px solid #ffffff",
-						}}
-					>
-						{unreadCount}
-					</span>
-				) : null}
+				{unreadCount > 0 ? <span className="notif__count">{unreadCount}</span> : null}
 			</button>
 
 			{open ? (

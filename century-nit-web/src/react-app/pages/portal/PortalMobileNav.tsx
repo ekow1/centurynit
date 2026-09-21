@@ -95,7 +95,7 @@ export function PortalAppBar({
 
 				<div className="pbar__titles">
 					<span className="pbar__title">{title}</span>
-					{kicker && <span className="pbar__sub mono">{kicker}</span>}
+					{kicker && <span className="pbar__chip mono">{kicker}</span>}
 				</div>
 
 				<div className="pbar__actions">

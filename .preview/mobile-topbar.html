@@ -1,101 +1,216 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mobile top bar — fix</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portal mobile app bar — single-line title, hollow marks (proposed)</title>
 <style>
-	:root{--bg:#fafaf8;--ink:#18181b;--mut:#71717a;--line:#dcdcd6;--linelt:#e9e9e4;--bad:#b91c1c;--good:#15803d;--mono:ui-monospace,Menlo,monospace}
-	*{box-sizing:border-box;margin:0;padding:0}
-	body{background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,sans-serif;padding:2rem clamp(1rem,4vw,3rem)}
-	h1{font-size:1.3rem;margin-bottom:.2rem}
-	.sub{color:var(--mut);font-size:.8rem;margin-bottom:1.75rem;max-width:48rem}
-	h2{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--mut);margin:2rem 0 .6rem}
-	.frame{width:360px;border:1.5px solid var(--ink);background:#fff;box-shadow:4px 4px 0 rgba(0,0,0,.12);overflow:hidden}
-	.tag{display:inline-block;font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;padding:.15rem .5rem;color:#fff}
-	.tag.bad{background:var(--bad)}.tag.good{background:var(--good)}
-	.cols{display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start}
-	.note{max-width:24rem;font-size:.78rem;color:var(--mut)}
-	.note li{margin-bottom:.5rem}
-	code{font-family:var(--mono);font-size:.7rem;background:var(--linelt);padding:.05em .3em}
-	/* current pbar */
-	.bar{display:flex;align-items:center;gap:.75rem;min-height:56px;padding:0 .9rem;border-bottom:1px solid var(--line);background:rgba(250,250,248,.94)}
-	.mark{width:2.1rem;height:2.1rem;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;flex-shrink:0}
-	.ic{width:2.35rem;height:2.35rem;margin-left:-.5rem;display:flex;align-items:center;justify-content:center;font-size:1.05rem;flex-shrink:0}
-	.t{flex:1;min-width:0}
-	.t b{display:block;font-size:1.05rem;line-height:1.15}
-	.t i{font-style:normal;font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--mut)}
-	.bell{position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:1rem}
-	.nbadge{position:absolute;top:2px;right:2px;background:var(--ink);color:#fff;font:700 .6rem var(--mono);padding:.15rem .3rem;border:2px solid #fff}
-	.ava{width:1.9rem;height:1.9rem;border-radius:50%;background:#c4b5fd;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700}
-	.pnext{display:flex;gap:.5rem;align-items:center;background:var(--ink);color:#fff;font-size:.72rem;padding:.45rem .9rem}
-	.pnext em{font-style:normal;font-family:var(--mono);font-size:.52rem;text-transform:uppercase;opacity:.7}
-	/* fixed pbar */
-	.bar2{display:flex;align-items:center;gap:.5rem;height:56px;padding:0 .9rem;border-bottom:1.5px solid var(--ink);background:rgba(250,250,248,.96)}
-	.bar2 .ic{margin-left:-.35rem}
-	.acts{display:flex;align-items:center;gap:2px;margin-right:-.35rem}
-	.acts>button,.acts>.bell2{width:40px;height:40px;border:0;background:none;display:flex;align-items:center;justify-content:center;position:relative;font-size:1rem}
-	.ava2{width:26px;height:26px;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font:700 .58rem var(--mono)}
-	.content{padding:1rem .9rem;font-size:.72rem;color:var(--mut)}
-	.sk{height:.65rem;background:var(--linelt);margin:.45rem 0}
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#525252; --micro:#3f3f3f; --line-light:#d4d4d4; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1240px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	.banner{font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;background:var(--ink);color:#fff;padding:.35rem .7rem;margin-bottom:.8rem}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem}
+	.jump a{color:inherit}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.5rem clamp(1.25rem,3vw,2.25rem) 2.5rem}
+	.sidebyside{display:flex;gap:2rem;flex-wrap:wrap;align-items:flex-start}
+	.cap{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.5rem}
+	.fcap{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);margin-top:.55rem;line-height:1.55;max-width:26rem}
+	code{font-family:var(--mono);font-size:.7rem;background:var(--muted-bg);padding:.05em .3em}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+
+	/* ---- phone frame ---- */
+	.phone{width:390px;border:1.5px solid var(--ink);background:#fff;overflow:hidden;flex-shrink:0}
+	.cbody{padding:.9rem}
+	.sk{height:.6rem;background:var(--muted-bg);margin:.5rem 0}
+	.dimline{display:flex;align-items:center;gap:.4rem;font-family:var(--mono);font-size:.6rem;color:var(--fg-muted);margin:.4rem 0}
+
+	/* ============ CURRENT bar (before) ============ */
+	.bar-old{display:flex;align-items:center;gap:.75rem;height:56px;padding:0 .9rem;border-bottom:1.5px solid var(--ink);background:rgba(255,255,255,.94)}
+	.mk-old{width:34px;height:34px;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0}
+	.tt{flex:1;min-width:0}
+	.tt b{display:block;font-size:1.05rem;line-height:1.15;letter-spacing:-.01em}
+	.tt i{display:block;font-style:normal;font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--fg-muted);margin-top:.1rem}
+	.ibtn{width:44px;height:44px;display:flex;align-items:center;justify-content:center;position:relative;flex-shrink:0;color:var(--ink)}
+	.bdg-old{position:absolute;top:2px;right:2px;min-width:16px;background:var(--ink);color:#fff;border:2px solid #fff;font:700 .6rem var(--mono);padding:.15rem .35rem;line-height:1;text-align:center}
+	.av-old{width:26px;height:26px;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font:700 .58rem var(--mono)}
+	.nxt{display:flex;gap:.5rem;align-items:center;background:var(--ink);color:#fff;font-size:.8rem;font-weight:600;padding:.5rem .9rem;border-top:1px solid var(--ink)}
+	.nxt em{font-style:normal;font-family:var(--mono);font-size:.6rem;font-weight:400;text-transform:uppercase;letter-spacing:.1em;opacity:.75}
+
+	/* ============ PROPOSED bar (after) ============ */
+	.bar-new{display:flex;align-items:center;gap:.6rem;min-height:56px;padding:6px .9rem;border-bottom:1.5px solid var(--ink);background:rgba(255,255,255,.96)}
+	.mk-new{width:30px;height:30px;border:1.5px solid var(--ink);background:transparent;color:var(--ink);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.72rem;flex-shrink:0}
+	.tt2{flex:1;min-width:0;display:flex;align-items:center;gap:.5rem}
+	.tt2 b{font-size:1.05rem;line-height:1.15;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+	.chip{font-family:var(--mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:var(--micro);border:1px solid var(--line);padding:2px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+	.bdg-new{position:absolute;top:3px;right:1px;min-width:14px;height:14px;padding:0 3px;background:var(--ink);color:#fff;box-shadow:0 0 0 1.5px #fff;font:700 .55rem/14px var(--mono);text-align:center}
+	.av-new{width:28px;height:28px;border:1.5px solid var(--ink);background:transparent;color:var(--ink);display:flex;align-items:center;justify-content:center;font:700 .58rem var(--mono)}
+	.back{font-size:1.5rem;line-height:1;margin-left:-.35rem}
+	.nxt-new{display:flex;gap:.5rem;align-items:center;background:var(--ink);color:#fff;font-size:.8rem;font-weight:600;padding:.42rem .9rem}
+	.nxt-new em{font-style:normal;font-family:var(--mono);font-size:.6rem;font-weight:400;text-transform:uppercase;letter-spacing:.1em;opacity:.75}
+
+	/* wiring table */
+	.wiring{border-collapse:collapse;width:100%;margin-top:.5rem}
+	.wiring th,.wiring td{border:1px solid var(--line-light);font-family:var(--mono);font-size:.7rem;text-align:left;padding:.6rem .8rem;vertical-align:top}
+	.wiring th{text-transform:uppercase;letter-spacing:.1em;font-size:.6rem;background:var(--muted-bg)}
+	.wiring td:first-child{white-space:nowrap;font-weight:700}
+	.wiring code{font-family:var(--mono)}
 </style>
 </head>
 <body>
-<h1>Mobile top bar — arrangement fix</h1>
-<p class="sub">The row has no shared hit-box contract: the avatar borrows the back-chevron's negative margin, the bell is a different size, and the actions cluster hugs the edge inconsistently. Result: crowded, misaligned right side.</p>
+<div class="wrap">
+	<span class="banner">Mock · proposal — all names, counts and routes illustrative</span>
+	<h1 class="page">Portal mobile app bar — one line, hollow marks, quieter badge (proposed)</h1>
+	<p class="note">The phone app bar (<code>.pbar</code>) packs a solid CN block, a two-line title, a bell wearing its unread count on top of the glyph, and a second identical black square for the account avatar — all inside 56px. This mock keeps the row and the &ge;44px tap targets but gives each element its own weight: hollow brand mark, single-line title with an inline chapter chip, a corner badge that clears the bell, and an outlined avatar that reads as a button.</p>
+	<div class="jump"><a href="#a">A · what's squished</a><a href="#b">B · the bar</a><a href="#c">C · stage &amp; next variants</a><a href="#d">D · wiring</a></div>
 
-<h2>Now vs proposed · 360px</h2>
-<div class="cols">
-	<div>
-		<span class="tag bad">Current</span>
-		<div class="frame" style="margin-top:.5rem">
-			<div class="bar">
-				<span class="mark">CN</span>
-				<span class="t"><b>Home</b><i>I · Consultation</i></span>
-				<span class="bell">🔔<span class="nbadge">3</span></span>
-				<span class="ic"><span class="ava">EA</span></span>
+	<!-- ================= SECTION A ================= -->
+	<span class="tag" id="a">A · What's squished today</span>
+	<div class="mock">
+		<div class="sidebyside">
+			<div style="flex:1;min-width:19rem">
+				<p class="cap" style="border-bottom:1.5px solid var(--ink);padding-bottom:.35rem">One 56px sticky row, five occupants</p>
+				<ul style="margin:.7rem 0 0 1.1rem;font-size:.78rem;display:grid;gap:.55rem">
+					<li><b>1 · Density.</b> A 34px solid-black <code>CN</code> square, the title <code>Journey</code> (1.05rem) with <code>VI · COMPLETE</code> (0.6rem uppercase mono) stacked beneath it, a 44px bell button with an absolutely-positioned <code>22</code> badge overlapping the icon, and a 26px <code>EE</code> initials square inside a 44px button — all inside one 56px row on a ~360px-wide screen.</li>
+					<li><b>2 · Two identical black squares.</b> The <code>CN</code> brand mark and the <code>EE</code> avatar carry the same weight — brand and identity read as the same affordance, and the avatar doesn't look tappable.</li>
+					<li><b>3 · Title-height-driven row.</b> The kicker stacks under the title, so the row is sized by two text lines; with the Next strip (<code>pbar__next</code>) the bar can eat ~110px+ at the top of every page.</li>
+					<li><b>4 · Badge leak + overlap.</b> The bell count uses a hardcoded <code>18181b</code> inline style (not a token) at <code>top:2px; right:2px</code> — it overlaps the bell glyph and reads as clutter rather than "22 unread". (Sibling leak: <code>.fab__badge</code> still uses <code>e53935</code> — both are the current colour leaks this proposal removes.)</li>
+					<li><b>5 · Stage pages.</b> The leading square becomes a back chevron (<code>.pbar__back</code>, 44px) — good — but the row still carries title + kicker + bell + avatar.</li>
+				</ul>
+				<p class="fcap">Styles: <code>packages/core/styles/base.mobile.css</code> ~585–760 · markup: <code>PortalAppBar</code> in <code>PortalMobileNav.tsx</code>.</p>
 			</div>
-			<div class="pnext"><em>Next</em> Pay enrolment invoice <span style="margin-left:auto">→</span></div>
-			<div class="content"><div class="sk" style="width:70%"></div><div class="sk" style="width:90%"></div></div>
+			<div>
+				<p class="cap">before · /portal/journey · 390px</p>
+				<div class="phone">
+					<div class="bar-old">
+						<span class="mk-old">CN</span>
+						<span class="tt"><b>Journey</b><i>VI · Complete</i></span>
+						<span class="ibtn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="bdg-old">22</span></span>
+						<span class="ibtn"><span class="av-old">EE</span></span>
+					</div>
+					<div class="nxt"><em>Next</em> Pay enrolment invoice <span style="margin-left:auto">→</span></div>
+					<div class="cbody">
+						<div class="dimline"><span style="border:1px solid var(--line);padding:0 .4rem">≈112px</span> of chrome above the first line of content</div>
+						<div class="sk" style="width:68%"></div>
+						<div class="sk" style="width:92%"></div>
+						<div class="sk" style="width:45%"></div>
+					</div>
+				</div>
+				<p class="fcap">Two solid black squares of near-equal size flank the row; the <code>22</code> badge sits on the bell glyph; the kicker owns a whole second line.</p>
+			</div>
 		</div>
 	</div>
-	<div>
-		<span class="tag good">Proposed</span>
-		<div class="frame" style="margin-top:.5rem">
-			<div class="bar2">
-				<span class="mark">CN</span>
-				<span class="t"><b>Home</b><i>I · Consultation</i></span>
-				<span class="acts">
-					<span class="bell2">🔔<span class="nbadge">3</span></span>
-					<button><span class="ava2">EA</span></button>
-				</span>
-			</div>
-			<div class="pnext"><em>Next</em> Pay enrolment invoice <span style="margin-left:auto">→</span></div>
-			<div class="content"><div class="sk" style="width:70%"></div><div class="sk" style="width:90%"></div></div>
-		</div>
-	</div>
-	<ul class="note">
-		<li><b>Actions get one contract</b> — bell + avatar become identical 40×40 buttons inside <code>.pbar__actions</code>, optically compensated as a group (<code>margin-right:-.35rem</code>), never individually.</li>
-		<li><b>Negative margin only on the back chevron</b> — a new <code>.pbar__back</code> class carries <code>margin-left:-.35rem</code>; the avatar stops borrowing it.</li>
-		<li><b>Avatar squares up</b> — mono initials on ink, matching the shell's square language instead of a soft round photo.</li>
-		<li><b>Bar bottom rule strengthens</b> to 1.5px ink — reads as the page's top edge, matches the card treatment everywhere else.</li>
-		<li><b>Dropdown anchors</b> — the account menu + notification panel pin to the actions cluster (<code>right:0</code>), can't fall off-screen left.</li>
-		<li>Also fixed while in here: <code>open-chat</code> vs <code>century:open-chat</code> — the Help tab's event name mismatch.</li>
-	</ul>
-</div>
 
-<h2>Stage page variant (back button)</h2>
-<div class="cols">
-	<div class="frame">
-		<span class="tag good">Proposed · stage page</span>
-		<div class="bar2" style="border-top:none">
-			<button class="ic" style="border:0;background:none">←</button>
-			<span class="t"><b>Visa</b><i>IV · Visa</i></span>
-			<span class="acts"><span class="bell2">🔔</span><button><span class="ava2">EA</span></button></span>
+	<!-- ================= SECTION B ================= -->
+	<span class="tag tag--after" id="b">B · Proposed bar — /portal/journey</span>
+	<div class="mock">
+		<div class="sidebyside">
+			<div>
+				<p class="cap">after · /portal/journey · 390px</p>
+				<div class="phone">
+					<div class="bar-new">
+						<span class="mk-new">CN</span>
+						<span class="tt2"><b>Journey</b><span class="chip">VI · Complete</span></span>
+						<span class="ibtn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="bdg-new">22</span></span>
+						<span class="ibtn"><span class="av-new">EE</span></span>
+					</div>
+					<div class="cbody">
+						<div class="sk" style="width:68%"></div>
+						<div class="sk" style="width:92%"></div>
+						<div class="sk" style="width:45%"></div>
+					</div>
+				</div>
+				<p class="fcap">Tap targets stay &ge;44px — bell and avatar buttons are unchanged 44px hit-boxes.<br>Only the glyphs inside got smaller and hollower.</p>
+			</div>
+			<div style="flex:1;min-width:19rem">
+				<p class="cap" style="border-bottom:1.5px solid var(--ink);padding-bottom:.35rem">What changed</p>
+				<ul style="margin:.7rem 0 0 1.1rem;font-size:.78rem;display:grid;gap:.55rem">
+					<li><b>Single-line title.</b> <code>Journey</code> (1.05rem) sits on one line with a small uppercase mono chip <code>VI · COMPLETE</code> inline (1px border, 2px 6px padding). The stacked second line is gone; long kickers truncate inside the chip.</li>
+					<li><b>Hollow brand mark.</b> <code>CN</code> shrinks to 30px and swaps the solid fill for a 1.5px border — it stops colliding with the avatar.</li>
+					<li><b>Outlined avatar.</b> <code>EE</code> becomes a 28px outlined square (1.5px border, transparent bg, foreground initials) inside the same 44px button — reads as a control, distinct from the brand.</li>
+					<li><b>Badge anchored to the corner.</b> The count is a 14px-min square in solid foreground at the button's top-right (0.55rem mono), ringed with background so it clears the bell glyph — and it uses <code>var(--foreground)</code>/<code>var(--background)</code> tokens, not <code>18181b</code>.</li>
+					<li><b>Breathing room.</b> The row keeps ~56px but gains <code>padding-block:6px</code>, so glyphs don't touch the bar's edges.</li>
+				</ul>
+			</div>
 		</div>
-		<div class="content"><div class="sk" style="width:55%"></div><div class="sk" style="width:80%"></div></div>
 	</div>
-	<p class="note">Back chevron replaces the CN mark on stage pages — same geometry, only the left slot changes. Chevron gets its own <code>.pbar__back</code> class so the negative margin never leaks onto the avatar again.</p>
+
+	<!-- ================= SECTION C ================= -->
+	<span class="tag tag--after" id="c">C · Variants — stage page &amp; Next strip</span>
+	<div class="mock">
+		<div class="sidebyside">
+			<div>
+				<p class="cap">after · /portal/visa (stage) · 390px</p>
+				<div class="phone">
+					<div class="bar-new">
+						<span class="ibtn back">‹</span>
+						<span class="tt2"><b>Visa</b><span class="chip">IV · With the embassy — decision pending</span></span>
+						<span class="ibtn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="bdg-new">3</span></span>
+						<span class="ibtn"><span class="av-new">EE</span></span>
+					</div>
+					<div class="cbody">
+						<div class="sk" style="width:55%"></div>
+						<div class="sk" style="width:84%"></div>
+						<div class="sk" style="width:38%"></div>
+					</div>
+				</div>
+				<p class="fcap">Back chevron <code>‹</code> takes the leading slot (no CN); title = page name, chip = chapter.<br>The chip ellipsizes instead of wrapping — the row never grows a second line. Tap targets &ge;44px.</p>
+			</div>
+			<div>
+				<p class="cap">after · with Next strip · 390px</p>
+				<div class="phone">
+					<div class="bar-new">
+						<span class="mk-new">CN</span>
+						<span class="tt2"><b>Journey</b><span class="chip">VI · Complete</span></span>
+						<span class="ibtn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="bdg-new">22</span></span>
+						<span class="ibtn"><span class="av-new">EE</span></span>
+					</div>
+					<div class="nxt-new"><em>Next</em> Pay enrolment invoice <span style="margin-left:auto">→</span></div>
+					<div class="cbody">
+						<div class="dimline"><span style="border:1px solid var(--line);padding:0 .4rem">≈96px</span> of chrome — ~16px reclaimed</div>
+						<div class="sk" style="width:68%"></div>
+						<div class="sk" style="width:92%"></div>
+						<div class="sk" style="width:45%"></div>
+					</div>
+				</div>
+				<p class="fcap">The Next strip is unchanged except slightly slimmer (0.42rem block padding).<br>Single-line title + slimmer strip ≈16px of vertical space handed back. Tap targets &ge;44px.</p>
+			</div>
+		</div>
+	</div>
+
+	<!-- ================= SECTION D ================= -->
+	<span class="tag" id="d">D · Wiring</span>
+	<div class="mock">
+		<table class="wiring">
+			<tr><th>File</th><th>What changes</th></tr>
+			<tr>
+				<td>century-nit-web/src/react-app/pages/portal/PortalMobileNav.tsx</td>
+				<td><code>.pbar__titles</code> (~96–99) becomes a single flex row: <code>&lt;span className="pbar__title"&gt;</code> followed by <code>{kicker &amp;&amp; &lt;span className="pbar__chip mono"&gt;{kicker}&lt;/span&gt;}</code> — the kicker moves inline as a chip and <code>.pbar__sub</code> is deleted. Avatar markup unchanged (CSS-only restyle). <code>.pbar__back</code> keeps its leading slot on stage paths.</td>
+			</tr>
+			<tr>
+				<td>packages/core/styles/base.mobile.css</td>
+				<td><code>.pbar</code> (~590) gains <code>padding-block:6px</code>. <code>.pbar__mark</code> (~638) → hollow variant: 30px, <code>background:transparent; border:1.5px solid var(--foreground); color:var(--foreground)</code>. <code>.pbar__ava</code> (~696) → 28px outlined: 1.5px border, transparent bg, foreground initials. <code>.pbar__titles</code> (~720) → <code>flex-direction:row; align-items:center; gap:.5rem</code>. New <code>.pbar__chip</code>: 1px border, 2px 6px padding, 0.55rem uppercase mono, ellipsis. Delete <code>.pbar__sub</code> (~738).</td>
+			</tr>
+			<tr>
+				<td>century-nit-web/src/react-app/styles/app.css</td>
+				<td><code>.pbar__next</code> (~9154): block padding <code>0.5rem → 0.42rem</code>. Otherwise untouched — the strip stays inverted and full-bleed.</td>
+			</tr>
+			<tr>
+				<td>century-nit-web/src/react-app/pages/portal/NotificationBell.tsx</td>
+				<td>Replace the badge's inline styles (~243–259) with a <code>.notif__count</code> class: <code>position:absolute; top:3px; right:1px; min-width:14px; height:14px; background:var(--foreground); color:var(--background); font:700 .55rem var(--font-mono); box-shadow:0 0 0 1.5px var(--background)</code> — tokens instead of the hardcoded <code>18181b</code>, anchored to the button corner so it clears the glyph. The button's own inline styles (40px box, <code>18181b</code> color, <code>f4f4f5</code> hover) should also move to a class while in there.</td>
+			</tr>
+		</table>
+	</div>
 </div>
 </body>
 </html>

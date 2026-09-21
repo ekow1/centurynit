@@ -595,7 +595,7 @@ body.sheet-lock {
 	align-items: center;
 	gap: 0.75rem;
 	height: calc(var(--appbar-h) + var(--safe-t));
-	padding: var(--safe-t) max(0.9rem, var(--safe-r)) 0 max(0.9rem, var(--safe-l));
+	padding: calc(var(--safe-t) + 6px) max(0.9rem, var(--safe-r)) 6px max(0.9rem, var(--safe-l));
 	background: var(--background);
 	background: color-mix(in srgb, var(--background) 90%, transparent);
 	-webkit-backdrop-filter: saturate(180%) blur(16px);
@@ -639,13 +639,14 @@ body.sheet-lock {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 2.1rem;
-	height: 2.1rem;
+	width: 30px;
+	height: 30px;
 	flex-shrink: 0;
-	background: var(--foreground);
-	color: var(--accent-foreground);
+	background: transparent;
+	border: 1.5px solid var(--foreground);
+	color: var(--foreground);
 	font-family: var(--font-display);
-	font-size: 0.85rem;
+	font-size: 0.72rem;
 	font-weight: 600;
 }
 
@@ -694,10 +695,11 @@ body.sheet-lock {
 }
 
 .pbar__ava {
-	width: 26px;
-	height: 26px;
-	background: var(--foreground);
-	color: var(--background);
+	width: 28px;
+	height: 28px;
+	background: transparent;
+	border: 1.5px solid var(--foreground);
+	color: var(--foreground);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -719,8 +721,9 @@ body.sheet-lock {
 
 .pbar__titles {
 	display: flex;
-	flex-direction: column;
-	gap: 0.1rem;
+	flex-direction: row;
+	align-items: center;
+	gap: 0.5rem;
 	flex: 1;
 	min-width: 0;
 }
@@ -733,16 +736,24 @@ body.sheet-lock {
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	flex-shrink: 0;
 }
 
-.pbar__sub {
-	font-size: 0.6rem;
-	letter-spacing: 0.1em;
+/* The chapter kicker rides inline as a bordered chip — it truncates first so
+   the row never grows a second line. */
+
+.pbar__chip {
+	font-family: var(--font-mono);
+	font-size: 0.55rem;
 	text-transform: uppercase;
+	letter-spacing: 0.1em;
 	color: var(--muted-foreground);
+	border: 1px solid var(--border-light);
+	padding: 2px 6px;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	min-width: 0;
 }
 
 .fab__badge {
@@ -754,8 +765,8 @@ body.sheet-lock {
 	padding: 0 4px;
 	border-radius: 999px;
 	border: 2px solid var(--background);
-	background: #e53935;
-	color: #fff;
+	background: var(--foreground);
+	color: var(--background);
 	font-family: var(--font-mono);
 	font-size: 0.6rem;
 	font-weight: 700;

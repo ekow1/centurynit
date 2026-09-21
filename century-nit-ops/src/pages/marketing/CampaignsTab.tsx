@@ -40,11 +40,11 @@ export function CampaignsTab() {
 		try {
 			const [c, l, s] = await Promise.all([
 				get<{ campaigns: Campaign[] }>("/campaigns"),
-				get<{ lists: MailingList[] }>("/mailing-lists"),
+				get<{ mailingLists: MailingList[] }>("/mailing-lists"),
 				get<{ segments: Segment[] }>("/segments"),
 			]);
 			setCampaigns(c.campaigns);
-			setLists(l.lists);
+			setLists(l.mailingLists);
 			setSegments(s.segments);
 		} finally {
 			setLoading(false);

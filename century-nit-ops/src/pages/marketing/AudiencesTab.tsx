@@ -59,11 +59,11 @@ export function AudiencesTab() {
 	const load = useCallback(async () => {
 		const [s, l, sup] = await Promise.all([
 			get<{ segments: Segment[] }>("/segments"),
-			get<{ lists: MailingList[] }>("/mailing-lists"),
+			get<{ mailingLists: MailingList[] }>("/mailing-lists"),
 			get<{ suppressions: Suppression[] }>("/suppressions"),
 		]);
 		setSegments(s.segments);
-		setLists(l.lists);
+		setLists(l.mailingLists);
 		setSuppressions(sup.suppressions);
 		for (const seg of s.segments) {
 			post<{ matched: number; optedIn: number }>("/segments/preview", { entity: seg.entity, filters: seg.filters })

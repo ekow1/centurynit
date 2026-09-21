@@ -64,7 +64,7 @@ export function ContactsTab() {
 	}, [load]);
 
 	useEffect(() => {
-		get<{ lists: MailingList[] }>("/mailing-lists").then((r) => setLists(r.lists)).catch(() => {});
+		get<{ mailingLists: MailingList[] }>("/mailing-lists").then((r) => setLists(r.mailingLists)).catch(() => {});
 	}, []);
 
 	async function openDetail(email: string) {

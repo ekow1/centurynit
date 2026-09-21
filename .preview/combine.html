@@ -118,8 +118,8 @@ section{position:relative}
 .fcard__amt{padding:1.4rem 1.3rem;display:flex;flex-direction:column;justify-content:center;gap:.3rem}
 .fcard__amt b{font-family:var(--display);font-size:1.7rem;font-weight:600;letter-spacing:-.02em;line-height:1}
 .fcard__amt span{font-family:var(--font-mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground)}
-.fcard__img{border-left:var(--thin);aspect-ratio:21/8;overflow:hidden;position:relative}
-.fcard__img img{width:100%;height:100%;object-fit:cover;filter:grayscale(1);transition:filter .25s}
+.fcard__img{border-left:var(--thin);min-height:9rem;overflow:hidden;position:relative}
+.fcard__img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:grayscale(1);transition:filter .25s}
 .fcard:hover .fcard__img img{filter:grayscale(0)}
 .fcard__img span{position:absolute;bottom:.5rem;left:.6rem;background:#fff;border:var(--thin);font-family:var(--font-mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.08em;padding:.25rem .5rem}
 .fcard__meta{grid-column:1/-1;border-top:var(--thin);padding:.7rem 1.3rem;display:flex;justify-content:space-between;gap:1rem;font-family:var(--font-mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground)}
@@ -140,6 +140,54 @@ section{position:relative}
 .srow__what{font-size:.78rem;color:var(--muted-foreground);line-height:1.5}
 .srow__go{font-family:var(--font-mono);font-size:.66rem;font-weight:700}
 @media(max-width:720px){.srow{grid-template-columns:4.2rem 1fr auto}.srow__no,.srow__what{display:none}}
+
+/* process — the route: scope picker lights the stages */
+.route-ctl{display:flex;gap:0;border:var(--thin);width:max-content;max-width:100%;margin-bottom:2.4rem;background:#fff;overflow-x:auto}
+.route-ctl__btn{border:0;border-right:var(--thin);background:transparent;padding:.7rem 1.3rem;font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;cursor:pointer;color:var(--muted-foreground);white-space:nowrap}
+.route-ctl__btn:last-child{border-right:0}
+.route-ctl__btn.is-on{background:var(--foreground);color:#fff}
+.route{list-style:none;display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-top:var(--thin)}
+.route__stage{padding:1.6rem 1.4rem 1.6rem 0;position:relative;border-right:1px solid var(--border-light);transition:opacity .25s}
+.route__stage:last-child{border-right:0}
+.route__rail{display:flex;align-items:center;height:.5rem;margin-bottom:1.1rem}
+.route__dot{width:.55rem;height:.55rem;background:var(--foreground);flex:none}
+.route__seg{flex:1;height:1px;background:var(--border)}
+.route__stage:last-child .route__seg{display:none}
+.route__no{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.14em;color:var(--muted-foreground)}
+.route__name{font-family:var(--display);font-size:1.55rem;font-weight:600;letter-spacing:-.02em;margin:.3rem 0 .25rem}
+.route__req{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.09em;color:#b45309}
+.route__list{list-style:none;margin-top:.7rem;font-size:.8rem;color:var(--muted-foreground);line-height:1.9}
+.route__list li::before{content:"— ";color:#b45309}
+.route__fee{margin-top:.9rem;font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;border:var(--thin);display:inline-block;padding:.3rem .6rem;width:max-content}
+.route__stage--entry{background:transparent}
+.route__stage--entry .route__dot{background:#b45309}
+.route__stage--entry .route__fee{border-color:var(--foreground);font-weight:700}
+/* scope off — the stage is skipped */
+.route__stage.is-off{opacity:.35}
+.route__stage.is-off .route__dot{background:#fff;border:var(--thin)}
+.route__stage.is-off .route__name{text-decoration:line-through;text-decoration-thickness:1.5px}
+.route__stage.is-rec .route__no{color:#b45309}
+.route__stage.is-rec .route__no::after{content:" · recommended"}
+.route-foot{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-top:1.6rem;flex-wrap:wrap}
+.route-foot p{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground)}
+@media(max-width:860px){
+	.route{grid-template-columns:1fr 1fr}
+	.route__stage{border-right:0;border-bottom:1px solid var(--border-light);padding:1.2rem 1rem 1.2rem 0}
+}
+@media(max-width:560px){.route{grid-template-columns:1fr}}
+
+/* consequence strip — what the chosen scope sets up */
+.fx{display:grid;grid-template-columns:repeat(4,1fr);border:var(--thin);border-bottom:0;margin-top:2.2rem;background:#fff}
+.fx__cell{padding:1.3rem 1.4rem;border-bottom:var(--thin);border-right:1px solid var(--border-light)}
+.fx__cell:last-child{border-right:0}
+.fx__k{font-family:var(--font-mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.12em;color:#b45309}
+.fx__cell h5{font-family:var(--display);font-size:1.05rem;font-weight:600;letter-spacing:-.01em;margin:.4rem 0 .35rem}
+.fx__cell p{font-size:.78rem;color:var(--muted-foreground);line-height:1.55}
+.fx__cell ul{list-style:none;font-size:.78rem;color:var(--muted-foreground);line-height:1.8}
+.fx__cell li.on{color:var(--foreground);font-weight:600}
+.fx__cell li.off{text-decoration:line-through}
+@media(max-width:860px){.fx{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.fx{grid-template-columns:1fr}.fx__cell{border-right:0}}
 
 /* services — alternating feature rows: image ↔ editorial body */
 .svc{border-top:var(--thin)}
@@ -326,6 +374,73 @@ section{position:relative}
 	</div>
 </section>
 
+<!-- HOW THE PROCESS WORKS — redesigned: one route, scopes light it up -->
+<section class="section" style="border-top:var(--thin);background:var(--muted)"><span class="chip">Process — the route + scope picker drives it</span>
+	<div class="container">
+		<div class="section__head">
+			<div><p class="eyebrow">Methodology</p><h2 class="section-title">How the process works</h2>
+			<p class="lead" style="max-width:38rem;margin-top:.6rem">One consultation opens your file. From there the journey is three stages — pick one, or take them all. Choose a scope below and watch the route light up.</p></div>
+		</div>
+
+		<!-- scope picker controls the route -->
+		<div class="route-ctl" role="group" aria-label="Pick a journey scope">
+			<button class="route-ctl__btn" data-scope="a">Admissions only</button>
+			<button class="route-ctl__btn" data-scope="av">Admissions + Visa</button>
+			<button class="route-ctl__btn" data-scope="v">Visa only</button>
+			<button class="route-ctl__btn is-on" data-scope="full">Full journey</button>
+		</div>
+
+		<!-- the route -->
+		<ol class="route" id="route">
+			<li class="route__stage route__stage--entry" data-stage="c">
+				<span class="route__rail"><i class="route__dot"></i><i class="route__seg"></i></span>
+				<p class="route__no">Stage 0</p>
+				<h3 class="route__name">Consultation</h3>
+				<p class="route__req">The door in — online or in person, Accra or Kumasi</p>
+				<ul class="route__list"><li>You pick your scope here</li><li>Your file opens the same day</li></ul>
+				<p class="route__fee">US$75 · fixed</p>
+			</li>
+			<li class="route__stage" data-stage="admissions">
+				<span class="route__rail"><i class="route__dot"></i><i class="route__seg"></i></span>
+				<p class="route__no">Stage I</p>
+				<h3 class="route__name">Admissions</h3>
+				<p class="route__req">Counsel · documents · offers</p>
+				<ul class="route__list"><li>Programme shortlist</li><li>Docs filed per university</li><li>Offer tracking</li></ul>
+				<p class="route__fee">Quoted at consultation</p>
+			</li>
+			<li class="route__stage" data-stage="visa">
+				<span class="route__rail"><i class="route__dot"></i><i class="route__seg"></i></span>
+				<p class="route__no">Stage II</p>
+				<h3 class="route__name">Visa</h3>
+				<p class="route__req">File · biometrics · interview</p>
+				<ul class="route__list"><li>Embassy-ready file</li><li>Biometrics booked</li><li>Mock interview</li></ul>
+				<p class="route__fee">Quoted at consultation</p>
+			</li>
+			<li class="route__stage" data-stage="departure">
+				<span class="route__rail"><i class="route__dot"></i><i class="route__seg"></i></span>
+				<p class="route__no">Stage III</p>
+				<h3 class="route__name">Departure &amp; arrival</h3>
+				<p class="route__req">Flight · briefing · landing</p>
+				<ul class="route__list"><li>Flight &amp; housing</li><li>Pre-departure briefing</li><li>First-week check-in</li></ul>
+				<p class="route__fee">Quoted at consultation</p>
+			</li>
+		</ol>
+
+		<!-- the consequence strip swaps with the scope -->
+		<div class="fx" id="fx">
+			<div class="fx__cell"><p class="fx__k">Consultation form</p><h5 id="fx-form">The full intake</h5><p id="fx-form-d">Every section — academics, finances, preferences, documents.</p></div>
+			<div class="fx__cell"><p class="fx__k">Stages</p><h5>Your plan</h5><ul id="fx-stages"><li class="on">I · II · III — all unlocked</li></ul></div>
+			<div class="fx__cell"><p class="fx__k">Documents</p><h5 id="fx-docs">The full checklist</h5><ul id="fx-docs-l"><li>Transcripts &amp; certificates</li><li>Bank statements &amp; sponsor</li><li>Offer letter once it lands</li></ul></div>
+			<div class="fx__cell"><p class="fx__k">Portal</p><h5 id="fx-portal">Your file opens scoped</h5><p id="fx-portal-d">Stages, tasks and invoices exist only for what you bought.</p></div>
+		</div>
+
+		<div class="route-foot">
+			<p>Bundle pricing beats buying stages apart — the consultation is where the exact quote lands.</p>
+			<a class="btn" href="#">Book a consultation →</a>
+		</div>
+	</div>
+</section>
+
 <!-- what the page becomes -->
 <section class="section" style="border-top:var(--thin);background:var(--foreground);color:#fff">
 	<div class="container">
@@ -352,6 +467,30 @@ document.querySelectorAll(".xp__tab").forEach(t=>t.addEventListener("click",()=>
 	document.getElementById("pane-"+t.dataset.pane).setAttribute("data-open","");
 	document.getElementById("xp-foot-label").textContent=labels[t.dataset.pane];
 	document.getElementById("xp-foot-link").setAttribute("href",links[t.dataset.pane]);
+}));
+
+/* route — scope picker lights the stages and swaps the consequence strip */
+const SCOPES={
+	full:{on:["admissions","visa","departure"],rec:[],form:"The full intake",formd:"Every section — academics, finances, preferences, documents.",stages:["I · II · III — all unlocked"],docs:["Transcripts & certificates","Bank statements & sponsor","Offer letter once it lands"]},
+	a:{on:["admissions"],rec:["visa"],form:"Admissions entry",formd:"Academics, preferences, goals — no visa questions yet.",stages:["I · Admissions — unlocked","II · Visa — recommended later","III · Departure — not on this plan"],docs:["Transcripts & certificates","Passport & CV","Bank statements — later, for the visa"]},
+	av:{on:["admissions","visa"],rec:["departure"],form:"Admissions + visa entry",formd:"The full file minus arrival details.",stages:["I · II — unlocked","III · Departure — recommended later"],docs:["Transcripts & certificates","Bank statements & sponsor","Offer letter once it lands"]},
+	v:{on:["visa"],rec:["departure"],form:"Visa entry",formd:"Your offer, visa history, finances — no school questions.",stages:["I · Admissions — skipped","II · Visa — unlocked","III · Departure — recommended later"],docs:["Offer letter / CAS or I-20","Bank statements & sponsor","Transcripts — not asked"]},
+};
+document.querySelectorAll(".route-ctl__btn").forEach(b=>b.addEventListener("click",()=>{
+	document.querySelectorAll(".route-ctl__btn").forEach(x=>x.classList.remove("is-on"));
+	b.classList.add("is-on");
+	const s=SCOPES[b.dataset.scope];
+	document.querySelectorAll(".route__stage[data-stage]").forEach(st=>{
+		const id=st.dataset.stage;
+		st.classList.toggle("is-off",id!=="c"&&!s.on.includes(id)&&!s.rec.includes(id));
+		st.classList.toggle("is-rec",s.rec.includes(id));
+	});
+	const docL=document.getElementById("fx-docs-l");
+	if(docL){docL.innerHTML=s.docs.map(d=>`<li${d.includes("not asked")||d.includes("later")?' class="off"':""}>${d}</li>`).join("");}
+	const stL=document.getElementById("fx-stages");
+	if(stL){stL.innerHTML=s.stages.map(t=>`<li class="${t.includes("skipped")||t.includes("not on")?"off":"on"}">${t}</li>`).join("");}
+	document.getElementById("fx-form").textContent=s.form;
+	document.getElementById("fx-form-d").textContent=s.formd;
 }));
 </script>
 </body>

@@ -12,7 +12,6 @@ import {
 	coreServices,
 	CONSULTATION_FEE,
 	destinations,
-	processSteps,
 	programs,
 	scholarships,
 	stats,
@@ -21,7 +20,7 @@ import {
 	getUniversity,
 	videoTestimonials,
 } from "century-nit-core";
-import { SERVICE_STAGES, SERVICE_STAGE_LABELS } from "century-nit-shared";
+import { SERVICE_STAGES, SERVICE_STAGE_LABELS, type ServiceStage } from "century-nit-shared";
 import { STAGE_SHORT } from "../data/stageLabels";
 
 /** The purchasable stage strip — consultation is the entry, the rest compose. */
@@ -59,6 +58,82 @@ const EXPLORE_TABS = [
 type ExploreTab = (typeof EXPLORE_TABS)[number]["id"];
 /** The pathways the old spotlight row featured — they lead the destinations grid. */
 const FEATURED_DESTINATION_IDS = new Set(["uk", "germany", "canada"]);
+
+/** The journey scopes — picking one lights the route and swaps the consequence strip. */
+const PROCESS_SCOPES = [
+	{
+		id: "full",
+		label: "Full journey",
+		stages: ["admissions", "visa", "departure"] as ServiceStage[],
+		recommended: [] as ServiceStage[],
+		form: "The full intake",
+		formDetail: "Every section — academics, finances, preferences, documents.",
+		plan: [{ text: "I · II · III — all unlocked", off: false }],
+		docsTitle: "The full checklist",
+		docs: [
+			{ text: "Transcripts & certificates", off: false },
+			{ text: "Bank statements & sponsor", off: false },
+			{ text: "Offer letter once it lands", off: false },
+		],
+	},
+	{
+		id: "a",
+		label: "Admissions only",
+		stages: ["admissions"] as ServiceStage[],
+		recommended: ["visa"] as ServiceStage[],
+		form: "Admissions entry",
+		formDetail: "Academics, preferences, goals — no visa questions yet.",
+		plan: [
+			{ text: "I · Admissions — unlocked", off: false },
+			{ text: "II · Visa — recommended later", off: false },
+			{ text: "III · Departure — not on this plan", off: true },
+		],
+		docsTitle: "The checklist matches",
+		docs: [
+			{ text: "Transcripts & certificates", off: false },
+			{ text: "Passport & CV", off: false },
+			{ text: "Bank statements — later, for the visa", off: true },
+		],
+	},
+	{
+		id: "av",
+		label: "Admissions + Visa",
+		stages: ["admissions", "visa"] as ServiceStage[],
+		recommended: ["departure"] as ServiceStage[],
+		form: "Admissions + visa entry",
+		formDetail: "The full file minus arrival details.",
+		plan: [
+			{ text: "I · II — unlocked", off: false },
+			{ text: "III · Departure — recommended later", off: false },
+		],
+		docsTitle: "The checklist matches",
+		docs: [
+			{ text: "Transcripts & certificates", off: false },
+			{ text: "Bank statements & sponsor", off: false },
+			{ text: "Offer letter once it lands", off: false },
+		],
+	},
+	{
+		id: "v",
+		label: "Visa only",
+		stages: ["visa"] as ServiceStage[],
+		recommended: ["departure"] as ServiceStage[],
+		form: "Visa entry",
+		formDetail: "Your offer, visa history, finances — no school questions.",
+		plan: [
+			{ text: "I · Admissions — skipped", off: true },
+			{ text: "II · Visa — unlocked", off: false },
+			{ text: "III · Departure — recommended later", off: false },
+		],
+		docsTitle: "The checklist matches",
+		docs: [
+			{ text: "Offer letter / CAS or I-20", off: false },
+			{ text: "Bank statements & sponsor", off: false },
+			{ text: "Transcripts — not asked", off: true },
+		],
+	},
+] as const;
+type ProcessScopeId = (typeof PROCESS_SCOPES)[number]["id"];
 
 const baseHeroSlides: Omit<HeroSlide, "primary" | "secondary">[] = [
 	{
@@ -165,6 +240,8 @@ export function Home() {
 	const statsRef = useRef<HTMLElement>(null);
 	const [statsActive, setStatsActive] = useState(false);
 	const [explore, setExplore] = useState<ExploreTab>("d");
+	const [scope, setScope] = useState<ProcessScopeId>("full");
+	const scopeData = PROCESS_SCOPES.find((x) => x.id === scope)!;
 	// Featured pathways lead the destinations grid — the old spotlight row, in-grid.
 	const featuredDestinations = [...destinations].sort(
 		(a, b) => Number(FEATURED_DESTINATION_IDS.has(b.id)) - Number(FEATURED_DESTINATION_IDS.has(a.id)),
@@ -540,140 +617,96 @@ export function Home() {
 						<div>
 							<p className="eyebrow">Methodology</p>
 							<h2 className="section-title">How the process works</h2>
-							<p className="lead mt-2" style={{ maxWidth: "36rem" }}>
-								Four disciplined stages, from first consultation to departure. Every stage has
-								named deliverables and a dedicated advisor.
+							<p className="lead mt-2" style={{ maxWidth: "38rem" }}>
+								One consultation opens your file. From there the journey is three stages —
+								pick one, or take them all. Choose a scope and watch the route light up.
 							</p>
 						</div>
 					</div>
 
-					<ol className="method">
-						{processSteps.map((s, i) => (
-							<li key={s.step} className="method__stage">
-								<div className="method__marker" aria-hidden>
-									<span className="method__num">{s.step}</span>
-									{i < processSteps.length - 1 ? <span className="method__line" /> : null}
-								</div>
-								<div className="method__body">
-									<h3 className="method__title display">{s.title}</h3>
-									<p className="method__detail muted">{s.detail}</p>
-									<ul className="method__list">
-										{s.deliverables.map((d) => (
-											<li key={d}>{d}</li>
-										))}
-									</ul>
-								</div>
-							</li>
+					{/* Scope picker — the route lights up to match */}
+					<div className="route-ctl" role="group" aria-label="Pick a journey scope">
+						{PROCESS_SCOPES.map((sc) => (
+							<button
+								key={sc.id}
+								type="button"
+								className={`route-ctl__btn${scope === sc.id ? " is-on" : ""}`}
+								aria-pressed={scope === sc.id}
+								onClick={() => setScope(sc.id)}
+							>
+								{sc.label}
+							</button>
 						))}
-					</ol>
+					</div>
 
-					{/* What you buy — the stages compose, consultation is the door in */}
-					<p className="eyebrow" style={{ marginTop: "3.5rem", marginBottom: ".8rem" }}>
-						Your journey — pick the stages, or take them all
-					</p>
-					<div className="jrn">
-						<div className="jrn__stage jrn__stage--entry">
-							<p className="jrn__stno">Stage 0 — always</p>
-							<h3>Consultation</h3>
-							<p className="jrn__req">The door in</p>
-							<ul className="jrn__inc">
-								<li>Online or in person — Accra or Kumasi</li>
+					<ol className="route">
+						<li className="route__stage route__stage--entry">
+							<span className="route__rail" aria-hidden><i className="route__dot" /><i className="route__seg" /></span>
+							<p className="route__no">Stage 0</p>
+							<h3 className="route__name">Consultation</h3>
+							<p className="route__req">The door in — online or in person, Accra or Kumasi</p>
+							<ul className="route__list">
 								<li>You pick your scope here</li>
 								<li>Your file opens the same day</li>
 							</ul>
-							<p className="jrn__prc">
-								Fixed fee<b>US${CONSULTATION_FEE}</b>
-							</p>
-							<span className="jrn__arr" aria-hidden>→</span>
-						</div>
-						{SERVICE_STAGES.map((stage, i) => (
-							<div key={stage} className="jrn__stage">
-								<p className="jrn__stno">
-									Stage {STAGE_NUMERAL[i]}
-									{i > 0 ? ` — needs ${STAGE_NUMERAL[i - 1]}` : ""}
-								</p>
-								<h3>{SERVICE_STAGE_LABELS[stage]}</h3>
-								<p className="jrn__req">{STAGE_REQ[stage]}</p>
-								<ul className="jrn__inc">
-									{STAGE_INCLUDES[stage].map((x) => (
-										<li key={x}>{x}</li>
-									))}
-								</ul>
-								<p className="jrn__prc">
-									Stage fee<b>quoted at consultation</b>
-								</p>
-								{i < SERVICE_STAGES.length - 1 && (
-									<span className="jrn__arr" aria-hidden>→</span>
-								)}
-							</div>
-						))}
-					</div>
+							<p className="route__fee">US${CONSULTATION_FEE} · fixed</p>
+						</li>
+						{SERVICE_STAGES.map((stage, i) => {
+							const s = PROCESS_SCOPES.find((x) => x.id === scope)!;
+							const off = !s.stages.includes(stage) && !s.recommended.includes(stage);
+							const rec = s.recommended.includes(stage);
+							return (
+								<li key={stage} className={`route__stage${off ? " is-off" : ""}${rec ? " is-rec" : ""}`}>
+									<span className="route__rail" aria-hidden><i className="route__dot" /><i className="route__seg" /></span>
+									<p className="route__no">Stage {STAGE_NUMERAL[i]}</p>
+									<h3 className="route__name">{SERVICE_STAGE_LABELS[stage]}</h3>
+									<p className="route__req">{STAGE_REQ[stage]}</p>
+									<ul className="route__list">
+										{STAGE_INCLUDES[stage].map((x) => (
+											<li key={x}>{x}</li>
+										))}
+									</ul>
+									<p className="route__fee">Quoted at consultation</p>
+								</li>
+							);
+						})}
+					</ol>
 
-					{/* the three ways to buy it */}
-					<div className="scopes">
-						<Link className="scope" to="/start">
-							<p className="eyebrow">Just admissions</p>
-							<h4>Admissions only</h4>
-							<div className="scope__stages"><span>I · Admissions</span></div>
-							<p className="scope__meta">
-								Counselling to offer letter.<br />Visa help added later if you want it.
-							</p>
-							<p className="scope__save">Stage I fee</p>
-						</Link>
-						<Link className="scope" to="/start">
-							<p className="eyebrow">Most common</p>
-							<h4>Admissions + Visa</h4>
-							<div className="scope__stages"><span>I · Admissions</span><span>II · Visa</span></div>
-							<p className="scope__meta">
-								Offer in hand, visa filed.<br />Add Departure any time before you fly.
-							</p>
-							<p className="scope__save">Two stages · less than à la carte</p>
-						</Link>
-						<Link className="scope scope--hero" to="/start">
-							<span className="scope__tag">Best value</span>
-							<p className="eyebrow">The whole way</p>
-							<h4>Full journey</h4>
-							<div className="scope__stages"><span>I</span><span>II</span><span>III</span></div>
-							<p className="scope__meta">
-								Counselling to first-week check-in.<br />One plan, one portal, priced as a bundle.
-							</p>
-							<p className="scope__save">Bundle — the parts cost more apart</p>
-						</Link>
-					</div>
-
-					{/* what the choice sets up */}
-					<p className="eyebrow" style={{ marginTop: "1.8rem", marginBottom: ".8rem" }}>
-						Chosen at the consultation — example: <b>Visa only</b>
-					</p>
+					{/* the consequence strip swaps with the scope */}
 					<div className="fx">
 						<div className="fx__cell">
 							<p className="fx__k">Consultation form</p>
-							<h5>Asks visa questions, not school questions</h5>
-							<p>Destination, intake date, prior refusals, sponsor — the intake adapts to the scope you pick.</p>
+							<h5>{scopeData.form}</h5>
+							<p>{scopeData.formDetail}</p>
 						</div>
 						<div className="fx__cell">
 							<p className="fx__k">Stages</p>
-							<h5>Unlocked · skipped · recommended</h5>
+							<h5>Your plan</h5>
 							<ul>
-								<li className="off">I · Admissions — skipped</li>
-								<li className="on">II · Visa — unlocked</li>
-								<li>III · Departure — recommended later</li>
+								{scopeData.plan.map((t) => (
+									<li key={t.text} className={t.off ? "off" : "on"}>{t.text}</li>
+								))}
 							</ul>
 						</div>
 						<div className="fx__cell">
 							<p className="fx__k">Documents</p>
-							<h5>The checklist matches the scope</h5>
+							<h5>{scopeData.docsTitle}</h5>
 							<ul>
-								<li>Offer letter / CAS or I-20</li>
-								<li>Bank statements &amp; sponsor</li>
-								<li className="off">Transcripts — not asked</li>
+								{scopeData.docs.map((t) => (
+									<li key={t.text} className={t.off ? "off" : ""}>{t.text}</li>
+								))}
 							</ul>
 						</div>
 						<div className="fx__cell">
 							<p className="fx__k">Portal</p>
 							<h5>Your file opens scoped</h5>
-							<p>Stages, tasks and invoices are generated for what you bought — nothing extra, nothing missing.</p>
+							<p>Stages, tasks and invoices exist only for what you bought.</p>
 						</div>
+					</div>
+
+					<div className="route-foot">
+						<p>Bundle pricing beats buying stages apart — the consultation is where the exact quote lands.</p>
+						<Link className="btn" to="/start">Book a consultation →</Link>
 					</div>
 				</div>
 			</section>

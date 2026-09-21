@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import { TRIGGER_WORDS, lineDue } from "../../../lib/invoiceLines";
+import { InvoiceDetail } from "../InvoiceDetail";
+import { useInvoiceApi } from "../../../hooks/useInvoiceApi";
+import { invoiceBalance, invoiceAgeDays } from "century-nit-core/ops";
+import { getInvoice } from "../../../lib/api";
 import { Link } from "react-router-dom";
 
 import { useCases } from "../../../hooks/useCases";
@@ -47,7 +51,7 @@ export function MoneyTab({
 	fail: Fail;
 }) {
 	const { setApplicationStage, setPaymentPlan, refresh } = useCases();
-	const { hasCapability } = useOpsAuth();
+	const { hasCapability, opsUser } = useOpsAuth();
 	const { catalogue } = useFeeCatalogue();
 	const canApproveSchedules = hasCapability("approve_schedules");
 	const interestPct = catalogue?.postArrival?.interestPct ?? 0;
@@ -91,6 +95,12 @@ export function MoneyTab({
 	// Per-stage lines (a plan that stops short, or one that grew) carry their own
 	// trigger; the full-journey split is still read by position.
 	const stageLines = Boolean(agencyInv?.lines.some((l) => l.dueOn && l.dueOn !== "acceptance" && l.dueOn !== "visa_approved" && l.dueOn !== "arrival" && l.dueOn !== "scheduled"));
+	// The ledger's own rows for this case — the same adapter and actions the
+	// Invoices page uses, so a payment recorded here is the payment.
+	const invoiceApi = useInvoiceApi();
+	const caseLedger = invoiceApi.invoices.filter((i) => i.applicationId === app.id && i.status !== "void");
+	const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
+	const openRow = caseLedger.find((i) => i.id === openInvoiceId) ?? null;
 	const [schedOpen, setSchedOpen] = useState(false);
 	const [schedMonths, setSchedMonths] = useState("6");
 	const [schedFreq, setSchedFreq] = useState<PostArrivalFrequency>("monthly");
@@ -437,6 +447,72 @@ export function MoneyTab({
 					flash(`${voided.invoiceNumber} declined and voided.`);
 				}}
 			/>
+			{/* Money is acted on in the case: approve, record a payment, credit,
+			    void — the Invoices page's own document, mounted here. */}
+			<div className="card">
+				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.5rem", flexWrap: "wrap" }}>
+					<p className="eyebrow mb-2">Invoices on this case · {caseLedger.length}</p>
+					<Link to="/invoices" className="dash-link">Ledger →</Link>
+				</div>
+				{caseLedger.length === 0 ? (
+					<p className="muted text-sm">Nothing raised yet.</p>
+				) : (
+					<div className="cn-detail__rows">
+						{caseLedger.map((inv) => {
+							const bal = invoiceBalance(inv);
+							const on = openInvoiceId === inv.id;
+							return (
+								<button key={inv.id} type="button" className="cn-detail__row" style={{ width: "100%", textAlign: "left", background: on ? "var(--muted)" : undefined, cursor: "pointer" }} onClick={() => setOpenInvoiceId(on ? null : inv.id)} aria-expanded={on}>
+									<span>
+										{inv.invoiceNumber} · {inv.type}
+										<span className="cn-detail__row-note" style={{ display: "block" }}>{inv.lines.length === 1 ? inv.lines[0]?.label : `${inv.lines.length} lines`} · {inv.status}</span>
+									</span>
+									<span className="mono text-xs">{bal > 0 ? `${formatMoney(Math.round(bal * 100), "ghs")} due` : "settled"}</span>
+								</button>
+							);
+						})}
+					</div>
+				)}
+				{openRow && (
+					<div style={{ marginTop: "0.75rem" }}>
+						<InvoiceDetail
+							row={{ inv: openRow, derived: openRow.status, age: invoiceAgeDays(openRow), balance: invoiceBalance(openRow) }}
+							account={null}
+							by={opsUser?.name ?? "Staff"}
+							onApprove={async () => setApproving(await getInvoice(openRow.id))}
+							onPay={async (amt, method, ref) => {
+								try {
+									await invoiceApi.recordPayment(openRow.id, amt, method, ref);
+									onInvoicesChanged();
+									flash(`Payment recorded on ${openRow.invoiceNumber}.`);
+								} catch (e) {
+									fail(e, "Payment failed");
+								}
+							}}
+							onVoid={async (reason) => {
+								try {
+									await invoiceApi.voidInvoice(openRow.id, reason);
+									onInvoicesChanged();
+									flash(`${openRow.invoiceNumber} voided.`);
+								} catch (e) {
+									fail(e, "Void failed");
+								}
+							}}
+							onCredit={async (amt, reason) => {
+								try {
+									await invoiceApi.creditInvoice(openRow.id, amt, reason);
+									onInvoicesChanged();
+									flash(`Credit recorded on ${openRow.invoiceNumber}.`);
+								} catch (e) {
+									fail(e, "Credit failed");
+								}
+							}}
+							onResend={() => flash("Resent to the client.")}
+						/>
+					</div>
+				)}
+			</div>
+
 			<RaiseInvoiceSheet
 				app={app}
 				open={raising}

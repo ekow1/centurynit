@@ -743,6 +743,13 @@
                   "when": 1790400400000,
                   "tag": "0107_stage_continuation",
                   "breakpoints": true
+            },
+            {
+                  "idx": 108,
+                  "version": "7",
+                  "when": 1790400500000,
+                  "tag": "0108_case_meetings",
+                  "breakpoints": true
             }
       ]
 }

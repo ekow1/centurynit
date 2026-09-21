@@ -9,7 +9,6 @@ import { SERVICE_STAGE_LABELS, entryStage, scopeLabel, type ApplicantProfile } f
 
 import type { Flash, Fail } from "./types";
 import { branchName } from "century-nit-core/ops";
-import { EditCaseSheet } from "../EditCaseSheet";
 
 type Fact = { label: string; value: string };
 type FactGroup = { title: string; facts: Fact[] };
@@ -100,7 +99,6 @@ export function OverviewTab({ app, consultation, canWork, flash, fail }: { app: 
 	const [caseNotesDraft, setCaseNotesDraft] = useState("");
 	const [editingCaseNotes, setEditingCaseNotes] = useState(false);
 	const [savingCaseNotes, setSavingCaseNotes] = useState(false);
-	const [editOpen, setEditOpen] = useState(false);
 
 	// Who the client is. The applicant record is canonical; if the handler's
 	// role can't reach it, the consultation intake carries the same fields.
@@ -131,21 +129,21 @@ export function OverviewTab({ app, consultation, canWork, flash, fail }: { app: 
 							<div className="cn-docs__head mb-3">
 								<p className="eyebrow">Case facts</p>
 								{canWork && (
-									<button type="button" className="btn btn--sm btn--ghost" onClick={() => setEditOpen(true)}>
-										Edit case
-									</button>
+									// Track, stages, target schools and the payment plan price the plan — they
+									// are edited in one place, the plan sheet on Enrolment.
+									<span className="muted text-xs">plan facts are edited on Enrolment</span>
 								)}
 							</div>
 							<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
 								<div><p className="muted text-xs">Branch</p><p>{branchName(app.branch)}</p></div>
 								<div>
-									<p className="muted text-xs">Plan</p>
+									<p className="muted text-xs">Plan · details</p>
 									<p>
 										{app.scopeStages
-											? `${scopeLabel(app.scopeStages)} · entered at ${SERVICE_STAGE_LABELS[entryStage(app.scopeStages)]}`
+											? `Accepted · ${SERVICE_STAGE_LABELS[entryStage(app.scopeStages)]} entry · ${app.fundingTrack && app.fundingTrack !== "undecided" ? `${app.fundingTrack} track` : "no track"}${app.targetSchoolCount ? ` · ${app.targetSchoolCount} schools` : ""}`
 											: app.plannedStages
-												? `Recommended: ${scopeLabel(app.plannedStages)} · not accepted yet`
-												: "Not chosen"}
+												? `Recommended ${scopeLabel(app.plannedStages)} — awaiting the client`
+												: "No plan yet"}
 									</p>
 								</div>
 								<div><p className="muted text-xs">Funding Track</p><p>{app.fundingTrack === "undecided" ? "None — no Admissions on the plan" : app.fundingTrack || "Not specified"}</p></div>
@@ -165,7 +163,7 @@ export function OverviewTab({ app, consultation, canWork, flash, fail }: { app: 
 									</button>
 								</p>
 							) : null}
-							<EditCaseSheet app={app} open={editOpen} onClose={() => setEditOpen(false)} onDone={flash} />
+
 						</div>
 						{/* Who the client actually is — bio, passport, academic and sponsor facts. */}
 						<div className="card">

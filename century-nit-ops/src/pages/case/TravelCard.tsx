@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { applicationsApi, ApiError } from "century-nit-core/api";
 import { InvoiceCard, Sheet, formatMoney } from "century-nit-core/ui";
 import type { TravelAssistanceRequest, TravelFlight } from "century-nit-shared";
@@ -238,7 +237,10 @@ export function TravelCard({
 	canUploadArtifacts = false,
 	ownerUserId = null,
 	onChanged,
+	onOpenBilling,
 }: {
+	/** Switch the case to its Billing tab — money is acted on in the case. */
+	onOpenBilling?: () => void;
 	ta: TravelAssistanceRequest;
 	invoice?: ApiInvoice | null;
 	/** May raise the invoice and record the booking (the handler or a manager). */
@@ -298,9 +300,9 @@ export function TravelCard({
 									Approve & issue
 								</button>
 							) : (
-								<Link to={`/invoices?open=${invoice.id}`} className="btn btn--sm btn--ghost">
-									Open in Billing →
-								</Link>
+								<button type="button" className="btn btn--sm btn--ghost" onClick={onOpenBilling}>
+									Billing →
+								</button>
 							)
 						) : undefined
 					}

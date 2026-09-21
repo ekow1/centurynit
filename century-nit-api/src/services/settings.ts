@@ -56,6 +56,7 @@ export type SettingKey =
 	| "STRIPE_SECRET_KEY"
 	| "PLATFORM_EXCHANGE_RATE"
 	| "SERVICE_FEE_DEPOSIT_PERCENT"
+	| "SERVICE_FEE_REQUIRES_APPROVAL"
 	| "SERVICE_FEE_ADMISSIONS_START_PERCENT"
 	| "PRE_DEPARTURE_TEMPLATE"
 	| "SERVICE_FEE_PRE_DEPARTURE_PERCENT"
@@ -275,6 +276,12 @@ export const SETTING_DEFS: Record<
 		group: "Fee Schedule",
 		secret: false,
 		description: "On a plan that stops short of the full journey, the share of the Admissions stage due on acceptance. The rest is due when the first offer letter is recorded. Default: 50.",
+	},
+	SERVICE_FEE_REQUIRES_APPROVAL: {
+		label: "Service fee · needs approval before the client pays",
+		group: "Fee Schedule",
+		secret: false,
+		description: "\"true\" raises the service-fee invoice as a proforma the case's handler approves from Enrolment; the client sees and pays it once issued. Off (default): issued the moment the plan is accepted.",
 	},
 	SERVICE_FEE_PRE_DEPARTURE_PERCENT: {
 		label: "Service fee · pre-departure %",

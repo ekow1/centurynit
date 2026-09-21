@@ -2,7 +2,7 @@ import { normaliseScope, scopeLabel, SERVICE_STAGES, SERVICE_STAGE_LABELS, type 
 
 /**
  * The journey drawn the same way the portal and the homepage draw it —
- * Stage 0 (consultation, always on for a live case) plus the three service
+ * The consultation (always on for a live case) plus the three service
  * stages, inked when they're on the client's plan, hollow when the scope
  * skipped them, amber-ringed when ops or the client has flagged one as
  * recommended next.
@@ -57,9 +57,11 @@ export function ScopeRoute({
 	const scope = normaliseScope(scopeStages);
 	const rec = recommended ?? [];
 	const legs: { no: string; name: string; state: "on" | "off" | "rec" | "entry" }[] = [
-		{ no: "Stage 0", name: "Consultation", state: consulted ? "entry" : "off" },
+		// Named, never numbered: the chapters carry the numerals (I–VI); a service
+		// stage is a thing bought, not a step counted.
+		{ no: "Start", name: "Consultation", state: consulted ? "entry" : "off" },
 		...SERVICE_STAGES.map((s, i) => ({
-			no: `Stage ${["I", "II", "III"][i]}`,
+			no: ["First", "Then", "Last"][i],
 			name: SERVICE_STAGE_LABELS[s],
 			state: dotState(s, scope, rec),
 		})),

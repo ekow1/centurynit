@@ -79,6 +79,8 @@ import { setReleaseOverride } from "../services/release.js";
 
 import { getApplicationActivity } from "../services/applicationActivity.js";
 import { decideContinuation } from "../services/continuations.js";
+import { createCaseMeeting, listCaseMeetings } from "../services/booking.js";
+import { toBookingResponse } from "./bookings.js";
 
 
 
@@ -123,6 +125,8 @@ import {
 	setVisaStageSchema,
 	decideContinuationSchema,
 	continuationRequestSchema,
+	bookingSchema,
+	createCaseMeetingSchema,
 	updateVisaDetailsSchema,
 	updateDepartureDetailsSchema,
 	releaseOverrideSchema,
@@ -763,6 +767,11 @@ applicationsRouter.openapi(
 			.where(and(eq(schema.invoices.applicationId, id), eq(schema.invoices.type, "visa"), not(eq(schema.invoices.status, "void"))))
 			.limit(1);
 		if (live) throw new HttpError(409, "VISA_INVOICE_EXISTS", `A visa invoice is already on this case (${live.invoiceNumber}).`);
+		// The same gate as the application invoice, on this stage's own set.
+		const outstandingVisa = outstandingForStage(await documentChecklistForApplication(id), "visa");
+		if (outstandingVisa.length > 0) {
+			throw new HttpError(409, "DOCUMENTS_OUTSTANDING", `Verify the client's visa documents before invoicing visa costs. Outstanding: ${outstandingVisa.join(", ")}.`);
+		}
 		const [applicant] = await db.select().from(schema.applicants).where(eq(schema.applicants.id, row.applicantId)).limit(1);
 		const created = await createProforma({
 			data: {
@@ -881,6 +890,61 @@ applicationsRouter.openapi(
 			actor: actorFrom(c.get("staff")!),
 		});
 		return c.json(request);
+	},
+);
+
+/**
+ * Case check-ins — a handler schedules a meeting on the live case (online
+ * with an auto Meet link, or in person). Free to the client; the booking
+ * machinery — slots, conflict guards, emails, reminders — is reused, only
+ * the consultation intake and invoice are skipped.
+ */
+applicationsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/{id}/meetings",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.object({ meetings: z.array(bookingSchema) }) } },
+				description: "The case's check-ins",
+			},
+		},
+	}),
+	async (c) => {
+		await assertApplicationAccess(c, c.req.valid("param").id);
+		const rows = await listCaseMeetings(c.req.valid("param").id);
+		return c.json({ meetings: rows.map((r) => toBookingResponse(r)) });
+	},
+);
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/meetings",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: idParams,
+			body: { content: { "application/json": { schema: createCaseMeetingSchema } }, required: true },
+		},
+		responses: {
+			201: {
+				content: { "application/json": { schema: bookingSchema } },
+				description: "Check-in booked",
+			},
+		},
+	}),
+	async (c) => {
+		await assertApplicationAccess(c, c.req.valid("param").id);
+		const meeting = await createCaseMeeting({
+			applicationId: c.req.valid("param").id,
+			data: c.req.valid("json"),
+			actor: actorFrom(c.get("staff")!),
+		});
+		return c.json(toBookingResponse(meeting), 201);
 	},
 );
 

@@ -128,8 +128,11 @@ export function PackageSheet({
 		});
 	}
 
+	// Recording or growing a plan raises or grows an invoice on the client's
+	// behalf: the reason is required, as it is for recording their consent.
+	const reasonMissing = reason.trim().length === 0;
 	async function submit() {
-		if ((needsTrack && !packageCode) || !degreeLevel) return;
+		if ((needsTrack && !packageCode) || !degreeLevel || reasonMissing) return;
 		setBusy(true);
 		setError(null);
 		try {
@@ -301,12 +304,12 @@ export function PackageSheet({
 						</div>
 					)}
 					<div>
-						<p className="muted text-xs mb-1">Reason · goes on the case timeline</p>
-						<input className="input" value={reason} placeholder="e.g. signed in office, chose over the phone" onChange={(e) => setReason(e.target.value)} maxLength={500} />
+						<p className="muted text-xs mb-1">Reason · required · goes on the case and the client is told</p>
+						<input className="input" value={reason} placeholder="e.g. signed in office, chose over the phone" onChange={(e) => setReason(e.target.value)} maxLength={500} required />
 					</div>
 					{error && <p className="cn-assign__error">{error}</p>}
 					<div className="cn-assign__row">
-						<button type="button" className="btn btn--sm btn--primary" disabled={busy || (needsTrack && !packageCode) || !degreeLevel || (locked && removed.length > 0)} onClick={() => void submit()}>
+						<button type="button" className="btn btn--sm btn--primary" disabled={busy || (needsTrack && !packageCode) || !degreeLevel || reasonMissing || (locked && removed.length > 0)} onClick={() => void submit()}>
 							{busy ? "Saving…" : extending ? "Extend plan" : "Record plan"}
 						</button>
 						<button type="button" className="btn btn--sm btn--ghost" onClick={onClose} disabled={busy}>

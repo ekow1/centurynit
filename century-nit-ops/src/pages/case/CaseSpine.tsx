@@ -14,7 +14,21 @@ import type { TabId } from "./tabs/types";
  * is in the Tab order.
  */
 
-type ChapterTab = { id: TabId; numeral: string; label: string; locked: boolean; hint?: string; /** Not on the client's plan — struck, not locked; opens Enrolment where it can be added. */ off?: boolean };
+type ChapterTab = {
+	id: TabId;
+	numeral: string;
+	label: string;
+	locked: boolean;
+	hint?: string;
+	/** Not on the client's plan — struck, not locked; opens Enrolment where it can be added. */
+	off?: boolean;
+	/** Recommended but not yet accepted — the plan as it stands before the client says yes. */
+	rec?: boolean;
+	/** The stage the plan stops short of — the one to offer. */
+	offer?: boolean;
+	/** One line under the label: what the plan says about this chapter. */
+	note?: string | null;
+};
 type ViewTab = { id: TabId; label: string; note?: string | null };
 
 export function CaseSpine({
@@ -101,7 +115,7 @@ export function CaseSpine({
 							aria-disabled={c.locked && !c.off}
 							tabIndex={isOn ? 0 : -1}
 							ref={setRef(c.id)}
-							title={c.off ? "Not on the client's plan — open Enrolment to add it" : c.locked ? c.hint : isNow ? "The chapter the case is in" : undefined}
+							title={c.off ? (c.offer ? "Not on the client's plan — the stage to offer next" : "Not on the client's plan — open Enrolment to add it") : c.rec ? "Recommended — not accepted yet" : c.locked ? c.hint : isNow ? "The chapter the case is in" : undefined}
 							className={[
 								"cn-chip",
 								passed ? "cn-chip--passed" : "",
@@ -109,6 +123,8 @@ export function CaseSpine({
 								isOn ? "cn-chip--on" : "",
 								c.locked && !c.off ? "cn-chip--locked" : "",
 								c.off ? "cn-chip--off" : "",
+								c.offer ? "cn-chip--offer" : "",
+								c.rec ? "cn-chip--rec" : "",
 							]
 								.filter(Boolean)
 								.join(" ")}
@@ -118,6 +134,7 @@ export function CaseSpine({
 								{passed ? "✓ " : isNow ? "■ " : c.off ? "— " : ""}
 								{c.off ? c.label : `${c.numeral} ${c.label}`}
 							</b>
+							{c.note ? <span className="cn-chip__n">{c.note}</span> : null}
 						</button>
 					</span>
 				);

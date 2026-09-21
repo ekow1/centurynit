@@ -221,6 +221,7 @@ export function DepartureTab({
 							void refresh();
 							onInvoicesChanged();
 						}}
+						onOpenBilling={() => setTab("payments")}
 					/>
 				) : (
 					<p className="muted text-sm">

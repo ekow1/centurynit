@@ -14,7 +14,7 @@ import {
 	type AuthVariables,
 } from "../middleware/auth.js";
 import { HttpError, validationHook } from "../middleware/error.js";
-import {
+import { proposeStage,
 	getApplicantByUserId,
 	latestApplicationForApplicant,
 	acceptProceedForApplication,
@@ -248,6 +248,31 @@ opsProceedRouter.openapi(
 			reason: body.reason,
 			actor: { opsUserId: staff.opsUserId, name: staff.name },
 		});
+		return c.json({ ok: true });
+	},
+);
+
+/* ── POST /api/v1/cases/:id/propose-stage — suggest the next stage to the client ── */
+
+opsProceedRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/propose-stage",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: applicationParams,
+			body: { content: { "application/json": { schema: z.object({ stage: z.enum(["admissions", "visa", "departure"]), note: z.string().max(500).optional() }) } }, required: true },
+		},
+		responses: {
+			200: { description: "The client is told; nothing binds until they ask for it" },
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		await proposeStage({ id, stage: body.stage, note: body.note ?? null, actor: { opsUserId: staff.opsUserId, name: staff.name } });
 		return c.json({ ok: true });
 	},
 );

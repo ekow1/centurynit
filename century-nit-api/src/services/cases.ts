@@ -1657,7 +1657,47 @@ export async function markApplicationFeesNotDue(applicationId: string, byName: s
 const NOTHING_DUE_TEXT = "No university application fees are due for the chosen schools — nothing to pay before submissions start.";
 const VISA_NOTHING_DUE_TEXT = "No visa costs are recorded for this destination — nothing to pay before visa processing starts.";
 
-/** Auto-raise the visa costs when entering visa_processing with no visa invoice — or record that none are due. */
+/**
+ * The visa costs, raised as a proforma when the visa chapter opens — the
+ * same rule as every stage: the stage's event raises it, the handler
+ * approves it. Gated on the visa stage's own documents plus the entry
+ * evidence; when they are outstanding the case says so instead of raising
+ * quietly, and the officer raises by hand once they are verified. One live
+ * visa invoice per case; nothing due is recorded once.
+ */
+export async function raiseVisaInvoiceOnChapterOpen(applicationId: string, actor: { opsUserId?: string | null; name: string; email: string }): Promise<void> {
+	try {
+		const app = await getApplication(applicationId);
+		if (!app) return;
+		const applicant = await getApplicant(app.applicantId);
+		if (!applicant) return;
+		const [live] = await db
+			.select({ id: invoices.id })
+			.from(invoices)
+			.where(and(eq(invoices.applicationId, app.id), eq(invoices.type, "visa"), ne(invoices.status, "void")))
+			.limit(1);
+		if (live) return;
+		if (await nothingDueRecorded(app.id, VISA_NOTHING_DUE_TEXT)) return;
+		const { outstandingForStage } = await import("./documentChecklist.js");
+		const outstanding = outstandingForStage(await documentChecklistForApplication(app.id), "visa");
+		if (outstanding.length > 0) {
+			await db.insert(caseComments).values({
+				targetType: "application",
+				targetId: app.id,
+				kind: "status",
+				text: `Visa costs not raised yet — verify first: ${outstanding.join(", ")}. Raise from the Visa tab once they are verified.`,
+				authorName: "Century NIT",
+				authorOpsUserId: null,
+			});
+			return;
+		}
+		await raiseVisaInvoiceForApplication(app, applicant, actor);
+	} catch (err) {
+		console.warn("[cases] visa costs on chapter open failed:", err);
+	}
+}
+
+/** Raise the visa costs as a proforma — or record that none are due. */
 async function raiseVisaInvoiceForApplication(
 	app: ApplicationRow,
 	applicant: ApplicantRow,
@@ -2045,10 +2085,12 @@ async function finishAdvance(
 		.where(eq(applications.id, id))
 		.returning();
 	if (stage === "travel_assistance") await seedPreDepartureTasks(id);
-	// The visa file opening makes the Visa stage's milestone due.
+	// The visa file opening makes the Visa stage's milestone due, and raises
+	// the visa costs for approval — the stage's event, not a hand.
 	if (stage === "visa_processing" && row.stage !== "visa_processing") {
 		const { fireDueTrigger } = await import("./serviceFee.js");
 		await fireDueTrigger(id, "visa_open");
+		await raiseVisaInvoiceOnChapterOpen(id, { opsUserId: actor.opsUserId ?? null, name: actor.name, email: actor.email ?? "" });
 	}
 	await db.insert(caseComments).values({
 		targetType: "application",
@@ -2548,7 +2590,8 @@ export async function applicantUserIdOfApplication(id: string): Promise<string |
  */
 
 import { serviceFeeForPackage } from "century-nit-core/content";
-import { nextInvoiceNumber, nextUncoveredDueAt } from "./invoice.js";
+import { nextInvoiceNumber, nextProformaNumber, nextUncoveredDueAt } from "./invoice.js";
+import { getSetting } from "./settings.js";
 import { milestoneSplit, stagePricesFor } from "./fees.js";
 
 type PackageOutcome = { application: ApplicationRow; proformaInvoice: typeof invoices.$inferSelect | null };
@@ -2594,6 +2637,54 @@ async function notifyPlanChangedByOps(app: ApplicationRow, change: "recorded" | 
 	} catch (err) {
 		console.warn("[cases] plan-changed notification failed:", err);
 	}
+}
+
+/**
+ * The office suggests the next stage to the client. Nothing binds: the
+ * client reads it on their portal, asks for the stage from their plan page,
+ * and the ordinary review approves it. Recorded on the case so the
+ * suggestion, and who made it, is on the timeline.
+ */
+export async function proposeStage(input: { id: string; stage: ServiceStage; note?: string | null; actor: { name: string; opsUserId?: string | null } }): Promise<void> {
+	const row = await getApplication(input.id);
+	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+	const scope = normaliseScope(row.scopeStages ?? null);
+	if (scope.includes(input.stage)) throw new HttpError(409, "STAGE_ON_PLAN", `${SERVICE_STAGE_LABELS[input.stage]} is already on the plan.`);
+	const applicant = await getApplicant(row.applicantId);
+	await db.insert(caseComments).values({
+		targetType: "application",
+		targetId: row.id,
+		kind: "status",
+		visibility: "applicant",
+		text: `${input.actor.name} suggested adding the ${SERVICE_STAGE_LABELS[input.stage]} stage${input.note ? ` — "${input.note}"` : ""}`,
+		authorName: input.actor.name,
+		authorOpsUserId: input.actor.opsUserId ?? null,
+	});
+	if (applicant?.userId) {
+		await notify({
+			recipientUserId: applicant.userId,
+			type: "plan.proposed",
+			title: `${input.actor.name} suggests adding ${SERVICE_STAGE_LABELS[input.stage]}`,
+			body: `${input.note ? `"${input.note}" — ` : ""}Open your plan to see what it covers and ask to add it. Nothing changes until you do.`,
+			link: "/portal/package",
+			entityType: "case",
+			entityId: row.id,
+		});
+	}
+	if (applicant?.email) {
+		await queueEmails([
+			mail.stageProposedForClient({
+				entityId: row.id,
+				clientName: applicant.name ?? "there",
+				clientEmail: applicant.email,
+				appNumber: row.appNumber,
+				stageLabel: SERVICE_STAGE_LABELS[input.stage],
+				byName: input.actor.name,
+				note: input.note ?? null,
+			}),
+		]).catch(() => {});
+	}
+	await broadcastCaseUpdate(row, { opsUserId: input.actor.opsUserId ?? "", name: input.actor.name, email: "" });
 }
 
 /** Which stage an agency line pays for — from its label; null on a full-journey split line. */
@@ -2876,7 +2967,11 @@ export async function setApplicationPackage(input: {
 		let proformaInvoice: typeof invoices.$inferSelect | null = null;
 
 		if (subtotalCents > 0) {
-			const invoiceNumber = await nextInvoiceNumber(txDb);
+			// Every other invoice on a case is a proforma the handler approves.
+			// The service fee is issued the moment the plan is accepted unless
+			// finance switches approval on — then it waits like the rest.
+			const needsApproval = (await getSetting("SERVICE_FEE_REQUIRES_APPROVAL"))?.trim().toLowerCase() === "true";
+			const invoiceNumber = needsApproval ? await nextProformaNumber(txDb) : await nextInvoiceNumber(txDb);
 			const [created] = await tx
 				.insert(invoices)
 				.values({
@@ -2887,9 +2982,11 @@ export async function setApplicationPackage(input: {
 					applicantEmail: applicant.email ?? null,
 					type: "agency",
 					subtotalCents,
-					status: "issued",
+					status: needsApproval ? "proforma" : "issued",
+					raisedByName: needsApproval ? actorName : null,
 					issuedBy: null,
-					issuedByName: "Century NIT",
+					// Not-null on the row; a proforma's issuer is written when it is approved.
+					issuedByName: needsApproval ? actorName : "Century NIT",
 					note: `Service package: ${planName} · ${scopeLabel(scope)}`,
 					// The acceptance milestone is due now; the rest wait for their events.
 					dueAt: lines.some((l) => l.dueOn === "acceptance") ? new Date() : null,
@@ -2902,9 +2999,9 @@ export async function setApplicationPackage(input: {
 
 			await tx.insert(invoiceEvents).values({
 				invoiceId: created.id,
-				action: "issued",
+				action: needsApproval ? "raised" : "issued",
 				actor: "system",
-				detail: `Issued from ${pkg ? `package ${pkg.code}` : "the fee catalogue"} · ${scopeLabel(scope)}`,
+				detail: `${needsApproval ? "Raised for approval" : "Issued"} from ${pkg ? `package ${pkg.code}` : "the fee catalogue"} · ${scopeLabel(scope)}`,
 			});
 
 			proformaInvoice = created;

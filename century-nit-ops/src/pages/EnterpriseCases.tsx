@@ -57,12 +57,12 @@ function quietDays(app: MockApplication, now: number): number {
  * two halves of Stage I — documents, then offers.
  */
 const CHAPTER_LABEL: Record<ChapterId, string> = {
-	consult: "0 · Consultation",
-	enrol: "I · Documents",
-	apply: "I · Offers",
-	visa: "II · Visa",
-	depart: "III · Departure",
-	done: "Done",
+	consult: "I · Consultation",
+	enrol: "II · Enrolment",
+	apply: "III · Applications",
+	visa: "IV · Visa",
+	depart: "V · Departure",
+	done: "VI · Complete",
 };
 const CHAPTER_FILTERS: { id: "all" | ChapterId; label: string }[] = [
 	{ id: "all", label: "All" },

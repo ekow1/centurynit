@@ -23,7 +23,6 @@ import { SERVICE_STAGES, SERVICE_STAGE_LABELS, type ServiceStage } from "century
 import { STAGE_SHORT } from "../data/stageLabels";
 
 /** The purchasable stage strip — consultation is the entry, the rest compose. */
-const STAGE_NUMERAL = ["I", "II", "III"];
 const STAGE_REQ: Record<string, string> = {
 	admissions: "Counsel · docs · offers",
 	visa: "File · biometrics · interview",
@@ -40,11 +39,11 @@ const STAGE_INCLUDES: Record<string, string[]> = {
 };
 /** Which journey stage each à-la-carte service belongs to. */
 const SERVICE_STAGE_TAG: Record<string, string> = {
-	counseling: "Stage I · Admissions",
-	"admission-docs": "Stage I · Admissions",
-	"visa-docs": "Stage II · Visa",
-	"study-visa": "Stage II · Visa",
-	travel: "Stage III · Departure",
+	counseling: "Admissions",
+	"admission-docs": "Admissions",
+	"visa-docs": "Visa",
+	"study-visa": "Visa",
+	travel: "Departure",
 };
 
 /** The Explore tabs — destinations, partners, programs and funding share one section. */
@@ -641,7 +640,7 @@ export function Home() {
 					<ol className="route">
 						<li className="route__stage route__stage--entry">
 							<span className="route__rail" aria-hidden><i className="route__dot" /><i className="route__seg" /></span>
-							<p className="route__no">Stage 0</p>
+							<p className="route__no">Start</p>
 							<h3 className="route__name">Consultation</h3>
 							<p className="route__req">The door in — online or in person, Accra or Kumasi</p>
 							<ul className="route__list">
@@ -656,7 +655,7 @@ export function Home() {
 							return (
 								<li key={stage} className={`route__stage${off ? " is-off" : ""}${rec ? " is-rec" : ""}`}>
 									<span className="route__rail" aria-hidden><i className="route__dot" /><i className="route__seg" /></span>
-									<p className="route__no">Stage {STAGE_NUMERAL[i]}</p>
+									<p className="route__no">{["First", "Then", "Last"][i]}</p>
 									<h3 className="route__name">{SERVICE_STAGE_LABELS[stage]}</h3>
 									<p className="route__req">{STAGE_REQ[stage]}</p>
 									<ul className="route__list">

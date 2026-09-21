@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 
 import { InvoiceCard, StatusPill } from "century-nit-core/ui";
 import type { MockApplication } from "century-nit-core/ops";
 import type { ApiInvoice } from "../../../lib/api";
-import type { Flash, Fail } from "./types";
+import type { Flash, Fail, TabId } from "./types";
 import { PackageSheet } from "../PackageSheet";
 
 import { useCases } from "../../../hooks/useCases";
@@ -13,11 +12,10 @@ import { DECISION_LABELS, PAYMENT_PLAN_LABELS, SERVICE_STAGES, SERVICE_STAGE_LAB
 
 
 /** Enrolment — the client's four steps: confirmed, package & plan, deposit, consultant. */
-export function EnrolmentTab({ app, caseInvoices, canIssueInvoices, canWork, flash, fail }: { app: MockApplication; caseInvoices: ApiInvoice[]; canIssueInvoices: boolean; canWork: boolean; flash: Flash; fail: Fail }) {
-	const { updateCaseFacts } = useCases();
+export function EnrolmentTab({ app, caseInvoices, canIssueInvoices, canWork, flash, fail, setTab }: { app: MockApplication; caseInvoices: ApiInvoice[]; canIssueInvoices: boolean; canWork: boolean; flash: Flash; fail: Fail; setTab: (id: TabId) => void }) {
+	const { proposeStage } = useCases();
 	const [packageOpen, setPackageOpen] = useState(false);
 	const [addStages, setAddStages] = useState<ServiceStage[] | undefined>(undefined);
-	const [savingPlan, setSavingPlan] = useState(false);
 	// The plan's scope. A case that predates scopes bought the full journey.
 	// The accepted plan; before acceptance the recommendation is shown as such, never as the plan.
 	const accepted = app.scopeStages ? normaliseScope(app.scopeStages) : null;
@@ -85,30 +83,10 @@ export function EnrolmentTab({ app, caseInvoices, canIssueInvoices, canWork, fla
 							</button>
 						)}
 						{app.fundingTrack && !app.paymentPlanId && (
-							<>
-								<span className="muted text-xs">Payment plan</span>
-								<select
-									className="cn-filter__select"
-									style={{ width: "auto", flex: "none" }}
-									value=""
-									disabled={savingPlan}
-									onChange={(e) => {
-										if (!e.target.value) return;
-										setSavingPlan(true);
-										void updateCaseFacts(app.appId, { paymentPlanId: e.target.value })
-											.then(() => flash("Payment plan recorded."))
-											.catch((err) => fail(err, "Could not set the payment plan"))
-											.finally(() => setSavingPlan(false));
-									}}
-								>
-									<option value="">Choose…</option>
-									{Object.entries(PAYMENT_PLAN_LABELS).map(([id, label]) => (
-										<option key={id} value={id}>
-											{label}
-										</option>
-									))}
-								</select>
-							</>
+							// The payment plan prices the plan — it is set in the plan sheet, nowhere else.
+							<button type="button" className="btn btn--sm btn--ghost" onClick={() => openSheet()}>
+								Choose the payment plan…
+							</button>
 						)}
 					</div>
 				)}
@@ -120,12 +98,12 @@ export function EnrolmentTab({ app, caseInvoices, canIssueInvoices, canWork, fla
 								This case is scoped to {scopeLabel(scope)}. The visa stage cannot open until it is added; the client can add it from the portal, or you can record it here.
 							</p>
 						</div>
-						<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-							<button type="button" className="btn btn--sm btn--ghost" onClick={() => openSheet(["visa"])}>
-								Add Visa
+						<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", alignItems: "center" }}>
+							<button type="button" className="btn btn--sm btn--primary" onClick={() => void proposeStage(app.appId, "visa").then(() => flash("Visa proposed — the client has been told.")).catch((e) => fail(e, "Could not send the proposal"))}>
+								Propose Visa →
 							</button>
-							<button type="button" className="btn btn--sm btn--primary" onClick={() => openSheet(["visa", "departure"])}>
-								Complete the journey
+							<button type="button" className="link-arrow" style={{ fontSize: "var(--text-xs)" }} onClick={() => openSheet(["visa"])}>
+								record on their behalf…
 							</button>
 						</div>
 					</div>
@@ -146,9 +124,9 @@ export function EnrolmentTab({ app, caseInvoices, canIssueInvoices, canWork, fla
 							invoice={caseInvoices.find((i) => i.type === "agency")!}
 							actions={
 								canIssueInvoices ? (
-									<Link to={`/invoices?open=${caseInvoices.find((i) => i.type === "agency")!.id}`} className="btn btn--sm btn--ghost">
-										Open in Invoices →
-									</Link>
+									<button type="button" className="btn btn--sm btn--ghost" onClick={() => setTab("payments")}>
+										Billing →
+									</button>
 								) : undefined
 							}
 						/>

@@ -5032,6 +5032,9 @@ a.dash-kpi--on:hover {
 .cn-chip--now { border-color: var(--foreground); color: var(--foreground); }
 .cn-chip--off { border-style: dotted; color: var(--muted-foreground); }
 .cn-chip--off b { text-decoration: line-through; font-weight: 500; }
+.cn-chip--offer { border-color: var(--warn, #92400e); color: var(--warn, #92400e); }
+.cn-chip--offer b { text-decoration: none; }
+.cn-chip--rec { border-style: dashed; border-color: var(--foreground); }
 .cn-chip--now::before { content: ""; width: 7px; height: 7px; background: currentColor; flex-shrink: 0; }
 .cn-chip--on { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
 .cn-chip--on .cn-chip__n { color: rgba(255, 255, 255, 0.7); }

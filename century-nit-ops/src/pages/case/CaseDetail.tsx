@@ -19,7 +19,9 @@ import { VisaTab } from "./tabs/VisaTab";
 import { DepartureTab } from "./tabs/DepartureTab";
 import { MoneyTab } from "./tabs/MoneyTab";
 import { caseHandlerName, tasksForApplication, taskActionLabel, type PendingTask } from "../../lib/pendingTasks";
-import { ScopeRoute } from "../../components/ScopeRoute";
+import { CheckInSheet } from "./CheckInSheet";
+import { applicationsApi } from "century-nit-core/api";
+import type { Booking } from "century-nit-shared";
 import { listInvoices, getApplicationActivity, type ApiInvoice } from "../../lib/api";
 import { CaseHeader, Sheet, type NextAction } from "century-nit-core/ui";
 import { CaseTodo } from "./CaseTodo";
@@ -48,6 +50,7 @@ import {
 	SERVICE_STAGE_LABELS,
 	STAGE_INTAKE,
 	type ServiceStage,
+	PORTAL_STAGE_LABELS,
 } from "century-nit-shared";
 
 
@@ -125,6 +128,7 @@ function currentTabFor(app: MockApplication): TabId {
 export function CaseDetail({ app, initialTab }: { app: MockApplication; initialTab?: TabId }) {
 	const { opsRole, opsUser, canAssignWork, canIssueInvoices } = useOpsAuth();
 	const {
+		proposeStage,
 		handoffs,
 		travelRequests,
 		consultations,
@@ -207,7 +211,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 
 	// Consent override and decline both need a reason; a sheet asks for it
 	// (a browser prompt cannot be styled, validated or read by a screen reader).
-	const [reasonFor, setReasonFor] = useState<"record" | "decline" | "complete" | "continuation-decline" | null>(null);
+	const [reasonFor, setReasonFor] = useState<"record" | "decline" | "complete" | "continuation-decline" | "propose" | null>(null);
 	const [reasonDraft, setReasonDraft] = useState("");
 	const [reasonBusy, setReasonBusy] = useState(false);
 	function handleRecordProceed() {
@@ -225,6 +229,9 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			} else if (reasonFor === "decline") {
 				await declineProceed(app.appId, reason);
 				flash("Applicant declined to proceed — the case is paused.");
+			} else if (reasonFor === "propose" && step.kind !== "done" && step.offer) {
+				await proposeStage(app.appId, step.offer, reason || undefined);
+				flash(`${SERVICE_STAGE_LABELS[step.offer]} proposed — the client has been told.`);
 			} else if (reasonFor === "complete") {
 				await setApplicationStage(app.appId, "completed", reason);
 				flash("Case completed at the reached stage.");
@@ -240,6 +247,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		}
 	}
 	async function handleReinviteProceed() {
+		if (!window.confirm(`Email ${app.applicantName} an invitation to reopen their enrolment decision?`)) return;
 		try {
 			await reinviteProceed(app.appId);
 			flash("Consent gate re-opened for the applicant.");
@@ -258,6 +266,13 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const [offerStages, setOfferStages] = useState<ServiceStage[] | null>(null);
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [teamOpen, setTeamOpen] = useState(false);
+	// Check-ins — meetings a handler books on the live case (not consultations).
+	const [checkInOpen, setCheckInOpen] = useState(false);
+	const [meetings, setMeetings] = useState<Booking[]>([]);
+	useEffect(() => {
+		if (!app.id) return;
+		applicationsApi.meetings(app.id).then((r) => setMeetings(r.meetings)).catch(() => setMeetings([]));
+	}, [app.id, app.updatedAt]);
 
 	// Tab state, mirrored to ?tab= so a notification or a handoff can link to
 	// the right chapter and a refresh keeps it. Precedence: the URL, then the
@@ -436,13 +451,24 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		nextStage && advanceBlock && mayAdvance && app.proceedStatus === "accepted" && !pendingHandoff
 			? `${nextStage === "completed" ? "The case cannot close yet" : `${JOURNEY_STAGE_LABELS[nextStage]} is not open yet`} — ${advanceBlock}`
 			: null;
+	// What the case waits on when there is nothing to do — in ops words, from
+	// the same rule as the button, never the portal's step label.
+	const waitingOn =
+		step.kind === "done" ? "Closed." : step.kind === "blocked" ? `Waiting on ${step.to === "completed" ? "completion" : JOURNEY_STAGE_LABELS[step.to]} — ${step.reason}` : null;
 	// The stage the plan stops short of — the thing to sell. Shown beside
 	// whatever the case can do at its exit, never instead of it.
+	// The office proposes; the client asks; the office records. Proposing
+	// binds nothing — it tells the client and points them at their plan.
 	const offerAction =
 		step.kind !== "done" && step.offer && mayAdvance ? (
-			<button type="button" className="btn btn--sm btn--ghost" onClick={() => setOfferStages(step.offer === "visa" ? ["visa"] : ["visa", "departure"])}>
-				Offer {SERVICE_STAGE_LABELS[step.offer]} →
-			</button>
+			<span style={{ display: "inline-flex", gap: "0.4rem", flexWrap: "wrap", alignItems: "center" }}>
+				<button type="button" className="btn btn--sm btn--ghost" onClick={() => { setReasonDraft(""); setReasonFor("propose"); }}>
+					Propose {SERVICE_STAGE_LABELS[step.offer]} →
+				</button>
+				<button type="button" className="link-arrow" style={{ fontSize: "var(--text-xs)" }} onClick={() => setOfferStages(step.offer === "visa" ? ["visa"] : ["visa", "departure"])}>
+					record on their behalf…
+				</button>
+			</span>
 		) : null;
 	if (nextStage && !advanceBlock && mayAdvance) {
 		const completing = nextStage === "completed";
@@ -485,16 +511,17 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			action: offerAction,
 		});
 	}
-	// Ops-initiated early completion — the client said they're done by phone,
-	// so no opt-out is recorded; the sheet asks for the note the API requires.
-	if (!caseClosed && !stopRequested && reachedStopStage && mayAdvance && step.kind !== "complete" && step.kind !== "done") {
+	// Completing before the plan's exit is the same action with one more
+	// question: the note of what was agreed. It never sits beside a second
+	// "complete" button — when the plan's own exit is reached, that one shows.
+	if (!caseClosed && !stopRequested && reachedStopStage && mayAdvance && step.kind !== "complete" && step.kind !== "done" && !nextActions.some((a) => a.id === "advance")) {
 		nextActions.push({
 			id: "complete-early",
-			title: `Client may be done at ${SERVICE_STAGE_LABELS[reachedStopStage]}`,
-			detail: "No opt-out is recorded — if the client has told you they're not continuing, complete the case with the note of what was agreed.",
+			title: `Complete the case at ${SERVICE_STAGE_LABELS[reachedStopStage]}`,
+			detail: "The plan goes further, so completing here asks for the note of what was agreed with the client. The plan is trimmed to what was delivered.",
 			action: (
 				<button type="button" className="btn btn--sm btn--ghost" onClick={() => { setReasonDraft(""); setReasonFor("complete"); }}>
-					Complete the case…
+					Complete the case
 				</button>
 			),
 		});
@@ -598,6 +625,11 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				}
 				actions={
 					<>
+						{!caseClosed && (
+							<button type="button" className="btn btn--sm btn--ghost" onClick={() => setCheckInOpen(true)}>
+								Check-in…
+							</button>
+						)}
 						<button type="button" className="btn btn--sm btn--ghost" onClick={() => setTeamOpen(true)}>
 							Team
 						</button>
@@ -615,29 +647,48 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				]}
 				contact={{ email: app.email, phone: app.phone }}
 				extra={[
+					// Each fact once, labelled: the plan as a chip, the client's step as what it is.
 					...(planLine ? [{ label: "Plan", value: planLine }] : []),
+					...(app.journey?.portalStage && app.stage !== "completed" ? [{ label: "Client sees", value: PORTAL_STAGE_LABELS[app.journey.portalStage] ?? app.journey.portalStage }] : []),
 					{ label: "Country", value: app.country || "—" },
 					{ label: "Programme", value: app.program || "—" },
 				]}
 			/>
 
-			{/* The plan drawn as the route — the same picture the portal shows:
-			    stages on the scope inked, skipped struck, the offer tagged. */}
-			{scope || app.plannedStages ? (
-				<div style={{ border: "1px solid var(--border)", background: "var(--card)", padding: "0 1rem 0.9rem", marginBottom: "0.75rem" }}>
-					<ScopeRoute
-						scopeStages={app.scopeStages ?? null}
-						recommended={!scope && app.plannedStages ? normaliseScope(app.plannedStages) : undefined}
-					/>
-					{planLine ? <p className="muted" style={{ fontSize: "var(--text-xs)", margin: "0.25rem 0 0" }}>{planLine}</p> : null}
+			{/* Meetings on the case — check-ins booked here, upcoming first. */}
+			{meetings.filter((m) => m.status !== "CANCELLED" && m.status !== "NO_SHOW" && m.status !== "COMPLETED").length > 0 && (
+				<div style={{ border: "1px solid var(--border)", background: "var(--card)", marginBottom: "0.75rem" }}>
+					{meetings
+						.filter((m) => m.status !== "CANCELLED" && m.status !== "NO_SHOW" && m.status !== "COMPLETED")
+						.map((m) => (
+							<div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", padding: "0.6rem 1rem", borderBottom: "1px solid var(--border-light)", fontSize: "var(--text-sm)" }}>
+								<span>
+									<strong>{m.serviceName}</strong>
+									<span className="muted"> · {m.type === "online" ? "Online" : "In person"} · {m.employeeName ?? "unassigned"}</span>
+								</span>
+								<span className="mono" style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)", whiteSpace: "nowrap" }}>
+									{new Date(m.startsAt).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: m.timezone })}
+								</span>
+							</div>
+						))}
 				</div>
-			) : null}
+			)}
 
 			<CaseStateLine app={app} closed={caseClosed} />
 
-			<CaseTodo items={nextActions} waitingOn={app.journey?.nextUnlock ?? null} blockedBy={blockedBy} />
+			<CaseTodo items={nextActions} waitingOn={waitingOn} blockedBy={blockedBy} />
 
 			<ApplicationAssignSheet app={app} open={assignOpen} onClose={() => setAssignOpen(false)} onDone={flash} />
+
+			<CheckInSheet
+				app={app}
+				open={checkInOpen}
+				onClose={() => setCheckInOpen(false)}
+				onDone={(msg) => {
+					flash(msg);
+					applicationsApi.meetings(app.id).then((r) => setMeetings(r.meetings)).catch(() => {});
+				}}
+			/>
 
 			<TeamSheet
 				app={app}
@@ -667,6 +718,8 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				title={
 					reasonFor === "record"
 						? "Record consent on the applicant's behalf"
+						: reasonFor === "propose"
+							? `Propose ${step.kind !== "done" && step.offer ? SERVICE_STAGE_LABELS[step.offer] : "the next stage"} to the client`
 						: reasonFor === "complete"
 							? "Complete the case where it stands"
 							: reasonFor === "continuation-decline"
@@ -684,6 +737,8 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					<p className="cn-assign__current">
 						{reasonFor === "record"
 							? "Only after the applicant confirmed by phone or in person. Say who confirmed and when — it goes on the case record."
+							: reasonFor === "propose"
+								? "The client is told, in-app and by email, and pointed at their plan to ask for the stage. Nothing binds until they do. A line on why helps them decide (optional)."
 							: reasonFor === "complete"
 								? `The file closes at ${reachedStopStage ? SERVICE_STAGE_LABELS[reachedStopStage] : "the reached stage"} — say what was agreed with the client. Earned documents and receipts stay theirs; they can ask for the next stage later.`
 								: reasonFor === "continuation-decline"
@@ -698,6 +753,8 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 						placeholder={
 							reasonFor === "record"
 								? "e.g. Confirmed by phone with the applicant on 12 Sep"
+								: reasonFor === "propose"
+									? "e.g. Your Leeds offer is strong — we'd take the visa file from here"
 								: reasonFor === "complete"
 									? "e.g. Client taking the offer at a nearer university — not continuing to visa with us"
 									: reasonFor === "continuation-decline"
@@ -712,6 +769,8 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 								? "Saving…"
 								: reasonFor === "record"
 									? "Record consent"
+									: reasonFor === "propose"
+										? "Send the proposal"
 									: reasonFor === "complete"
 										? "Complete the case"
 										: reasonFor === "continuation-decline"
@@ -736,7 +795,15 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					{ id: "travel", numeral: "V" },
 				] as const).map((c) => {
 					const t = tabs.find((x) => x.id === c.id)!;
-					return { id: c.id as TabId, numeral: c.numeral, label: t.label, locked: t.locked, hint: t.hint, off: t.off };
+					const st = c.id === "application" ? "admissions" : c.id === "visa" ? "visa" : c.id === "travel" ? "departure" : null;
+					const planned = !scope && app.plannedStages ? normaliseScope(app.plannedStages) : null;
+					const offer = Boolean(t.off && step.kind !== "done" && step.offer && st === step.offer);
+					const note =
+						t.off ? (offer ? "not on the plan · offer this" : st === "admissions" ? "not on the plan · offer brought" : "not on the plan")
+						: planned && st && planned.includes(st) ? "recommended"
+						: c.id === "enrolment" ? (scope ? `${scopeLabel(scope)}${app.depositPaid ? " · paid" : ""}` : planned ? `recommended: ${scopeLabel(planned)}` : null)
+						: null;
+					return { id: c.id as TabId, numeral: c.numeral, label: t.label, locked: t.locked, hint: t.hint, off: t.off, rec: Boolean(planned && st && planned.includes(st)), offer, note };
 				})}
 				current={current}
 				nowId={stageTab}
@@ -759,7 +826,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					<p className="muted" style={{ padding: "1rem 0" }}>Loading the consultation record…</p>
 				))}
 
-			{current === "enrolment" && <EnrolmentTab app={app} caseInvoices={caseInvoices} canIssueInvoices={canIssueInvoices} canWork={canWork} flash={flash} fail={fail} />}
+			{current === "enrolment" && <EnrolmentTab app={app} caseInvoices={caseInvoices} canIssueInvoices={canIssueInvoices} canWork={canWork} flash={flash} fail={fail} setTab={setTab} />}
 
 			{current === "application" && (
 				<ApplicationsTab
@@ -866,8 +933,8 @@ function CaseStateLine({ app, closed }: { app: MockApplication; closed: boolean 
 		facts.push("awaiting the client's confirmation" + (opened ? ` · invited ${opened}` : ""));
 	} else {
 		pill = { label: "Active", tone: "ink" };
+		// Status only: the consent fact. Money and progress live on the spine and in Billing.
 		facts.push(`client confirmed${day(app.proceededAt) ? ` ${day(app.proceededAt)}` : ""}`);
-		facts.push(app.depositPaid ? "deposit paid · enrolled" : "deposit due");
 	}
 	if (opened) facts.push(`opened ${opened}${from}`);
 	return (

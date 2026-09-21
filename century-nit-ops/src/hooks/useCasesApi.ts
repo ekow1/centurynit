@@ -541,6 +541,13 @@ export function useCasesApi() {
 			});
 			await refresh();
 		},
+		/** Suggest the next stage to the client — tells them, binds nothing. */
+		proposeStage: async (appId: string, stage: ServiceStage, note?: string) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) return;
+			await apiFetch(`${API_PREFIX}/cases/${app.id}/propose-stage`, { method: "POST", body: JSON.stringify({ stage, note }) });
+			await refresh();
+		},
 		reinviteProceed: async (appId: string) => {
 			const app = applications.find((a) => a.appId === appId);
 			if (!app) throw new Error("Application not found");

@@ -22,31 +22,31 @@ import { getAuthSettings, type AuthSettingsResponse } from "../lib/api";
 import { coreServices } from "century-nit-core";
 
 /*
- * The route the account opens onto — Stage 0 through III, the same stages
+ * The route the account opens onto — consultation then the three service stages, the same stages
  * the homepage route and the portal scope use. Images come from the shared
  * service content so they stay editable in one place.
  */
 const AUTH_ROUTE = [
 	{
-		stage: "Stage 0 · always",
+		stage: "Always",
 		name: "Consultation",
 		blurb: "Online or in person — you pick the scope, your file opens the same day.",
 		image: coreServices.find((s) => s.id === "counseling")?.image,
 	},
 	{
-		stage: "Stage I",
+		stage: "Admissions",
 		name: "Admissions",
 		blurb: "Counselling, documents, submissions and offer tracking.",
 		image: coreServices.find((s) => s.id === "admission-docs")?.image,
 	},
 	{
-		stage: "Stage II",
+		stage: "Visa",
 		name: "Visa",
 		blurb: "Embassy-ready file, biometrics booked, decision tracked.",
 		image: coreServices.find((s) => s.id === "visa-docs")?.image,
 	},
 	{
-		stage: "Stage III",
+		stage: "Departure",
 		name: "Departure & arrival",
 		blurb: "Flight, housing, briefing and the first-week check-in.",
 		image: coreServices.find((s) => s.id === "travel")?.image,

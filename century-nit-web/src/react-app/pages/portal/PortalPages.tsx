@@ -8,6 +8,7 @@ import { Field, Select } from "../../components/ui/Field";
 import { InvoiceCard, StatusPill, formatMoney } from "century-nit-core/ui";
 import { openInvoiceDocument } from "../../lib/receipt";
 import { usePaySheet } from "../../components/portal/PaySheet";
+import { StageIntakeCard } from "../../components/portal/StageIntakeCard";
 import { StageConsentCard } from "../../components/StageConsentCard";
 import { EnrolmentDecision } from "../../components/EnrolmentDecision";
 import { AssessmentOutcomeCard } from "../../components/AssessmentOutcomeCard";
@@ -4759,6 +4760,9 @@ function VisaHubInner() {
 
 			<div className="psplit mt-4">
 				<div>
+					<div className="mb-4">
+						<StageIntakeCard stage="visa" />
+					</div>
 					{hasAdmit && !paid && !isConsented && (
 						<div className="mb-4">
 							<StageConsentCard
@@ -5289,7 +5293,10 @@ export function PortalComplete() {
 }
 
 function CompleteInner() {
-	const { application, booking, schoolApplications } = useAppState();
+	const { application, booking, schoolApplications, journey, syncFromServer } = useAppState();
+	const { toast } = useNotifier();
+	const [contNote, setContNote] = useState("");
+	const [contBusy, setContBusy] = useState(false);
 	const [paidInvoices, setPaidInvoices] = useState<ApiInvoice[]>([]);
 	const [officialDocs, setOfficialDocs] = useState<ApplicantDocument[]>([]);
 	useEffect(() => {
@@ -5360,25 +5367,64 @@ function CompleteInner() {
 			: null;
 	const spanLabel = spanDays ? (spanDays >= 60 ? `${Math.round(spanDays / 30.4)} months` : `${spanDays} days`) : null;
 
+	const endedAt = application.completedAtStage as ServiceStage | null;
+	// Chapters past where the journey ended read "not taken" — the ladder
+	// doesn't pretend work nobody did.
+	const ENDED_ORDER: Record<string, number> = { admissions: 3, visa: 4, departure: 5 };
+	const cutoff = endedAt ? ENDED_ORDER[endedAt] : 99;
+	const NUMERAL_ORD: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6 };
+
 	const recap: { numeral: string; name: string; fact: string; when: string }[] = [
 		{ numeral: "I", name: "Consultation", fact: [booking.consultationType ? `${booking.consultationType} session` : "Session held", booking.confirmationId].filter(Boolean).join(" · "), when: day(journeyStart) },
 		{ numeral: "II", name: "Enrolment", fact: [fund?.name, deg?.name, "deposit paid"].filter(Boolean).join(" · "), when: day(application.packageChosenAt) },
 		{ numeral: "III", name: "Applications", fact: `${schoolApplications.length} targeted · ${accepted.length} admitted${chosen ? ` · ${chosen.universityName ?? getUniversity(chosen.universityId)?.name} accepted` : ""}`, when: day(application.offerAcceptedAt ?? application.schoolSelectionDoneAt) },
 		{ numeral: "IV", name: "Visa", fact: vd.validFrom || vd.validTo ? `Granted · ${day(vd.validFrom)} → ${day(vd.validTo)}` : "Granted", when: day(vd.decidedAt) },
 		{ numeral: "V", name: "Departure", fact: [flightLine ? `${flightLine} booked` : "Travel settled", "milestone paid", "checklist done"].join(" · "), when: day(application.agencySettledAt) },
-		{ numeral: "VI", name: "Complete", fact: "File closed. Post-arrival support open", when: day(application.completedAt) },
-	];
+		{ numeral: "VI", name: "Complete", fact: endedAt ? `Ended at ${SERVICE_STAGE_LABELS[endedAt]}` : "File closed. Post-arrival support open", when: day(application.completedAt) },
+	].map((r) => (NUMERAL_ORD[r.numeral] > cutoff ? { ...r, fact: "Not taken — the journey ended earlier", when: "—" } : r));
+
+	// The continuation zone — a completed client can ask for the stage beyond
+	// the plan's exit; the request waits on the office.
+	const requestable = (journey.requestableStage ?? null) as ServiceStage | null;
+	const pendingCont = application.pendingContinuation;
+	const lastCont = application.lastContinuation;
+	async function sendContinuation() {
+		setContBusy(true);
+		try {
+			await meApi.requestContinuation({ note: contNote.trim() || undefined });
+			toast.success("Request sent — the office will review it.");
+			setContNote("");
+			await syncFromServer();
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : "Could not send the request");
+		} finally {
+			setContBusy(false);
+		}
+	}
+	async function withdrawContinuation() {
+		setContBusy(true);
+		try {
+			await meApi.withdrawContinuation();
+			toast.success("Request withdrawn.");
+			await syncFromServer();
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : "Could not withdraw the request");
+		} finally {
+			setContBusy(false);
+		}
+	}
 
 	return (
 		<div className="portal-page">
 			{/* the closed file */}
 			<div className="jclosed">
 				<span className="jclosed__seal">VI</span>
-				<p className="eyebrow">Chapter VI · Complete{application.applicationId ? ` · case ${application.applicationId}` : ""}</p>
-				<h1 className="jclosed__title">File closed. You're enrolled.</h1>
+				<p className="eyebrow">Chapter VI · Complete{endedAt ? ` · ended at ${SERVICE_STAGE_LABELS[endedAt]}` : ""}{application.applicationId ? ` · case ${application.applicationId}` : ""}</p>
+				<h1 className="jclosed__title">{endedAt ? `Your journey ended at ${SERVICE_STAGE_LABELS[endedAt]}.` : "File closed. You're enrolled."}</h1>
 				<p className="jclosed__lead">
-					Every chapter done, every invoice settled, your documents released. Safe travels
-					{booking.assessment.firstName ? `, ${booking.assessment.firstName}` : ""}.
+					{endedAt
+						? (application.completionNote ?? "The work you paid for is done — everything earned stays yours, and the next stage is one request away whenever you want it.")
+						: `Every chapter done, every invoice settled, your documents released. Safe travels${booking.assessment.firstName ? `, ${booking.assessment.firstName}` : ""}.`}
 				</p>
 				<div className="jclosed__meta">
 					{chosen ? (
@@ -5408,12 +5454,53 @@ function CompleteInner() {
 				</div>
 			</div>
 
+			{/* the door swings both ways — ask for the stage beyond the exit */}
+			{pendingCont ? (
+				<div className="sharp-card mt-6" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+					<div>
+						<p className="eyebrow">Requested · awaiting the office</p>
+						<p style={{ fontWeight: 700, fontSize: "1.05rem", marginTop: "0.35rem" }}>
+							{SERVICE_STAGE_LABELS[pendingCont.stage as ServiceStage] ?? pendingCont.stage} stage — requested {day(pendingCont.createdAt)}
+						</p>
+						{pendingCont.note ? <p className="mono muted" style={{ fontSize: "0.75rem", marginTop: "0.3rem" }}>“{pendingCont.note}”</p> : null}
+					</div>
+					<Button variant="ghost" onClick={() => void withdrawContinuation()} disabled={contBusy}>
+						Withdraw request
+					</Button>
+				</div>
+			) : requestable ? (
+				<div className="sharp-card mt-6">
+					<p className="eyebrow">Pick up where you left off</p>
+					<p style={{ fontWeight: 700, fontSize: "1.05rem", marginTop: "0.35rem" }}>
+						Want the {SERVICE_STAGE_LABELS[requestable]} stage after all?
+					</p>
+					{lastCont?.status === "declined" && lastCont.decisionNote ? (
+						<p className="mono muted" style={{ fontSize: "0.75rem", marginTop: "0.3rem" }}>Last request declined — {lastCont.decisionNote}</p>
+					) : null}
+					<p className="lead mt-2" style={{ fontSize: "var(--text-sm)" }}>
+						Send the office a request — approving it extends your plan and opens the stage's invoice and intake on your portal.
+					</p>
+					<textarea
+						className="input mt-3"
+						rows={2}
+						value={contNote}
+						onChange={(e) => setContNote(e.target.value)}
+						placeholder="A note for the office — timing, what changed (optional)"
+					/>
+					<div className="row mt-3">
+						<Button onClick={() => void sendContinuation()} disabled={contBusy} arrow>
+							{contBusy ? "Sending…" : `Request the ${SERVICE_STAGE_LABELS[requestable]} stage`}
+						</Button>
+					</div>
+				</div>
+			) : null}
+
 			<div className="psplit mt-6">
 				<div>
 					{/* the journey, on record */}
 					<div className="psec">
 						<span className="psec__title">The whole journey, on record</span>
-						<span className="psec__hint">6 of 6 chapters</span>
+						<span className="psec__hint">{cutoff === 99 ? "6 of 6" : `${Math.min(cutoff, 5)} of 6`} chapters</span>
 					</div>
 					<div className="recap">
 						{recap.map((r) => (
@@ -5458,18 +5545,22 @@ function CompleteInner() {
 						)}
 					</div>
 
-					{/* what stays open */}
-					<div className="psec">
-						<span className="psec__title">What stays open</span>
-						<span className="psec__hint">post-arrival</span>
-					</div>
-					<div className="sharp-card">
-						<ul style={{ listStyle: "none", padding: 0, fontSize: "var(--text-sm)", lineHeight: 1.9, margin: 0 }}>
-							<li style={{ display: "flex", gap: "0.7rem" }}><span className="mono">→</span><span><strong>Check in when you land</strong>. Message your officer through the portal chat; we confirm your arrival with the school.</span></li>
-							<li style={{ display: "flex", gap: "0.7rem" }}><span className="mono">→</span><span><strong>Enrolment week</strong>. Report by {day(application.departureDetails?.reportBy) !== "N/A" ? day(application.departureDetails?.reportBy) : "your school's date"}. Your officer watches for issues in the first month.</span></li>
-							<li style={{ display: "flex", gap: "0.7rem" }}><span className="mono">→</span><span><strong>Your record stays</strong>. Receipts, letters and the vault remain available here. Come back for a transcript request or a reference any time.</span></li>
-						</ul>
-					</div>
+					{/* what stays open — post-arrival only applies once Departure was reached */}
+					{!endedAt || endedAt === "departure" ? (
+						<>
+							<div className="psec">
+								<span className="psec__title">What stays open</span>
+								<span className="psec__hint">post-arrival</span>
+							</div>
+							<div className="sharp-card">
+								<ul style={{ listStyle: "none", padding: 0, fontSize: "var(--text-sm)", lineHeight: 1.9, margin: 0 }}>
+									<li style={{ display: "flex", gap: "0.7rem" }}><span className="mono">→</span><span><strong>Check in when you land</strong>. Message your officer through the portal chat; we confirm your arrival with the school.</span></li>
+									<li style={{ display: "flex", gap: "0.7rem" }}><span className="mono">→</span><span><strong>Enrolment week</strong>. Report by {day(application.departureDetails?.reportBy) !== "N/A" ? day(application.departureDetails?.reportBy) : "your school's date"}. Your officer watches for issues in the first month.</span></li>
+									<li style={{ display: "flex", gap: "0.7rem" }}><span className="mono">→</span><span><strong>Your record stays</strong>. Receipts, letters and the vault remain available here. Come back for a transcript request or a reference any time.</span></li>
+								</ul>
+							</div>
+						</>
+					) : null}
 				</div>
 
 				{/* the rail. Destination, released documents, the people */}

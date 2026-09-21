@@ -1,7 +1,7 @@
 import { schoolApplicationSchema } from "./school.js";
 import { z } from "zod";
 import { STAGE_LABELS } from "../labels.js";
-import { entryJourneyStage, normaliseScope, serviceStageForJourney, serviceStageSchema, type ServiceStage } from "../stages.js";
+import { entryJourneyStage, normaliseScope, SERVICE_STAGE_LABELS, serviceStageForJourney, serviceStageSchema, type ServiceStage } from "../stages.js";
 
 /**
  * Applicant journey. Consultations (cases), applications, and the applicant
@@ -155,7 +155,7 @@ export type NextStep =
 export function nextStepFor(input: {
 	scopeStages: readonly string[] | null | undefined;
 	stage: JourneyStage;
-	checks: NonNullable<Parameters<typeof canAdvanceToStage>[2]> & { visaDone?: boolean; agencySettled?: boolean; hasAdmitted?: boolean };
+	checks: NonNullable<Parameters<typeof canAdvanceToStage>[2]> & { visaDone?: boolean; agencySettled?: boolean; hasAdmitted?: boolean; stopRequested?: boolean };
 }): NextStep {
 	const { stage, checks } = input;
 	if (stage === "completed") return { kind: "done" };
@@ -163,6 +163,26 @@ export function nextStepFor(input: {
 	const idx = JOURNEY_STAGES.indexOf(stage);
 	const next = JOURNEY_STAGES[idx + 1];
 	if (!next) return { kind: "done" };
+
+	// A client who stopped where they are (a stage opt-out, or ops recorded
+	// it) completes the case at the reached stage — provided that stage's
+	// own exit fact holds. The server still gates the money side.
+	if (checks.stopRequested) {
+		const reached: ServiceStage | null =
+			stage === "visa_processing"
+				? "visa"
+				: stage === "travel_assistance" || stage === "payment_execution"
+					? "departure"
+					: "admissions";
+		const exitDone =
+			reached === "visa" ? Boolean(checks.visaDone)
+			: reached === "departure" ? isTravelResolved(checks.travelAssistanceStatus)
+			: Boolean(checks.hasAdmitted);
+		if (!exitDone) {
+			return { kind: "blocked", to: "completed", reason: `the ${SERVICE_STAGE_LABELS[reached]} stage's work is not done`, offer: null };
+		}
+		return { kind: "complete", offer: null };
+	}
 
 	// A plan that enters after Admissions waits at document_verification for
 	// its first milestone; the payment opens the entry stage, not an advance.
@@ -780,6 +800,43 @@ export const stageConsentInputSchema = z.object({
 });
 export type StageConsentInput = z.infer<typeof stageConsentInputSchema>;
 
+/* Stage continuation — a completed client asks to take the next stage */
+
+export const continuationStatusSchema = z.enum(["pending", "approved", "declined", "withdrawn"]);
+export type ContinuationStatus = z.infer<typeof continuationStatusSchema>;
+
+export const continuationRequestSchema = z.object({
+	id: z.string().uuid(),
+	applicationId: z.string().uuid(),
+	/** The service stage requested — always the one beyond the plan's exit. */
+	stage: serviceStageSchema,
+	note: z.string().nullable(),
+	status: continuationStatusSchema,
+	decisionNote: z.string().nullable().optional(),
+	decidedByName: z.string().nullable().optional(),
+	decidedAt: z.string().datetime().nullable(),
+	createdAt: z.string().datetime(),
+});
+export type ContinuationRequest = z.infer<typeof continuationRequestSchema>;
+
+export const requestContinuationSchema = z.object({
+	note: z.string().max(1000).optional(),
+});
+export type RequestContinuation = z.infer<typeof requestContinuationSchema>;
+
+export const decideContinuationSchema = z.object({
+	decision: z.enum(["approved", "declined"]),
+	note: z.string().max(1000).optional(),
+});
+export type DecideContinuation = z.infer<typeof decideContinuationSchema>;
+
+/** Answers to a stage's intake pack — the assessment fields it would have asked an entrant. */
+export const stageIntakeSubmissionSchema = z.object({
+	stage: z.enum(["visa", "departure"]),
+	answers: z.record(z.string(), z.string().max(2000)),
+});
+export type StageIntakeSubmission = z.infer<typeof stageIntakeSubmissionSchema>;
+
 /* Travel Assistance (direct-invoice flow) */
 
 export const travelDecisionSchema = z.enum(["yes", "hold", "no"]);
@@ -891,6 +948,20 @@ export const applicationSchema = z.object({
 	applicationConsent: stageConsentSchema.nullable(),
 	visaConsent: stageConsentSchema.nullable(),
 	travelConsent: stageConsentSchema.nullable(),
+	/** Where a mid-plan completion stopped — the reached service stage. Null for a full-plan finish. */
+	completedAtStage: serviceStageSchema.nullable().optional(),
+	/** The note recorded with a mid-plan completion. */
+	completionNote: z.string().nullable().optional(),
+	/**
+	 * Answers a stage asked for when the client continued into it after
+	 * completion — the intake a later entrant would have given at booking.
+	 * Keyed by stage; a `submittedAt` key marks it done.
+	 */
+	stageIntake: z.record(z.string(), z.record(z.string(), z.string())).default({}),
+	/** The client's pending "continue to the next stage" request, if any. */
+	pendingContinuation: continuationRequestSchema.nullable().optional(),
+	/** The latest continuation request of any status — a declined one carries the reason. */
+	lastContinuation: continuationRequestSchema.nullable().optional(),
 	/**
 	 * Active per-stage specialists (visa, travel, finance). From
 	 * stage_assignments. The whole-case owner is `assignedStaffId`; a case is
@@ -1042,6 +1113,8 @@ export const requestDocumentsSchema = z.object({
 });
 export const setStageSchema = z.object({
 	stage: journeyStageSchema,
+	/** Recorded with a mid-plan completion — why the case ended where it did. */
+	note: z.string().max(1000).optional(),
 });
 export const toggleChecklistSchema = z.object({
 	itemId: z.string().min(1),

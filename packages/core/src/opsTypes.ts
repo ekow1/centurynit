@@ -350,6 +350,14 @@ export interface MockApplication {
 	travelConsent?: { decision: string; reason?: string | null; decidedAt?: string | null } | null;
 	/** Active per-stage specialists (visa / travel / finance) from stage_assignments. */
 	stageHandlers?: { stage: string; opsUserId: string; opsUserName: string; opsUserEmail: string }[];
+	/** Where a completion ended — the reached stage on an early finish; null on a full-plan finish. */
+	completedAtStage?: "admissions" | "visa" | "departure" | null;
+	/** Why the file closed where it did. */
+	completionNote?: string | null;
+	/** The client's request for the stage beyond the plan's exit, waiting on the office. */
+	pendingContinuation?: { id: string; stage: "admissions" | "visa" | "departure"; note: string | null; status: string; createdAt?: string } | null;
+	/** The latest continuation request of any status — a declined one carries the reason. */
+	lastContinuation?: { id: string; stage: "admissions" | "visa" | "departure"; note: string | null; status: string; decisionNote?: string | null; createdAt?: string } | null;
 	/**
 	 * The step the applicant sees in the portal. Same derivation the portal
 	 * reads (`deriveJourney`), so ops and the client name the same step.

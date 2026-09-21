@@ -73,6 +73,8 @@ import type {
 	TravelAssistanceInvoiceInput,
 	CaseTeam,
 	StageHandoff,
+	ContinuationRequest,
+	StageIntakeSubmission,
 } from "century-nit-shared";
 import { API_PREFIX, type FeeSchedule } from "century-nit-shared";
 import { setGhsPerUsd } from "./ui/Money.js";
@@ -1125,10 +1127,17 @@ export const applicationsApi = {
 			...json(body),
 		});
 	},
-	setStage(id: string, stage: string): Promise<ApiApplication> {
+	setStage(id: string, stage: string, note?: string): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/stage`, {
 			method: "POST",
-			...json({ stage }),
+			...json({ stage, note }),
+		});
+	},
+	/** The office decides a client's request to take the stage beyond the plan's exit. */
+	decideContinuation(id: string, requestId: string, body: { decision: "approved" | "declined"; note?: string }): Promise<ContinuationRequest> {
+		return request(`${API_PREFIX}/applications/${id}/continuations/${requestId}`, {
+			method: "POST",
+			...json(body),
 		});
 	},
 	toggleChecklist(id: string, itemId: string, checked: boolean): Promise<ApiApplication> {
@@ -1330,6 +1339,24 @@ export const meApi = {
 
 	getConsent(stage: "application" | "visa" | "travel"): Promise<{ consent: unknown }> {
 		return request(`${API_PREFIX}/me/application/consent/${stage}`);
+	},
+
+	/**
+	 * A completed client asks to take the stage beyond their plan's exit.
+	 * The request waits on the office; approving it extends the plan.
+	 */
+	requestContinuation(input?: { note?: string }): Promise<ContinuationRequest> {
+		return request(`${API_PREFIX}/me/application/continuation`, { method: "POST", ...json(input ?? {}) });
+	},
+
+	/** Take a pending continuation request back before the office decides. */
+	withdrawContinuation(): Promise<ContinuationRequest> {
+		return request(`${API_PREFIX}/me/application/continuation/withdraw`, { method: "POST" });
+	},
+
+	/** The questions a reopened stage asks — answers stored under its key. */
+	submitStageIntake(input: StageIntakeSubmission): Promise<Record<string, Record<string, string>>> {
+		return request(`${API_PREFIX}/me/application/stage-intake`, { method: "POST", ...json(input) });
 	},
 
 	/**

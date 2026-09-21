@@ -32,6 +32,7 @@ import {
 
 
 	canAdvanceToStage,
+	isTravelResolved,
 
 	type ApplicationActivityEvent,
 
@@ -139,7 +140,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 
 
 		setApplicationStage,
-
+		decideContinuation,
 	} = useCases();
 	const { invoices: allInvoices } = useInvoiceApi();
 
@@ -204,7 +205,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 
 	// Consent override and decline both need a reason; a sheet asks for it
 	// (a browser prompt cannot be styled, validated or read by a screen reader).
-	const [reasonFor, setReasonFor] = useState<"record" | "decline" | null>(null);
+	const [reasonFor, setReasonFor] = useState<"record" | "decline" | "complete" | "continuation-decline" | null>(null);
 	const [reasonDraft, setReasonDraft] = useState("");
 	const [reasonBusy, setReasonBusy] = useState(false);
 	function handleRecordProceed() {
@@ -213,7 +214,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	}
 	async function submitReason() {
 		const reason = reasonDraft.trim();
-		if (reasonFor === "record" && !reason) return;
+		if ((reasonFor === "record" || reasonFor === "complete" || reasonFor === "continuation-decline") && !reason) return;
 		setReasonBusy(true);
 		try {
 			if (reasonFor === "record") {
@@ -222,10 +223,16 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			} else if (reasonFor === "decline") {
 				await declineProceed(app.appId, reason);
 				flash("Applicant declined to proceed — the case is paused.");
+			} else if (reasonFor === "complete") {
+				await setApplicationStage(app.appId, "completed", reason);
+				flash("Case completed at the reached stage.");
+			} else if (reasonFor === "continuation-decline" && app.pendingContinuation) {
+				await decideContinuation(app.appId, app.pendingContinuation.id, "declined", reason);
+				flash("Continuation request declined — the client has been told.");
 			}
 			setReasonFor(null);
 		} catch (err) {
-			fail(err, reasonFor === "record" ? "Could not record consent" : "Could not record decline");
+			fail(err, reasonFor === "record" ? "Could not record consent" : reasonFor === "complete" ? "Could not complete the case" : reasonFor === "continuation-decline" ? "Could not decline the request" : "Could not record decline");
 		} finally {
 			setReasonBusy(false);
 		}
@@ -388,11 +395,27 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const coarseStage = (JOURNEY_STAGES[Math.max(0, stageIdx(app.stage))] ?? JOURNEY_STAGES[0]) as JourneyStage;
 	// What the case can do next, from the same function the server's advance
 	// handler runs — plan-aware, so a button here is never one the API refuses.
+	// A recorded stop — the client opted out of a stage, or declined the
+	// enrolment — lets the same `nextStepFor` offer "complete" at the reached
+	// stage even when the plan goes further. The API checks the same rule.
+	const stopRequested =
+		app.visaConsent?.decision === "opt_out" ||
+		app.travelConsent?.decision === "opt_out" ||
+		app.proceedStatus === "declined";
 	const step = nextStepFor({
 		scopeStages: app.scopeStages ?? null,
 		stage: coarseStage,
-		checks: { ...app, visaDone: app.visaStage === "complete" && app.visaOutcome === "approved", hasAdmitted: hasAdmitted || (scope != null && !scope.includes("admissions")), agencySettled: Boolean(app.agencySettled) },
+		checks: { ...app, visaDone: app.visaStage === "complete" && app.visaOutcome === "approved", hasAdmitted: hasAdmitted || (scope != null && !scope.includes("admissions")), agencySettled: Boolean(app.agencySettled), stopRequested },
 	});
+	// The highest stage whose exit fact holds — where an early completion ends.
+	const reachedStopStage: ServiceStage | null =
+		app.travelAssistanceStatus && isTravelResolved(app.travelAssistanceStatus)
+			? "departure"
+			: app.visaStage === "complete" && app.visaOutcome === "approved"
+				? "visa"
+				: hasAdmitted || (scope != null && !scope.includes("admissions"))
+					? "admissions"
+					: null;
 	const nextStage: JourneyStage | undefined = step.kind === "advance" ? step.to : step.kind === "complete" ? "completed" : step.kind === "blocked" ? step.to : undefined;
 	const advanceBlock = step.kind === "blocked" ? step.reason : null;
 	const mayAdvance =
@@ -417,9 +440,15 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		const completing = nextStage === "completed";
 		nextActions.push({
 			id: "advance",
-			title: completing ? "Ready to complete the case" : `Ready to open ${JOURNEY_STAGE_LABELS[nextStage]}`,
+			title: completing
+				? stopRequested && reachedStopStage
+					? `Complete the case — ended at ${SERVICE_STAGE_LABELS[reachedStopStage]}`
+					: "Ready to complete the case"
+				: `Ready to open ${JOURNEY_STAGE_LABELS[nextStage]}`,
 			detail: completing
-				? `The plan ends at ${JOURNEY_STAGE_LABELS[coarseStage]} — its work is done and the service fee is settled.${step.kind === "complete" && step.offer ? ` The client could still add ${SERVICE_STAGE_LABELS[step.offer]}.` : ""}`
+				? stopRequested && reachedStopStage
+					? `The client stopped where they are — the ${SERVICE_STAGE_LABELS[reachedStopStage]} stage's work is done. Completing prunes the plan to what was delivered and records why it ended.`
+					: `The plan ends at ${JOURNEY_STAGE_LABELS[coarseStage]} — its work is done and the service fee is settled.${step.kind === "complete" && step.offer ? ` The client could still add ${SERVICE_STAGE_LABELS[step.offer]}.` : ""}`
 				: `Every requirement for ${JOURNEY_STAGE_LABELS[coarseStage]} is met.`,
 			tone: "done",
 			action: (
@@ -446,6 +475,49 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			title: `The plan stops before ${SERVICE_STAGE_LABELS[step.offer]}`,
 			detail: `${JOURNEY_STAGE_LABELS[coarseStage]} is the last chapter on the plan. The client can add the next stage from the portal, or you can record it here.`,
 			action: offerAction,
+		});
+	}
+	// Ops-initiated early completion — the client said they're done by phone,
+	// so no opt-out is recorded; the sheet asks for the note the API requires.
+	if (!caseClosed && !stopRequested && reachedStopStage && mayAdvance && step.kind !== "complete" && step.kind !== "done") {
+		nextActions.push({
+			id: "complete-early",
+			title: `Client may be done at ${SERVICE_STAGE_LABELS[reachedStopStage]}`,
+			detail: "No opt-out is recorded — if the client has told you they're not continuing, complete the case with the note of what was agreed.",
+			action: (
+				<button type="button" className="btn btn--sm btn--ghost" onClick={() => { setReasonDraft(""); setReasonFor("complete"); }}>
+					Complete the case…
+				</button>
+			),
+		});
+	}
+	// A completed client's request to take the next stage waits here for a
+	// decision — approving extends the plan and reopens the case.
+	if (app.pendingContinuation) {
+		const cont = app.pendingContinuation;
+		nextActions.push({
+			id: `continuation-${cont.id}`,
+			title: `Client requested the ${SERVICE_STAGE_LABELS[cont.stage]} stage`,
+			detail: `${cont.note ? `"${cont.note}" — ` : ""}Approving extends the plan, bills the stage's first milestone, and reopens the case. Declining needs a reason.`,
+			tone: "blocked",
+			action: mayAdvance ? (
+				<span style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+					<button
+						type="button"
+						className="btn btn--sm btn--primary"
+						onClick={() =>
+							void decideContinuation(app.appId, cont.id, "approved")
+								.then(() => flash(`${SERVICE_STAGE_LABELS[cont.stage]} added — the case is reopened.`))
+								.catch((e) => fail(e, "Could not approve the request"))
+						}
+					>
+						Approve &amp; extend plan →
+					</button>
+					<button type="button" className="btn btn--sm btn--ghost" onClick={() => { setReasonDraft(""); setReasonFor("continuation-decline"); }}>
+						Decline…
+					</button>
+				</span>
+			) : undefined,
 		});
 	}
 	for (const task of tasksForApplication(app, { handoffs, travelRequests, invoices: allInvoices })) {
@@ -568,7 +640,15 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			<Sheet
 				open={reasonFor !== null}
 				onClose={() => (reasonBusy ? undefined : setReasonFor(null))}
-				title={reasonFor === "record" ? "Record consent on the applicant's behalf" : "Record that the applicant is not proceeding"}
+				title={
+					reasonFor === "record"
+						? "Record consent on the applicant's behalf"
+						: reasonFor === "complete"
+							? "Complete the case where it stands"
+							: reasonFor === "continuation-decline"
+								? "Decline the continuation request"
+								: "Record that the applicant is not proceeding"
+				}
 			>
 				<form
 					onSubmit={(e) => {
@@ -580,19 +660,39 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					<p className="cn-assign__current">
 						{reasonFor === "record"
 							? "Only after the applicant confirmed by phone or in person. Say who confirmed and when — it goes on the case record."
-							: "Why the applicant is pausing, if they said (optional). They can resume from the portal at any time."}
+							: reasonFor === "complete"
+								? `The file closes at ${reachedStopStage ? SERVICE_STAGE_LABELS[reachedStopStage] : "the reached stage"} — say what was agreed with the client. Earned documents and receipts stay theirs; they can ask for the next stage later.`
+								: reasonFor === "continuation-decline"
+									? "Why the next stage can't be added — the client reads this on their portal."
+									: "Why the applicant is pausing, if they said (optional). They can resume from the portal at any time."}
 					</p>
 					<textarea
 						className="input"
 						rows={3}
 						value={reasonDraft}
 						onChange={(e) => setReasonDraft(e.target.value)}
-						placeholder={reasonFor === "record" ? "e.g. Confirmed by phone with the applicant on 12 Sep" : "Reason (optional)"}
+						placeholder={
+							reasonFor === "record"
+								? "e.g. Confirmed by phone with the applicant on 12 Sep"
+								: reasonFor === "complete"
+									? "e.g. Client taking the offer at a nearer university — not continuing to visa with us"
+									: reasonFor === "continuation-decline"
+										? "Reason (required — the client reads this)"
+										: "Reason (optional)"
+						}
 						autoFocus
 					/>
 					<div className="cn-assign__row">
-						<button type="submit" className="btn btn--primary" disabled={reasonBusy || (reasonFor === "record" && !reasonDraft.trim())}>
-							{reasonBusy ? "Saving…" : reasonFor === "record" ? "Record consent" : "Record decline"}
+						<button type="submit" className="btn btn--primary" disabled={reasonBusy || ((reasonFor === "record" || reasonFor === "complete" || reasonFor === "continuation-decline") && !reasonDraft.trim())}>
+							{reasonBusy
+								? "Saving…"
+								: reasonFor === "record"
+									? "Record consent"
+									: reasonFor === "complete"
+										? "Complete the case"
+										: reasonFor === "continuation-decline"
+											? "Decline request"
+											: "Record decline"}
 						</button>
 						<button type="button" className="btn btn--ghost" onClick={() => setReasonFor(null)} disabled={reasonBusy}>
 							Cancel

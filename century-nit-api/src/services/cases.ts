@@ -10,6 +10,7 @@ import {
 	type CaseApplicationStatus,
 	type AcceptProceedResponse,
 	canAdvanceToStage,
+	isTravelResolved,
 	travelBlockReason,
 	type TravelAssistanceStatus,
 	JOURNEY_STAGES,
@@ -339,6 +340,16 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		? await journeyForApplicant(applicant, row, { schoolTracks: schoolList, visaConsent }).catch(() => null)
 		: null;
 
+	// A continuation request waiting on the office — the client asked to take
+	// the stage beyond where the journey ended. The latest of any status
+	// carries a decline's reason, and an approved one is what re-opened the
+	// case — the stage's intake card keys off it.
+	const { pendingContinuationFor, lastContinuationFor } = await import("./continuations.js");
+	const [pendingContinuation, lastContinuation] = await Promise.all([
+		row.stage === "completed" ? pendingContinuationFor(row.id) : Promise.resolve(null),
+		lastContinuationFor(row.id),
+	]).catch(() => [null, null] as const);
+
 	return {
 		id: row.id,
 		appNumber: row.appNumber,
@@ -361,6 +372,11 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		journeyCoordinatorEmail: journeyCoordinator?.email ?? null,
 		stage: row.stage as JourneyStage,
 		status: caseStatusOf(row),
+		completedAtStage: row.completedAtStage ?? null,
+		completionNote: row.completionNote ?? null,
+		stageIntake: (row.stageIntake ?? {}) as ApiApplication["stageIntake"],
+		pendingContinuation,
+		lastContinuation,
 		proceedStatus: row.proceedStatus,
 		proceededAt: row.proceededAt?.toISOString() ?? null,
 		declinedReason: row.declinedReason,
@@ -1804,10 +1820,25 @@ export async function ensureVisaInvoiceForApplication(
 	return created;
 }
 
+/**
+ * Why this case may end where it is: a recorded opt-out on a stage consent,
+ * the enrolment decline, or a note the handler wrote into the completion.
+ * Null when nothing explains an early finish — then the ordinary gates rule.
+ */
+async function completionStopReason(row: ApplicationRow, note?: string): Promise<string | null> {
+	const { getStageConsent } = await import("./stageConsents.js");
+	const [visaConsent, travelConsent] = await Promise.all([getStageConsent(row.id, "visa"), getStageConsent(row.id, "travel")]);
+	if (visaConsent?.decision === "opt_out") return `Client opted out of the Visa stage${visaConsent.reason ? `: ${visaConsent.reason}` : "."}`;
+	if (travelConsent?.decision === "opt_out") return `Client opted out of the Departure stage${travelConsent.reason ? `: ${travelConsent.reason}` : "."}`;
+	if (row.proceedStatus === "declined") return `Client declined to proceed${row.declinedReason ? `: ${row.declinedReason}` : "."}`;
+	return note?.trim() || null;
+}
+
 export async function setApplicationStage(
 	id: string,
 	stage: JourneyStage,
 	actor: Actor,
+	note?: string,
 ): Promise<ApplicationRow> {
 	if (!JOURNEY_STAGES.includes(stage)) {
 		throw new HttpError(400, "INVALID_STAGE", `Unknown journey stage: ${stage}`);
@@ -1842,10 +1873,95 @@ export async function setApplicationStage(
 			stage: row.stage,
 			checks: { visaDone: row.visaStage === "complete" && row.visaOutcome === "approved", agencySettled: row.agencySettled, hasAdmitted },
 		});
-		if (step.kind !== "complete") {
+		if (step.kind === "complete") return finishAdvance(row, stage, actor, applicant);
+		// Not at the plan's exit — a recorded stop can still complete the case
+		// at the reached stage via the early-completion path below.
+		if (!(await completionStopReason(row, note))) {
 			throw new HttpError(409, "STAGE_ADVANCE_BLOCKED", `Cannot complete: ${step.kind === "blocked" ? step.reason : "the case is not at its exit stage"}.`);
 		}
-		return finishAdvance(row, stage, actor, applicant);
+	}
+
+	// ── Complete where the client stopped ────────────────────────────────
+	// A client who opted out of the next stage (or whom ops is closing for,
+	// with a note) can be marked complete at the last stage whose exit fact
+	// holds — and the ledger is pruned to what was delivered, so a stage
+	// that never opened stops being billed. No stop signal: fall through to
+	// the ordinary gates (a full-plan finish needs the whole checklist).
+	if (stage === "completed" && row.stage !== "completed") {
+		const stopReason = await completionStopReason(row, note);
+		if (stopReason) {
+			const reached: ServiceStage | null = isTravelResolved(travelAssistanceStatus)
+				? "departure"
+				: row.visaStage === "complete" && row.visaOutcome === "approved"
+					? "visa"
+					: hasAdmitted
+						? "admissions"
+						: null;
+			if (!reached) {
+				throw new HttpError(
+					409,
+					"STAGE_ADVANCE_BLOCKED",
+					"Cannot complete: no stage's work is finished yet. A case completes at a finished stage, never inside an open one.",
+				);
+			}
+			// Trim the plan to what was delivered. Removing a stage that never
+			// opened prunes its unfired lines; an opened stage still owed
+			// refuses here, so completion never closes with money hanging.
+			const keptScope = scopeNow
+				? scopeNow.filter((s) => (SERVICE_STAGES as readonly string[]).indexOf(s) <= (SERVICE_STAGES as readonly string[]).indexOf(reached))
+				: null;
+			if (keptScope && scopeNow && keptScope.length < scopeNow.length) {
+				await setApplicationPackage({
+					id,
+					packageCode: row.fundingTrack,
+					degreeLevel: row.degreeLevel,
+					stages: keptScope,
+					actor: { name: actor.name, opsUserId: actor.opsUserId, reason: `Completed early — ended at ${SERVICE_STAGE_LABELS[reached]}` },
+					internal: true,
+				});
+			}
+			// Belt and braces after the prune: nothing due may still be owed.
+			const open = clientInvoices.filter((i) => i.status === "issued" || i.status === "partial");
+			for (const inv of open) {
+				const [lines, paidRow] = await Promise.all([
+					db.select({ dueAt: invoiceLines.dueAt, amountCents: invoiceLines.amountCents }).from(invoiceLines).where(eq(invoiceLines.invoiceId, inv.id)),
+					db.select({ total: sql<number>`coalesce(sum(amount_cents), 0)::int` }).from(invoicePayments).where(eq(invoicePayments.invoiceId, inv.id)),
+				]);
+				const dueCents = lines.filter((l) => l.dueAt != null).reduce((n, l) => n + l.amountCents, 0);
+				if (dueCents > (paidRow[0]?.total ?? 0)) {
+					throw new HttpError(409, "INVOICE_OUTSTANDING", `Cannot complete: ${inv.invoiceNumber} has an amount due — settle, void, or write it off first.`);
+				}
+			}
+
+			const [updated] = await db
+				.update(applications)
+				.set({ stage: "completed", completedAtStage: reached, completionNote: stopReason, updatedAt: new Date() })
+				.where(and(eq(applications.id, id), ne(applications.stage, "completed")))
+				.returning();
+			if (!updated) return row;
+
+			await db.insert(caseComments).values({
+				targetType: "application",
+				targetId: id,
+				kind: "status",
+				text: `Stage → completed · ended at ${SERVICE_STAGE_LABELS[reached]} — ${stopReason}`,
+				authorName: actor.name,
+				authorOpsUserId: actor.opsUserId,
+			});
+			markStageCompleted(id, row.stage, actor.opsUserId);
+			const clientUserId = await applicantUserIdOfApplication(id);
+			if (clientUserId) {
+				notify({
+					recipientUserId: clientUserId,
+					type: "stage.changed",
+					title: "Your journey is complete",
+					body: `Your file closed at ${SERVICE_STAGE_LABELS[reached]}. Everything you paid for stays yours — and you can pick up the next stage any time.`,
+					link: "/portal/complete",
+				}).catch(() => {});
+			}
+			await broadcastCaseUpdate(updated, actor);
+			return updated;
+		}
 	}
 
 	// ── Guard: the stage must be on the client's plan ───────────────────
@@ -2474,6 +2590,12 @@ export async function setApplicationPackage(input: {
 	stages?: readonly string[];
 	/** Who is choosing — the client, or ops on their behalf (with a reason). */
 	actor?: { name: string; opsUserId?: string | null; reason?: string | null };
+	/**
+	 * System-initiated reshape (an early completion pruning the plan, a
+	 * continuation approval extending it) — skips the client-facing
+	 * eligibility and consent gates; the caller's own gate already ran.
+	 */
+	internal?: boolean;
 }): Promise<PackageOutcome> {
 	const scope = normaliseScope(input.stages ?? SERVICE_STAGES);
 	const split = await milestoneSplit();
@@ -2508,13 +2630,13 @@ export async function setApplicationPackage(input: {
 
 		const outcome = (consultation?.assessmentResult as { outcome?: string } | null)?.outcome?.toLowerCase() ?? "";
 		const eligible = outcome === "eligible" || outcome === "conditionally eligible";
-		if (!eligible || consultation?.status !== "COMPLETED") {
+		if (!input.internal && (!eligible || consultation?.status !== "COMPLETED")) {
 			throw new HttpError(403, "CONSULTATION_NOT_ELIGIBLE", "Package selection requires a completed, eligible consultation");
 		}
 
 		// Consent gate: the applicant must have explicitly accepted to proceed
 		// before a package can be selected. Consent is a separate step.
-		if (app.proceedStatus !== "accepted") {
+		if (!input.internal && app.proceedStatus !== "accepted") {
 			throw new HttpError(409, "CONSENT_REQUIRED", "The applicant must consent to proceed before selecting a package.");
 		}
 

@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portal floats — redesign mock</title>
+<style>
+  :root{
+    --background:#ffffff; --foreground:#0a0a0a;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#0a0a0a; --border-light:#d4d4d8;
+    --ok:#0d7a3f; --warn:#92400e; --bad:#b91c1c; --accent:#5b21b6;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:#fafafa;color:var(--foreground);font-size:.875rem}
+  .page{max-width:1240px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .page-title{font-size:1.9rem;font-weight:700;letter-spacing:-.02em}
+  .lead{color:var(--muted-foreground);max-width:48rem;line-height:1.6}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--muted-foreground)}
+  .head{margin-bottom:2rem}
+  .sec{margin:2.75rem 0 1rem}
+  .sec h2{font-size:1.15rem;font-weight:700}
+  .sec .sub{font-size:.72rem;color:var(--muted-foreground);margin-top:.2rem;max-width:52rem;line-height:1.6}
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start;margin-top:1rem}
+  @media (max-width:1100px){.compare{grid-template-columns:1fr}}
+  .variant-label{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;
+    color:var(--muted-foreground);margin-bottom:.5rem;display:flex;align-items:center;gap:.5rem}
+  .variant-label .tag{border:1px solid var(--border-light);padding:.1rem .45rem;font-size:.58rem}
+  .variant-label .tag--new{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+  .callouts{list-style:none;margin-top:.75rem;padding:0;font-size:.72rem;color:var(--muted-foreground)}
+  .callouts li{padding:.35rem 0 .35rem 1.4rem;position:relative;line-height:1.5}
+  .callouts li::before{content:attr(data-n);position:absolute;left:0;top:.3rem;font-family:var(--font-mono);
+    font-size:.6rem;border:1px solid var(--border-light);width:1.05rem;height:1.05rem;display:flex;
+    align-items:center;justify-content:center}
+  .callouts code{font-family:var(--font-mono);font-size:.62rem;background:var(--muted);padding:.05rem .3rem}
+  .bugbox{border:1.5px solid var(--bad);background:#fdf5f5;padding:1rem 1.2rem;margin-top:1rem}
+  .bugbox .eyebrow{color:var(--bad)}
+  .bugbox p{font-size:.72rem;line-height:1.6;margin-top:.4rem}
+  .bugbox code{font-family:var(--font-mono);font-size:.62rem;background:#fff;border:1px solid var(--border-light);padding:.05rem .3rem}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-top:1rem;align-items:start}
+  @media (max-width:1100px){.grid2{grid-template-columns:1fr}}
+  .notecard{border:1.5px solid var(--border);background:var(--background);padding:1rem 1.15rem}
+  .notecard h3{font-size:.9rem;margin-bottom:.4rem}
+  .notecard p{font-size:.74rem;color:var(--muted-foreground);line-height:1.6}
+  .notecard ul{list-style:none;padding:0;margin-top:.5rem;font-size:.72rem;color:var(--muted-foreground)}
+  .notecard li{padding:.3rem 0 .3rem 1rem;position:relative;line-height:1.5}
+  .notecard li::before{content:"—";position:absolute;left:0;color:var(--border-light)}
+  .notecard code{font-family:var(--font-mono);font-size:.62rem;background:var(--muted);padding:.05rem .3rem}
+  .good{color:var(--ok);font-weight:600}
+  .bad{color:var(--bad);font-weight:600}
+
+  /* fake portal canvas the floats sit on */
+  .stage{position:relative;border:1.5px solid var(--border);background:var(--background);
+    height:560px;overflow:hidden}
+  .stage__bar{height:2.6rem;border-bottom:1.5px solid var(--border);display:flex;align-items:center;
+    padding:0 1rem;gap:.8rem;background:var(--muted)}
+  .stage__bar .dot{width:.5rem;height:.5rem;background:var(--border-light)}
+  .stage__body{padding:1.2rem;color:var(--muted-foreground);font-size:.78rem;line-height:1.6}
+  .stage__ghost{border:1.5px dashed var(--border-light);padding:.9rem 1rem;margin-bottom:.8rem;font-size:.72rem}
+
+  /* ══ CURRENT floats (faithful reconstruction) ══ */
+  .o-fab{position:absolute;right:1.2rem;bottom:1.2rem;width:52px;height:52px;background:#18181b;color:#fff;
+    border:1px solid #000;box-shadow:4px 4px 0 rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .o-badge{position:absolute;top:-6px;right:-6px;background:#fff;color:#18181b;font-size:10px;font-weight:800;
+    font-family:var(--font-mono);padding:1px 5px;border:1px solid #18181b}
+  .o-win{position:absolute;right:1.2rem;bottom:1.2rem;width:360px;height:480px;background:#fff;
+    border:1px solid #18181b;box-shadow:6px 6px 0 rgba(0,0,0,.18);display:flex;flex-direction:column;overflow:hidden}
+  .o-win__head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #f4f4f5}
+  .o-win__title{font-size:12px;font-weight:700;display:flex;align-items:center;gap:7px}
+  .o-win__title i{width:6px;height:6px;background:#18181b;display:inline-block}
+  .o-win__ctl{color:#71717a;font-size:12px}
+  .o-tabs{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #f4f4f5;background:#fafafa}
+  .o-tabs button{padding:10px 6px;background:none;border:0;border-bottom:2px solid transparent;
+    font-size:11px;font-weight:600;color:#71717a;cursor:pointer}
+  .o-tabs .on{color:#18181b;border-bottom-color:#18181b}
+  .o-chanhead{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid #f4f4f5}
+  .o-chanhead b{font-size:11px;letter-spacing:.04em}
+  .o-chanhead small{display:block;font-family:var(--font-mono);font-size:9px;color:#52525b;margin-top:2px}
+  .o-pill{font-size:9px;font-weight:600;color:#52525b;background:#f4f4f5;padding:2px 8px;border-radius:12px}
+  .o-msgs{flex:1;padding:12px;display:flex;flex-direction:column;gap:9px;overflow:hidden}
+  .o-bub{max-width:75%;padding:9px 12px;font-size:12.5px;line-height:1.4}
+  .o-bub--them{background:#f4f4f5;border-radius:16px 16px 16px 4px;align-self:flex-start}
+  .o-bub--me{background:#18181b;color:#fff;border-radius:16px 16px 4px 16px;align-self:flex-end}
+  .o-bub small{display:block;font-family:var(--font-mono);font-size:8px;opacity:.55;margin-top:4px}
+  .o-composer{display:flex;padding:10px 14px;border-top:1px solid #f4f4f5;gap:8px}
+  .o-composer input{flex:1;background:#f4f4f5;border:1px solid transparent;border-radius:20px;padding:9px 14px;font-size:12px;outline:none}
+  .o-composer button{background:#18181b;color:#fff;border:0;border-radius:50%;width:34px;height:34px;font-size:9px;font-family:var(--font-mono)}
+
+  /* ══ PROPOSED floats ══ */
+  .n-launch{position:absolute;right:1.2rem;bottom:1.2rem;display:flex;flex-direction:column;align-items:flex-end;gap:.55rem}
+  .n-peek{background:var(--foreground);color:var(--background);font-size:.66rem;padding:.5rem .8rem;
+    max-width:14rem;line-height:1.45;box-shadow:3px 3px 0 rgba(0,0,0,.2)}
+  .n-peek b{display:block;font-family:var(--font-mono);font-size:.54rem;text-transform:uppercase;letter-spacing:.1em;opacity:.6;margin-bottom:.15rem}
+  .n-fab{position:relative;width:52px;height:52px;background:var(--foreground);color:var(--background);
+    border:1.5px solid var(--foreground);display:flex;align-items:center;justify-content:center;cursor:pointer;
+    box-shadow:3px 3px 0 rgba(0,0,0,.2)}
+  .n-fab__badge{position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;background:var(--bad);color:#fff;
+    font-family:var(--font-mono);font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;
+    padding:0 4px;border:1.5px solid var(--background)}
+
+  .n-win{position:absolute;right:1.2rem;bottom:1.2rem;width:370px;height:500px;background:var(--background);
+    border:1.5px solid var(--foreground);display:flex;flex-direction:column;overflow:hidden;
+    box-shadow:5px 5px 0 rgba(0,0,0,.15)}
+  .n-win__head{display:flex;align-items:center;gap:.6rem;padding:.6rem .9rem;border-bottom:1.5px solid var(--foreground)}
+  .n-win__ava{width:1.8rem;height:1.8rem;background:var(--foreground);color:var(--background);display:flex;
+    align-items:center;justify-content:center;font-family:var(--font-mono);font-size:.6rem;font-weight:700;flex-shrink:0}
+  .n-win__who{flex:1;min-width:0}
+  .n-win__name{font-size:.78rem;font-weight:700;line-height:1.15}
+  .n-win__pres{display:flex;align-items:center;gap:.35rem;font-family:var(--font-mono);font-size:.55rem;
+    color:var(--muted-foreground);margin-top:.1rem}
+  .n-win__pres i{width:.42rem;height:.42rem;background:var(--ok);display:inline-block}
+  .n-win__ctl{display:flex;gap:2px}
+  .n-win__ctl button{width:24px;height:24px;border:0;background:none;color:var(--muted-foreground);cursor:pointer;font-size:11px}
+  .n-tabs{display:flex;border-bottom:1.5px solid var(--foreground)}
+  .n-tabs button{flex:1;padding:.55rem .3rem;background:none;border:0;border-right:1px solid var(--border-light);
+    font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.09em;
+    color:var(--muted-foreground);cursor:pointer;position:relative;display:flex;align-items:center;justify-content:center;gap:.35rem}
+  .n-tabs button:last-child{border-right:0}
+  .n-tabs .on{color:var(--foreground);font-weight:700;box-shadow:inset 0 -2.5px 0 var(--foreground)}
+  .n-tabs .u{min-width:14px;height:14px;background:var(--bad);color:#fff;font-size:8px;font-weight:700;
+    display:inline-flex;align-items:center;justify-content:center;padding:0 3px}
+  .n-statusline{padding:.45rem .9rem;background:var(--muted);border-bottom:1px solid var(--border-light);
+    font-family:var(--font-mono);font-size:.56rem;color:var(--muted-foreground);letter-spacing:.05em}
+  .n-statusline b{color:var(--warn)}
+  .n-msgs{flex:1;padding:.8rem .9rem;display:flex;flex-direction:column;gap:.65rem;overflow:hidden;background:var(--background)}
+  .n-bub{max-width:80%;padding:.55rem .75rem;font-size:.8rem;line-height:1.45}
+  .n-bub--them{background:var(--muted);align-self:flex-start;border-left:2.5px solid var(--foreground)}
+  .n-bub--me{background:var(--foreground);color:var(--background);align-self:flex-end}
+  .n-bub small{display:block;font-family:var(--font-mono);font-size:.52rem;opacity:.55;margin-top:.3rem;letter-spacing:.04em}
+  .n-bub--them small{color:var(--muted-foreground);opacity:.8}
+  .n-composer{display:flex;align-items:center;gap:.5rem;padding:.55rem .8rem;border-top:1.5px solid var(--foreground)}
+  .n-composer input{flex:1;border:1px solid var(--border-light);padding:.5rem .7rem;font-size:.8rem;outline:none;background:var(--background)}
+  .n-composer .ic{width:30px;height:30px;border:1px solid var(--border-light);background:none;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;color:var(--muted-foreground);font-size:.8rem;flex-shrink:0}
+  .n-composer .send{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+  .n-typing{font-family:var(--font-mono);font-size:.55rem;color:var(--muted-foreground);padding:0 .9rem .3rem;letter-spacing:.05em}
+
+  /* phone frame */
+  .phonewrap{display:flex;gap:1.5rem;align-items:flex-start;flex-wrap:wrap;margin-top:1rem}
+  .phone{width:375px;flex-shrink:0;border:2.5px solid var(--border);border-radius:1.6rem;
+    padding:.6rem;background:#111;box-shadow:0 18px 40px rgba(0,0,0,.18)}
+  .phone__screen{background:var(--background);border-radius:1.1rem;overflow:hidden;position:relative;
+    height:620px;display:flex;flex-direction:column}
+  .phone__notch{width:5.5rem;height:.5rem;background:#111;border-radius:99px;margin:.6rem auto 0}
+  .phone .n-win{position:absolute;inset:0;width:auto;height:auto;border:0;box-shadow:none;border-radius:0}
+  .phone .n-win__head{padding-top:1.4rem}
+  .p-tabbar{margin-top:auto;height:3.2rem;border-top:1.5px solid var(--border);display:flex}
+  .p-tabbar span{flex:1;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);
+    font-size:.52rem;color:var(--muted-foreground);border-right:1px solid var(--border-light)}
+  .p-tabbar span:last-child{border-right:0}
+
+  table.layer{border-collapse:collapse;width:100%;margin-top:1rem;font-size:.72rem}
+  table.layer th{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;
+    text-align:left;padding:.45rem .6rem;border-bottom:1.5px solid var(--border);color:var(--muted-foreground)}
+  table.layer td{padding:.45rem .6rem;border-bottom:1px solid var(--border-light);vertical-align:top;line-height:1.5}
+  table.layer code{font-family:var(--font-mono);font-size:.6rem;background:var(--muted);padding:.05rem .3rem}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="head">
+  <p class="eyebrow">Portal · floating surfaces</p>
+  <h1 class="page-title">The floats, audited</h1>
+  <p class="lead" style="margin-top:.5rem">
+    Four floating surfaces exist: the chat launcher + window (<code class="mono" style="font-size:.75rem">CommunicationCenter</code>),
+    the notification panel, and the toast stack — plus a <b>dead second chat widget</b>
+    (<code class="mono" style="font-size:.75rem">FloatingChat.tsx</code>, 555 lines, mounted nowhere).
+    The plumbing underneath is genuinely good; the chrome on top is where it leaks.
+  </p>
+</header>
+
+<section class="sec">
+  <h2>What's working — keep it</h2>
+  <div class="grid2">
+    <div class="notecard">
+      <ul>
+        <li><span class="good">✓</span> <b>Real-time is real.</b> SSE drives message arrival, edits, deletes, reactions, typing indicators, and conversation status — no polling in the message path.</li>
+        <li><span class="good">✓</span> <b>Channel routing is smart.</b> Support / assigned officer / AI share one routed conversation; <code>route({stageKey})</code> picks the right thread server-side.</li>
+        <li><span class="good">✓</span> <b>AI → human escalation</b> posts the transcript into the support thread — the applicant never re-explains.</li>
+        <li><span class="good">✓</span> <b>Deep links work.</b> <code>?chat=&lt;id&gt;</code> and the <code>open-chat</code> event let any page or notification open the right thread.</li>
+        <li><span class="good">✓</span> <b>Attachments</b> stage → presigned PUT → bind on send. Resolved-conversation strip reopens on reply.</li>
+      </ul>
+    </div>
+    <div class="notecard">
+      <h3>What's broken or weak</h3>
+      <ul>
+        <li><span class="bad">✗</span> <b>The unread badge is dead when closed.</b> <code>totalUnread</code> comes from <code>context</code>, which is only fetched while the window is open (<code>if (!open) return</code>). A message arriving while the launcher sits closed <b>never increments the badge</b> — the one job a launcher has.</li>
+        <li><span class="bad">✗</span> <b>No presence.</b> The officer tab can't say "Ama is online" — staff heartbeat presence exists server-side but never reaches the float.</li>
+        <li><span class="bad">✗</span> <b>The real chat window has no mobile layout.</b> It's inline-styled <code>width:360px; bottom:24px</code> — on a 320–360px phone it overflows the viewport and ignores safe areas. (The responsive <code>.chat-panel</code> CSS targets the dead widget.)</li>
+        <li><span class="bad">✗</span> <b>Two divergent chat UIs.</b> <code>FloatingChat.tsx</code> is dead code with its own tabs, bubbles and composer — drift waiting to happen.</li>
+        <li><span class="bad">✗</span> <b>Rounded bubbles vs. the square design language,</b> ~400 lines of inline style objects, z-index 9999 floating free of the shell's layer scale (fab 890 / panel 1000 / toast 10000).</li>
+        <li><span class="bad">✗</span> <b>No Escape-to-close, no outside-click close,</b> no minimize — the window is open or gone.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <h2>The unread-badge bug — the core functional fix</h2>
+  <div class="bugbox">
+    <p class="eyebrow">Why a new message never badges the launcher</p>
+    <p>
+      <code>loadContext()</code> — the only thing that populates <code>unreadCount</code> — runs inside
+      <code>useEffect(() => { if (!open) return; ... }, [open])</code>. Closed widget = no context = badge stays at zero.
+      SSE <code>chat.message</code> events are subscribed in <code>useCommunicationChat(open)</code>, which is also
+      gated on <code>open</code>. So the float is blind precisely when it's closed.
+    </p>
+    <p>
+      <b>Fix:</b> keep a lightweight always-on subscription — the context fetch once on mount + a
+      <code>chat.message</code> SSE listener that bumps <code>unread</code> when the window is closed, cleared on open.
+      The heavy message list still lazy-loads on open. ~30 lines in the hook, zero API change.
+    </p>
+  </div>
+</section>
+
+<section class="sec">
+  <h2>Launcher — current vs proposed</h2>
+  <p class="sub">A message just arrived from the assigned officer while the window was closed.</p>
+  <div class="compare">
+    <div>
+      <p class="variant-label">Current <span class="tag">silent launcher</span></p>
+      <div class="stage">
+        <div class="stage__bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="stage__body">
+          <div class="stage__ghost">Dashboard content…</div>
+          <div class="stage__ghost">…</div>
+          <p class="mono" style="font-size:.6rem;color:var(--bad)">← badge shows nothing; context was never fetched</p>
+        </div>
+        <div class="o-fab">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <!-- badge exists in markup but is always 0 while closed -->
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Badge wired to <code>context.conversations[].unreadCount</code> — which is only fetched while open. A closed launcher is permanently badge-less.</li>
+        <li data-n="2">No preview of what arrived — the applicant must open the widget to discover it was the officer answering.</li>
+      </ul>
+    </div>
+    <div>
+      <p class="variant-label">Proposed <span class="tag tag--new">live launcher</span></p>
+      <div class="stage">
+        <div class="stage__bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="stage__body">
+          <div class="stage__ghost">Dashboard content…</div>
+          <div class="stage__ghost">…</div>
+        </div>
+        <div class="n-launch">
+          <div class="n-peek"><b>Ama Owusu · Officer</b>Your visa checklist is updated — two items signed off.</div>
+          <div class="n-fab">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span class="n-fab__badge">3</span>
+          </div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Badge is <b>SSE-fed, always subscribed</b> — red square, real count, works closed.</li>
+        <li data-n="2"><b>Peek card</b>: last incoming message (sender + first line) floats above the launcher for ~6s when the window is closed — dismissable, never re-shows the same message.</li>
+        <li data-n="3">Same square/chip language as the rest of the portal — no round fab, no double-shadow mismatch.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <h2>Window — current vs proposed</h2>
+  <div class="compare">
+    <div>
+      <p class="variant-label">Current <span class="tag">360px inline-styled</span></p>
+      <div class="stage">
+        <div class="stage__bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="o-win">
+          <div class="o-win__head">
+            <span class="o-win__title"><i></i>CHAT</span>
+            <span class="o-win__ctl">⤢ ✕</span>
+          </div>
+          <div class="o-tabs"><button class="on">SUPPORT</button><button>OFFICER</button><button>AI</button></div>
+          <div class="o-chanhead">
+            <div><b>AMA OWUSU</b><small>CONSULTANT · ACCRA</small></div>
+            <span class="o-pill">OFFICER</span>
+          </div>
+          <div class="o-msgs">
+            <div class="o-bub o-bub--them">Your visa checklist is updated — two items signed off.<small>AMA · 14:02</small></div>
+            <div class="o-bub o-bub--them">The bank statement needs 3 months, not 6 weeks.<small>AMA · 14:03</small></div>
+            <div class="o-bub o-bub--me">Got it — uploading tonight.<small>YOU · 14:05</small></div>
+          </div>
+          <div class="o-composer"><input placeholder="Message Ama…"><button>→</button></div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Header says "CHAT" — wasted line. Who you're talking to only appears in the channel card below.</li>
+        <li data-n="2">Tabs carry no unread state — a waiting support reply is invisible from the officer tab.</li>
+        <li data-n="3">Round bubbles + pill + circular send — a different design language from the rest of the portal.</li>
+        <li data-n="4">Fixed 360×600 at <code>bottom:24px</code>, no Escape/outside-click close.</li>
+      </ul>
+    </div>
+    <div>
+      <p class="variant-label">Proposed <span class="tag tag--new">one header, live tabs</span></p>
+      <div class="stage">
+        <div class="stage__bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="n-win">
+          <div class="n-win__head">
+            <span class="n-win__ava">AO</span>
+            <div class="n-win__who">
+              <p class="n-win__name">Ama Owusu</p>
+              <p class="n-win__pres"><i></i>Online · replies in ~1h</p>
+            </div>
+            <div class="n-win__ctl"><button title="Minimize">—</button><button title="Expand">⤢</button><button title="Close">✕</button></div>
+          </div>
+          <div class="n-tabs">
+            <button>Support</button>
+            <button class="on">Ama <span class="u">2</span></button>
+            <button>AI</button>
+          </div>
+          <div class="n-statusline">OFFICER · VISA CHAPTER · <b>SLOT CONFIRMED 24 SEP</b></div>
+          <div class="n-msgs">
+            <div class="n-bub n-bub--them">Your visa checklist is updated — two items signed off.<small>AMA · 14:02</small></div>
+            <div class="n-bub n-bub--them">The bank statement needs 3 months, not 6 weeks.<small>AMA · 14:03</small></div>
+            <div class="n-bub n-bub--me">Got it — uploading tonight.<small>YOU · 14:05 · READ</small></div>
+          </div>
+          <p class="n-typing">AMA IS TYPING…</p>
+          <div class="n-composer">
+            <button class="ic" title="Attach">⌎</button>
+            <input placeholder="Message Ama…">
+            <button class="ic send" title="Send">→</button>
+          </div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1"><b>Header = the person</b>: avatar, name, live presence ("Online · replies in ~1h") from the staff heartbeat that already exists server-side.</li>
+        <li data-n="2"><b>Tabs show per-channel unread</b> — "Ama · 2" — so a waiting reply is visible from any channel.</li>
+        <li data-n="3"><b>Context strip</b>: which chapter this thread serves + relevant state ("slot confirmed 24 Sep").</li>
+        <li data-n="4">Square bubbles, left-rule on theirs, read state on yours — consistent with the portal's sharp language. Esc + click-outside close; minimize collapses to the launcher without losing the thread.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <h2>The other two channels — Support &amp; AI</h2>
+  <p class="sub">Same shell, same header anatomy — only the body changes. Officer keeps its person-header; Support and AI swap in the desk/engine identity.</p>
+  <div class="compare">
+
+    <!-- SUPPORT -->
+    <div>
+      <p class="variant-label">Support channel <span class="tag tag--new">proposed</span></p>
+      <div class="stage" style="height:520px">
+        <div class="stage__bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="n-win">
+          <div class="n-win__head">
+            <span class="n-win__ava">CS</span>
+            <div class="n-win__who">
+              <p class="n-win__name">Century Support</p>
+              <p class="n-win__pres"><i></i>Desk open · replies in ~15m</p>
+            </div>
+            <div class="n-win__ctl"><button title="Minimize">—</button><button title="Expand">⤢</button><button title="Close">✕</button></div>
+          </div>
+          <div class="n-tabs">
+            <button class="on">Support <span class="u">1</span></button>
+            <button>Ama <span class="u">2</span></button>
+            <button>AI</button>
+          </div>
+          <div class="n-statusline">TRIAGE QUEUE · TICKET AUTO-ATTACHED TO YOUR FILE</div>
+          <div class="n-msgs">
+            <div class="n-bub n-bub--them">Hi Efua — you reached the support desk. What do you need?<small>SUPPORT · 13:58</small></div>
+            <div class="n-bub n-bub--me">My payment went through but the invoice still says unpaid.<small>YOU · 14:01 · READ</small></div>
+            <div class="n-bub n-bub--them">Checking the Paystack webhook for CNT-INV-0091 — one moment.<small>SUPPORT · 14:02</small></div>
+          </div>
+          <div class="n-composer">
+            <button class="ic" title="Attach">⌎</button>
+            <input placeholder="Type a message…">
+            <button class="ic send" title="Send">→</button>
+          </div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Header = <b>the desk</b>, not "CHAT" — avatar, live queue status, expected reply time.</li>
+        <li data-n="2">Context strip says what support already sees: the ticket rides on your file, so no "what's your application ID?" dance.</li>
+        <li data-n="3">Empty state keeps the quick chips (<i>Payment &amp; invoices · Document review · Visa consultation</i>) — they prefill the draft, unchanged behaviour, just squared.</li>
+        <li data-n="4">The resolved strip survives: "Resolved. Send a message to reopen." stays as the closed-thread affordance.</li>
+      </ul>
+    </div>
+
+    <!-- AI -->
+    <div>
+      <p class="variant-label">AI channel <span class="tag tag--new">proposed</span></p>
+      <div class="stage" style="height:520px">
+        <div class="stage__bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="n-win">
+          <div class="n-win__head">
+            <span class="n-win__ava" style="background:var(--accent)">AI</span>
+            <div class="n-win__who">
+              <p class="n-win__name">Century AI</p>
+              <p class="n-win__pres"><i style="background:var(--accent)"></i>Instant · knows your journey stage</p>
+            </div>
+            <div class="n-win__ctl"><button title="Minimize">—</button><button title="Expand">⤢</button><button title="Close">✕</button></div>
+          </div>
+          <div class="n-tabs">
+            <button>Support</button>
+            <button>Ama <span class="u">2</span></button>
+            <button class="on">AI</button>
+          </div>
+          <div class="n-statusline">CONTEXT: VISA CHAPTER · INVOICE CNT-INV-0091 PAID</div>
+          <div class="n-msgs">
+            <div class="n-bub n-bub--them" style="border-left-color:var(--accent)">Ask me anything about your application — I can see your stage, invoices and next steps.<small>CENTURY AI</small></div>
+            <div class="n-bub n-bub--me">What documents do I still need for the visa?<small>YOU · 14:06</small></div>
+            <div class="n-bub n-bub--them" style="border-left-color:var(--accent)">Two items: a 3-month bank statement and your passport bio page. Your checklist shows both as pending upload.<small>CENTURY AI · 14:06</small></div>
+            <p class="n-typing" style="padding:0">GENERATING RESPONSE…</p>
+          </div>
+          <div style="padding:.4rem .8rem;border-top:1px solid var(--border-light);display:flex;gap:.35rem;overflow-x:auto">
+            <span class="mono" style="font-size:.54rem;border:1px solid var(--border-light);padding:.18rem .5rem;color:var(--muted-foreground);white-space:nowrap">Visa requirements</span>
+            <span class="mono" style="font-size:.54rem;border:1px solid var(--border-light);padding:.18rem .5rem;color:var(--muted-foreground);white-space:nowrap">Payment plan</span>
+            <span class="mono" style="font-size:.54rem;border:1px solid var(--border-light);padding:.18rem .5rem;color:var(--muted-foreground);white-space:nowrap">Required documents</span>
+          </div>
+          <div style="padding:0 .8rem .5rem">
+            <button class="mono" style="width:100%;border:1.5px solid var(--foreground);background:none;padding:.5rem;font-size:.6rem;letter-spacing:.08em;cursor:pointer">TALK TO A HUMAN →</button>
+          </div>
+          <div class="n-composer">
+            <input placeholder="Ask Century AI…">
+            <button class="ic send" title="Send">→</button>
+          </div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Header = <b>the engine</b> — violet square avatar marks it as non-human instantly; the presence line says what it knows ("knows your journey stage") instead of faking "online".</li>
+        <li data-n="2"><b>Context strip advertises the real trick</b>: the AI prompt carries stage + invoice + pending-action state (<code>useAiChat</code> already sends it — now the user can see it, which builds trust).</li>
+        <li data-n="3"><b>Escalate stays one tap</b>, moved above the composer so it's reachable mid-scroll; still posts the transcript to Support.</li>
+        <li data-n="4">Round AI bubbles → square with a violet left rule — same message anatomy as human chat, clearly not a person.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <h2>Mobile — the window becomes a sheet</h2>
+  <div class="phonewrap">
+    <div class="phone">
+      <div class="phone__screen">
+        <div class="phone__notch"></div>
+        <div class="n-win">
+          <div class="n-win__head">
+            <span class="n-win__ava">AO</span>
+            <div class="n-win__who">
+              <p class="n-win__name">Ama Owusu</p>
+              <p class="n-win__pres"><i></i>Online</p>
+            </div>
+            <div class="n-win__ctl"><button>—</button><button>✕</button></div>
+          </div>
+          <div class="n-tabs">
+            <button>Support</button>
+            <button class="on">Ama <span class="u">2</span></button>
+            <button>AI</button>
+          </div>
+          <div class="n-msgs" style="padding-top:1rem">
+            <div class="n-bub n-bub--them">Your visa checklist is updated — two items signed off.<small>AMA · 14:02</small></div>
+            <div class="n-bub n-bub--me">Got it — uploading tonight.<small>YOU · 14:05</small></div>
+          </div>
+          <div class="n-composer">
+            <button class="ic">⌎</button>
+            <input placeholder="Message Ama…">
+            <button class="ic send">→</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="flex:1;min-width:18rem">
+      <p class="variant-label">Mobile rules</p>
+      <div class="notecard">
+        <ul>
+          <li><b>Full-screen sheet</b> under 600px — the current inline <code>width:360px;bottom:24px</code> overflows small phones and ignores the tab bar; the new sheet uses <code>inset:0</code> + safe-area padding like the app's other sheets.</li>
+          <li><b>Launcher respects <code>--shell-bottom</code></b> — sits above the bottom tab bar, never under a thumb.</li>
+          <li><b>Expand hidden on phones</b> — the sheet is already full-screen; minimize drops to the launcher.</li>
+          <li><b>Peek card doesn't show on mobile</b> — the badge + a heads-up row in the notification feed do the job; a floating preview over a small screen is noise.</li>
+          <li>z-index moves onto the shell scale: launcher 890, sheet 2100 above the tab bar, toasts stay topmost at 10000.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <h2>What changes in code</h2>
+  <div class="grid2">
+    <div class="notecard">
+      <h3>Functionality</h3>
+      <ul>
+        <li><b>Always-on unread</b>: fetch context once on mount + SSE <code>chat.message</code> → bump badge while closed; clear on open. ~30 lines in <code>useCommunicationChat</code>.</li>
+        <li><b>Peek card</b>: last inbound message preview above the launcher (closed state only, ~6s, localStorage "seen" guard).</li>
+        <li><b>Presence</b>: reuse the staff heartbeat / conversation meta to render "Online · last seen" in the header.</li>
+        <li><b>Per-channel unread on tabs</b> from the same context payload.</li>
+        <li><b>Esc / click-outside / minimize</b> — window state machine: closed · open · minimized.</li>
+        <li><b>Delete <code>FloatingChat.tsx</code></b> — dead second implementation.</li>
+      </ul>
+    </div>
+    <div class="notecard">
+      <h3>UI</h3>
+      <ul>
+        <li>Move ~400 lines of inline style objects into <code>app.css</code> as a <code>.cchat</code> block using shell tokens.</li>
+        <li>Header becomes the person (avatar + name + presence), not the word "CHAT".</li>
+        <li>Square bubbles — left-rule on theirs, solid on yours; read receipts in mono.</li>
+        <li>Context strip under tabs: chapter + relevant state.</li>
+        <li>Mobile sheet via media query on the real component; launcher uses the shell's <code>--shell-bottom</code>/<code>--safe-*</code> vars.</li>
+        <li>Toast stack unchanged — it's already disciplined; just lands on the shared z-scale.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

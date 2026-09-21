@@ -145,6 +145,57 @@ export const ENTRY_EVIDENCE_IDS: Record<ServiceStage, readonly string[]> = {
 };
 
 /**
+ * The stage beyond the plan's exit — the one a completed client can ask
+ * for. Null when the plan already covers the whole journey. The scope is
+ * contiguous, so the requestable stage is always the step after its exit.
+ */
+export function requestableStageFor(stages: readonly string[] | null | undefined): ServiceStage | null {
+	const scope = normaliseScope(stages);
+	const exitIdx = (SERVICE_STAGES as readonly string[]).indexOf(scope[scope.length - 1]);
+	return SERVICE_STAGES[exitIdx + 1] ?? null;
+}
+
+/**
+ * What a stage must learn before its file can be worked — the questions and
+ * documents a client entering at that stage gives at assessment, replayed
+ * for a client who continued into the stage later. The field ids are the
+ * assessment's own, so answers land where an entrant's would have.
+ */
+export type StageIntakeField = {
+	id: string;
+	label: string;
+	hint?: string;
+	kind: "text" | "yesno" | "number";
+	/** Shown only when the named field equals this value. */
+	showIf?: { id: string; equals: string };
+};
+
+export const STAGE_INTAKE: Record<Exclude<ServiceStage, "admissions">, { fields: StageIntakeField[]; documentIds: readonly string[] }> = {
+	visa: {
+		fields: [
+			{ id: "visaRefusedBefore", label: "Ever been refused a visa — any country?", hint: "A refusal shapes the whole strategy. We ask before the embassy does.", kind: "yesno" },
+			{ id: "visaRefusalCountry", label: "Which country refused it?", kind: "text", showIf: { id: "visaRefusedBefore", equals: "yes" } },
+			{ id: "visaRefusalYear", label: "When?", hint: "e.g. 2023", kind: "text", showIf: { id: "visaRefusedBefore", equals: "yes" } },
+			{ id: "visaRefusalReason", label: "The reason they gave, if you know it", kind: "text", showIf: { id: "visaRefusedBefore", equals: "yes" } },
+			{ id: "priorApplications", label: "Previous applications — any country, approved or not", kind: "text" },
+			{ id: "travelHistory", label: "Countries visited in the last 5 years", kind: "text" },
+		],
+		documentIds: STAGE_DOCUMENT_IDS.visa,
+	},
+	departure: {
+		fields: [
+			{ id: "arrivalCity", label: "Arrival city", kind: "text" },
+			{ id: "arrivalAirport", label: "Arrival airport", kind: "text" },
+			{ id: "arrivalWindow", label: "When do you plan to land?", hint: "A month or week is fine.", kind: "text" },
+			{ id: "needsAccommodation", label: "Do you need housing arranged?", kind: "yesno" },
+			{ id: "needsPickup", label: "Airport pickup on landing?", kind: "yesno" },
+			{ id: "dependants", label: "Dependants travelling with you", kind: "number" },
+		],
+		documentIds: STAGE_DOCUMENT_IDS.departure,
+	},
+};
+
+/**
  * Stage prices for a package that has none yet — the legacy rows priced
  * the whole journey as one number. Split so à la carte lands a little
  * above the bundle, which is the point of a bundle.

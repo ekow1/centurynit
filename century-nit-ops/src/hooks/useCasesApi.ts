@@ -259,6 +259,10 @@ function toApplication(row: ApiApplication): MockApplication {
 		applicationConsent: row.applicationConsent ?? null,
 		visaConsent: row.visaConsent ?? null,
 		travelConsent: row.travelConsent ?? null,
+		completedAtStage: row.completedAtStage ?? null,
+		completionNote: row.completionNote ?? null,
+		pendingContinuation: row.pendingContinuation ?? null,
+		lastContinuation: row.lastContinuation ?? null,
 		travelAssistanceStatus: row.travelAssistanceStatus ?? null,
 		targetSchoolCount: row.targetSchoolCount ?? null,
 		acceptedSchoolId: row.acceptedSchoolId ?? null,
@@ -506,10 +510,17 @@ export function useCasesApi() {
 		loading,
 		error,
 		refresh,
-		setApplicationStage: async (appId: string, stage: JourneyStage) => {
+		setApplicationStage: async (appId: string, stage: JourneyStage, note?: string) => {
 			const app = applications.find((a) => a.appId === appId);
 			if (!app) return;
-			replaceApplication(await applicationsApi.setStage(app.id, stage));
+			replaceApplication(await applicationsApi.setStage(app.id, stage, note));
+			await refresh();
+		},
+		decideContinuation: async (appId: string, requestId: string, decision: "approved" | "declined", note?: string) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) throw new Error("Application not found");
+			await applicationsApi.decideContinuation(app.id, requestId, { decision, note });
+			replaceApplication(await applicationsApi.get(app.id));
 			await refresh();
 		},
 		recordProceed: async (appId: string, reason: string) => {

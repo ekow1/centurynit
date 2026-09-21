@@ -13,6 +13,7 @@ import { documentsApi } from "century-nit-core/api";
 import type { ApplicantDocument } from "century-nit-shared";
 import { meApi, ApiError } from "century-nit-core/api";
 import { usePaySheet } from "../../components/portal/PaySheet";
+import { StageIntakeCard } from "../../components/portal/StageIntakeCard";
 import { AGENCY_STAGES, PAYMENT_PLANS } from "century-nit-core";
 import { useNotifier } from "../../components/notifier/Notifier";
 import type { ApiInvoice, TravelFlight } from "century-nit-shared";
@@ -286,6 +287,11 @@ function TravelAssistanceInner() {
 						{s.fact ? <p className="vstep__d">{s.fact}</p> : null}
 					</div>
 				))}
+			</div>
+
+			{/* the intake this stage asks of a client who continued into it */}
+			<div className="mt-4">
+				<StageIntakeCard stage="departure" />
 			</div>
 
 			<div className="psplit mt-5">

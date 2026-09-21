@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Complete where you stop — continue by request + stage intake (proposed)</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1240px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	.banner{font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;background:var(--ink);color:#fff;padding:.35rem .7rem;margin-bottom:.8rem}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+	.jump a{color:inherit}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.5rem clamp(1.25rem,3vw,2.25rem) 2.5rem}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.sidebyside{display:flex;gap:2rem;flex-wrap:wrap;align-items:flex-start}
+	.cap{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.5rem}
+	.phone{width:390px;border:1.5px solid var(--ink);background:#fff;flex-shrink:0}
+	.phone .scr{padding:1rem 1rem 1.5rem}
+
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)} .sm{font-size:.8rem}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap;text-align:center}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.btn--off{opacity:.4;cursor:not-allowed}
+	.pill{display:inline-flex;align-items:center;padding:.25rem .65rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line-light)}
+	.pill--dash{border-style:dashed;color:var(--fg-muted)}
+	.pkv{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--line-light);font-size:.78rem}
+	.pkv:last-child{border-bottom:none}
+	.pkv .k{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--micro);font-size:.64rem;padding-top:.1rem}
+	.pkv .v{text-align:right;min-width:0}
+	.card{background:#fff;border:1px solid var(--ink);padding:1.1rem}
+	.card--inv{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.card--inv .eyebrow{color:rgba(255,255,255,.6)}
+	.card--inv .muted{color:rgba(255,255,255,.7)}
+	.card--inv .pkv{border-color:#333}
+	.mt1{margin-top:.5rem}.mt2{margin-top:.8rem}.mt3{margin-top:1rem}.mt4{margin-top:1.4rem}
+	.dlinks{font-family:var(--mono);font-size:.68rem;white-space:nowrap}
+	.dlinks a{color:var(--ink);text-decoration:underline}
+	.dlinks a+a{margin-left:.7rem}
+	.avatar{width:2.6rem;height:2.6rem;border:1.5px solid var(--ink);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;font-size:.85rem;flex-shrink:0}
+	.rowx{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap}
+
+	.psplit{display:grid;grid-template-columns:minmax(0,1fr) 21rem;gap:2rem;align-items:start;margin-top:1.75rem}
+	.prail{display:flex;flex-direction:column;gap:.8rem}
+
+	.hero{border:1.5px solid var(--ink);padding:1.4rem 1.75rem;display:flex;flex-wrap:wrap;gap:1rem;justify-content:space-between;align-items:center;margin-top:1.5rem}
+	.hero--inv{background:var(--ink);color:#fff}
+	.hero--inv .eyebrow{color:rgba(255,255,255,.6)}
+	.hero--inv .muted{color:rgba(255,255,255,.75)}
+	.hero--dash{border-style:dashed}
+	.hero__title{font-size:1.5rem;font-weight:600;letter-spacing:-.01em;margin-top:.2rem}
+	.hero__sub{font-size:.82rem;margin-top:.3rem}
+
+	.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:.6rem;margin-top:1.25rem}
+	.step{border:1px solid var(--line-light);padding:.7rem .9rem;min-width:0}
+	.step .l{font-size:.8rem;font-weight:650}
+	.step .d{font-family:var(--mono);font-size:.6rem;color:var(--fg-muted);margin-top:.2rem;letter-spacing:.04em;text-transform:uppercase}
+	.step--done{background:var(--muted-bg)}
+	.step--on{border:1.5px solid var(--ink)}
+	.step--on .d{color:var(--ink);font-weight:700}
+	.step--skip{border-style:dashed;color:var(--fg-muted)}
+	.step--skip .l{font-weight:500}
+
+	.flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;margin-top:1rem}
+	.flow .node{border:1.5px solid var(--ink);padding:.7rem 1rem;font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;background:#fff;display:flex;align-items:center;text-align:center}
+	.flow .node--inv{background:var(--ink);color:#fff}
+	.flow .node--dash{border-style:dashed;color:var(--fg-muted)}
+	.flow .arr{display:flex;align-items:center;padding:0 .5rem;font-family:var(--mono);color:var(--fg-muted)}
+	.flow .who{display:block;font-size:.55rem;color:var(--fg-muted);margin-top:.2rem}
+	.flow .node--inv .who{color:rgba(255,255,255,.6)}
+
+	.opshd{display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;border-bottom:1.5px solid var(--ink);padding-bottom:1rem}
+	.opshd .who2{font-size:1.2rem;font-weight:700}
+	.opshd .meta{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);letter-spacing:.06em;margin-top:.15rem}
+	.opshd .acts{margin-left:auto;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+	.sheet{border:1.5px solid var(--ink);max-width:30rem;background:#fff;box-shadow:8px 8px 0 rgba(0,0,0,.12)}
+	.sheet__h{border-bottom:1px solid var(--ink);padding:.9rem 1.1rem;display:flex;justify-content:space-between;align-items:baseline}
+	.sheet__b{padding:1rem 1.1rem}
+	.chk{display:flex;gap:.6rem;align-items:flex-start;padding:.5rem 0;border-bottom:1px solid var(--line-light);font-size:.8rem}
+	.chk:last-child{border-bottom:none}
+	.chk .box{width:1rem;height:1rem;border:1.5px solid var(--ink);flex-shrink:0;margin-top:.1rem;font-family:var(--mono);font-size:.7rem;display:flex;align-items:center;justify-content:center}
+	.chk .box--x{background:var(--ink);color:#fff}
+	.chk .box--warn{border-style:dashed}
+	.chk .t{flex:1}
+	.chk .s{font-family:var(--mono);font-size:.6rem;color:var(--fg-muted);text-transform:uppercase;letter-spacing:.06em;margin-top:.15rem}
+	.input{width:100%;border:1.5px solid var(--ink);padding:.55rem .65rem;font-family:var(--mono);font-size:.8rem;background:#fff}
+	textarea.input{font-family:var(--sans);resize:vertical}
+	.fla{border:1.5px dashed var(--ink);padding:.8rem 1rem;font-size:.78rem;margin-top:.8rem}
+
+	.cmp{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-top:1rem}
+	.cmp .col{border:1px solid var(--line-light);padding:1rem 1.2rem}
+	.cmp h4{font-size:.9rem;margin-bottom:.4rem}
+	.cmp .col--inv{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.cmp .col--inv .muted{color:rgba(255,255,255,.7)}
+	.cmp .col--inv .pkv{border-color:#333}
+	.cmp .col--inv .k{color:rgba(255,255,255,.6)}
+
+	/* intake */
+	.fld{margin-top:.7rem}
+	.fld .q{font-size:.82rem;font-weight:600}
+	.fld .h{font-size:.68rem;color:var(--fg-muted);margin-top:.1rem}
+	.opt{display:inline-block;border:1px solid var(--line-light);padding:.35rem .8rem;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;margin:.35rem .35rem 0 0}
+	.opt--on{border-color:var(--ink);background:var(--ink);color:#fff}
+	.doc{display:flex;justify-content:space-between;align-items:center;gap:.7rem;padding:.55rem 0;border-bottom:1px solid var(--line-light);font-size:.8rem}
+	.doc:last-child{border-bottom:none}
+	.doc .nm b{display:block;font-size:.8rem}
+	.doc .nm .h{font-family:var(--mono);font-size:.58rem;color:var(--fg-muted);text-transform:uppercase;letter-spacing:.06em}
+	.doc .st{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+	.up{border:1.5px solid var(--ink);padding:.35rem .7rem;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+
+	@media(max-width:900px){.psplit{grid-template-columns:1fr}.cmp{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<span class="banner">Proposal · mock · v3</span>
+	<h1 class="page">Complete where you stop — continue by request, and the stage asks its own questions</h1>
+	<p class="note"><b>One terminal state.</b> When the stage the applicant reached is done — the plan's exit, or the point they chose to stop — the handler marks the journey <b>complete</b>. Picking up the next stage is a <b>request the client sends</b>; ops approves, the plan extends — and the new stage opens with <b>its own intake</b>: the questions and documents it needs that were never asked at consultation, minus whatever is already on file.</p>
+	<div class="jump">
+		<a href="#a">A · portal: journey complete</a>
+		<a href="#b">B · request sent → reopened</a>
+		<a href="#i">I · stage intake</a>
+		<a href="#c">C · ops: mark complete</a>
+		<a href="#d">D · ops: continue request</a>
+		<a href="#e">E · the loop</a>
+		<a href="#f">F · honest reporting</a>
+		<a href="#g">G · wiring</a>
+	</div>
+
+	<!-- ── A · PORTAL: COMPLETE AT THE REACHED STAGE ────────────── -->
+	<div class="tag" id="a">A · Portal — journey complete, ended at Applications</div>
+	<div class="mock">
+		<div class="hero hero--inv">
+			<div>
+				<span class="eyebrow">Journey · complete</span>
+				<div class="hero__title">You're admitted. Journey complete.</div>
+				<p class="hero__sub muted">KNUST · MSc Logistics · completed 15 Oct · ended at Applications — visa support not taken.</p>
+			</div>
+			<div style="text-align:right">
+				<div class="pill" style="border-color:#fff">Completed</div>
+				<div class="mono mt2" style="font-size:.66rem;color:rgba(255,255,255,.6)">2 payments · all settled</div>
+			</div>
+		</div>
+
+		<div class="steps">
+			<div class="step step--done"><div class="l">Consultation</div><div class="d">done · Sep</div></div>
+			<div class="step step--done"><div class="l">Enrolment</div><div class="d">done · plan A+V</div></div>
+			<div class="step step--done"><div class="l">Applications</div><div class="d">done · admitted</div></div>
+			<div class="step step--skip"><div class="l">Visa</div><div class="d">not taken</div></div>
+			<div class="step step--skip"><div class="l">Departure</div><div class="d">not taken</div></div>
+			<div class="step step--done"><div class="l">Complete</div><div class="d">at Applications</div></div>
+		</div>
+
+		<div class="psplit">
+			<div>
+				<div class="card">
+					<div class="eyebrow">What's yours</div>
+					<div class="pkv mt1"><span class="k">Admission letter · KNUST</span><span class="v"><span class="pill pill--hollow">Released</span> <span class="dlinks"><a>↓</a></span></span></div>
+					<div class="pkv"><span class="k">Receipts · 2 payments</span><span class="v"><span class="dlinks"><a>↓ rcpt</a><a>↓ inv</a></span></span></div>
+					<div class="pkv"><span class="k">Uploaded documents</span><span class="v"><span class="dlinks"><a>Vault →</a></span></span></div>
+				</div>
+
+				<div class="card mt3 card--inv">
+					<div class="eyebrow">Ready for the next stage?</div>
+					<p class="muted sm mt1">Visa support is the next step on your plan. Send a request — your handler confirms, quotes the stage, and your journey resumes where it stopped.</p>
+					<div class="mt2" style="display:flex;gap:.5rem;flex-wrap:wrap">
+						<span class="btn" style="background:#fff;color:var(--ink);border-color:#fff">Request Visa stage →</span>
+						<span class="btn btn--ghost" style="color:#fff;border-color:rgba(255,255,255,.5)">Not now</span>
+					</div>
+				</div>
+			</div>
+			<div class="prail">
+				<div class="card">
+					<div class="eyebrow">Your record</div>
+					<div class="pkv mt1"><span class="k">Outcome</span><span class="v"><b>Admitted</b> · KNUST MSc</span></div>
+					<div class="pkv"><span class="k">Plan</span><span class="v">A + V · ended at A</span></div>
+					<div class="pkv"><span class="k">Paid</span><span class="v mono">GH₵ 7,200</span></div>
+					<div class="pkv"><span class="k">Not billed</span><span class="v mono">Visa · GH₵ 4,800</span></div>
+				</div>
+				<div class="card">
+					<div class="eyebrow">Your handler</div>
+					<div class="pkv mt1"><span class="k">E. Mensima</span><span class="v">Admissions</span></div>
+					<span class="btn btn--ghost btn--sm mt2" style="width:100%">Message →</span>
+				</div>
+			</div>
+		</div>
+	</div>
+	<ul class="callout">
+		<li>Complete is honest about <b>where</b> it ended: "ended at Applications — visa support not taken" is on the record. Steps not taken read <b>not taken</b> — dashed, never "locked".</li>
+		<li>The continue CTA only appears when there <b>is</b> a next stage to request — a full-journey completion shows nothing to add.</li>
+	</ul>
+
+	<!-- ── B · REQUEST SENT → REOPENED ───────────────────────────── -->
+	<div class="tag" id="b">B · Portal — request sent, then reopened</div>
+	<div class="mock">
+		<div class="sidebyside">
+			<div style="flex:1;min-width:19rem">
+				<p class="cap">B1 · Request pending</p>
+				<div class="hero hero--dash" style="margin-top:0">
+					<div>
+						<span class="eyebrow">Journey · complete</span>
+						<div class="hero__title">Visa request sent</div>
+						<p class="hero__sub muted">Sent 18 Oct · your handler reviews and confirms the stage price. We'll notify you here.</p>
+					</div>
+					<span class="pill pill--dash">Awaiting office</span>
+				</div>
+				<div class="card mt3">
+					<div class="eyebrow">What happens next</div>
+					<div class="pkv mt1"><span class="k">1</span><span class="v">Handler reviews your request</span></div>
+					<div class="pkv"><span class="k">2</span><span class="v">Visa stage added · invoice issued</span></div>
+					<div class="pkv"><span class="k">3</span><span class="v">Stage asks what it needs · pay → Visa opens</span></div>
+				</div>
+				<div class="card mt3" style="border-style:dashed">
+					<div class="rowx"><p class="muted sm" style="max-width:22rem">Changed your mind before it's reviewed?</p><span class="btn btn--ghost btn--sm">Withdraw request</span></div>
+				</div>
+			</div>
+			<div style="flex:1;min-width:19rem">
+				<p class="cap">B2 · Approved — Visa opens with its intake</p>
+				<div class="hero" style="margin-top:0">
+					<div>
+						<span class="eyebrow">Chapter IV · Visa</span>
+						<div class="hero__title">Welcome back — Visa is open</div>
+						<p class="hero__sub muted">Request approved 20 Oct · stage added · invoice INV-0119 issued. Two things open the file below.</p>
+					</div>
+					<span class="btn">Pay GH₵ 4,800 →</span>
+				</div>
+				<div class="steps">
+					<div class="step step--done"><div class="l">…Applications</div><div class="d">done</div></div>
+					<div class="step step--on"><div class="l">Visa</div><div class="d">invoice + intake</div></div>
+					<div class="step step--skip"><div class="l">Departure</div><div class="d">ahead</div></div>
+				</div>
+				<p class="note mt3" style="margin-bottom:0">Position resumes <b>at the facts</b>. The stage opens carrying two asks: its entry invoice, and the intake it never got at consultation — below.</p>
+			</div>
+		</div>
+	</div>
+
+	<!-- ── I · STAGE INTAKE ──────────────────────────────────────── -->
+	<div class="tag" id="i">I · The stage asks its own questions — because consultation never did</div>
+	<div class="mock">
+		<div class="sidebyside">
+			<div style="flex:1.2;min-width:21rem">
+				<p class="cap">Visa intake — opened with the stage</p>
+				<div class="card">
+					<div class="rowx"><span class="eyebrow">Visa needs to know</span><span class="pill pill--dash">3 questions</span></div>
+					<p class="muted sm mt1">You joined us at Applications, so we never asked these. A visa officer can't file without them — this is the same set a visa-entry client answers at booking.</p>
+
+					<div class="fld">
+						<div class="q">Ever been refused a visa — any country?</div>
+						<div class="h">A refusal shapes the whole strategy. We ask before the embassy does.</div>
+						<span class="opt opt--on">Yes</span><span class="opt">No</span>
+						<input class="input mt1" value="UK visitor visa · 2023 · insufficient ties" style="font-size:.72rem">
+					</div>
+					<div class="fld">
+						<div class="q">Previous applications — any country, approved or not?</div>
+						<input class="input mt1" value="Schengen · approved 2022" style="font-size:.72rem">
+					</div>
+					<div class="fld">
+						<div class="q">Countries visited in the last 5 years</div>
+						<input class="input mt1" value="Togo, UAE, UK" style="font-size:.72rem">
+					</div>
+				</div>
+			</div>
+			<div style="flex:1;min-width:19rem">
+				<p class="cap">…and its documents — minus what's on file</p>
+				<div class="card">
+					<div class="rowx"><span class="eyebrow">Visa document set</span><span class="pill pill--dash">2 of 5 on file</span></div>
+					<div class="mt1">
+						<div class="doc"><div class="nm"><b>Passport bio page</b><span class="h">on file · verified Sep</span></div><span class="st" style="color:var(--fg-muted)">✓ on file</span></div>
+						<div class="doc"><div class="nm"><b>Passport photo</b><span class="h">on file · verified Sep</span></div><span class="st" style="color:var(--fg-muted)">✓ on file</span></div>
+						<div class="doc"><div class="nm"><b>Financial evidence</b><span class="h">6-month statements or sponsor letter</span></div><span class="up">Upload ↑</span></div>
+						<div class="doc"><div class="nm"><b>TB test certificate</b><span class="h">approved clinic · within 6 months</span></div><span class="up">Upload ↑</span></div>
+						<div class="doc"><div class="nm"><b>Admission letter</b><span class="h">KNUST · released with your file</span></div><span class="st" style="color:var(--fg-muted)">✓ attached</span></div>
+					</div>
+					<p class="muted sm mt2">The list is the stage's set (<code>STAGE_DOCUMENT_IDS.visa</code>) against your vault — what you already gave us is never asked twice.</p>
+				</div>
+				<div class="fla">Intake isn't a payment gate — the file opens on the invoice. It's the officer's working checklist: the stage can be paid and waiting on <i>you</i>, and the chapter says so plainly.</div>
+			</div>
+		</div>
+	</div>
+	<ul class="callout">
+		<li>Each stage carries an <b>intake pack</b>: Visa → the visa-history questions + its document set; Departure → the arrival questions (city, airport, housing, pickup, dependants) + its set. The same packs the assessment shows an entrant — reused, not re-authored.</li>
+		<li>Documents already verified in the vault are <b>never re-asked</b> — the checklist is the set minus what's on file, so a continuer's intake is short, not a second assessment.</li>
+	</ul>
+
+	<!-- ── C · OPS: MARK COMPLETE ────────────────────────────────── -->
+	<div class="tag" id="c">C · Ops — "Mark complete" wherever the work stopped</div>
+	<div class="mock">
+		<p class="cap">C1 · Scoped exit done — exists today</p>
+		<div class="opshd">
+			<div class="avatar">AB</div>
+			<div>
+				<div class="who2">Ama Boateng <span class="pill pill--hollow" style="margin-left:.4rem">CNA-2026-041</span></div>
+				<div class="meta">PLAN ADMISSIONS ONLY · ADMITTED · FEE SETTLED</div>
+			</div>
+			<div class="acts"><span class="pill pill--solid">Exit reached</span><span class="btn">Mark complete</span></div>
+		</div>
+
+		<p class="cap mt4">C2 · Client stopped mid-plan — same button, "ended at" recorded (proposed)</p>
+		<div class="opshd">
+			<div class="avatar">EK</div>
+			<div>
+				<div class="who2">Ekow Essel <span class="pill pill--hollow" style="margin-left:.4rem">CNA-2026-017</span></div>
+				<div class="meta">PLAN A+V · ADMITTED · VISA CONSENT: OPTED OUT 12 OCT · INVOICES CLEAN</div>
+			</div>
+			<div class="acts"><span class="pill pill--dash">Opted out</span><span class="btn">Mark complete</span></div>
+		</div>
+		<ul class="callout">
+			<li>Same act, honest record: the case completes <b>at the stage reached</b> — "completed · ended at Applications · client opted out of Visa". Mid-plan completes only when the reached stage's work is genuinely done and money is clean.</li>
+			<li>A client who quits <b>inside</b> an unfinished stage can't be marked complete — that would lie. Their consent stays recorded; the case waits for them or for a stage amendment.</li>
+		</ul>
+	</div>
+
+	<div class="mock mt3">
+		<p class="cap">C3 · The complete sheet — the same hygiene gate either way</p>
+		<div class="sidebyside">
+			<div class="sheet" style="margin:0">
+				<div class="sheet__h"><b>Mark complete</b><span class="mono muted" style="font-size:.62rem">CNA-2026-017</span></div>
+				<div class="sheet__b">
+					<p class="muted sm">Will complete <b>at Applications</b> — client opted out of Visa · "deferring to next intake"</p>
+					<div class="mt2">
+						<div class="chk"><span class="box box--x">✓</span><div class="t">Reached stage's work is done<div class="s">Offer recorded · KNUST · admitted</div></div></div>
+						<div class="chk"><span class="box box--x">✓</span><div class="t">Money clean<div class="s">Visa invoice voided · GH₵ 7,200 settled</div></div></div>
+						<div class="chk"><span class="box box--x">✓</span><div class="t">No open handoffs</div></div>
+					</div>
+					<p class="eyebrow mt3">Completion note</p>
+					<textarea class="input mt1" rows="2">Client deferring to Jan intake; visa stage not taken. May request it later.</textarea>
+					<div class="fla">Portal shows "Journey complete — ended at Applications" with a Request Visa stage card. They can pick it up any time.</div>
+					<div class="mt3" style="display:flex;gap:.5rem"><span class="btn" style="flex:1">Mark complete</span><span class="btn btn--ghost">Cancel</span></div>
+				</div>
+			</div>
+			<div style="flex:1;min-width:18rem">
+				<p class="note">The gate is the one completion already enforces — now applied to the reached stage: <b>its work done, no live receivable, no open handoff</b>. The "ended at" + note become the record.</p>
+				<p class="note">If an issued invoice is still open or a handoff pends, the button stays off until it's settled, voided, or written off — a case never completes with money hanging.</p>
+			</div>
+		</div>
+	</div>
+
+	<!-- ── D · OPS: CONTINUE REQUEST ─────────────────────────────── -->
+	<div class="tag" id="d">D · Ops — the client's request lands as a task</div>
+	<div class="mock">
+		<div class="sidebyside">
+			<div style="flex:1;min-width:19rem">
+				<p class="cap">D1 · Pending task card</p>
+				<div class="card">
+					<div class="rowx"><span class="eyebrow">Continue request</span><span class="pill pill--dash">18 Oct · 2d ago</span></div>
+					<div class="pkv mt2"><span class="k">Case</span><span class="v">CNA-2026-017 · Ekow Essel</span></div>
+					<div class="pkv"><span class="k">Completed</span><span class="v">at Applications · 15 Oct</span></div>
+					<div class="pkv"><span class="k">Requests</span><span class="v"><b>Visa stage</b> · GH₵ 4,800</span></div>
+					<div class="pkv"><span class="k">Client note</span><span class="v">"Ready for January intake"</span></div>
+					<div class="mt2" style="display:flex;gap:.5rem"><span class="btn btn--sm">Review →</span><span class="btn btn--ghost btn--sm">Decline…</span></div>
+				</div>
+			</div>
+			<div class="sheet" style="flex:1;min-width:19rem;max-width:none;box-shadow:none">
+				<div class="sheet__h"><b>Approve continuation</b><span class="mono muted" style="font-size:.62rem">CNA-2026-017</span></div>
+				<div class="sheet__b">
+					<p class="muted sm">Adds <b>Visa</b> to the plan — the existing extend-plan machinery. Entry milestone bills on approval.</p>
+					<div class="pkv mt2"><span class="k">Plan becomes</span><span class="v">A + V (unchanged scope)</span></div>
+					<div class="pkv"><span class="k">New line</span><span class="v mono">Visa stage · GH₵ 4,800 · due on acceptance</span></div>
+					<div class="pkv"><span class="k">Resumes at</span><span class="v">Visa · awaiting payment</span></div>
+					<div class="pkv"><span class="k">Intake sent</span><span class="v"><b>3 questions · 5 documents</b> — 2 already on file</span></div>
+					<div class="mt3" style="display:flex;gap:.5rem"><span class="btn" style="flex:1">Approve &amp; invoice</span><span class="btn btn--ghost">Decline</span></div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<ul class="callout">
+		<li>Approval = the existing <b>extend plan</b> path: scope gains the stage, the invoice gets its entry line, consent resets — and the stage's intake pack attaches, so the officer sees the client's file needs from day one.</li>
+		<li>The sheet says exactly what the client will be asked — no surprise "we need more" a week into the stage.</li>
+	</ul>
+
+	<!-- ── E · THE LOOP ──────────────────────────────────────────── -->
+	<div class="tag" id="e">E · The loop, end to end</div>
+	<div class="mock">
+		<div class="flow">
+			<div class="node">Stage work done<span class="who">facts</span></div><div class="arr">→</div>
+			<div class="node">Mark complete<span class="who">handler · money clean</span></div><div class="arr">→</div>
+			<div class="node node--inv">Complete<span class="who">"ended at …" on record</span></div><div class="arr">→</div>
+			<div class="node node--dash">Request next stage<span class="who">client · optional</span></div><div class="arr">→</div>
+			<div class="node">Approve + invoice<span class="who">ops · extend plan</span></div><div class="arr">→</div>
+			<div class="node">Stage intake<span class="who">questions + docs</span></div><div class="arr">→</div>
+			<div class="node">Resumes at facts<span class="who">pay entry milestone</span></div>
+		</div>
+		<p class="note mt3" style="margin-bottom:0">Complete is a door that swings both ways — and each stage carries its own intake, so the assessment stays short for everyone and no stage ever files blind.</p>
+	</div>
+
+	<!-- ── F · HONEST REPORTING ──────────────────────────────────── -->
+	<div class="tag" id="f">F · "Complete" stays honest</div>
+	<div class="mock">
+		<div class="cmp">
+			<div class="col col--inv">
+				<h4>Completed · full plan</h4>
+				<div class="pkv"><span class="k">Record</span><span class="v">ended at Departure</span></div>
+				<div class="pkv"><span class="k">Means</span><span class="v">Everything bought, delivered</span></div>
+				<div class="pkv"><span class="k">Counts as</span><span class="v"><b>Full conversion</b></span></div>
+			</div>
+			<div class="col">
+				<h4>Completed · ended early</h4>
+				<div class="pkv"><span class="k">Record</span><span class="v">ended at Applications · opt-out</span></div>
+				<div class="pkv"><span class="k">Means</span><span class="v">Reached stage done; rest not taken</span></div>
+				<div class="pkv"><span class="k">Counts as</span><span class="v"><b>Partial</b> — upsell pipeline</span></div>
+			</div>
+		</div>
+		<p class="note mt3" style="margin-bottom:0">One status, two stories: <code>completedAtStage</code> + <code>completionNote</code> separate "rode the whole plan" from "stopped at Applications". The early-enders list is literally the sales team's <b>warmest</b> pipeline — they already paid once, and the portal hands them the button to come back.</p>
+	</div>
+
+	<!-- ── G · WIRING ────────────────────────────────────────────── -->
+	<div class="tag" id="g">G · What this touches</div>
+	<div class="mock">
+		<div class="pkv"><span class="k">Shared</span><span class="v mono sm">STAGE_INTAKE: per-stage questions + docs (reuses STAGE_DOCUMENT_IDS + assessment field defs) · nextStepFor complete at reached exit</span></div>
+		<div class="pkv"><span class="k">Schema</span><span class="v mono sm">applications: +completed_at_stage, +completion_note · continuation_requests · stage_intake jsonb (answers per stage)</span></div>
+		<div class="pkv"><span class="k">API</span><span class="v mono sm">setStage completed → mid-plan path w/ hygiene gate · POST /me/continuation · approve → extend plan + invoice + intake attached</span></div>
+		<div class="pkv"><span class="k">Checklist</span><span class="v mono sm">requiredDocumentIdsFor already re-derives from scope — extension grows the doc set for free; intake card surfaces it</span></div>
+		<div class="pkv"><span class="k">Ops</span><span class="v mono sm">Mark complete sheet (ended-at + note) · continue-request card · approve sheet previews the intake</span></div>
+		<div class="pkv"><span class="k">Portal</span><span class="v mono sm">complete hero w/ "ended at" + Request card · pending → withdraw · reopened chapter: invoice + intake card</span></div>
+		<p class="note mt3" style="margin-bottom:0">The intake questions aren't new schema — they're the assessment's conditional sections, replayed at the stage that actually needs them. No "closed" state, no forked ladder: <b>completed is the only terminal; intake is how a stage introduces itself.</b></p>
+	</div>
+</div>
+</body>
+</html>

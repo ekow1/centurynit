@@ -126,6 +126,10 @@ import {
 	type StageConsentStage,
 	type StageConsent,
 
+	continuationRequestSchema,
+	requestContinuationSchema,
+	stageIntakeSubmissionSchema,
+
 } from "century-nit-shared";
 import {
 
@@ -140,6 +144,11 @@ import {
 	upsertStageConsent,
 	getApplicationForClientUser,
 } from "../services/stageConsents.js";
+import {
+	requestContinuation,
+	withdrawContinuation,
+	submitStageIntake,
+} from "../services/continuations.js";
 import { randomUUID } from "node:crypto";
 import { HttpError, validationHook } from "../middleware/error.js";
 
@@ -924,6 +933,72 @@ meRouter.openapi(
 			decision: body.decision,
 		});
 		return c.json(updated);
+	},
+);
+
+/* ── Stage continuation — the completed client asks to take the next stage ── */
+
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/application/continuation",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			body: { content: { "application/json": { schema: requestContinuationSchema } }, required: true },
+		},
+		responses: {
+			200: { content: { "application/json": { schema: continuationRequestSchema } }, description: "The continuation request" },
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const request = await requestContinuation({ applicantUserId: user.id, note: c.req.valid("json").note });
+		return c.json(request);
+	},
+);
+
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/application/continuation/withdraw",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {},
+		responses: {
+			200: { content: { "application/json": { schema: continuationRequestSchema } }, description: "The withdrawn request" },
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const request = await withdrawContinuation({ applicantUserId: user.id });
+		return c.json(request);
+	},
+);
+
+/* ── Stage intake — the questions a reopened stage asks of its client ── */
+
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/application/stage-intake",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			body: { content: { "application/json": { schema: stageIntakeSubmissionSchema } }, required: true },
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.record(z.string(), z.record(z.string(), z.string())) } },
+				description: "The application's intake answers, keyed by stage",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const body = c.req.valid("json");
+		const intake = await submitStageIntake({ applicantUserId: user.id, stage: body.stage, answers: body.answers });
+		return c.json(intake);
 	},
 );
 

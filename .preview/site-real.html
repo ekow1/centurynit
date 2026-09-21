@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Century NIT — homepage improved (mock)</title>
+<style>
+	:root{
+		--background:#fff;--foreground:#000;--muted:#f5f5f5;--muted-foreground:#52525b;
+		--micro:#3f3f46;--border:#000;--border-light:#a3a3a3;--thin:1.5px solid #000;
+		--thick:1.5px solid #000;--linelt:#e4e4e7;
+		--mono:ui-monospace,"Cascadia Code",Menlo,Consolas,monospace;
+		--container:80rem;--navh:5.25rem;
+	}
+	*{box-sizing:border-box;margin:0;padding:0}
+	body{background:var(--background);color:var(--foreground);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+	.container{max-width:var(--container);margin:0 auto;padding:0 clamp(1.5rem,4vw,3.5rem)}
+	.eyebrow{font-family:var(--mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.16em;color:var(--muted-foreground)}
+	.mono{font-family:var(--mono)}
+	.muted{color:var(--muted-foreground)}
+	a{color:inherit}
+	img{display:block;width:100%;height:100%;object-fit:cover}
+
+	/* buttons — square, like production */
+	.btn{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;padding:.9rem 1.7rem;border:2px solid var(--border);background:var(--foreground);color:#fff;text-decoration:none;cursor:pointer;transition:background .1s,color .1s}
+	.btn--secondary{background:transparent;color:var(--foreground)}
+	.btn--secondary:hover{background:var(--foreground);color:#fff}
+	.btn--sm{padding:.55rem 1rem;font-size:.68rem}
+	.link-arrow{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700;text-decoration:none;white-space:nowrap}
+	.link-arrow:hover{text-decoration:underline}
+
+	.section{padding:clamp(4.5rem,9vw,8rem) 0}
+	.section__head{display:flex;justify-content:space-between;align-items:flex-end;gap:2rem;margin-bottom:2.75rem}
+	.section-title{font-size:clamp(2rem,4vw,3.2rem);line-height:1;letter-spacing:-.035em;font-weight:500;margin-top:.6rem}
+	.lead{color:var(--muted-foreground);font-size:1.05rem;line-height:1.65}
+	.section-rule{border:0;height:1px;background:var(--linelt);margin:0}
+
+	/* ============ NAV ============ */
+	.nav{border-bottom:var(--thick);position:sticky;top:0;background:#fff;z-index:50}
+	.nav__inner{height:var(--navh);display:flex;align-items:center;gap:2.5rem}
+	.nav__logo{font-weight:700;font-size:1.2rem;letter-spacing:-.02em;text-decoration:none}
+	.nav__logo span{font-family:var(--mono);font-weight:400;font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--muted-foreground);margin-left:.4rem}
+	.nav__links{display:flex;gap:1.7rem;margin-left:auto}
+	.nav__links a{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;text-decoration:none;color:var(--muted-foreground)}
+	.nav__links a:hover,.nav__links a.on{color:var(--foreground)}
+	.nav__actions{display:flex;align-items:center;gap:1rem}
+	.nav__signin{font-family:var(--mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;text-decoration:none}
+	@media(max-width:960px){.nav__links{display:none}}
+
+	/* ============ HERO (faithful to production split layout) ============ */
+	.hero{position:relative;border-bottom:var(--thick);background:#fff}
+	.hero__viewport{position:relative;height:clamp(36rem,88vh,50rem)}
+	.slide{position:absolute;inset:0;display:grid;grid-template-rows:1fr auto}
+	@media(min-width:960px){.slide{grid-template-columns:minmax(0,.72fr) minmax(0,1.28fr);grid-template-rows:1fr}}
+	.slide__copy{display:flex;flex-direction:column;justify-content:center;padding:clamp(2rem,4vw,4rem) clamp(1.5rem,3.5vw,3rem);padding-bottom:6rem;position:relative;background:#fff;overflow:hidden}
+	@media(min-width:960px){.slide__copy{border-right:var(--thin)}}
+	.slide__kicker{display:flex;align-items:center;gap:.75rem;margin-bottom:1.5rem}
+	.slide__index{font-family:var(--mono);font-size:.75rem;letter-spacing:.14em}
+	.slide__rule{width:2.5rem;height:2px;background:var(--foreground)}
+	.slide__title{font-size:clamp(2.6rem,5.5vw,4.5rem);line-height:.95;letter-spacing:-.04em;font-weight:500;max-width:11ch}
+	.slide__title em{font-style:italic;font-weight:400}
+	.slide__lead{margin-top:1.25rem;font-size:clamp(1rem,1.5vw,1.15rem);line-height:1.65;color:var(--muted-foreground);max-width:30rem}
+	.slide__actions{display:flex;flex-wrap:wrap;gap:.85rem;margin-top:1.75rem}
+	.slide__meta{margin-top:1.6rem;padding-top:1.1rem;border-top:1px solid var(--border-light);display:flex;flex-wrap:wrap;gap:1.25rem 2.2rem}
+	.slide__meta dt{font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-foreground);margin-bottom:.3rem}
+	.slide__meta dd{font-size:1.05rem;letter-spacing:-.02em;font-weight:600}
+	.slide__media{position:relative;overflow:hidden;background:#111;min-height:14rem;border-top:var(--thin)}
+	@media(min-width:960px){.slide__media{min-height:0;height:100%;border-top:0}}
+	.slide__media img{position:absolute;inset:0;filter:grayscale(78%)}
+	.slide__media::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#00000014,transparent 45%)}
+	/* improvement: service strip on the image */
+	.slide__tag{position:absolute;right:1.25rem;bottom:1.25rem;z-index:2;background:#fff;border:var(--thin);padding:.5rem .8rem;font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em}
+	/* controls */
+	.hero__controls{position:absolute;left:0;right:0;bottom:0;z-index:10;border-top:var(--thin);background:rgba(255,255,255,.97)}
+	.hero__controls-in{max-width:var(--container);margin:0 auto;padding:.9rem clamp(1.5rem,4vw,3.5rem);display:grid;grid-template-columns:auto 1fr auto;gap:1rem 1.5rem;align-items:center}
+	.hero__nav{display:flex;gap:.5rem}
+	.hero__nav button{width:46px;height:46px;border:2px solid var(--border);background:#fff;font-size:1.1rem;cursor:pointer}
+	.hero__nav button:hover{background:var(--foreground);color:#fff}
+	.hero__dots{display:flex;gap:.35rem;justify-content:center;flex-wrap:wrap}
+	.hero__dots button{min-height:42px;padding:.45rem .75rem;font-family:var(--mono);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid transparent;color:var(--muted-foreground);background:none;cursor:pointer}
+	.hero__dots button.on{color:var(--foreground);border-color:var(--border);background:var(--muted)}
+	.hero__prog{min-width:8rem}
+	.hero__prog p{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground);margin-bottom:.4rem}
+	.hero__prog .bar{height:2px;background:var(--linelt)}
+	.hero__prog .bar i{display:block;height:100%;width:34%;background:var(--foreground)}
+	@media(max-width:720px){.hero__dots{display:none}.hero__controls-in{grid-template-columns:auto 1fr}}
+
+	/* ============ STATS — improved: outcomes not inputs ============ */
+	.stats{border-bottom:var(--thin);background:var(--muted)}
+	.stats__grid{display:grid;grid-template-columns:repeat(4,1fr)}
+	.stats__grid>div{padding:2rem 1.5rem;border-right:1px solid var(--linelt)}
+	.stats__grid>div:last-child{border-right:0}
+	.stat__v{font-size:clamp(1.9rem,3.4vw,2.8rem);font-weight:700;letter-spacing:-.03em}
+	.stat__l{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground);margin-top:.25rem}
+	@media(max-width:720px){.stats__grid{grid-template-columns:1fr 1fr}.stats__grid>div{border-bottom:1px solid var(--linelt)}}
+
+	/* ============ SERVICES — journey builder + à la carte ============ */
+	.jrn{display:grid;grid-template-columns:.85fr 1fr 1fr 1fr;border:var(--thin)}
+	.jrn__stage--entry{background:var(--muted)}
+	.jrn__stage{padding:1.6rem 1.5rem;border-right:1px solid var(--linelt);position:relative;background:#fff}
+	.jrn__stage:last-child{border-right:0}
+	.jrn__stage .stno{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.14em;color:var(--muted-foreground)}
+	.jrn__stage h3{font-size:1.45rem;font-weight:600;letter-spacing:-.02em;margin:.5rem 0 .2rem}
+	.jrn__stage .req{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground)}
+	.jrn__stage .inc{list-style:none;margin-top:1rem;font-size:.82rem;color:var(--muted-foreground);line-height:1.85}
+	.jrn__stage .inc li::before{content:"■ ";font-size:.45rem;vertical-align:.15em;color:var(--foreground)}
+	.jrn__stage .prc{margin-top:1.1rem;padding-top:.9rem;border-top:1px solid var(--linelt);font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground)}
+	.jrn__stage .prc b{display:block;font-size:.95rem;color:var(--foreground);letter-spacing:0;margin-top:.15rem}
+	.jrn__arr{position:absolute;top:50%;right:-.62rem;transform:translateY(-50%);z-index:2;background:#fff;border:var(--thin);width:1.55rem;height:1.55rem;display:grid;place-items:center;font-family:var(--mono);font-size:.7rem}
+	@media(max-width:860px){.jrn{grid-template-columns:1fr}.jrn__stage{border-right:0;border-bottom:1px solid var(--linelt)}.jrn__arr{display:none}}
+	.scopes{display:grid;grid-template-columns:repeat(3,1fr);gap:1.2rem;margin-top:1.5rem}
+	.scope{border:var(--thin);padding:1.3rem 1.4rem;text-decoration:none;display:block;position:relative;background:#fff;transition:box-shadow .15s}
+	.scope:hover{box-shadow:5px 5px 0 var(--foreground)}
+	.scope--hero{background:var(--foreground);color:#fff}
+	.scope--hero .eyebrow,.scope--hero .smeta{color:#a1a1aa}
+	.scope .tag{position:absolute;top:-1px;right:-1px;background:#fff;border:var(--thin);font-family:var(--mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.1em;padding:.25rem .5rem;color:#000}
+	.scope h4{font-size:1.25rem;font-weight:600;letter-spacing:-.02em;margin:.45rem 0 .3rem}
+	.scope .smeta{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground);line-height:1.8}
+	.scope .stages{margin-top:.9rem;display:flex;gap:.35rem;flex-wrap:wrap}
+	.scope .stages span{border:1px solid currentColor;font-family:var(--mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.08em;padding:.25rem .5rem;opacity:.85}
+	.scope .save{margin-top:.9rem;font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em}
+	.scope--hero .save{color:#fbbf24}
+	@media(max-width:860px){.scopes{grid-template-columns:1fr}}
+	/* ============ SCOPE → what it sets up ============ */
+	.fx{display:grid;grid-template-columns:repeat(4,1fr);border:var(--thin);margin-top:1.5rem}
+	.fx__cell{padding:1.3rem 1.4rem;border-right:1px solid var(--linelt);background:#fff}
+	.fx__cell:last-child{border-right:0}
+	.fx__cell .k{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+	.fx__cell h5{font-size:1rem;font-weight:600;margin:.4rem 0 .5rem}
+	.fx__cell p{font-size:.8rem;color:var(--muted-foreground);line-height:1.65}
+	.fx__cell ul{list-style:none;font-size:.78rem;color:var(--muted-foreground);line-height:1.8;margin-top:.3rem}
+	.fx__cell ul li::before{content:"■ ";font-size:.42rem;vertical-align:.18em}
+	.fx__cell .on{color:var(--foreground);font-weight:600}
+	.fx__cell .off{text-decoration:line-through;opacity:.5}
+	@media(max-width:960px){.fx{grid-template-columns:1fr 1fr}.fx__cell:nth-child(2){border-right:0}.fx__cell:nth-child(-n+2){border-bottom:1px solid var(--linelt)}}
+	@media(max-width:560px){.fx{grid-template-columns:1fr}.fx__cell{border-right:0;border-bottom:1px solid var(--linelt)}.fx__cell:last-child{border-bottom:0}}
+	/* ============ DEVICE FRAME — mobile preview ============ */
+	.device{display:grid;place-items:center;padding:2.5rem 0}
+	.phone{width:min(21rem,90vw);border:2px solid var(--foreground);background:#fff;box-shadow:8px 8px 0 var(--foreground)}
+	.phone__bar{display:flex;align-items:center;gap:.5rem;padding:.55rem .7rem;border-bottom:var(--thin);font-family:var(--mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.1em}
+	.phone__bar i{width:.45rem;height:.45rem;background:var(--foreground);display:inline-block}
+	.phone__body{padding:1rem .9rem;max-height:32rem;overflow:hidden;position:relative}
+	.phone__body::after{content:"";position:absolute;inset:auto 0 0;height:4rem;background:linear-gradient(transparent,#fff)}
+	.phone .jrn{display:block;border:var(--thin)}
+	.phone .jrn__stage{padding:1rem;border-right:0;border-bottom:1px solid var(--linelt)}
+	.phone .jrn__stage h3{font-size:1.1rem}
+	.phone .jrn__stage .inc{font-size:.72rem;line-height:1.6;margin-top:.5rem}
+	.phone .jrn__arr{display:none}
+	.phone .scopes{grid-template-columns:1fr;gap:.7rem;margin-top:.9rem}
+	.phone .scope{padding:.9rem}
+	.phone .scope h4{font-size:1rem}
+	.phone .fx{grid-template-columns:1fr;margin-top:.9rem}
+	.phone .fx__cell{padding:.8rem;border-right:0;border-bottom:1px solid var(--linelt)}
+	.phone .fx__cell:last-child{border-bottom:0}
+	.phone .fx__cell h5{font-size:.85rem}
+	.phone .fx__cell p,.phone .fx__cell ul{font-size:.7rem}
+	.mob-note{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);margin-top:1.2rem;text-align:center}
+	.svc{border-top:var(--thin)}
+	.svc__row{display:grid;grid-template-columns:3rem 1.35fr 1.6fr 7rem 4rem;gap:1.5rem;align-items:baseline;padding:1.1rem .25rem;border-bottom:1px solid var(--linelt);text-decoration:none;transition:background .12s}
+	.svc__row:hover{background:var(--muted)}
+	.svc__row:hover .svc__go{text-decoration:underline}
+	.svc__num{font-family:var(--mono);font-size:.75rem;color:var(--muted-foreground)}
+	.svc__name{font-size:1.05rem;font-weight:600;letter-spacing:-.01em}
+	.svc__name small{display:block;font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;font-weight:400;color:var(--muted-foreground);margin-top:.25rem}
+	.svc__del{list-style:none;font-size:.8rem;color:var(--muted-foreground);line-height:1.7}
+	.svc__del li::before{content:"— "}
+	.svc__dur{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground)}
+	.svc__go{font-family:var(--mono);font-size:.7rem;font-weight:700;text-align:right}
+	.svc__foot{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1.15rem .25rem;border-bottom:var(--thin);flex-wrap:wrap}
+	.svc__foot p{font-family:var(--mono);font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground)}
+	.svc__foot b{color:var(--foreground)}
+	@media(max-width:860px){.svc__row{grid-template-columns:2.4rem 1fr 3rem}.svc__del,.svc__dur{display:none}}
+
+	/* ============ MEDIA CARDS (faithful) ============ */
+	.card-grid{display:grid;gap:1.5rem}
+	.card-grid--3{grid-template-columns:repeat(3,1fr)}
+	.card-grid--2{grid-template-columns:repeat(2,1fr)}
+	@media(max-width:860px){.card-grid--3,.card-grid--2{grid-template-columns:1fr}}
+	.mcard{border:var(--thin);text-decoration:none;display:flex;flex-direction:column;background:#fff;position:relative;overflow:hidden;transition:box-shadow .15s}
+	.mcard:hover{box-shadow:6px 6px 0 var(--foreground)}
+	.mcard__img{height:11rem;border-bottom:var(--thin);overflow:hidden}
+	.mcard__img img{filter:grayscale(85%);transition:filter .2s}
+	.mcard:hover .mcard__img img{filter:grayscale(0)}
+	.mcard__hint{position:absolute;top:.75rem;right:.75rem;z-index:2;width:2rem;height:2rem;border:var(--thin);background:#fff;display:grid;place-items:center;font-family:var(--mono);font-size:.8rem}
+	.mcard__body{padding:1.35rem;display:flex;flex-direction:column;gap:.6rem;flex:1}
+	.mcard__title{font-size:1.45rem;font-weight:600;letter-spacing:-.02em;line-height:1.15}
+	.mcard__text{font-size:.88rem;color:var(--muted-foreground);line-height:1.6}
+	.mcard__cta{margin-top:auto;padding-top:.9rem;font-family:var(--mono);font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em}
+
+	/* ============ PORTAL BAND ============ */
+	.band{background:var(--foreground);color:#fff}
+	.band__in{display:grid;grid-template-columns:1.05fr 1fr;gap:4rem;align-items:center;padding:clamp(3.5rem,7vw,6rem) 0}
+	.band h2{font-size:clamp(1.9rem,3.4vw,2.8rem);line-height:1.05;letter-spacing:-.03em;font-weight:500;margin:.6rem 0 1rem}
+	.band .lead{color:#a1a1aa;font-size:.98rem}
+	.band .pts{margin-top:1.6rem;display:grid;gap:.55rem;font-family:var(--mono);font-size:.64rem;text-transform:uppercase;letter-spacing:.1em;color:#d4d4d8}
+	.band .pts span::before{content:"■ ";font-size:.5rem;vertical-align:.12em;margin-right:.4rem}
+	.band .btn{border-color:#fff}
+	.band .btn--primary{background:#fff;color:#000}
+	.shot{border:1.5px solid #3f3f46;background:#fff;color:#000;padding:1.1rem;font-size:.78rem}
+	.shot__bar{display:flex;justify-content:space-between;align-items:center;border-bottom:var(--thin);padding-bottom:.6rem;margin-bottom:.3rem}
+	.shot .live{width:.55rem;height:.55rem;background:#15803d;display:inline-block;margin-right:.4rem}
+	.shot .r{display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-bottom:1px solid var(--linelt)}
+	.shot .r:last-child{border:0}
+	.shot .t{font-family:var(--mono);font-size:.56rem;color:#71717a;text-transform:uppercase}
+	@media(max-width:900px){.band__in{grid-template-columns:1fr;gap:2.5rem}}
+
+	/* ============ METHOD — stepped track ============ */
+	.method{list-style:none;display:grid;grid-template-columns:repeat(4,1fr);gap:0;counter-reset:st}
+	.method li{position:relative;padding:2rem 1.6rem 1.8rem;border-top:var(--thin);border-bottom:var(--thin);border-right:1px solid var(--linelt);background:#fff}
+	.method li:first-child{border-left:0}
+	/* the connecting spine */
+	.method::before{content:"";grid-column:1/-1;height:0}
+	.method .mnum{font-size:clamp(2.6rem,4.5vw,3.8rem);font-weight:700;letter-spacing:-.05em;line-height:1;color:var(--foreground)}
+	.method .mnum::after{content:"";display:block;width:2rem;height:3px;background:var(--foreground);margin:.7rem 0 .9rem}
+	.method li:first-child .mnum::after,.method li:hover .mnum::after{background:var(--foreground)}
+	.method h3{font-size:1.3rem;font-weight:600;letter-spacing:-.02em;margin-bottom:.5rem}
+	.method .md{font-size:.84rem;color:var(--muted-foreground);line-height:1.65}
+	.method .mlist{list-style:none;margin-top:1rem;font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted-foreground);display:grid;gap:.35rem}
+	.method .mlist li::before{content:"■ ";font-size:.45rem;vertical-align:.14em;color:var(--foreground)}
+	.method .mdur{position:absolute;top:1.1rem;right:1rem;font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);border:1px solid var(--linelt);padding:.2rem .45rem}
+	/* arrow between stages */
+	.method .marrow{position:absolute;top:1.05rem;right:-.55rem;z-index:2;font-family:var(--mono);font-size:.8rem;background:#fff;padding:0 .2rem;color:var(--muted-foreground)}
+	.method li:last-child .marrow{display:none}
+	.method li:hover{background:var(--muted)}
+	@media(max-width:960px){
+		.method{grid-template-columns:1fr 1fr}
+		.method li{border-left:0;border-bottom:1px solid var(--linelt)}
+		.method .marrow{display:none}
+	}
+	@media(max-width:540px){.method{grid-template-columns:1fr}.method .mdur{position:static;display:inline-block;margin-bottom:.6rem}}
+
+	/* ============ RED SEAT — written + on camera ============ */
+	.rs{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem}
+	.rs blockquote{border:var(--thin);padding:1.5rem;display:flex;flex-direction:column;background:#fff}
+	.rs .mark{font-size:2.4rem;line-height:.6;font-weight:500}
+	.rs .q{font-size:.95rem;line-height:1.65;margin:.9rem 0 1.2rem}
+	.rs footer{margin-top:auto;padding-top:.9rem;border-top:1px solid var(--linelt);font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground)}
+	.rs footer b{display:block;color:var(--foreground);font-size:.78rem;letter-spacing:.02em;font-family:system-ui;text-transform:none;font-weight:600}
+	.rsv{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;margin-top:1.5rem}
+	.rsv__card{text-decoration:none;display:block}
+	.rsv__frame{position:relative;border:var(--thin);height:12rem;overflow:hidden;background:#111}
+	.rsv__frame img{filter:grayscale(60%);transition:filter .2s,transform .4s}
+	.rsv__card:hover .rsv__frame img{filter:grayscale(0);transform:scale(1.03)}
+	.rsv__play{position:absolute;inset:0;display:grid;place-items:center}
+	.rsv__play i{width:3.2rem;height:3.2rem;background:#fff;border:var(--thin);display:grid;place-items:center;font-style:normal;font-size:.9rem;transition:background .15s,color .15s}
+	.rsv__card:hover .rsv__play i{background:var(--foreground);color:#fff}
+	.rsv__len{position:absolute;right:.7rem;bottom:.7rem;background:#fff;border:1px solid var(--border);font-family:var(--mono);font-size:.58rem;padding:.2rem .5rem}
+	.rsv__head{font-size:1.02rem;font-weight:600;letter-spacing:-.01em;line-height:1.35;margin-top:.8rem}
+	.rsv__meta{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground);margin-top:.3rem}
+	.rspart{display:flex;justify-content:space-between;align-items:baseline;margin:2.5rem 0 1.2rem;padding-top:1.6rem;border-top:1px solid var(--linelt)}
+	.rspart h3{font-size:1.1rem;font-weight:600;letter-spacing:-.01em}
+	.rspart .cnt{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground)}
+	@media(max-width:860px){.rs,.rsv{grid-template-columns:1fr}}
+
+	/* ============ CTA ============ */
+	.cta{background:var(--foreground);color:#fff}
+	.cta__in{display:flex;justify-content:space-between;align-items:center;gap:2.5rem;padding:clamp(3.5rem,7vw,5.5rem) 0;flex-wrap:wrap}
+	.cta h2{font-size:clamp(1.9rem,3.4vw,2.7rem);letter-spacing:-.03em;line-height:1.08;max-width:34rem;margin-top:.5rem;font-weight:500}
+	.cta .mono-line{font-family:var(--mono);font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:#a1a1aa;margin-top:.9rem}
+
+	/* ============ INNER PAGE FRAMES ============ */
+	.pg{border:var(--thin);background:#fff;margin-bottom:2rem}
+	.pg__bar{display:flex;justify-content:space-between;align-items:center;border-bottom:var(--thin);padding:.55rem 1rem;background:var(--muted)}
+	.pg__bar b{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em}
+	.pg__bar span{font-family:var(--mono);font-size:.55rem;color:var(--muted-foreground)}
+	.pg__body{padding:clamp(1.5rem,3vw,2.5rem)}
+	.pagehead{border-bottom:var(--thin);padding-bottom:1.4rem;margin-bottom:1.6rem}
+	.pagehead h2{font-size:clamp(1.8rem,3.4vw,2.7rem);letter-spacing:-.03em;font-weight:500;margin-top:.5rem}
+	.pagehead .lead{max-width:36rem;margin-top:.5rem}
+	/* service detail */
+	.sd{display:grid;grid-template-columns:1.4fr 1fr;gap:2.5rem}
+	.sd h4{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.14em;color:var(--muted-foreground);margin:1.4rem 0 .5rem}
+	.sd .ticks{list-style:none;font-size:.86rem;line-height:2}
+	.sd .ticks li::before{content:"■ ";font-size:.5rem;vertical-align:.15em;margin-right:.3rem}
+	.sd__side{border:var(--thin);padding:1.3rem;align-self:start;position:sticky;top:calc(var(--navh) + 1rem)}
+	.sd__side .rowline{display:flex;justify-content:space-between;padding:.5rem 0;border-bottom:1px solid var(--linelt);font-size:.8rem}
+	.sd__side .rowline .k{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground)}
+	@media(max-width:820px){.sd{grid-template-columns:1fr}.sd__side{position:static}}
+	/* faq */
+	.faq details{border-bottom:1px solid var(--linelt)}
+	.faq details:first-of-type{border-top:var(--thin)}
+	.faq details:last-of-type{border-bottom:var(--thin)}
+	.faq summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:baseline;gap:1rem;padding:1.1rem .25rem;font-size:1.05rem;font-weight:600;letter-spacing:-.01em}
+	.faq summary::-webkit-details-marker{display:none}
+	.faq summary .pm{font-family:var(--mono);font-size:.9rem;color:var(--muted-foreground)}
+	.faq details[open] .pm{transform:rotate(45deg)}
+	.faq .pm{display:inline-block;transition:transform .15s}
+	.faq details p{padding:0 .25rem 1.2rem;color:var(--muted-foreground);font-size:.9rem;max-width:44rem}
+	/* scholarships */
+	.sch{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+	.sch .card{border:var(--thin);padding:1.4rem;text-decoration:none;display:block}
+	.sch .card:hover{box-shadow:5px 5px 0 var(--foreground)}
+	.sch .amt{font-size:2rem;font-weight:700;letter-spacing:-.03em;margin:.7rem 0 .3rem}
+	.sch .el{font-size:.85rem;color:var(--muted-foreground);line-height:1.6}
+	.sch .dl{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground);margin-top:.9rem}
+	@media(max-width:720px){.sch{grid-template-columns:1fr}}
+	/* start journey — portal entry */
+	.sj{display:grid;grid-template-columns:1fr 1fr;border:var(--thin)}
+	.sj__l{padding:2rem;border-right:var(--thin)}
+	.sj__r{padding:2rem;background:var(--muted)}
+	.sj .fld{margin-bottom:.9rem}
+	.sj .fld label{display:block;font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground);margin-bottom:.3rem}
+	.sj .fld .in{border:1.5px solid var(--border);padding:.7rem .8rem;font-size:.85rem;background:#fff;color:var(--muted-foreground)}
+	.sj .step{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground)}
+	.sj .step b{color:var(--foreground)}
+	.sj .oauth{display:flex;align-items:center;gap:.6rem;border:1.5px solid var(--border);background:#fff;padding:.75rem .9rem;font-size:.85rem;font-weight:600;text-decoration:none;margin-bottom:.6rem}
+	.sj .oauth:hover{background:var(--muted)}
+	.sj .or{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground);text-align:center;margin:.9rem 0}
+	@media(max-width:720px){.sj{grid-template-columns:1fr}.sj__l{border-right:0;border-bottom:var(--thin)}}
+	.pgnote{font-family:var(--mono);font-size:.62rem;color:var(--muted-foreground);margin:-1.4rem 0 2rem;line-height:1.7;max-width:44rem}
+
+	/* ============ ENQUIRY FLOAT ============ */
+	.fab{position:fixed;right:1.4rem;bottom:1.4rem;z-index:60;display:flex;align-items:center;gap:.55rem;background:var(--foreground);color:#fff;border:var(--thin);padding:.75rem 1.1rem;font-family:var(--mono);font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;cursor:pointer;box-shadow:4px 4px 0 rgba(0,0,0,.25)}
+	.fab:hover{background:#222}
+	.fab .dot{width:.5rem;height:.5rem;background:#f59e0b}
+	.eq{position:fixed;right:1.4rem;bottom:5rem;z-index:60;width:min(23rem,calc(100vw - 2rem));border:var(--thick);background:#fff;box-shadow:6px 6px 0 rgba(0,0,0,.18)}
+	.eq__head{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;border-bottom:1px solid var(--linelt);background:var(--muted)}
+	.eq__who{display:flex;align-items:center;gap:.6rem}
+	.eq__av{width:32px;height:32px;background:#7c3aed;color:#fff;display:grid;place-items:center;font-family:var(--mono);font-size:.68rem;font-weight:700}
+	.eq__who p:first-child{font-weight:600;font-size:.85rem}
+	.eq__who p:last-child{font-size:.7rem;color:var(--muted-foreground)}
+	.eq__tabs{display:flex;border-bottom:1px solid var(--linelt)}
+	.eq__tabs button{flex:1;font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;padding:.6rem .3rem;background:none;border:0;border-right:1px solid var(--linelt);cursor:pointer;color:var(--muted-foreground)}
+	.eq__tabs button:last-child{border-right:0}
+	.eq__tabs button.on{background:var(--foreground);color:#fff}
+	.eq__body{padding:1rem;min-height:10rem;display:flex;flex-direction:column;gap:.6rem}
+	.eq__msg{background:var(--muted);padding:.6rem .8rem;font-size:.82rem;max-width:85%;line-height:1.5}
+	.eq__msg--me{align-self:flex-end;background:var(--foreground);color:#fff}
+	.eq__chips{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.3rem}
+	.eq__chips span{border:1px solid var(--border-light);font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.06em;padding:.3rem .55rem;color:var(--muted-foreground);cursor:pointer}
+	.eq__chips span:hover{border-color:var(--border);color:var(--foreground)}
+	.eq__in{display:flex;border-top:var(--thin)}
+	.eq__in input{flex:1;border:0;padding:.8rem .9rem;font-size:.85rem;outline:none}
+	.eq__in button{border:0;border-left:var(--thin);background:var(--foreground);color:#fff;font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;padding:0 1rem;cursor:pointer}
+
+	/* annotation chips */
+	.note{display:inline-block;background:#fef3c7;border:1px solid #d97706;font-family:var(--mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;padding:.2rem .5rem;vertical-align:middle;margin-left:.6rem}
+	section{position:relative}
+	.chip{position:absolute;top:.9rem;left:.4rem;background:var(--foreground);color:#fff;font-family:var(--mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.1em;padding:.2rem .5rem;z-index:5}
+</style>
+</head>
+<body>
+
+<!-- NAV (current, tightened) -->
+<header class="nav">
+	<div class="container nav__inner">
+		<a class="nav__logo" href="#">Century NIT <span>International</span></a>
+		<nav class="nav__links">
+			<a href="#">Destinations</a><a href="#">Universities</a><a href="#">Programs</a><a href="#" class="on">Services</a><a href="#">The Red Seat</a><a href="#">More</a>
+		</nav>
+		<div class="nav__actions">
+			<a class="btn btn--sm" href="#">Start journey</a>
+			<a class="nav__signin" href="#">Login</a>
+		</div>
+	</div>
+</header>
+
+<!-- HERO — same split carousel, improved copy + service tag on image -->
+<section class="hero"><span class="chip">1 · Hero — same layout, sharper copy</span>
+	<div class="hero__viewport">
+		<div class="slide">
+			<div class="slide__copy">
+				<div class="slide__kicker"><span class="slide__index">01 / 04</span><span class="slide__rule"></span><span class="eyebrow">Immigration &amp; Visa Consultancy Worldwide</span></div>
+				<h1 class="slide__title">Study abroad. <em>With a live file.</em></h1>
+				<p class="slide__lead">Counselling, admission, visa and travel — run inside your own client portal, where every step updates the moment it happens. Accra &amp; Kumasi, since 2011.</p>
+				<div class="slide__actions">
+					<a class="btn" href="#">Start journey →</a>
+					<a class="btn btn--secondary" href="#">Explore destinations</a>
+				</div>
+				<dl class="slide__meta">
+					<div><dt>Since</dt><dd>2011</dd></div>
+					<div><dt>Offices</dt><dd>Accra · Kumasi</dd></div>
+					<div><dt>Consultation</dt><dd>Online · In person</dd></div>
+				</dl>
+			</div>
+			<div class="slide__media">
+				<img src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=1600&q=80" alt="">
+				<span class="slide__tag">■ 100+ partner institutions</span>
+			</div>
+		</div>
+	</div>
+	<div class="hero__controls"><div class="hero__controls-in">
+		<div class="hero__nav"><button>←</button><button>→</button></div>
+		<div class="hero__dots"><button class="on">01 · Century NIT</button><button>02 · UK</button><button>03 · Germany</button><button>04 · Canada</button></div>
+		<div class="hero__prog"><p>Autoplay</p><div class="bar"><i></i></div></div>
+	</div></div>
+</section>
+
+<!-- STATS — outcomes, not inputs -->
+<section class="stats"><span class="chip">2 · Stats — outcome proof</span>
+	<div class="container stats__grid">
+		<div><p class="stat__v">2011</p><p class="l">Founded · licensed consultancy</p></div>
+		<div><p class="stat__v">100+</p><p class="l">Partner institutions</p></div>
+		<div><p class="stat__v">6+</p><p class="l">Destinations · UK → UAE</p></div>
+		<div><p class="stat__v">Live</p><p class="l">Client portal · every case tracked</p></div>
+	</div>
+</section>
+
+<!-- SERVICES — the journey composes; à la carte below -->
+<section class="section"><span class="chip">3 · Services — stages compose into a journey</span>
+	<div class="container">
+		<div class="section__head">
+			<div><p class="eyebrow">What we offer</p><h2 class="section-title">It starts with a consultation.<br>Then the stages you pick.</h2><p class="lead" style="max-width:36rem;margin-top:.7rem">The consultation opens your file. What you choose there sets the form, the stages, the documents — everything that follows.</p></div>
+			<a class="link-arrow" href="#">Student services →</a>
+		</div>
+
+		<!-- the stages — consultation is the entry, everything keys off it -->
+		<div class="jrn">
+			<div class="jrn__stage jrn__stage--entry">
+				<p class="stno">Stage 0 — always</p>
+				<h3>Consultation</h3>
+				<p class="req">The door in</p>
+				<ul class="inc"><li>Online or in person</li><li>You pick your scope here</li><li>Your file opens the same day</li></ul>
+				<p class="prc">Fixed fee<b>GH₵ —</b></p>
+				<span class="jrn__arr">→</span>
+			</div>
+			<div class="jrn__stage">
+				<p class="stno">Stage I</p>
+				<h3>Admissions</h3>
+				<p class="req">Counsel · docs · offers</p>
+				<ul class="inc"><li>Counselling &amp; programme shortlist</li><li>Admission documentation per university</li><li>Submission + offer tracking</li></ul>
+				<p class="prc">Stage fee<b>from $—</b></p>
+				<span class="jrn__arr">→</span>
+			</div>
+			<div class="jrn__stage">
+				<p class="stno">Stage II — needs I</p>
+				<h3>Visa</h3>
+				<p class="req">File · biometrics · interview</p>
+				<ul class="inc"><li>Embassy-ready visa file</li><li>Forms filed, biometrics booked</li><li>Mock interview + decision tracking</li></ul>
+				<p class="prc">Stage fee<b>from $—</b></p>
+				<span class="jrn__arr">→</span>
+			</div>
+			<div class="jrn__stage">
+				<p class="stno">Stage III — needs II</p>
+				<h3>Departure &amp; arrival</h3>
+				<p class="req">Flight · briefing · landing</p>
+				<ul class="inc"><li>Flight &amp; housing coordination</li><li>Pre-departure briefing</li><li>First-week check-in</li></ul>
+				<p class="prc">Stage fee<b>from $—</b></p>
+			</div>
+		</div>
+
+		<!-- the three ways to buy it -->
+		<div class="scopes">
+			<a class="scope" href="#">
+				<p class="eyebrow">Just admissions</p>
+				<h4>Admissions only</h4>
+				<div class="stages"><span>I · Admissions</span></div>
+				<p class="smeta">Counselling to offer letter.<br>Visa help added later if you want it.</p>
+				<p class="save">Stage I fee</p>
+			</a>
+			<a class="scope" href="#">
+				<p class="eyebrow">Most common</p>
+				<h4>Admissions + Visa</h4>
+				<div class="stages"><span>I · Admissions</span><span>II · Visa</span></div>
+				<p class="smeta">Offer in hand, visa filed.<br>Add Departure any time before you fly.</p>
+				<p class="save">Two stages · less than à la carte</p>
+			</a>
+			<a class="scope scope--hero" href="#">
+				<span class="tag">Best value</span>
+				<p class="eyebrow">The whole way</p>
+				<h4>Full journey</h4>
+				<div class="stages"><span>I</span><span>II</span><span>III</span></div>
+				<p class="smeta">Counselling to first-week check-in.<br>One plan, one portal, priced as a bundle.</p>
+				<p class="save">Bundle — the parts cost more apart</p>
+			</a>
+		</div>
+
+		<!-- what the choice sets up — e.g. Visa only -->
+		<p class="eyebrow" style="margin-top:1.8rem;margin-bottom:.8rem">Chosen at the consultation — example: <b>Visa only</b></p>
+		<div class="fx">
+			<div class="fx__cell">
+				<p class="k">Consultation form</p>
+				<h5>Asks visa questions, not school questions</h5>
+				<p>Destination, intake date, prior refusals, sponsor — the intake adapts to the scope you pick at booking.</p>
+			</div>
+			<div class="fx__cell">
+				<p class="k">Stages</p>
+				<h5>Unlocked · discarded · recommended</h5>
+				<ul>
+					<li class="off">I · Admissions — skipped</li>
+					<li class="on">II · Visa — unlocked</li>
+					<li>III · Departure — recommended later</li>
+				</ul>
+			</div>
+			<div class="fx__cell">
+				<p class="k">Documents</p>
+				<h5>The checklist matches the scope</h5>
+				<ul>
+					<li>Offer letter / CAS or I-20</li>
+					<li>Bank statements &amp; sponsor</li>
+					<li class="off">Transcripts — not asked</li>
+				</ul>
+			</div>
+			<div class="fx__cell">
+				<p class="k">Portal</p>
+				<h5>Your file opens scoped</h5>
+				<p>Stages, tasks and invoices are generated for Visa only — nothing you didn't buy, nothing missing.</p>
+			</div>
+		</div>
+
+		<!-- à la carte -->
+		<div style="margin-top:3rem">
+			<p class="eyebrow" style="margin-bottom:.8rem">À la carte — just need one thing?</p>
+			<div class="svc">
+				<a class="svc__row" href="#"><span class="svc__num">A</span><span class="svc__name">Counselling session<small>Part of Stage I</small></span><ul class="svc__del"><li>1-on-1, office or online</li><li>Shortlist in 5 working days</li></ul><span class="svc__dur">1–2 sessions</span><span class="svc__go">→</span></a>
+				<a class="svc__row" href="#"><span class="svc__num">B</span><span class="svc__name">Visa documentation<small>Part of Stage II</small></span><ul class="svc__del"><li>Embassy-ready evidence file</li><li>Consistency check</li></ul><span class="svc__dur">1–3 weeks</span><span class="svc__go">→</span></a>
+				<a class="svc__row" href="#"><span class="svc__num">C</span><span class="svc__name">Travel arrangements<small>Part of Stage III</small></span><ul class="svc__del"><li>Flight &amp; housing guidance</li><li>Pre-departure briefing</li></ul><span class="svc__dur">1–2 weeks</span><span class="svc__go">→</span></a>
+			</div>
+		</div>
+
+		<div class="svc__foot" style="border-top:0">
+			<p>Every engagement starts with one consultation — <b>online or in person</b></p>
+			<a class="btn btn--sm" href="#">Book consultation →</a>
+		</div>
+
+		<!-- mobile preview -->
+		<div class="device"><span class="chip">Mobile — the same section, ~390px</span>
+			<div>
+			<div class="phone">
+				<div class="phone__bar"><i></i> century · services</div>
+				<div class="phone__body">
+					<p class="eyebrow">What we offer</p>
+					<h2 class="section-title" style="font-size:1.7rem">It starts with a consultation. Then the stages you pick.</h2>
+					<div class="jrn" style="margin-top:1rem">
+						<div class="jrn__stage jrn__stage--entry"><p class="stno">Stage 0 — always</p><h3>Consultation</h3><p class="req">The door in · GH₵ —</p><p class="prc" style="margin-top:.6rem;padding-top:.5rem">↓ sets your scope</p></div>
+						<div class="jrn__stage"><p class="stno">Stage I</p><h3>Admissions</h3><p class="req">Counsel · docs · offers</p></div>
+						<div class="jrn__stage"><p class="stno">Stage II — needs I</p><h3>Visa</h3><p class="req">File · biometrics · interview</p></div>
+						<div class="jrn__stage"><p class="stno">Stage III — needs II</p><h3>Departure &amp; arrival</h3><p class="req">Flight · briefing · landing</p></div>
+					</div>
+					<div class="scopes">
+						<a class="scope" href="#"><p class="eyebrow">Just admissions</p><h4>Admissions only</h4><p class="smeta">Stage I fee · visa added later</p></a>
+						<a class="scope scope--hero" href="#"><span class="tag">Best value</span><p class="eyebrow">The whole way</p><h4>Full journey</h4><p class="smeta">I + II + III · bundle price</p></a>
+					</div>
+					<div class="fx">
+						<div class="fx__cell"><p class="k">Example: visa only</p><h5>Admissions skipped · Visa unlocked · Departure recommended</h5></div>
+					</div>
+					<a class="btn" href="#" style="width:100%;justify-content:center;margin-top:1rem">Book consultation →</a>
+				</div>
+			</div>
+			<p class="mob-note">Stages stack · arrows drop · "best value" card pinned under the stages<br>Consultation CTA stays bottom-most</p>
+			</div>
+		</div>
+	</div>
+</section>
+
+<hr class="section-rule">
+
+<!-- METHOD — stepped track: big numerals, durations, deliverables -->
+<section class="section"><span class="chip">4 · Method — stepped track</span>
+	<div class="container">
+		<div class="section__head">
+			<div>
+				<p class="eyebrow">Methodology</p>
+				<h2 class="section-title">How the process works</h2>
+				<p class="lead" style="max-width:34rem;margin-top:.7rem">Four disciplined stages, from first consultation to departure. Every stage has named deliverables and a dedicated advisor.</p>
+			</div>
+		</div>
+		<ol class="method">
+			<li>
+				<span class="mdur">1–2 sessions</span><span class="marrow">→</span>
+				<p class="mnum">01</p>
+				<h3>Counsel</h3>
+				<p class="md">One-on-one at our Accra or Kumasi office, or online. Academic background, budget and ambitions mapped to the right programme.</p>
+				<ul class="mlist"><li>Study-abroad roadmap</li><li>Destination shortlist</li><li>Budget &amp; funding plan</li></ul>
+			</li>
+			<li>
+				<span class="mdur">2–6 weeks</span><span class="marrow">→</span>
+				<p class="mnum">02</p>
+				<h3>Admit</h3>
+				<p class="md">Applications prepared to each university's exact requirements — transcripts, statements, references — tracked to an offer.</p>
+				<ul class="mlist"><li>Application file per uni</li><li>SOP coaching</li><li>Offer tracking</li></ul>
+			</li>
+			<li>
+				<span class="mdur">2–8 weeks</span><span class="marrow">→</span>
+				<p class="mnum">03</p>
+				<h3>Visa</h3>
+				<p class="md">Embassy-ready file assembled — financial evidence, CAS/LOA, forms filed. Mock interviews before the real one.</p>
+				<ul class="mlist"><li>Embassy-ready file</li><li>Biometrics scheduled</li><li>Decision tracked</li></ul>
+			</li>
+			<li>
+				<span class="mdur">1–2 weeks</span>
+				<p class="mnum">04</p>
+				<h3>Depart</h3>
+				<p class="md">Flights, housing, pre-departure briefing — banking, SIM, culture. You land knowing what happens next.</p>
+				<ul class="mlist"><li>Flight plan</li><li>Departure briefing</li><li>Arrival check-in</li></ul>
+			</li>
+		</ol>
+	</div>
+</section>
+
+<!-- PORTAL BAND — new: the product as proof -->
+<section class="band"><span class="chip" style="background:#fff;color:#000">5 · NEW — show the product</span>
+	<div class="container band__in">
+		<div>
+			<p class="eyebrow" style="color:#a1a1aa">Not promises — a system</p>
+			<h2>Every client gets a live file.<br>Watch yours move.</h2>
+			<p class="lead">Consultation booked, document verified, invoice paid, visa filed — your portal shows it the moment it happens. Message your officer inside your case.</p>
+			<div class="pts"><span>Live stage tracking</span><span>Transparent invoices &amp; receipts</span><span>In-app officer chat</span><span>Document vault</span></div>
+			<div style="margin-top:1.8rem"><a class="btn btn--primary" href="#">See how it works →</a></div>
+		</div>
+		<div class="shot">
+			<div class="shot__bar"><span class="mono" style="font-size:.6rem;letter-spacing:.12em;text-transform:uppercase"><span class="live"></span>Your file · live</span><span class="mono" style="font-size:.55rem;color:#71717a">CN-2026-118</span></div>
+			<div class="r"><span>Visa file submitted to embassy</span><span class="t">2h ago</span></div>
+			<div class="r"><span>Invoice INV-014 — service fee</span><span style="font-weight:700">Paid ✓</span></div>
+			<div class="r"><span>Ama replied in your case chat</span><span class="t">just now</span></div>
+			<div class="r"><span style="color:#71717a">Next — biometrics appointment</span><span>→</span></div>
+		</div>
+	</div>
+</section>
+
+<!-- RED SEAT — written quotes + on-camera films, both kept -->
+<section class="section"><span class="chip">6 · Red Seat — written + films</span>
+	<div class="container">
+		<div class="section__head">
+			<div><p class="eyebrow">The Red Seat</p><h2 class="section-title">In their own words</h2><p class="lead" style="max-width:32rem;margin-top:.6rem">Clients who sat in the red seat, and where it took them.</p></div>
+			<a class="link-arrow" href="#">All stories →</a>
+		</div>
+
+		<div class="rs">
+			<blockquote><span class="mark">“</span><p class="q">Before contacting Century NIT I was skeptical — but their team gave me the best results. Today I am in the UK pursuing my master's.</p><footer><b>Evans Sam</b>Master's · Ghana → UK</footer></blockquote>
+			<blockquote><span class="mark">“</span><p class="q">Ever grateful for their professional advice during my school and programme selection. Currently doing my master's in Germany.</p><footer><b>Godbless Adu</b>Master's · Ghana → Germany</footer></blockquote>
+			<blockquote><span class="mark">“</span><p class="q">The support during my visa application was above and beyond. A seemingly difficult application, successful.</p><footer><b>Augustine Boateng</b>Study visa · Ghana → Abroad</footer></blockquote>
+		</div>
+
+		<div class="rspart"><h3>On camera</h3><span class="cnt">6 films</span></div>
+		<div class="rsv">
+			<a class="rsv__card" href="#">
+				<div class="rsv__frame"><img src="https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800&q=70" alt=""><span class="rsv__play"><i>▶</i></span><span class="rsv__len">1:48</span></div>
+				<p class="rsv__head">“I was sceptical. Six months later I was in Manchester.”</p>
+				<p class="rsv__meta">Evans Sam · MBA · Ghana → UK</p>
+			</a>
+			<a class="rsv__card" href="#">
+				<div class="rsv__frame"><img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?w=800&q=70" alt=""><span class="rsv__play"><i>▶</i></span><span class="rsv__len">2:37</span></div>
+				<p class="rsv__head">“Tuition-free Germany was a real option, not a rumour.”</p>
+				<p class="rsv__meta">Kwabena Osei · MEng · Ghana → Germany</p>
+			</a>
+			<a class="rsv__card" href="#">
+				<div class="rsv__frame"><img src="https://images.unsplash.com/photo-1580489944761-15a19d654956?w=800&q=70" alt=""><span class="rsv__play"><i>▶</i></span><span class="rsv__len">1:55</span></div>
+				<p class="rsv__head">“Mock interviews were the difference on the day.”</p>
+				<p class="rsv__meta">Ama Serwaa Adjei · MSc · Ghana → Canada</p>
+			</a>
+		</div>
+	</div>
+</section>
+
+<hr class="section-rule">
+
+<!-- DESTINATIONS — spotlight + destinations + universities merged -->
+<section class="section"><span class="chip">7 · Destinations — 3 grids merged into 1</span>
+	<div class="container">
+		<div class="section__head">
+			<div><p class="eyebrow">Favourite destinations</p><h2 class="section-title">Choose your country</h2></div>
+			<a class="link-arrow" href="#">View all →</a>
+		</div>
+		<div class="card-grid card-grid--3">
+			<a class="mcard" href="#"><span class="mcard__hint">→</span><div class="mcard__img"><img src="https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=70" alt=""></div><div class="mcard__body"><span class="eyebrow">🇬🇧 Europe</span><h3 class="mcard__title">United Kingdom</h3><p class="mcard__text">Global-rank universities, strongest pathway. Oxford to Manchester.</p><span class="mcard__cta">Explore →</span></div></a>
+			<a class="mcard" href="#"><span class="mcard__hint">→</span><div class="mcard__img"><img src="https://images.unsplash.com/photo-1517935706615-2717063c2225?w=800&q=70" alt=""></div><div class="mcard__body"><span class="eyebrow">🇨🇦 North America</span><h3 class="mcard__title">Canada</h3><p class="mcard__text">Half a million international students. PGWP-ready programmes.</p><span class="mcard__cta">Explore →</span></div></a>
+			<a class="mcard" href="#"><span class="mcard__hint">→</span><div class="mcard__img"><img src="https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=800&q=70" alt=""></div><div class="mcard__body"><span class="eyebrow">🇩🇪 Europe</span><h3 class="mcard__title">Germany</h3><p class="mcard__text">Low-tuition STEM and research intensity.</p><span class="mcard__cta">Explore →</span></div></a>
+		</div>
+	</div>
+</section>
+
+<!-- ============ INNER PAGES ============ -->
+<section class="section" style="background:var(--muted);border-top:var(--thin);border-bottom:var(--thin)"><span class="chip">9 · Inner pages — same system</span>
+	<div class="container">
+		<div class="section__head">
+			<div><p class="eyebrow">The rest of the site</p><h2 class="section-title">Every page, one language.</h2></div>
+		</div>
+
+		<!-- Service detail -->
+		<div class="pg">
+			<div class="pg__bar"><b>/services/study-visa</b><span>service detail</span></div>
+			<div class="pg__body">
+				<div class="pagehead">
+					<p class="eyebrow">Service 04 · Visa desk</p>
+					<h2>Study Visa</h2>
+					<p class="lead">Admission alone does not guarantee a visa. We file the embassy forms, schedule biometrics and prepare you for the interview — tracked through to decision.</p>
+				</div>
+				<div class="sd">
+					<div>
+						<h4>What you get</h4>
+						<ul class="ticks"><li>Complete visa application filed</li><li>Biometrics appointment scheduled</li><li>Mock interview preparation</li><li>Tracked through to decision</li></ul>
+						<h4>How it runs</h4>
+						<ul class="ticks"><li>Visa file assembled and reviewed</li><li>Embassy forms completed and filed</li><li>Interview preparation</li><li>Decision communicated</li></ul>
+					</div>
+					<aside class="sd__side">
+						<p class="eyebrow" style="margin-bottom:.8rem">At a glance</p>
+						<div class="rowline"><span class="k">Typical</span><span>2–8 weeks</span></div>
+						<div class="rowline"><span class="k">Starts with</span><span>Consultation</span></div>
+						<div class="rowline"><span class="k">Desk</span><span>Visa · Accra/Kumasi</span></div>
+						<div class="rowline" style="border:0"><span class="k">Tracked in</span><span>Your portal</span></div>
+						<a class="btn" href="#" style="width:100%;justify-content:center;margin-top:1.1rem">Book consultation →</a>
+					</aside>
+				</div>
+			</div>
+		</div>
+		<p class="pgnote">Service detail: the same ledger discipline — deliverables and process visible, a sticky "at a glance" rail with the CTA. Replaces the single paragraph card that exists today.</p>
+
+		<!-- Destinations -->
+		<div class="pg">
+			<div class="pg__bar"><b>/destinations</b><span>index</span></div>
+			<div class="pg__body">
+				<div class="pagehead"><p class="eyebrow">Where our clients land</p><h2>Six destinations.</h2></div>
+				<div class="card-grid card-grid--3">
+					<a class="mcard" href="#"><span class="mcard__hint">→</span><div class="mcard__img"><img src="https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=70" alt=""></div><div class="mcard__body"><span class="eyebrow">🇬🇧 Europe</span><h3 class="mcard__title">United Kingdom</h3><p class="mcard__text">Global-rank universities, strongest pathway.</p><span class="mcard__cta">Explore →</span></div></a>
+					<a class="mcard" href="#"><span class="mcard__hint">→</span><div class="mcard__img"><img src="https://images.unsplash.com/photo-1517935706615-2717063c2225?w=800&q=70" alt=""></div><div class="mcard__body"><span class="eyebrow">🇨🇦 N. America</span><h3 class="mcard__title">Canada</h3><p class="mcard__text">PGWP-ready programmes.</p><span class="mcard__cta">Explore →</span></div></a>
+					<a class="mcard" href="#"><span class="mcard__hint">→</span><div class="mcard__img"><img src="https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=800&q=70" alt=""></div><div class="mcard__body"><span class="eyebrow">🇩🇪 Europe</span><h3 class="mcard__title">Germany</h3><p class="mcard__text">Low-tuition STEM &amp; research.</p><span class="mcard__cta">Explore →</span></div></a>
+				</div>
+			</div>
+		</div>
+		<p class="pgnote">Destinations index keeps the media cards — they're right for browsable image-led content. Same treatment on /universities and /programs.</p>
+
+		<!-- Scholarships -->
+		<div class="pg">
+			<div class="pg__bar"><b>/scholarships</b><span>funding</span></div>
+			<div class="pg__body">
+				<div class="pagehead"><p class="eyebrow">Funding</p><h2>Scholarship opportunities</h2></div>
+				<div class="sch">
+					<a class="card" href="#"><span class="eyebrow">Merit</span><p class="amt">£10,000</p><h3 style="font-size:1.2rem;font-weight:600">GREAT Scholarships</h3><p class="el">Postgraduate funding for Ghanaian students at select UK universities.</p><p class="dl">Deadline · rolling</p></a>
+					<a class="card" href="#"><span class="eyebrow">Government</span><p class="amt">Full</p><h3 style="font-size:1.2rem;font-weight:600">DAAD — Germany</h3><p class="el">Full funding for master's and PhD candidates with strong academics.</p><p class="dl">Deadline · Oct</p></a>
+				</div>
+			</div>
+		</div>
+		<p class="pgnote">Scholarship cards keep the big amount + deadline — already good. Only change: consistent type sizes with the rest of the site.</p>
+
+		<!-- FAQs -->
+		<div class="pg">
+			<div class="pg__bar"><b>/faqs</b><span>answers</span></div>
+			<div class="pg__body faq">
+				<div class="pagehead"><p class="eyebrow">Questions</p><h2>Straight answers.</h2></div>
+				<details open><summary>How much does the consultation cost?<span class="pm">+</span></summary><p>One consultation — online or in person at Accra or Kumasi. The fee is shown before you pay; it is the only charge until you decide to enrol.</p></details>
+				<details><summary>Do you guarantee a visa?<span class="pm">+</span></summary><p>No consultancy can. What we guarantee is a complete, consistent, credible file — and that you see every step of it in your portal.</p></details>
+				<details><summary>How do I follow my application?<span class="pm">+</span></summary><p>Every client gets a live portal: stage tracking, invoices, documents and chat with your officer. No WhatsApp chases.</p></details>
+				<details><summary>Which countries do you cover?<span class="pm">+</span></summary><p>UK, USA, Canada, Australia, Germany and the UAE — over 100 partner institutions.</p></details>
+			</div>
+		</div>
+		<p class="pgnote">FAQs become real accordions with the site's ruled rhythm — answers that mention the portal and the consultation fee double as conversion copy.</p>
+
+		<!-- Start journey — the portal entry -->
+		<div class="pg">
+			<div class="pg__bar"><b>/start</b><span>portal entry — straight to your file</span></div>
+			<div class="pg__body">
+				<div class="sj">
+					<div class="sj__l">
+						<p class="eyebrow">Your portal</p>
+						<h3 style="font-size:1.6rem;letter-spacing:-.02em;margin:.5rem 0 .4rem">Open your file.</h3>
+						<p class="lead" style="font-size:.9rem">Sign in — or create your account — and your journey continues where it left off.</p>
+						<div style="margin-top:1.3rem">
+							<a class="oauth" href="#"><span class="mono" style="font-weight:700">G</span> Continue with Google</a>
+							<a class="oauth" href="#"><span class="mono" style="font-weight:700">@</span> Continue with email</a>
+							<a class="oauth" href="#"><span class="mono" style="font-weight:700">+233</span> Continue with phone</a>
+						</div>
+						<p class="or">No account yet — booking a consultation creates one</p>
+						<a class="btn" href="#" style="width:100%;justify-content:center">Book a consultation →</a>
+					</div>
+					<div class="sj__r">
+						<p class="step">What lands inside</p>
+						<ul class="ticks" style="list-style:none;margin-top:1rem;font-size:.85rem;line-height:2.1"><li>— Your stage, live</li><li>— Invoices &amp; receipts</li><li>— Chat with your officer</li><li>— Document vault</li><li>— Consultation booking</li></ul>
+						<p class="lead" style="font-size:.85rem;margin-top:1.2rem">Every "Start journey" button on this site lands here — one account, one file.</p>
+					</div>
+				</div>
+			</div>
+		</div>
+		<p class="pgnote">/start is the portal's front door, not a marketing form: sign-in methods up front, "book a consultation" as the no-account path, and a rail that previews what the portal contains. Signed-in visitors pass straight through.</p>
+
+		<!-- Enquiry float — the public chat -->
+		<div class="pg">
+			<div class="pg__bar"><b>float · every public page</b><span>EnquiryWidget — AI · WhatsApp · Email</span></div>
+			<div class="pg__body" style="position:relative;min-height:26rem;background:var(--muted)">
+				<div style="max-width:22rem">
+					<p class="eyebrow">The floating enquiry</p>
+					<p class="lead" style="font-size:.92rem;margin-top:.5rem">Already on the site — three tabs: streamed AI answers, WhatsApp to the desk, and an email form. Restyled here to the square language: no pill, no rounded bubbles, a mono "Enquire" bar instead of a circle.</p>
+					<p class="lead" style="font-size:.92rem;margin-top:.6rem">The AI answers from the site's real content — destinations, fees, documents — so the float sells while staff are offline.</p>
+				</div>
+				<div class="eq" style="position:absolute;right:1.4rem;bottom:4.6rem">
+					<div class="eq__head">
+						<div class="eq__who"><span class="eq__av">AI</span><div><p>Century AI</p><p>Instant · knows the site</p></div></div>
+						<span class="mono" style="font-size:.7rem;color:var(--muted-foreground);cursor:pointer">✕</span>
+					</div>
+					<div class="eq__tabs"><button class="on">AI</button><button>WhatsApp</button><button>Email</button></div>
+					<div class="eq__body">
+						<div class="eq__msg">Hi — ask me anything about studying abroad with Century NIT.</div>
+						<div class="eq__msg eq__msg--me">How much does it cost?</div>
+						<div class="eq__msg">It starts with one consultation — the fee is shown before you pay. From there, each stage is priced on your invoice in the portal.</div>
+						<div class="eq__chips"><span>Which countries?</span><span>Documents needed</span><span>Visa timeline</span></div>
+					</div>
+					<div class="eq__in"><input placeholder="Ask a question…"><button>Send</button></div>
+				</div>
+				<button class="fab" style="position:absolute"><span class="dot"></span>Enquire</button>
+			</div>
+		</div>
+		<p class="pgnote">The EnquiryWidget, restyled: square launcher ("Enquire" + amber dot) instead of a floating circle, square panel, mono tabs — AI / WhatsApp / Email. Same component, same channels, site-consistent skin.</p>
+
+	</div>
+</section>
+
+<!-- CTA — same band, sharper line -->
+<section class="cta"><span class="chip" style="background:#fff;color:#000">10 · CTA — same band</span>
+	<div class="container cta__in">
+		<div>
+			<p class="eyebrow" style="color:#a1a1aa">Ready to begin?</p>
+			<h2>One consultation. Then your file starts moving.</h2>
+			<p class="mono-line">+233 554 717 878 · info@centurynit.com · Mon–Fri 8–5 · Sat 9–12</p>
+		</div>
+		<div style="display:flex;gap:.8rem;flex-wrap:wrap">
+			<a class="btn" style="background:#fff;color:#000;border-color:#fff" href="#">Start journey →</a>
+			<a class="btn btn--secondary" style="border-color:#fff;color:#fff" href="#">Enquire</a>
+		</div>
+	</div>
+</section>
+
+<!-- The float, live on the mock -->
+<button class="fab"><span class="dot"></span>Enquire</button>
+
+</body>
+</html>

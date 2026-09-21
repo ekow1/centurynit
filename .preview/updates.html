@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Consultant updates — redesign mock</title>
+<style>
+  :root{
+    --background:#ffffff; --foreground:#0a0a0a;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#0a0a0a; --border-light:#d4d4d8;
+    --ok:#0d7a3f; --warn:#92400e; --bad:#b91c1c; --accent:#5b21b6;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --text-xs:.72rem; --text-sm:.875rem;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:#fafafa;color:var(--foreground);font-size:var(--text-sm)}
+  .page{max-width:1240px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .page-title{font-size:1.9rem;font-weight:700;letter-spacing:-.02em}
+  .lead{color:var(--muted-foreground);max-width:48rem;line-height:1.6}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--muted-foreground)}
+  .head{margin-bottom:2rem}
+  .sec{margin:2.75rem 0 1rem}
+  .sec h2{font-size:1.15rem;font-weight:700}
+  .sec .sub{font-size:var(--text-xs);color:var(--muted-foreground);margin-top:.2rem;max-width:50rem;line-height:1.6}
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start;margin-top:1rem}
+  @media (max-width:1020px){.compare{grid-template-columns:1fr}}
+  .variant-label{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;
+    color:var(--muted-foreground);margin-bottom:.5rem;display:flex;align-items:center;gap:.5rem}
+  .variant-label .tag{border:1px solid var(--border-light);padding:.1rem .45rem;font-size:.58rem}
+  .variant-label .tag--new{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+  .frame{border:1.5px solid var(--border);background:var(--background);overflow:hidden}
+  .callouts{list-style:none;margin-top:.75rem;padding:0;font-size:var(--text-xs);color:var(--muted-foreground)}
+  .callouts li{padding:.35rem 0 .35rem 1.4rem;position:relative;line-height:1.5}
+  .callouts li::before{content:attr(data-n);position:absolute;left:0;top:.3rem;font-family:var(--font-mono);
+    font-size:.6rem;border:1px solid var(--border-light);width:1.05rem;height:1.05rem;display:flex;
+    align-items:center;justify-content:center}
+  .callouts code{font-family:var(--font-mono);font-size:.62rem;background:var(--muted);padding:.05rem .3rem}
+  .sharp-card{border:1.5px solid var(--border);background:var(--background);padding:1.1rem 1.25rem}
+  .doc-link{font-family:var(--font-mono);font-size:.66rem;border:none;background:none;cursor:pointer;
+    text-decoration:underline;text-underline-offset:2px;color:var(--foreground);padding:0}
+  .doc-link:hover{color:var(--muted-foreground)}
+
+  /* ══ TODAY — what cn-timeline actually is: no CSS, browser defaults ══ */
+  .raw-timeline{list-style:disc;padding-left:1.3rem}
+  .raw-timeline li{margin:.85rem 0}
+  .raw-timeline .head{display:flex;justify-content:space-between;font-size:.82rem}
+  .raw-timeline .when{color:var(--muted-foreground);font-size:.75rem}
+  .raw-timeline .detail{font-size:.85rem;margin-top:.15rem;white-space:pre-line;line-height:1.55}
+
+  /* ══ PROPOSED — the real timeline ══ */
+  .upd{list-style:none;padding:0;margin:0;position:relative}
+  .upd::before{content:"";position:absolute;left:.44rem;top:.9rem;bottom:.9rem;width:1.5px;background:var(--border-light)}
+  .upd__item{position:relative;padding:.7rem 0 .7rem 1.9rem;border-bottom:1px solid var(--border-light)}
+  .upd__item:last-child{border-bottom:0}
+  /* square marker on the rail, colour = kind */
+  .upd__mark{position:absolute;left:.17rem;top:.95rem;width:.56rem;height:.56rem;flex-shrink:0}
+  .upd__mark--status{background:var(--foreground)}
+  .upd__mark--note{border:1.5px solid var(--foreground)}
+  .upd__mark--docreq{background:var(--warn)}
+  .upd__mark--decision{background:var(--ok)}
+  .upd__mark--assign{border:1.5px solid var(--accent)}
+  /* kind chip — mono, uppercase, square */
+  .upd__kind{font-family:var(--font-mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;
+    border:1px solid var(--border-light);padding:.08rem .4rem;color:var(--muted-foreground);white-space:nowrap}
+  .upd__kind--status{border-color:var(--foreground);color:var(--foreground);background:var(--muted)}
+  .upd__kind--docreq{border-color:var(--warn);color:var(--warn)}
+  .upd__kind--decision{border-color:var(--ok);color:var(--ok)}
+  .upd__kind--assign{border-color:var(--accent);color:var(--accent)}
+  .upd__head{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+  .upd__who{font-weight:600;font-size:.82rem}
+  .upd__when{font-family:var(--font-mono);font-size:.62rem;color:var(--muted-foreground);margin-left:auto;white-space:nowrap}
+  .upd__title{font-weight:600;font-size:.85rem;margin-top:.3rem}
+  .upd__body{font-size:.82rem;color:var(--muted-foreground);line-height:1.55;margin-top:.15rem;white-space:pre-line}
+  .upd__act{margin-top:.45rem}
+  /* unread divider */
+  .upd__new{display:flex;align-items:center;gap:.6rem;padding:.45rem 0 .45rem 1.9rem;position:relative}
+  .upd__new::before{content:"";position:absolute;left:.17rem;top:50%;width:.56rem;height:.56rem;background:var(--bad);transform:translateY(-50%)}
+  .upd__new span{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.12em;color:var(--bad)}
+  .upd__new::after{content:"";flex:1;height:1.5px;background:var(--bad)}
+  .upd__item--fresh{background:linear-gradient(90deg,rgba(185,28,28,.045),transparent 60%)}
+  /* collapse tail */
+  .upd__more{width:100%;text-align:left;border:none;border-top:1.5px solid var(--border);background:var(--muted);
+    font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;
+    padding:.6rem 1.25rem;cursor:pointer;color:var(--foreground)}
+  .upd__more:hover{background:var(--border-light)}
+  /* card header row with unread count */
+  .upd-card{padding:0}
+  .upd-card__head{display:flex;align-items:baseline;gap:.6rem;padding:.8rem 1.25rem;border-bottom:1.5px solid var(--border)}
+  .upd-card__head .eyebrow{margin:0}
+  .upd-card__count{margin-left:auto;font-family:var(--font-mono);font-size:.6rem;background:var(--bad);color:#fff;
+    padding:.12rem .45rem;text-transform:uppercase;letter-spacing:.1em}
+  .upd-card__body{padding:0 1.25rem}
+  /* empty state */
+  .upd-empty{padding:1.6rem 1.25rem;text-align:left}
+  .upd-empty .eyebrow{margin-bottom:.4rem}
+  .upd-empty p{font-size:.82rem;color:var(--muted-foreground);line-height:1.6;max-width:34rem}
+
+  /* ══ responsive — same 960px breakpoint as the app shell ══ */
+  @media (max-width:959.98px){
+    .upd-card{margin:0 -.85rem;border-left:0;border-right:0}
+    .upd__item,.upd__new{padding-left:1.5rem}
+    .upd::before{left:.4rem}
+    .upd__mark{left:.14rem;width:.48rem;height:.48rem}
+    .upd__who{display:none}
+    .upd__act .doc-link{display:block;width:100%;text-align:left;padding:.45rem 0}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="head">
+  <p class="eyebrow">Portal · updates from your consultant</p>
+  <h1 class="page-title">Updates, rebuilt</h1>
+  <p class="lead" style="margin-top:.5rem">
+    The current panel is a class name with no CSS — <code class="mono" style="font-size:.75rem">cn-timeline</code> matches
+    zero rules, so updates render as a default bulleted list. The <code class="mono" style="font-size:.75rem">kind</code>
+    field on every comment is ignored entirely: a visa decision, a document request, and a casual note all look identical.
+  </p>
+</header>
+
+<!-- ══════════════ CURRENT vs PROPOSED ══════════════ -->
+<section class="sec">
+  <h2>Same data, two renders</h2>
+  <p class="sub">Left is what ships today. Right is the redesign — real timeline rail, kind-coded markers and chips, split headline/body, relative time, per-kind actions, and an unread divider fed by the SSE stream that already lands these comments live.</p>
+
+  <div class="compare">
+    <!-- TODAY -->
+    <div>
+      <div class="variant-label"><span class="tag">today</span> unstyled ol · kind ignored · nothing actionable</div>
+      <div class="sharp-card" style="padding:.9rem 1.1rem">
+        <ol class="raw-timeline">
+          <li>
+            <div class="head"><span>Ama Serwaa</span><span class="when">19 Sep 2026</span></div>
+            <p class="detail">Visa — decision issued. Your application was approved. We'll email the letter and start your departure file.</p>
+          </li>
+          <li>
+            <div class="head"><span>Ama Serwaa</span><span class="when">14 Sep 2026</span></div>
+            <p class="detail">We need a clearer scan of your passport bio page — the one on file cuts off the MRZ line. Please re-upload.</p>
+          </li>
+          <li>
+            <div class="head"><span>Century NIT</span><span class="when">9 Sep 2026</span></div>
+            <p class="detail">Stage moved to Visa processing. Your file is now with the visa desk.</p>
+          </li>
+          <li>
+            <div class="head"><span>Kofi Mensah</span><span class="when">2 Sep 2026</span></div>
+            <p class="detail">Case handed to Ama — she's your visa officer from here.</p>
+          </li>
+          <li>
+            <div class="head"><span>Ama Serwaa</span><span class="when">28 Aug 2026</span></div>
+            <p class="detail">Both universities confirmed receipt. KNUST usually responds within three weeks; legon a bit longer.</p>
+          </li>
+        </ol>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">No rail, no markers — <code>cn-timeline</code> has zero CSS; these are browser bullets.</li>
+        <li data-n="2">"Visa — decision issued" is the single most important line on the page and it looks like the rest.</li>
+        <li data-n="3">The passport re-upload asks for an action — but gives no link, no highlight, no way to act on it.</li>
+        <li data-n="4">Full history always expanded; dates are absolute-only; nothing shows what's new since last visit.</li>
+      </ul>
+    </div>
+
+    <!-- PROPOSED -->
+    <div>
+      <div class="variant-label"><span class="tag tag--new">proposed</span> kind-coded rail · actions · unread divider</div>
+      <div class="sharp-card upd-card">
+        <div class="upd-card__head">
+          <span class="eyebrow">Updates from Ama</span>
+          <span class="upd-card__count">2 new</span>
+        </div>
+        <div class="upd-card__body">
+          <ol class="upd">
+            <li class="upd__new"><span>New since your last visit</span></li>
+            <li class="upd__item upd__item--fresh">
+              <span class="upd__mark upd__mark--decision"></span>
+              <div class="upd__head">
+                <span class="upd__kind upd__kind--decision">Decision</span>
+                <span class="upd__who">Ama Serwaa</span>
+                <span class="upd__when">2h ago · 19 Sep</span>
+              </div>
+              <p class="upd__title">Visa approved</p>
+              <p class="upd__body">Your application was approved. We'll email the letter and start your departure file.</p>
+              <div class="upd__act"><button class="doc-link">Open departure chapter →</button></div>
+            </li>
+            <li class="upd__item upd__item--fresh">
+              <span class="upd__mark upd__mark--docreq"></span>
+              <div class="upd__head">
+                <span class="upd__kind upd__kind--docreq">Document needed</span>
+                <span class="upd__who">Ama Serwaa</span>
+                <span class="upd__when">5d ago · 14 Sep</span>
+              </div>
+              <p class="upd__title">Passport bio page — clearer scan needed</p>
+              <p class="upd__body">The one on file cuts off the MRZ line. Please re-upload.</p>
+              <div class="upd__act"><button class="doc-link">Open document vault →</button></div>
+            </li>
+            <li class="upd__item">
+              <span class="upd__mark upd__mark--status"></span>
+              <div class="upd__head">
+                <span class="upd__kind upd__kind--status">Status</span>
+                <span class="upd__who">Century NIT</span>
+                <span class="upd__when">9 Sep</span>
+              </div>
+              <p class="upd__title">Moved to Visa processing</p>
+              <p class="upd__body">Your file is now with the visa desk.</p>
+            </li>
+            <li class="upd__item">
+              <span class="upd__mark upd__mark--assign"></span>
+              <div class="upd__head">
+                <span class="upd__kind upd__kind--assign">Handover</span>
+                <span class="upd__who">Kofi Mensah</span>
+                <span class="upd__when">2 Sep</span>
+              </div>
+              <p class="upd__body">Case handed to Ama — she's your visa officer from here.</p>
+            </li>
+          </ol>
+          <button class="upd__more">3 earlier updates ↓</button>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Markers + chips read <code>kind</code>: status · document needed · decision · handover · note. Instant triage.</li>
+        <li data-n="2">First line becomes the headline, the rest drops to muted body — scannable without losing detail.</li>
+        <li data-n="3">Actions live on the update: doc request links to the vault, a decision links to the chapter it unlocked.</li>
+        <li data-n="4">The red divider marks "new since last visit" — SSE already delivers these live, this makes it visible.</li>
+        <li data-n="5">History past the latest few collapses behind one rule-lined toggle.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ KINDS ══════════════ -->
+<section class="sec">
+  <h2>Kind vocabulary — already in the data</h2>
+  <p class="sub"><code class="mono" style="font-size:.7rem">caseCommentSchema.kind</code> is one of <code class="mono" style="font-size:.7rem">comment · recommendation · document_request · status · assignment</code>. The API already writes it; the UI just never reads it.</p>
+  <div class="frame" style="margin-top:1rem;padding:1rem 1.25rem">
+    <table style="width:100%;border-collapse:collapse;font-size:.78rem">
+      <tr class="mono" style="font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground)">
+        <td style="padding:.4rem .6rem .4rem 0">kind</td><td style="padding:.4rem .6rem">marker</td><td style="padding:.4rem .6rem">chip</td><td style="padding:.4rem .6rem">action</td>
+      </tr>
+      <tr><td class="mono" style="padding:.35rem .6rem .35rem 0">status</td><td><span class="upd__mark upd__mark--status" style="position:static;display:inline-block"></span> solid ink</td><td>Status</td><td class="muted">none — informational</td></tr>
+      <tr><td class="mono" style="padding:.35rem .6rem .35rem 0">comment</td><td><span class="upd__mark upd__mark--note" style="position:static;display:inline-block"></span> hollow ink</td><td>Note</td><td class="muted">none</td></tr>
+      <tr><td class="mono" style="padding:.35rem .6rem .35rem 0">recommendation</td><td><span class="upd__mark upd__mark--note" style="position:static;display:inline-block"></span> hollow ink</td><td>Advice</td><td class="muted">link to the relevant chapter</td></tr>
+      <tr><td class="mono" style="padding:.35rem .6rem .35rem 0">document_request</td><td><span class="upd__mark upd__mark--docreq" style="position:static;display:inline-block"></span> amber</td><td>Document needed</td><td>Open document vault →</td></tr>
+      <tr><td class="mono" style="padding:.35rem .6rem .35rem 0">assignment</td><td><span class="upd__mark upd__mark--assign" style="position:static;display:inline-block"></span> violet hollow</td><td>Handover</td><td class="muted">none — names the new officer</td></tr>
+      <tr><td class="mono" style="padding:.35rem .6rem .35rem 0">visa/decision lines*</td><td><span class="upd__mark upd__mark--decision" style="position:static;display:inline-block"></span> green</td><td>Decision</td><td>Open the unlocked chapter →</td></tr>
+    </table>
+    <p class="muted" style="font-size:.68rem;margin-top:.6rem">* the existing <code class="mono" style="font-size:.6rem">isVisaUpdate</code> text-regex already splits visa lines out — the same hook gives them the decision treatment.</p>
+  </div>
+</section>
+
+<!-- ══════════════ MOBILE ══════════════ -->
+<section class="sec">
+  <h2>Mobile — the rail survives, the chrome doesn't</h2>
+  <p class="sub">At &lt;960px the card goes full-width with no outer padding, the head row wraps (chip drops to its own line), the marker shrinks and the rail hugs the edge, and "x new" collapses to a dot count. Action links grow to full-width tap targets. Nothing is hidden — a phone client sees every update a desktop client sees.</p>
+
+  <div style="display:grid;grid-template-columns:380px 1fr;gap:1.5rem;margin-top:1rem;align-items:start">
+    <!-- phone frame -->
+    <div class="frame" style="padding:0;max-width:380px">
+      <div class="mono muted" style="font-size:.58rem;text-transform:uppercase;letter-spacing:.12em;padding:.45rem .8rem;border-bottom:1px solid var(--border-light);display:flex;justify-content:space-between">
+        <span>375px · portal</span><span>◦◦◦</span>
+      </div>
+      <div style="padding:.9rem .85rem">
+        <div class="upd-card" style="border:1.5px solid var(--border);background:#fff">
+          <div class="upd-card__head" style="padding:.65rem .85rem">
+            <span class="eyebrow" style="font-size:.58rem">Updates from Ama</span>
+            <span class="upd-card__count">2</span>
+          </div>
+          <div class="upd-card__body" style="padding:0 .85rem">
+            <ol class="upd">
+              <li class="upd__new" style="padding-left:1.5rem"><span>New</span></li>
+              <li class="upd__item upd__item--fresh" style="padding-left:1.5rem">
+                <span class="upd__mark upd__mark--decision" style="left:.14rem;width:.48rem;height:.48rem"></span>
+                <div class="upd__head">
+                  <span class="upd__kind upd__kind--decision">Decision</span>
+                  <span class="upd__when">2h ago</span>
+                </div>
+                <p class="upd__title">Visa approved</p>
+                <p class="upd__body">Your application was approved. We'll email the letter and start your departure file.</p>
+                <div class="upd__act"><button class="doc-link" style="display:block;width:100%;text-align:left;padding:.45rem 0">Open departure chapter →</button></div>
+              </li>
+              <li class="upd__item upd__item--fresh" style="padding-left:1.5rem">
+                <span class="upd__mark upd__mark--docreq" style="left:.14rem;width:.48rem;height:.48rem"></span>
+                <div class="upd__head">
+                  <span class="upd__kind upd__kind--docreq">Doc needed</span>
+                  <span class="upd__when">5d</span>
+                </div>
+                <p class="upd__title">Passport bio page — clearer scan needed</p>
+                <p class="upd__body">The one on file cuts off the MRZ line. Please re-upload.</p>
+                <div class="upd__act"><button class="doc-link" style="display:block;width:100%;text-align:left;padding:.45rem 0">Open document vault →</button></div>
+              </li>
+              <li class="upd__item" style="padding-left:1.5rem">
+                <span class="upd__mark upd__mark--status" style="left:.14rem;width:.48rem;height:.48rem"></span>
+                <div class="upd__head">
+                  <span class="upd__kind upd__kind--status">Status</span>
+                  <span class="upd__when">9 Sep</span>
+                </div>
+                <p class="upd__title">Moved to Visa processing</p>
+              </li>
+            </ol>
+            <button class="upd__more" style="margin:0 -.85rem;width:calc(100% + 1.7rem)">4 earlier ↓</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- the rules -->
+    <div class="frame" style="padding:1rem 1.25rem">
+      <div class="variant-label"><span class="tag tag--new">rules</span> @media (max-width:959.98px) — same breakpoint as the app shell</div>
+      <p class="mono" style="font-size:.68rem;line-height:2.05;margin-top:.6rem">
+        .upd-card &nbsp;→ &nbsp;margin:0 −.85rem; border-left/right:0 (full-bleed inside the page pad)<br>
+        .upd__who &nbsp;→ &nbsp;dropped: on mobile the author is the card title ("Updates from Ama"),<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;one name per row is noise<br>
+        .upd__when &nbsp;→ &nbsp;relative only ("2h ago", "5d"); the date moves into a title attr<br>
+        .upd__mark &nbsp;→ &nbsp;.48rem; rail shifts to left:.35rem — thinner but unbroken<br>
+        .upd__act a &nbsp;→ &nbsp;display:block; padding:.45rem 0 — 44px-tall tap target<br>
+        .upd-card__count &nbsp;→ &nbsp;bare number, no "new" label<br>
+        .upd__body &nbsp;→ &nbsp;webkit-line-clamp:3 on long notes; the sheet shows the rest
+      </p>
+      <p class="muted" style="font-size:.72rem;margin-top:.6rem;line-height:1.6">
+        The one layout change that matters: <b>the author name leaves the row</b>. On a phone, "Ama Serwaa"
+        repeated on every line costs more than it informs — the card header already says whose updates these are.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ EMPTY STATE ══════════════ -->
+<section class="sec">
+  <h2>Empty state — currently the section just vanishes</h2>
+  <p class="sub">Today <code class="mono" style="font-size:.7rem">list.length === 0 → return null</code>: the whole section disappears, so a client can't tell "no updates yet" from "this feature doesn't exist." A quiet placeholder is worth the four lines.</p>
+  <div class="sharp-card upd-card" style="max-width:560px;margin-top:1rem">
+    <div class="upd-card__head"><span class="eyebrow">Updates from Ama</span></div>
+    <div class="upd-empty">
+      <p class="eyebrow">Nothing yet</p>
+      <p>When Ama writes on your file — a stage move, a request, a decision — it lands here the moment she saves it. No refresh needed.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ MECHANICS ══════════════ -->
+<section class="sec">
+  <h2>Mechanics</h2>
+  <div class="frame" style="margin-top:1rem;padding:1rem 1.25rem">
+    <p class="mono" style="font-size:.68rem;line-height:2.1">
+      DATA&nbsp;&nbsp;&nbsp;&nbsp;comments already carry kind · author · at — zero API changes<br>
+      READ&nbsp;&nbsp;&nbsp;&nbsp;application.comments (existing slice) — no new fetch<br>
+      NEW&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;localStorage `updatesSeenAt` per case → divider + badge count<br>
+      LIVE&nbsp;&nbsp;&nbsp;&nbsp;case.updated SSE already fires on addCaseComment (fixed last sprint)<br>
+      CSS&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;one .upd block in app.css — replaces the orphaned cn-timeline classes<br>
+      OPS&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;unchanged — this is the portal render only
+    </p>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

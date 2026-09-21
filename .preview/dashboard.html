@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portal dashboard — redesign mock</title>
+<style>
+  :root{
+    --background:#ffffff; --foreground:#0a0a0a;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#0a0a0a; --border-light:#d4d4d8;
+    --ok:#0d7a3f; --warn:#92400e; --bad:#b91c1c; --accent:#5b21b6;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --text-xs:.72rem; --text-sm:.875rem;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:#fafafa;color:var(--foreground);font-size:var(--text-sm)}
+  .page{max-width:1240px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .page-title{font-size:1.9rem;font-weight:700;letter-spacing:-.02em}
+  .lead{color:var(--muted-foreground);max-width:48rem;line-height:1.6}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--muted-foreground)}
+  .head{margin-bottom:2rem}
+  .sec{margin:2.75rem 0 1rem}
+  .sec h2{font-size:1.15rem;font-weight:700}
+  .sec .sub{font-size:var(--text-xs);color:var(--muted-foreground);margin-top:.2rem;max-width:50rem;line-height:1.6}
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start;margin-top:1rem}
+  @media (max-width:1100px){.compare{grid-template-columns:1fr}}
+  .variant-label{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;
+    color:var(--muted-foreground);margin-bottom:.5rem;display:flex;align-items:center;gap:.5rem}
+  .variant-label .tag{border:1px solid var(--border-light);padding:.1rem .45rem;font-size:.58rem}
+  .variant-label .tag--new{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+  .frame{border:1.5px solid var(--border);background:var(--background);padding:1.4rem 1.5rem;overflow:hidden}
+  .frame--phone{padding:1rem .9rem}
+  .callouts{list-style:none;margin-top:.75rem;padding:0;font-size:var(--text-xs);color:var(--muted-foreground)}
+  .callouts li{padding:.35rem 0 .35rem 1.4rem;position:relative;line-height:1.5}
+  .callouts li::before{content:attr(data-n);position:absolute;left:0;top:.3rem;font-family:var(--font-mono);
+    font-size:.6rem;border:1px solid var(--border-light);width:1.05rem;height:1.05rem;display:flex;
+    align-items:center;justify-content:center}
+  .callouts code{font-family:var(--font-mono);font-size:.62rem;background:var(--muted);padding:.05rem .3rem}
+  .sharp-card{border:1.5px solid var(--border);background:var(--background);padding:1rem 1.15rem}
+  .sharp-card--invert{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+  .btn{display:inline-flex;align-items:center;gap:.4rem;border:1.5px solid var(--border);background:var(--foreground);
+    color:var(--background);font-family:var(--font-mono);font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;
+    padding:.55rem .9rem;cursor:pointer;text-decoration:none}
+  .btn--ghost{background:var(--background);color:var(--foreground)}
+  .btn--white{background:var(--background);color:var(--foreground);border-color:var(--background)}
+  .jlink{font-family:var(--font-mono);font-size:.64rem;text-decoration:underline;text-underline-offset:2px;color:inherit}
+  .bugbox{border:1.5px solid var(--bad);background:#fdf5f5;padding:1rem 1.2rem;margin-top:1rem}
+  .bugbox .eyebrow{color:var(--bad)}
+  .bugbox p{font-size:var(--text-xs);line-height:1.6;margin-top:.4rem}
+  .bugbox code{font-family:var(--font-mono);font-size:.62rem;background:#fff;border:1px solid var(--border-light);padding:.05rem .3rem}
+
+  /* ════════ TODAY (reconstructed) ════════ */
+  .old-hero h2{font-size:1.55rem;font-weight:700;margin-top:.3rem}
+  .old-hero p.lead{font-size:.8rem;margin-top:.3rem}
+  .old-refs{display:flex;gap:1.4rem;margin-top:.7rem;flex-wrap:wrap}
+  .old-ref{font-size:.72rem;color:var(--muted-foreground)}
+  .old-ref strong{color:var(--foreground)}
+  .old-now{display:flex;justify-content:space-between;align-items:center;gap:1rem;
+    border:1.5px solid var(--border);padding:1rem 1.15rem;margin-top:1.1rem}
+  .old-now__title{font-size:1.15rem;font-weight:700;margin-top:.15rem}
+  .old-now__detail{font-size:.74rem;color:var(--muted-foreground);margin-top:.15rem;max-width:26rem;line-height:1.5}
+  .old-jmini{display:grid;grid-template-columns:repeat(6,1fr);border:1.5px solid var(--border);margin-top:1rem}
+  .old-jmini a{display:block;padding:.75rem .6rem;border-right:1.5px solid var(--border);text-decoration:none;color:var(--foreground)}
+  .old-jmini a:last-child{border-right:0}
+  .old-jmini .n{width:1.15rem;height:1.15rem;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:.55rem}
+  .old-jmini .done .n{background:var(--foreground);color:var(--background)}
+  .old-jmini .now{background:var(--muted)}
+  .old-jmini .now .n{border-width:2.5px}
+  .old-jmini .lk .n{border-color:#737373;color:var(--muted-foreground)}
+  .old-jmini .nm{font-size:.62rem;font-weight:600;margin-top:.4rem}
+  .old-jmini .st{font-size:.56rem;color:var(--muted-foreground);margin-top:.1rem}
+  .old-jmini .lk .nm,.old-jmini .lk .st{color:var(--muted-foreground)}
+  .old-split{display:grid;grid-template-columns:1.4fr 1fr;gap:1.2rem;margin-top:1.1rem}
+  .old-psec{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5px solid var(--border);padding-bottom:.4rem}
+  .old-psec b{font-size:.78rem}
+  .old-psec span{font-size:.64rem;color:var(--muted-foreground)}
+  .old-nowlist{border:1.5px solid var(--border);border-top:0}
+  .old-nowlist .row{padding:.7rem .9rem;border-bottom:1px solid var(--border-light);font-size:.78rem;display:flex;justify-content:space-between;gap:1rem}
+  .old-nowlist .row:last-child{border-bottom:0}
+  .old-nowlist .lead{color:var(--muted-foreground);line-height:1.55}
+  .old-nowlist .foot{font-size:.64rem;color:var(--muted-foreground);background:var(--muted)}
+  .railstack{display:flex;flex-direction:column;gap:.8rem}
+  .pkv{display:flex;justify-content:space-between;border-bottom:1px solid var(--border-light);padding:.45rem 0;font-size:.74rem}
+  .pkv:last-child{border-bottom:0}
+  .pkv__k{color:var(--muted-foreground)}
+  .mini-raw{list-style:disc;padding-left:1.2rem;font-size:.76rem}
+  .mini-raw li{margin:.5rem 0}
+  .mini-raw .w{color:var(--muted-foreground);font-size:.66rem}
+  .apptmini{display:flex;gap:.8rem;align-items:center;margin-top:.4rem}
+  .apptmini__date{border:1.5px solid var(--border);width:2.4rem;height:2.4rem;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .apptmini__date b{font-size:1rem;line-height:1}
+  .apptmini__date span{font-family:var(--font-mono);font-size:.5rem;text-transform:uppercase}
+  .dup{outline:1.5px dashed var(--bad);outline-offset:2px}
+
+  /* ════════ PROPOSED ════════ */
+  /* slim hero: greeting + live status line + refs as quiet chips */
+  .n-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:1.2rem;flex-wrap:wrap}
+  .n-hero h2{font-size:1.5rem;font-weight:700;margin-top:.25rem}
+  .n-statusline{display:flex;align-items:center;gap:.55rem;margin-top:.45rem;font-size:.74rem;color:var(--muted-foreground)}
+  .n-statusline .dot{width:.5rem;height:.5rem;background:var(--warn)}
+  .n-statusline .dot--ok{background:var(--ok)}
+  .n-refs{display:flex;gap:.5rem}
+  .n-refs span{font-family:var(--font-mono);font-size:.58rem;border:1px solid var(--border-light);padding:.2rem .5rem;color:var(--muted-foreground)}
+  .n-refs b{color:var(--foreground);font-weight:600}
+
+  /* THE one band — action OR status, never both */
+  .n-band{border:1.5px solid var(--border);margin-top:1.1rem;display:flex;align-items:center;gap:1.2rem;padding:.95rem 1.15rem}
+  .n-band--wait{background:var(--muted)}
+  .n-band .eyebrow{white-space:nowrap}
+  .n-band__title{font-size:1.02rem;font-weight:700;margin-top:.15rem}
+  .n-band__detail{font-size:.74rem;color:var(--muted-foreground);margin-top:.15rem;line-height:1.5;max-width:30rem}
+  .n-band__main{flex:1;min-width:0}
+  .n-band__act{flex-shrink:0}
+
+  /* the appointment lives inside the band when it's the thing to do */
+  .n-appt{display:flex;gap:.8rem;align-items:center;border-top:1px solid var(--border-light);padding-top:.7rem;margin-top:.7rem}
+  .n-appt__d{border:1.5px solid var(--border);width:2.5rem;height:2.5rem;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0}
+  .n-appt__d b{font-size:1.05rem;line-height:1}
+  .n-appt__d span{font-family:var(--font-mono);font-size:.5rem;text-transform:uppercase}
+  .n-appt__t{font-weight:600;font-size:.8rem}
+  .n-appt__m{font-family:var(--font-mono);font-size:.58rem;color:var(--muted-foreground);margin-top:.1rem}
+  .n-appt__r{margin-left:auto;font-family:var(--font-mono);font-size:.56rem;border:1px solid var(--warn);color:var(--warn);padding:.15rem .45rem;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
+  .n-appt__r--ok{border-color:var(--ok);color:var(--ok)}
+
+  /* progress rail — replaces the six tiles */
+  .n-rail{display:flex;align-items:center;gap:0;margin-top:1.1rem;border:1.5px solid var(--border)}
+  .n-rail a{flex:1;display:flex;align-items:center;gap:.55rem;padding:.6rem .8rem;text-decoration:none;color:var(--foreground);border-right:1px solid var(--border-light)}
+  .n-rail a:last-child{border-right:0}
+  .n-rail .n{width:1.15rem;height:1.15rem;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:.55rem;flex-shrink:0}
+  .n-rail .done .n{background:var(--foreground);color:var(--background)}
+  .n-rail .now{background:var(--muted)}
+  .n-rail .now .n{border-width:2.5px}
+  .n-rail .nm{font-size:.7rem;font-weight:600;white-space:nowrap}
+  .n-rail .lk{color:var(--muted-foreground)}
+  .n-rail .lk .n{border-color:#b0b0b6}
+  .n-rail .lk .nm{color:var(--muted-foreground)}
+
+  /* split: now-list left, rail right — same skeleton, tighter */
+  .n-split{display:grid;grid-template-columns:1.35fr 1fr;gap:1.1rem;margin-top:1.1rem;align-items:start}
+  .n-card{border:1.5px solid var(--border)}
+  .n-card__h{display:flex;align-items:baseline;gap:.6rem;padding:.55rem .9rem;border-bottom:1.5px solid var(--border)}
+  .n-card__h .eyebrow{margin:0}
+  .n-card__h .right{margin-left:auto;font-family:var(--font-mono);font-size:.58rem;color:var(--muted-foreground)}
+  .n-card__b{padding:.2rem .9rem}
+  .n-li{display:flex;justify-content:space-between;gap:1rem;align-items:baseline;padding:.55rem 0;border-bottom:1px solid var(--border-light);font-size:.76rem}
+  .n-li:last-child{border-bottom:0}
+  .n-li .t{font-weight:600}
+  .n-li .s{font-family:var(--font-mono);font-size:.58rem;color:var(--muted-foreground);white-space:nowrap}
+  .n-li .s--ok{color:var(--ok)}
+  .n-li .s--warn{color:var(--warn)}
+  .n-card__f{display:flex;justify-content:space-between;align-items:center;padding:.5rem .9rem;background:var(--muted);border-top:1.5px solid var(--border);font-size:.64rem;color:var(--muted-foreground)}
+
+  /* compact rail cards merge into one "file" card with sections */
+  .n-file{border:1.5px solid var(--border)}
+  .n-file__sec{padding:.7rem .9rem;border-bottom:1.5px solid var(--border)}
+  .n-file__sec:last-child{border-bottom:0}
+  .n-file__sec .eyebrow{display:block;margin-bottom:.35rem}
+  .n-file--invert .n-file__sec{border-color:rgba(255,255,255,.35)}
+  .inv{background:var(--foreground);color:var(--background)}
+  .inv .pkv{border-color:rgba(255,255,255,.3)}
+  .inv .pkv__k{color:rgba(255,255,255,.72)}
+  .inv .eyebrow{color:rgba(255,255,255,.6)}
+  .inv .jlink{color:rgba(255,255,255,.85)}
+  .kv2{display:flex;justify-content:space-between;padding:.3rem 0;font-size:.74rem}
+  .kv2 .k{color:var(--muted-foreground)}
+
+  /* mini updates (the shipped component) */
+  .upd{list-style:none;padding:0;margin:0;position:relative}
+  .upd::before{content:"";position:absolute;left:.44rem;top:.6rem;bottom:.6rem;width:1.5px solid var(--border-light);background:var(--border-light)}
+  .upd__item{position:relative;padding:.55rem 0 .55rem 1.7rem;border-bottom:1px solid var(--border-light)}
+  .upd__item:last-child{border-bottom:0}
+  .upd__mark{position:absolute;left:.17rem;top:.8rem;width:.56rem;height:.56rem}
+  .upd__mark--status{background:var(--foreground)}
+  .upd__mark--note{border:1.5px solid var(--foreground)}
+  .upd__mark--docreq{background:var(--warn)}
+  .upd__mark--decision{background:var(--ok)}
+  .upd__head{display:flex;align-items:center;gap:.5rem}
+  .upd__kind{font-family:var(--font-mono);font-size:.54rem;text-transform:uppercase;letter-spacing:.1em;border:1px solid var(--border-light);padding:.06rem .35rem;color:var(--muted-foreground)}
+  .upd__when{font-family:var(--font-mono);font-size:.58rem;color:var(--muted-foreground);margin-left:auto}
+  .upd__title{font-weight:600;font-size:.78rem;margin-top:.2rem}
+  .upd__body{font-size:.74rem;color:var(--muted-foreground);margin-top:.1rem;line-height:1.5}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-top:1rem;align-items:start}
+  @media (max-width:1100px){.grid2{grid-template-columns:1fr}}
+  .notecard{border:1.5px solid var(--border);background:var(--background);padding:1rem 1.15rem}
+  .notecard h3{font-size:.9rem;margin-bottom:.4rem}
+  .notecard p{font-size:.74rem;color:var(--muted-foreground);line-height:1.6}
+  .notecard ul{list-style:none;padding:0;margin-top:.5rem;font-size:.72rem;color:var(--muted-foreground)}
+  .notecard li{padding:.3rem 0 .3rem 1rem;position:relative;line-height:1.5}
+  .notecard li::before{content:"—";position:absolute;left:0;color:var(--border-light)}
+  .notecard code{font-family:var(--font-mono);font-size:.62rem;background:var(--muted);padding:.05rem .3rem}
+
+  @media (max-width:959.98px){
+    .old-jmini{grid-template-columns:repeat(3,1fr)}
+    .old-jmini a{border-bottom:1.5px solid var(--border)}
+    .old-split,.n-split{grid-template-columns:1fr}
+    .n-rail{flex-wrap:wrap}
+    .n-rail a{flex:1 1 33%;border-bottom:1px solid var(--border-light)}
+    .n-rail .nm{font-size:.64rem}
+    .n-band{flex-direction:column;align-items:flex-start}
+    .n-band__act{width:100%}
+    .n-band__act .btn{width:100%;justify-content:center;padding:.8rem}
+    .n-refs{display:none}
+  }
+
+  /* ══ phone frame — the same rules, scoped to .phone so the mock shows
+        mobile layout without resizing the window ══ */
+  .phonewrap{display:flex;gap:1.5rem;align-items:flex-start;flex-wrap:wrap;margin-top:1rem}
+  .phone{width:375px;flex-shrink:0;border:2.5px solid var(--border);border-radius:1.6rem;
+    padding:.6rem;background:#111;box-shadow:0 18px 40px rgba(0,0,0,.18)}
+  .phone__screen{background:var(--background);border-radius:1.1rem;overflow:hidden;padding:1rem .9rem 1.4rem;min-height:640px}
+  .phone__notch{width:5.5rem;height:.5rem;background:#111;border-radius:99px;margin:0 auto .8rem}
+  .phone .n-hero h2{font-size:1.3rem}
+  .phone .n-refs{display:none}
+  .phone .n-band{flex-direction:column;align-items:stretch;gap:.9rem}
+  .phone .n-band__act .btn{width:100%;justify-content:center;padding:.75rem}
+  .phone .n-appt__r{white-space:normal;text-align:center}
+  .phone .n-rail{flex-wrap:wrap}
+  .phone .n-rail a{flex:1 1 33%;padding:.55rem .5rem;gap:.4rem;border-bottom:1px solid var(--border-light)}
+  .phone .n-rail .nm{font-size:.62rem}
+  .phone .n-rail .lk .nm{display:none}            /* locked chapters shrink to numerals */
+  .phone .n-rail .lk{flex:0 0 auto;justify-content:center}
+  .phone .n-split{grid-template-columns:1fr}
+  .phone .n-li .s{font-size:.54rem}
+  .phone .upd__body{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .phone .upd__when{font-size:.55rem}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="head">
+  <p class="eyebrow">Portal · dashboard home</p>
+  <h1 class="page-title">The dashboard, rebuilt</h1>
+  <p class="lead" style="margin-top:.5rem">
+    Three problems on the current page: it asks you to <b>confirm a consultation you already booked</b>
+    (the "confirm" pending-action misfires — see the bug note below), it tells you <b>where you are three
+    separate times</b> (status band, six-tile strip, "Now" section), and the right rail is four disconnected
+    cards when the applicant only asks one question: <i>what happens next?</i>
+  </p>
+</header>
+
+<section class="sec">
+  <h2>The bug — why "Confirm" is still there</h2>
+  <div class="bugbox">
+    <p class="eyebrow">Root cause</p>
+    <p>
+      The moment you pay for a consultation, <code>completeConsultationPayment()</code> sets
+      <code>consultationPhase = "awaiting_confirmation"</code>. The pending-action resolver reads that phase and
+      emits <code>title: "Confirm your consultation"</code> — an action aimed at <b>you</b>. But confirming a slot is a
+      <b>staff-only</b> operation (<code>confirmConsultationSlot</code> requires an assigned consultant and a meeting link).
+      The sync only moves the phase forward when the case reaches <code>CONFIRMED</code>/<code>slotConfirmed</code> on the
+      server. So between "you booked" and "a consultant confirms", the dashboard orders you to do a thing you cannot do.
+    </p>
+    <p>
+      <b>Fix in the mock:</b> that state renders as <b>status, not action</b> — "Booked — the branch is confirming your slot"
+      with the appointment inline. A client-facing <i>Confirm</i> only appears when a staff-proposed reschedule genuinely
+      waits on the applicant (a distinct flag), never on the normal booked path.
+    </p>
+  </div>
+</section>
+
+<section class="sec">
+  <h2>Current vs proposed — the booked state</h2>
+  <p class="sub">Same data, same moment: consultation booked and paid, slot not yet confirmed by staff, one application invoice outstanding.</p>
+
+  <div class="compare">
+    <!-- CURRENT -->
+    <div>
+      <p class="variant-label">Current <span class="tag">what renders today</span></p>
+      <div class="frame">
+        <div class="old-hero">
+          <p class="eyebrow">Overview</p>
+          <h2>Welcome, Efua</h2>
+          <p class="lead muted">One glance at your journey. Where you are, what needs you, and who is on your file.</p>
+          <div class="old-refs">
+            <span class="old-ref">Application ID · <strong>Not issued</strong></span>
+            <span class="old-ref">Consultation reference · <strong>Not booked</strong> <span class="mono" style="color:var(--bad);font-size:.6rem">← wrong — CNT-CONS-4821 exists</span></span>
+          </div>
+        </div>
+
+        <div class="old-now dup">
+          <div>
+            <p class="eyebrow" style="color:var(--bad)">Action required</p>
+            <p class="old-now__title">Confirm your consultation</p>
+            <p class="old-now__detail">We proposed a time for your consultation. Confirm it or pick another slot.</p>
+          </div>
+          <a class="btn">Confirm</a>
+        </div>
+
+        <div class="old-jmini dup">
+          <a class="done"><span class="n">✓</span><p class="nm">Consult</p><p class="st">Done</p></a>
+          <a class="now"><span class="n">II</span><p class="nm">Enrol</p><p class="st">You are here</p></a>
+          <a class="lk"><span class="n">III</span><p class="nm">Apply</p><p class="st">Locked</p></a>
+          <a class="lk"><span class="n">IV</span><p class="nm">Visa</p><p class="st">Locked</p></a>
+          <a class="lk"><span class="n">V</span><p class="nm">Depart</p><p class="st">Locked</p></a>
+          <a class="lk"><span class="n">VI</span><p class="nm">Done</p><p class="st">Locked</p></a>
+        </div>
+
+        <div class="old-split">
+          <div>
+            <div class="old-psec dup"><b>Now · Consultation</b><span>Start your consultation</span></div>
+            <div class="old-nowlist">
+              <div class="row lead"><span>Book the first meeting, fill your assessment, and pay the consultation fee.</span></div>
+              <div class="row foot"><span>Start your consultation · chapter I</span><a class="jlink">Book consultation →</a></div>
+            </div>
+            <p style="margin-top:.6rem"><a class="jlink">Open the journey map →</a></p>
+          </div>
+          <div class="railstack">
+            <div class="sharp-card sharp-card--invert">
+              <p class="eyebrow" style="color:rgba(255,255,255,.6)">Money</p>
+              <div class="pkv" style="border-color:rgba(255,255,255,.3)"><span class="pkv__k" style="color:rgba(255,255,255,.72)">Paid to date</span><span>$75.00</span></div>
+              <div class="pkv" style="border-color:rgba(255,255,255,.3)"><span class="pkv__k" style="color:rgba(255,255,255,.72)">Due now</span><span>$150.00</span></div>
+              <p style="margin-top:.5rem"><a class="jlink" style="color:rgba(255,255,255,.85)">Open the ledger →</a></p>
+            </div>
+            <div class="sharp-card">
+              <p class="eyebrow">Next appointment</p>
+              <div class="apptmini">
+                <div class="apptmini__date"><b>24</b><span>Sep</span></div>
+                <div>
+                  <p style="font-weight:600;font-size:.78rem">Initial consultation</p>
+                  <p class="mono muted" style="font-size:.58rem">10:00 · Online · Ama Owusu</p>
+                </div>
+              </div>
+              <p style="margin-top:.5rem"><a class="jlink">Join / manage →</a></p>
+            </div>
+            <div class="sharp-card">
+              <p class="eyebrow">Your people</p>
+              <div class="pkv"><span class="pkv__k">Consultant</span><span>Ama Owusu</span></div>
+              <div class="pkv"><span class="pkv__k">Handler</span><span>Assigning…</span></div>
+              <div class="pkv"><span class="pkv__k">Travel officer</span><span>assigned later</span></div>
+              <p class="muted" style="font-size:.64rem;margin-top:.4rem">Message any of them through the chat, bottom right.</p>
+            </div>
+            <div class="sharp-card">
+              <p class="eyebrow">Documents</p>
+              <div class="pkv"><span class="pkv__k">On file</span><span><b>4</b></span></div>
+              <p style="margin-top:.5rem"><a class="jlink">Open the vault →</a></p>
+            </div>
+            <div class="sharp-card">
+              <p class="eyebrow">From your file</p>
+              <ul class="mini-raw">
+                <li><b>Ama Owusu</b> <span class="w">19 Sep</span><br>Passport received — checking it against the checklist.</li>
+                <li><b>System</b> <span class="w">18 Sep</span><br>Booking confirmed for 24 Sep, 10:00 GMT.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1"><b>"Action required — Confirm your consultation"</b> fires because <code>consultationPhase === "awaiting_confirmation"</code> — set the instant you pay, cleared only when staff confirm. You can't confirm; staff can. The action is a lie.</li>
+        <li data-n="2">Hero says <b>"Consultation reference · Not booked"</b> — it reads <code>booking.confirmationId</code> (localStorage), which is empty on a fresh device/session even though the server case exists. The appointment card below knows the truth; the hero doesn't.</li>
+        <li data-n="3"><b>"Where you are" appears three times</b>: the band, the six-tile strip, and the "Now" heading all repeat the stage. The strip also duplicates the sidebar nav.</li>
+        <li data-n="4">The "Now" body is the static stage blurb — the same sentence shown at enrolment — not anything about the actual booked appointment sitting in the rail.</li>
+        <li data-n="5">"From your file" still renders the old unstyled list (this mock predates the shipped updates component — it's fixed, just shown old here for contrast).</li>
+      </ul>
+    </div>
+
+    <!-- PROPOSED -->
+    <div>
+      <p class="variant-label">Proposed <span class="tag tag--new">redesign</span></p>
+      <div class="frame">
+        <div class="n-hero">
+          <div>
+            <p class="eyebrow">Overview</p>
+            <h2>Welcome, Efua</h2>
+            <p class="n-statusline"><span class="dot"></span> Chapter II · Enrol — consultation booked, slot being confirmed</p>
+          </div>
+          <div class="n-refs">
+            <span>APP <b>not issued</b></span>
+            <span>CONS <b>CNT-CONS-4821</b></span>
+          </div>
+        </div>
+
+        <div class="n-band n-band--wait">
+          <div class="n-band__main">
+            <p class="eyebrow">Up next</p>
+            <p class="n-band__title">Your consultation is booked</p>
+            <p class="n-band__detail">The branch is confirming the slot — nothing for you to do. If it moves, you'll see it here and in your email.</p>
+            <div class="n-appt">
+              <div class="n-appt__d"><b>24</b><span>Sep</span></div>
+              <div>
+                <p class="n-appt__t">Initial consultation · 10:00 GMT</p>
+                <p class="n-appt__m">ONLINE · AMA OWUSU · REF CNT-CONS-4821</p>
+              </div>
+              <span class="n-appt__r">Confirming</span>
+            </div>
+          </div>
+          <div class="n-band__act">
+            <a class="btn btn--ghost">Manage appointment</a>
+          </div>
+        </div>
+
+        <div class="n-rail">
+          <a class="done"><span class="n">✓</span><span class="nm">Consult</span></a>
+          <a class="now"><span class="n">II</span><span class="nm">Enrol</span></a>
+          <a class="lk"><span class="n">III</span><span class="nm">Apply</span></a>
+          <a class="lk"><span class="n">IV</span><span class="nm">Visa</span></a>
+          <a class="lk"><span class="n">V</span><span class="nm">Depart</span></a>
+          <a class="lk"><span class="n">VI</span><span class="nm">Done</span></a>
+        </div>
+
+        <div class="n-split">
+          <div class="n-card">
+            <div class="n-card__h"><p class="eyebrow">Needs you</p><span class="right">2 ITEMS</span></div>
+            <div class="n-card__b">
+              <div class="n-li"><span class="t">Pay the enrolment invoice</span><span class="s s--warn">$150.00 DUE</span></div>
+              <div class="n-li"><span class="t">Degree certificate — re-upload</span><span class="s">REJECTED 18 SEP</span></div>
+              <div class="n-li"><span class="t">Consultation slot</span><span class="s s--ok">BOOKED · 24 SEP</span></div>
+            </div>
+            <div class="n-card__f"><span>Everything else is moving on its own.</span><a class="jlink">Journey map →</a></div>
+          </div>
+
+          <div class="railstack">
+            <div class="n-file inv">
+              <div class="n-file__sec">
+                <span class="eyebrow">Money</span>
+                <div class="pkv"><span class="pkv__k">Paid to date</span><span>$75.00</span></div>
+                <div class="pkv"><span class="pkv__k">Due now</span><span>$150.00</span></div>
+                <p style="margin-top:.45rem"><a class="jlink">Open the ledger →</a></p>
+              </div>
+              <div class="n-file__sec">
+                <span class="eyebrow">Your people</span>
+                <div class="pkv"><span class="pkv__k">Consultant</span><span>Ama Owusu</span></div>
+                <div class="pkv"><span class="pkv__k">Handler</span><span>Assigning…</span></div>
+              </div>
+              <div class="n-file__sec">
+                <span class="eyebrow">Documents · <b style="color:inherit">4 on file</b></span>
+                <a class="jlink">Open the vault →</a>
+              </div>
+            </div>
+
+            <div class="n-card">
+              <div class="n-card__h"><p class="eyebrow">From your file</p><span class="right">2 NEW</span></div>
+              <div class="n-card__b">
+                <ul class="upd">
+                  <li class="upd__item">
+                    <span class="upd__mark upd__mark--docreq"></span>
+                    <div class="upd__head"><span class="upd__kind">Doc needed</span><span class="upd__when">2h</span></div>
+                    <p class="upd__title">Re-upload your degree certificate</p>
+                    <p class="upd__body">The scan is cut off at the seal — a full-page photo works.</p>
+                  </li>
+                  <li class="upd__item">
+                    <span class="upd__mark upd__mark--status"></span>
+                    <div class="upd__head"><span class="upd__kind">Status</span><span class="upd__when">1d</span></div>
+                    <p class="upd__title">Booking received</p>
+                    <p class="upd__body">Slot holds while the branch confirms.</p>
+                  </li>
+                </ul>
+              </div>
+              <div class="n-card__f"><a class="jlink">All updates →</a><span></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1"><b>One band, honest.</b> Booked-but-not-confirmed renders as <i>status</i> ("Confirming" chip, no Confirm button). When a real action exists — pay, upload, choose — the same band switches to "Action required" with the button. Never both, never a staff-only verb aimed at the client.</li>
+        <li data-n="2"><b>Refs read the server, not localStorage.</b> The consultation chip resolves from the live case (<code>liveConsultation.reference</code>) with the cached <code>confirmationId</code> only as a fallback — so "Not booked" can't contradict the appointment underneath it.</li>
+        <li data-n="3"><b>Six tiles → one rail.</b> Same chapters, same states, a third of the height; on mobile it wraps to 2×3 instead of six tall cells.</li>
+        <li data-n="4"><b>"Needs you" replaces the generic stage blurb.</b> Rows are real items from <code>getPendingAction</code> + invoices + rejected docs — each with a due/age tag, sorted by what blocks the journey.</li>
+        <li data-n="5"><b>Rail merges into one "file" card</b> — money / people / documents as sections, plus the shipped updates timeline at the bottom.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <h2>The band's three states</h2>
+  <p class="sub">One element covers every situation the current page spreads across the banner, the appointment card, and the stage copy.</p>
+  <div class="grid2">
+    <div class="notecard">
+      <p class="eyebrow" style="color:var(--bad)">Action required — you must act</p>
+      <div class="n-band" style="margin-top:.5rem">
+        <div class="n-band__main">
+          <p class="n-band__title">Pay the enrolment invoice</p>
+          <p class="n-band__detail">$150.00 unlocks school selection and starts your applications.</p>
+        </div>
+        <div class="n-band__act"><a class="btn">Pay now →</a></div>
+      </div>
+    </div>
+    <div class="notecard">
+      <p class="eyebrow" style="color:var(--warn)">Waiting — staff side, nothing for you</p>
+      <div class="n-band n-band--wait" style="margin-top:.5rem">
+        <div class="n-band__main">
+          <p class="n-band__title">Slot being confirmed</p>
+          <p class="n-band__detail">24 Sep · 10:00 · Ama Owusu. You'll be told if it moves.</p>
+        </div>
+        <div class="n-band__act"><a class="btn btn--ghost">View</a></div>
+      </div>
+    </div>
+    <div class="notecard">
+      <p class="eyebrow" style="color:var(--ok)">All clear — next thing is dated</p>
+      <div class="n-band" style="margin-top:.5rem">
+        <div class="n-band__main">
+          <p class="n-band__title">Visa appointment · 3 Oct</p>
+          <p class="n-band__detail">VFS Accra. Bring your passport and every document in the visa list.</p>
+        </div>
+        <div class="n-band__act"><a class="btn btn--ghost">Details</a></div>
+      </div>
+    </div>
+    <div class="notecard">
+      <p class="eyebrow">Idle — nothing pending</p>
+      <div class="n-band n-band--wait" style="margin-top:.5rem">
+        <div class="n-band__main">
+          <p class="n-band__title">Application tracking</p>
+          <p class="n-band__detail">3 schools filed. Replies land in your updates.</p>
+        </div>
+        <div class="n-band__act"><a class="btn btn--ghost">Open</a></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <h2>Mobile — the proposed page at 375px</h2>
+  <p class="sub">Same markup, scoped to the phone frame. The desktop version above also goes responsive if you narrow the window.</p>
+
+  <div class="phonewrap">
+    <div class="phone">
+      <div class="phone__screen">
+        <div class="phone__notch"></div>
+        <div class="n-hero">
+          <div>
+            <p class="eyebrow">Overview</p>
+            <h2>Welcome, Efua</h2>
+            <p class="n-statusline"><span class="dot"></span> Ch. II · Enrol — slot being confirmed</p>
+          </div>
+        </div>
+
+        <div class="n-band n-band--wait">
+          <div class="n-band__main">
+            <p class="eyebrow">Up next</p>
+            <p class="n-band__title">Consultation booked</p>
+            <div class="n-appt">
+              <div class="n-appt__d"><b>24</b><span>Sep</span></div>
+              <div>
+                <p class="n-appt__t">10:00 GMT · Online</p>
+                <p class="n-appt__m">AMA OWUSU · CNT-CONS-4821</p>
+              </div>
+            </div>
+          </div>
+          <div class="n-band__act"><a class="btn btn--ghost">Manage appointment</a></div>
+        </div>
+
+        <div class="n-rail">
+          <a class="done"><span class="n">✓</span><span class="nm">Consult</span></a>
+          <a class="now"><span class="n">II</span><span class="nm">Enrol</span></a>
+          <a class="lk"><span class="n">III</span><span class="nm">Apply</span></a>
+          <a class="lk"><span class="n">IV</span><span class="nm">Visa</span></a>
+          <a class="lk"><span class="n">V</span><span class="nm">Depart</span></a>
+          <a class="lk"><span class="n">VI</span><span class="nm">Done</span></a>
+        </div>
+
+        <div class="n-split">
+          <div class="n-card">
+            <div class="n-card__h"><p class="eyebrow">Needs you</p><span class="right">2</span></div>
+            <div class="n-card__b">
+              <div class="n-li"><span class="t">Pay enrolment invoice</span><span class="s s--warn">$150 DUE</span></div>
+              <div class="n-li"><span class="t">Degree cert — re-upload</span><span class="s">REJECTED</span></div>
+              <div class="n-li"><span class="t">Consultation slot</span><span class="s s--ok">BOOKED</span></div>
+            </div>
+            <div class="n-card__f"><a class="jlink">Journey map →</a><span></span></div>
+          </div>
+
+          <div class="n-file inv">
+            <div class="n-file__sec">
+              <span class="eyebrow">Money</span>
+              <div class="pkv"><span class="pkv__k">Paid</span><span>$75.00</span></div>
+              <div class="pkv"><span class="pkv__k">Due now</span><span>$150.00</span></div>
+            </div>
+            <div class="n-file__sec">
+              <span class="eyebrow">People · Docs</span>
+              <div class="pkv"><span class="pkv__k">Ama Owusu</span><span>4 files</span></div>
+            </div>
+          </div>
+
+          <div class="n-card">
+            <div class="n-card__h"><p class="eyebrow">From your file</p><span class="right">2 NEW</span></div>
+            <div class="n-card__b">
+              <ul class="upd">
+                <li class="upd__item">
+                  <span class="upd__mark upd__mark--docreq"></span>
+                  <div class="upd__head"><span class="upd__kind">Doc needed</span><span class="upd__when">2h</span></div>
+                  <p class="upd__title">Re-upload your degree certificate</p>
+                  <p class="upd__body">The scan is cut off at the seal — a full-page photo works.</p>
+                </li>
+                <li class="upd__item">
+                  <span class="upd__mark upd__mark--status"></span>
+                  <div class="upd__head"><span class="upd__kind">Status</span><span class="upd__when">1d</span></div>
+                  <p class="upd__title">Booking received</p>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:18rem">
+      <p class="variant-label">Mobile rules</p>
+      <div class="notecard">
+        <ul>
+          <li><b>Refs hide on phones</b> — the consultation ref lives on the appointment block; APP id is in the ledger and profile. Header stays one line.</li>
+          <li><b>Band stacks vertically</b>, button goes full-width (~44px target) — one thumb tap, no side-scrolling text next to a button.</li>
+          <li><b>Rail wraps 3×2</b>; locked chapters collapse to bare numerals — you don't need "Locked" read to you five times on a small screen.</li>
+          <li><b>Needs-you card comes first</b> in the single-column flow — the actionable thing lands above the fold, before money/people/updates.</li>
+          <li><b>Status tags compact</b> ("$150 DUE", "BOOKED") — the date detail moves into the row title or a tap-through.</li>
+          <li><b>Updates clamp at 3 lines</b> with the `+N more` expander the component already ships.</li>
+          <li>Breakpoint is the shell's own <code>960px</code> — these are the same rules the page will get in <code>app.mobile.css</code>.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <h2>What changes in code</h2>
+  <div class="grid2">
+    <div class="notecard">
+      <h3>Fixes (the confirm bug)</h3>
+      <ul>
+        <li><code>getPendingAction</code>: drop the <code>awaiting_confirmation → "Confirm your consultation"</code> action. It becomes a <i>status</i> the band renders read-only. A client confirm action returns only if a real applicant-side decision exists (e.g. accepting a proposed reschedule — needs a server flag like <code>slotProposedBy: "staff"</code>).</li>
+        <li>Hero refs: resolve the consultation ref from <code>liveConsultation.reference</code> first, fall back to <code>booking.confirmationId</code>. Never show "Not booked" while a live case exists.</li>
+        <li><code>completeConsultationPayment</code> setting <code>awaiting_confirmation</code> is semantically fine — the error is only that the pending-action layer treated a staff-side wait as a client-side task.</li>
+      </ul>
+    </div>
+    <div class="notecard">
+      <h3>Structure (DashboardHome.tsx)</h3>
+      <ul>
+        <li>One <code>&lt;StatusBand&gt;</code>: <code>pendingAction</code> → action skin; else derived status (booked/confirming, next dated thing, or idle). Replaces <code>action-now</code>/<code>journey-now</code> + the appointment card.</li>
+        <li><code>jmini</code> six-tile strip → slim <code>n-rail</code> (same data, <code>chapterStateOf</code> unchanged).</li>
+        <li>"Now" section → "Needs you" list fed by pending action + <code>dueList</code> invoices + rejected docs already in state.</li>
+        <li>Rail merges money/people/documents into one card; updates card (already rebuilt) stays.</li>
+        <li>No API changes. Everything is client-side regrouping + the two correctness fixes.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

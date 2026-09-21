@@ -12,6 +12,7 @@ import type { HandlerPlacement } from "../pages/case/AssignSheet";
 import { invoiceBalance, invoiceAgeDays } from "century-nit-core/ops";
 import {
 	JOURNEY_STAGE_LABELS,
+	SERVICE_STAGE_LABELS,
 	type JourneyStage,
 	type StageHandoff,
 	type Booking,
@@ -685,6 +686,28 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 			owner: "Finance",
 			linkTo: `/applications?id=${a.id}&tab=payments`,
 			at: a.updatedAt,
+			priority: PRIORITY.review_application,
+		});
+	}
+
+	// A completed client's request for the stage beyond their plan's exit
+	// waits on the office — approving extends the plan and reopens the case.
+	for (const a of applications) {
+		const cont = a.pendingContinuation;
+		if (!cont) continue;
+		q.push({
+			id: `a-cont-${cont.id}`,
+			category: "needs_action",
+			kind: "application",
+			action: "review",
+			record: a,
+			title: a.applicantName,
+			subtitle: `Continuation requested · ${SERVICE_STAGE_LABELS[cont.stage]} stage · ${a.appId}`,
+			meta: cont.note ? `"${cont.note}"` : stageMeta(a),
+			branch: a.branch,
+			owner: caseHandlerName(a) || "—",
+			linkTo: `/applications?id=${a.id}`,
+			at: cont.createdAt ?? a.updatedAt,
 			priority: PRIORITY.review_application,
 		});
 	}

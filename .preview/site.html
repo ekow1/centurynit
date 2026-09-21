@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Public site — services-forward redesign (mock)</title>
+<style>
+	:root{--bg:#fafaf8;--ink:#18181b;--mut:#71717a;--line:#d4d4d0;--linelt:#e9e9e4;--bad:#b91c1c;--good:#15803d;--mono:ui-monospace,Menlo,monospace}
+	*{box-sizing:border-box;margin:0;padding:0}
+	body{background:var(--bg);color:var(--ink);font:14px/1.55 system-ui,sans-serif;padding:2rem clamp(1rem,4vw,3rem)}
+	h1{font-size:1.4rem}.sub{color:var(--mut);font-size:.82rem;margin:.3rem 0 2rem;max-width:56rem}
+	h2{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--mut);margin:2.5rem 0 .7rem;border-bottom:1.5px solid var(--ink);padding-bottom:.4rem}
+	.find{border:1.5px solid var(--ink);background:#fff;padding:.9rem 1.1rem;margin-bottom:.55rem;font-size:.79rem;max-width:56rem}
+	.find b{font-family:var(--mono);font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:.25rem}
+	.find.bad{border-left:5px solid var(--bad)}.find.good{border-left:5px solid var(--good)}
+	code{font-family:var(--mono);font-size:.7rem;background:var(--linelt);padding:.05em .3em}
+	.mock{border:1.5px solid var(--ink);background:#fff;box-shadow:5px 5px 0 rgba(0,0,0,.12);margin-bottom:1.5rem;overflow:hidden}
+	.mtag{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.12em;background:var(--ink);color:#fff;padding:.25rem .7rem;display:inline-block}
+	.eyebrow{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.14em;color:var(--mut)}
+
+	/* services ledger */
+	.ledger{border-top:1.5px solid var(--ink)}
+	.lrow{display:grid;grid-template-columns:2.2rem 1.3fr 1.6fr 5.5rem 6rem;gap:1rem;align-items:baseline;padding:.85rem 1rem;border-bottom:1px solid var(--linelt);transition:background .12s}
+	.lrow:hover{background:var(--linelt)}
+	.lrow .n{font-family:var(--mono);font-size:.68rem;color:var(--mut)}
+	.lrow .nm{font-weight:700;font-size:.92rem}
+	.lrow .nm small{display:block;font-weight:400;color:var(--mut);font-size:.72rem;margin-top:.15rem}
+	.lrow .dl{font-size:.72rem;color:var(--mut);line-height:1.5}
+	.lrow .dl li{list-style:none}
+	.lrow .dl li::before{content:"— "}
+	.lrow .dur{font-family:var(--mono);font-size:.62rem;color:var(--mut);text-transform:uppercase}
+	.lrow .go{font-family:var(--mono);font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;text-align:right}
+	.lhead{display:grid;grid-template-columns:2.2rem 1.3fr 1.6fr 5.5rem 6rem;gap:1rem;padding:.45rem 1rem;border-bottom:1.5px solid var(--ink);font-family:var(--mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.12em;color:var(--mut)}
+	@media(max-width:760px){.lrow,.lhead{grid-template-columns:2rem 1fr 4.5rem}.lrow .dl,.lhead .dh{display:none}}
+
+	/* product band */
+	.band{background:var(--ink);color:#fff;display:grid;grid-template-columns:1fr 1fr;gap:0}
+	.band .copy{padding:2rem}
+	.band .copy h3{font-size:1.5rem;margin:.5rem 0 .7rem}
+	.band .copy p{color:#a1a1aa;font-size:.82rem;max-width:26rem}
+	.band .pts{margin-top:1.1rem;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:#d4d4d8;display:grid;gap:.4rem}
+	.band .pts span::before{content:"■ ";color:#fff;font-size:.5rem}
+	.shot{padding:2rem;display:flex;align-items:center}
+	.shot .card{width:100%;border:1.5px solid #3f3f46;background:#fff;color:var(--ink);padding:.9rem;font-size:.72rem}
+	.shot .rowline{display:flex;justify-content:space-between;border-bottom:1px solid var(--linelt);padding:.35rem 0}
+	.shot .live{display:inline-block;width:.5rem;height:.5rem;background:var(--good);margin-right:.35rem}
+	@media(max-width:760px){.band{grid-template-columns:1fr}}
+
+	/* nav strip */
+	.nv{display:flex;align-items:center;gap:1.2rem;padding:.7rem 1.2rem;border-bottom:1.5px solid var(--ink);font-size:.78rem}
+	.nv .logo{font-weight:800;font-size:.95rem}
+	.nv a{color:var(--ink);text-decoration:none}
+	.nv .cta{margin-left:auto;background:var(--ink);color:#fff;padding:.35rem .8rem;font-family:var(--mono);font-size:.6rem;text-transform:uppercase}
+	.nv .cta b{color:#fbbf24}
+	.order{font-family:var(--mono);font-size:.68rem;line-height:2.1;max-width:34rem}
+	.order b{display:inline-block;min-width:2rem;color:var(--mut)}
+	.order .cut{color:var(--bad);text-decoration:line-through}
+	.order .keep{color:var(--ink)}
+	.order .new{color:var(--good);font-weight:700}
+</style>
+</head>
+<body>
+<h1>Public website — services-forward redesign</h1>
+<p class="sub">The site's job is to convert a visitor into a booked consultation. Today the services — the actual product — are five generic cards at section 3 of 9, their substance (deliverables, duration, process) hidden behind clicks. Meanwhile the strongest proof — the client portal itself — is invisible.</p>
+
+<h2>Findings</h2>
+<div class="find bad"><b>Services undersold</b>Five cards, one sentence each, <code>Learn more →</code>. The deliverables ("embassy-ready visa file", "mock interview", "shortlist in 5 working days") — the things that actually convert — only exist on detail pages.</div>
+<div class="find bad"><b>Homepage is a brochure wall</b>9 sections: hero → stats → spotlight → services → destinations → universities → programs → red seat → methodology → scholarships → CTA → articles. Four grids of near-identical media cards blur together.</div>
+<div class="find bad"><b>The portal never appears</b>"One journey — consultation through visa — in your dashboard" is the CTA band's claim, but nothing shows it. Every competitor says "we keep you updated"; only you can <i>show</i> live case tracking.</div>
+<div class="find bad"><b>No price anchor</b>The consultation fee exists in the fee catalogue but nowhere on the site. "How much does it cost?" is the first question; silence reads as expensive or evasive.</div>
+<div class="find bad"><b>Red Seat films are placeholders</b><code>videoUrl: ""</code> on all six — the code comment says "swap before this goes live." They're live. Play buttons open an empty lightbox.</div>
+<div class="find bad"><b>Weak stats</b>"Founded 2011 · 2 branches · 6+ destinations · 100+ partners" — input numbers. No outcome proof: visas granted, success rate, students placed.</div>
+<div class="find good"><b>Keep</b>The hero carousel (strong), the square/rule design language, the methodology spine (4 stages), the written testimonials.</div>
+
+<h2>Proposal A — Services as a ledger, not cards</h2>
+<div class="mock">
+	<span class="mtag">Proposed · /student-services + homepage section</span>
+	<div class="lhead"><span>#</span><span>Service</span><span class="dh">What you get</span><span>Typical</span><span></span></div>
+	<div class="ledger">
+		<div class="lrow"><span class="n">01</span><span class="nm">Education Advice & Counseling<small>Course + country fit, budget, timeline</small></span><ul class="dl"><li>1-on-1 session, Accra · Kumasi · online</li><li>Shortlist in 5 working days</li></ul><span class="dur">1–2 sessions</span><span class="go">Details →</span></div>
+		<div class="lrow"><span class="n">02</span><span class="nm">Admission Documentation<small>WASSCE, transcripts, SOP, references</small></span><ul class="dl"><li>Per-university checklist</li><li>Statement coaching + tracking</li></ul><span class="dur">2–6 weeks</span><span class="go">Details →</span></div>
+		<div class="lrow"><span class="n">03</span><span class="nm">Visa Documentation<small>Embassy-ready financial file</small></span><ul class="dl"><li>Consistency-checked evidence</li><li>Sponsorship templates</li></ul><span class="dur">1–3 weeks</span><span class="go">Details →</span></div>
+		<div class="lrow"><span class="n">04</span><span class="nm">Study Visa<small>Filing · biometrics · interview</small></span><ul class="dl"><li>Mock interview prep</li><li>Tracked to decision</li></ul><span class="dur">2–8 weeks</span><span class="go">Details →</span></div>
+		<div class="lrow"><span class="n">05</span><span class="nm">Travel & Arrival<small>Flights, briefing, landing support</small></span><ul class="dl"><li>Pre-departure briefing</li><li>Post-arrival network</li></ul><span class="dur">1–2 weeks</span><span class="go">Details →</span></div>
+	</div>
+	<div style="padding:.7rem 1rem;font-family:var(--mono);font-size:.62rem;color:var(--mut);border-top:1.5px solid var(--ink)">Start with a consultation — <b style="color:var(--ink)">GH₵X · online or in person</b> · <span style="color:var(--ink);font-weight:700">Book →</span></div>
+</div>
+<p class="sub" style="margin-top:0">Scannable like a price list, honest about durations, deliverables visible without a click. On phones the deliverables column drops — the row stays a clean one-liner.</p>
+
+<h2>Proposal B — Sell the portal, don't just claim it</h2>
+<div class="mock">
+	<span class="mtag">Proposed · band after methodology</span>
+	<div class="band">
+		<div class="copy">
+			<p class="eyebrow" style="color:#a1a1aa">Not promises — a system</p>
+			<h3>Every client gets a live file.<br>Watch yours move.</h3>
+			<p>Consultation booked, documents verified, invoice paid, visa filed — your portal shows it the moment it happens. Chat with your officer inside your case, not over WhatsApp.</p>
+			<div class="pts"><span>Live stage tracking</span><span>Transparent invoices & receipts</span><span>In-app officer chat</span><span>Document vault with review status</span></div>
+		</div>
+		<div class="shot">
+			<div class="card">
+				<p class="eyebrow">Your portal · live</p>
+				<div class="rowline"><span><span class="live"></span>Visa file submitted to embassy</span><span class="mono" style="font-size:.58rem;color:var(--mut)">2h ago</span></div>
+				<div class="rowline"><span>Invoice INV-2026-014 paid</span><span style="color:var(--good);font-weight:700">✓</span></div>
+				<div class="rowline"><span>Ama replied in chat</span><span class="mono" style="font-size:.58rem;color:var(--mut)">just now</span></div>
+				<div class="rowline" style="border:0"><span style="color:var(--mut)">Next — biometrics appointment</span><span>→</span></div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<h2>Proposal C — Homepage order, compressed</h2>
+<div class="mock" style="padding:1.2rem 1.5rem">
+	<div class="order">
+		<div><b>1</b> <span class="keep">Hero carousel</span> <span class="muted">(keep — it's strong)</span></div>
+		<div><b>2</b> <span class="new">Services ledger</span> <span class="muted">(was section 3, now leads)</span></div>
+		<div><b>3</b> <span class="keep">Methodology</span> <span class="muted">(4 stages — the "how")</span></div>
+		<div><b>4</b> <span class="new">Portal band</span> <span class="muted">(the "why us" — proof)</span></div>
+		<div><b>5</b> <span class="keep">Red Seat</span> <span class="muted">(but: real video URLs or hide the films)</span></div>
+		<div><b>6</b> <span class="keep">One network grid</span> <span class="muted">— destinations + universities merged, 6 tiles</span></div>
+		<div><b>7</b> <span class="keep">Scholarships + articles</span> <span class="muted">(one combined "Explore" band)</span></div>
+		<div><b>8</b> <span class="keep">CTA band</span> <span class="muted">(add consultation price)</span></div>
+		<div style="margin-top:.6rem"><b>✕</b> <span class="cut">Spotlight grid, separate programs grid, weak stats band</span></div>
+	</div>
+</div>
+
+<p class="sub">Implementation notes: the ledger is pure markup + a new `.svc-ledger` block — zero API changes (all data already in <code>coreServices</code>). The portal band is a static mock of the real dashboard — honest, since the product exists. The nav's "Start Journey" CTA gains the consultation price (<code>GH₵X · Start</code>) once you confirm the fee to display.</p>
+</body>
+</html>

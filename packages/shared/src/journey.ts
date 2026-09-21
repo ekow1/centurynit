@@ -7,7 +7,7 @@ import {
 	type TravelAssistanceStatus,
 } from "./schemas/cases.js";
 import { PORTAL_STAGE_LABELS } from "./labels.js";
-import { normaliseScope } from "./stages.js";
+import { normaliseScope, requestableStageFor } from "./stages.js";
 import { ownershipCapabilityFor, roleHasCapability } from "./schemas/ops.js";
 
 /**
@@ -97,6 +97,12 @@ export type JourneySignals = {
 	 * stops at Visa is complete when the visa is approved and the fee settled.
 	 */
 	scopeStages?: string[] | null;
+	/** Where a mid-plan completion stopped — the reached service stage. */
+	completedAtStage?: string | null;
+	/** The note recorded with a mid-plan completion. */
+	completionNote?: string | null;
+	/** A pending "continue to the next stage" request's stage. */
+	pendingContinuationStage?: string | null;
 };
 
 export type JourneyChapterUnlocks = {
@@ -119,6 +125,13 @@ export type DerivedJourney = {
 	stageStatuses: Record<string, JourneyStageStatus>;
 	label: string;
 	nextUnlock: string | null;
+	/** The service stage a mid-plan completion stopped at; null for a full-plan finish. */
+	completedAtStage: string | null;
+	completionNote: string | null;
+	/** The stage a completed client can request next; null when the plan covers the whole journey. */
+	requestableStage: string | null;
+	/** A continuation request awaiting the office. */
+	pendingContinuationStage: string | null;
 };
 
 /**
@@ -200,12 +213,15 @@ function facts(s: JourneySignals): Facts {
 	// flight, no checklist, no arrival to wait for.
 	const scope = normaliseScope(s.scopeStages ?? null);
 	const exit = scope[scope.length - 1];
+	// Ops may mark a case complete at the reached stage (a client who stopped
+	// mid-plan). That write is itself the fact — the coarse stage carries it.
 	const isCompleted =
-		exit === "departure"
+		s.coarseStage === "completed" ||
+		(exit === "departure"
 			? taResolved && planSettled && s.preDepartureDone
 			: exit === "visa"
 				? s.visaDone && s.agencySettled
-				: s.hasAdmitted && s.agencySettled;
+				: s.hasAdmitted && s.agencySettled);
 	return {
 		...s,
 		hasProceeded: s.proceedStatus === "accepted",
@@ -285,6 +301,12 @@ export function deriveJourney(signals: JourneySignals): DerivedJourney {
 		stageStatuses,
 		label: refused ? "Visa refused" : PORTAL_STAGE_LABELS[portalStage],
 		nextUnlock: refused ? "Your consultant will advise on reapplying" : nextUnlock,
+		completedAtStage: f.isCompleted ? (signals.completedAtStage ?? null) : null,
+		completionNote: f.isCompleted ? (signals.completionNote ?? null) : null,
+		// The door swings both ways: a completed client can ask for the stage
+		// beyond the plan's exit.
+		requestableStage: f.isCompleted ? requestableStageFor(signals.scopeStages) : null,
+		pendingContinuationStage: signals.pendingContinuationStage ?? null,
 	};
 }
 
@@ -311,6 +333,10 @@ export function emptyJourney(): DerivedJourney {
 		stageStatuses,
 		label: PORTAL_STAGE_LABELS.consultation,
 		nextUnlock: null,
+		completedAtStage: null,
+		completionNote: null,
+		requestableStage: null,
+		pendingContinuationStage: null,
 	};
 }
 

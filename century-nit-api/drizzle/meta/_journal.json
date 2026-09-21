@@ -736,6 +736,13 @@
                   "when": 1790400300000,
                   "tag": "0106_admin_case_work",
                   "breakpoints": true
+            },
+            {
+                  "idx": 107,
+                  "version": "7",
+                  "when": 1790400400000,
+                  "tag": "0107_stage_continuation",
+                  "breakpoints": true
             }
       ]
 }

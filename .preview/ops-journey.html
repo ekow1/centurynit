@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ops · journey-scope audit & fix</title>
+<style>
+:root{--fg:#18181b;--muted:#f5f5f5;--mfg:#52525b;--border:#18181b;--bl:#d4d4d8;--thin:1px solid var(--border);--amber:#b45309;--mono:ui-monospace,"Cascadia Code",Menlo,monospace;--display:"Fraunces",Georgia,serif;--sans:"Inter",system-ui,sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);color:var(--fg);background:#fafafa;font-size:14px;line-height:1.5}
+.wrap{max-width:74rem;margin:0 auto;padding:2.5rem 1.5rem 4rem}
+h1{font-family:var(--display);font-size:2rem;font-weight:600;letter-spacing:-.02em}
+.k{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.14em;color:var(--mfg)}
+h2{font-family:var(--display);font-size:1.45rem;font-weight:600;letter-spacing:-.01em;margin:2.8rem 0 .4rem}
+.sub{color:var(--mfg);font-size:.88rem;max-width:46rem;margin-bottom:1.4rem}
+
+/* audit table */
+.audit{border:var(--thin);background:#fff}
+.audit__row{display:grid;grid-template-columns:11rem 1fr 15rem;gap:1.2rem;padding:.9rem 1.2rem;border-bottom:1px solid var(--bl);align-items:baseline}
+.audit__row:last-child{border-bottom:0}
+.audit__row.head{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.12em;color:var(--mfg);background:var(--muted)}
+.audit__pg{font-family:var(--mono);font-size:.72rem;font-weight:700}
+.audit__pg small{display:block;font-weight:400;color:var(--mfg);font-size:.6rem;margin-top:.1rem}
+.audit__fx{font-size:.8rem;color:var(--mfg)}
+.audit__fx b{color:var(--fg)}
+.badge{font-family:var(--mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.08em;padding:.15rem .45rem;border:1px solid currentColor;width:max-content}
+.badge.gap{color:#b91c1c;border-color:#b91c1c}
+.badge.ok{color:#15803d;border-color:#15803d}
+.badge.part{color:var(--amber);border-color:var(--amber)}
+
+/* fixed board */
+.board{border:var(--thin);background:#fff;margin-top:1rem}
+.board__rail{display:flex;border-bottom:var(--thin)}
+.board__rail span{flex:1;padding:.55rem .9rem;font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.12em;border-right:1px solid var(--bl)}
+.board__rail span:last-child{border-right:0}
+.board__rail b{margin-left:.4rem}
+.board__rail .s0{color:var(--amber)}
+.board__cols{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;min-height:16rem}
+.col{border-right:1px solid var(--bl);padding:.7rem}
+.col:last-child{border-right:0}
+.col__h{font-family:var(--mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:var(--mfg);margin-bottom:.6rem}
+.card{border:var(--thin);padding:.6rem .7rem;margin-bottom:.6rem;font-size:.8rem;background:#fff}
+.card b{display:block;font-size:.85rem}
+.card .meta{font-family:var(--mono);font-size:.55rem;color:var(--mfg);margin-top:.2rem}
+/* the scope chip + mini route on every card */
+.scopechip{display:inline-flex;align-items:center;gap:.4rem;border:1px solid var(--bl);font-family:var(--mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.07em;padding:.18rem .45rem;margin-top:.45rem;color:var(--mfg)}
+.minirt{display:inline-flex;gap:.25rem;align-items:center}
+.minirt i{width:.4rem;height:.4rem;background:var(--fg);display:inline-block}
+.minirt i.a{background:var(--amber)}
+.minirt i.off{background:#fff;border:1px solid var(--bl)}
+.minirt i.rec{background:#fff;border:1px solid var(--amber)}
+/* skipped column ghost */
+.col--skip{background:repeating-linear-gradient(135deg,transparent 0 6px,rgba(0,0,0,.02) 6px 12px)}
+.skipnote{font-family:var(--mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:var(--mfg);border:1px dashed var(--bl);padding:.5rem .6rem;margin-bottom:.6rem}
+
+/* case header strip */
+.casehd{border:var(--thin);background:#fff;margin-top:1rem;padding:1.1rem 1.3rem}
+.casehd__top{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.6rem}
+.casehd__top h3{font-family:var(--display);font-size:1.3rem;font-weight:600}
+.route{display:flex;border-top:var(--thin);margin-top:1rem}
+.route .st{flex:1;padding:.9rem .8rem .9rem 0;border-right:1px solid var(--bl)}
+.route .st:last-child{border-right:0}
+.route .rail{display:flex;align-items:center;height:.45rem;margin-bottom:.7rem}
+.route .dot{width:.5rem;height:.5rem;background:var(--fg)}
+.route .seg{flex:1;height:1px;background:var(--bl)}
+.route .st:last-child .seg{display:none}
+.route .no{font-family:var(--mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.12em;color:var(--mfg)}
+.route .nm{font-family:var(--display);font-size:1.1rem;font-weight:600;margin:.15rem 0}
+.route .hint{font-size:.7rem;color:var(--mfg)}
+.route .st.off{opacity:.38}
+.route .st.off .nm{text-decoration:line-through}
+.route .st.off .dot{background:#fff;border:var(--thin)}
+.route .st.entry .dot{background:var(--amber)}
+.route .st.rec .no::after{content:" · recommended";color:var(--amber)}
+@media(max-width:760px){.board__cols{grid-template-columns:1fr}.col{border-right:0;border-bottom:1px solid var(--bl)}.route{flex-direction:column}.route .st{border-right:0;border-bottom:1px solid var(--bl)}.audit__row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<p class="k">Ops · journey-scope audit</p>
+	<h1>Two vocabularies are running side by side</h1>
+	<p class="sub" style="margin-top:.5rem">The product now speaks <b>Stage 0 Consultation → I Admissions → II Visa → III Departure</b>, scoped per client (included / skipped / recommended). Ops still renders the old six-chapter model (Consult → Enrol → Apply → Visa → Depart → Done) almost everywhere. What breaks, page by page:</p>
+
+	<div class="audit">
+		<div class="audit__row head"><span>Page</span><span>Deficiency</span><span>Severity</span></div>
+		<div class="audit__row"><span class="audit__pg">Case board<small>EnterpriseCases / CaseBoard</small></span><span class="audit__fx">Columns are the old coarse stages under a chapter rail. <b>Consultation isn't on the board</b> (Stage 0 is invisible), cards carry <b>no scope</b>, and a visa-only file still reads as if it must pass through Applications columns. Drag-advance can push a scoped case into a stage it never bought.</span><span class="badge gap">Gap</span></div>
+		<div class="audit__row"><span class="audit__pg">Case detail header<small>CaseDetail</small></span><span class="audit__fx">Shows <b>"Full journey · entered at Admissions"</b> as a text line — the only place scope exists. No visual route; skipped/recommended stages aren't drawn. Tabs still named after old chapters ("Enrolment").</span><span class="badge part">Partial</span></div>
+		<div class="audit__row"><span class="audit__pg">Consultation detail<small>ConsultationDetail</small></span><span class="audit__fx"><b>The one place the new model is real</b> — scope picker, intent labels, entry-evidence per stage. But the decision doesn't visibly propagate: downstream pages never echo what was chosen here.</span><span class="badge ok">Aligned</span></div>
+		<div class="audit__row"><span class="audit__pg">Caseload &amp; task queue<small>WorkspaceCaseload · pendingTasks</small></span><span class="audit__fx">Tasks read "Needs handler · Visa" with no scope context. If a seat or task ever fires on a skipped stage, nothing on screen explains why it shouldn't exist. Seat lists (<b>TeamSheet</b>) enumerate all stages regardless of scope.</span><span class="badge gap">Gap</span></div>
+		<div class="audit__row"><span class="audit__pg">Client directory<small>ClientDirectory</small></span><span class="audit__fx">Stage column shows the coarse stage label only — "Applications" for a visa-only client is misleading. No scope column or filter.</span><span class="badge gap">Gap</span></div>
+		<div class="audit__row"><span class="audit__pg">Dashboard &amp; reports<small>EnterpriseDashboard / Reports</small></span><span class="audit__fx">Counts and revenue break down by old stage/chapter. No answer to "how many visa-only files are open" or "what's the admissions→visa conversion."</span><span class="badge gap">Gap</span></div>
+		<div class="audit__row"><span class="audit__pg">Assign sheet<small>AssignSheet</small></span><span class="audit__fx">Self-assign now fixed. But the sheet doesn't say which stages are even in scope — a manager can seat a handler on a stage the client skipped.</span><span class="badge part">Partial</span></div>
+	</div>
+
+	<h2>Fix 1 — the board speaks the journey</h2>
+	<p class="sub">Rail becomes <b>0 Consultation → I Admissions → II Visa → III Departure → Done</b>. Columns collapse to stage lanes (multiple old sub-stages group under their stage). Every card carries a <b>scope chip + mini route</b>: amber dot = consultation done, ink = in plan, hollow = skipped, amber-outline = recommended. A lane the file skips is ghosted, not treated as a gap.</p>
+
+	<div class="board">
+		<div class="board__rail"><span class="s0">0 · Consultation <b>6</b></span><span>I · Admissions <b>9</b></span><span>II · Visa <b>7</b></span><span>III · Departure <b>3</b></span><span>Done <b>11</b></span></div>
+		<div class="board__cols">
+			<div class="col">
+				<p class="col__h">Stage 0 — intake</p>
+				<div class="card"><b>Abena Owusu</b><div class="meta">Booked · Thu 10:00 · Accra</div><span class="scopechip"><span class="minirt"><i class="a"></i><i></i><i></i><i></i></span>scope at consult</span></div>
+				<div class="card"><b>Daniel Agyei</b><div class="meta">Assessed · eligible</div><span class="scopechip"><span class="minirt"><i class="a"></i><i class="off"></i><i></i><i class="rec"></i></span>visa only</span></div>
+			</div>
+			<div class="col">
+				<p class="col__h">I — documents · offers</p>
+				<div class="card"><b>Efua Mensima</b><div class="meta">Offers in · 2 of 3</div><span class="scopechip"><span class="minirt"><i class="a"></i><i></i><i></i><i></i></span>full journey</span></div>
+				<div class="card"><b>Kwame Asante</b><div class="meta">Submitted · UCL</div><span class="scopechip"><span class="minirt"><i class="a"></i><i></i><i></i><i class="off"></i></span>admissions + visa</span></div>
+			</div>
+			<div class="col">
+				<p class="col__h">II — file · decision</p>
+				<div class="card"><b>Daniel Agyei</b><div class="meta">Biometrics booked</div><span class="scopechip"><span class="minirt"><i class="a"></i><i class="off"></i><i></i><i class="rec"></i></span>visa only · admissions skipped</span></div>
+				<div class="card"><b>Akosua Frimpong</b><div class="meta">Decision pending</div><span class="scopechip"><span class="minirt"><i class="a"></i><i></i><i></i><i></i></span>full journey</span></div>
+			</div>
+			<div class="col">
+				<p class="col__h">III — flight · landing</p>
+				<div class="card"><b>Yaw Darko</b><div class="meta">Briefing done · flies Sat</div><span class="scopechip"><span class="minirt"><i class="a"></i><i></i><i></i><i></i></span>full journey</span></div>
+			</div>
+			<div class="col col--skip">
+				<p class="col__h">Done</p>
+				<div class="skipnote">Skipped stages never render as empty columns — the card's mini route carries the scope.</div>
+				<div class="card"><b>Ama Konadu</b><div class="meta">Departed Aug · arrival checked</div><span class="scopechip"><span class="minirt"><i class="a"></i><i></i><i></i><i></i></span>full journey</span></div>
+			</div>
+		</div>
+	</div>
+
+	<h2>Fix 2 — the case header draws the route</h2>
+	<p class="sub">Replace the text line under the client name with the same route component the homepage and portal use: Stage 0 entry cell + three stages that light, fade (skipped) or tag recommended per <code>scopeStages</code>. Ops and client finally read the same picture.</p>
+
+	<div class="casehd">
+		<div class="casehd__top">
+			<div><span class="k">Case · CN-2024-118</span><h3>Daniel Agyei — visa only</h3></div>
+			<span class="scopechip"><span class="minirt"><i class="a"></i><i class="off"></i><i></i><i class="rec"></i></span>visa only</span>
+		</div>
+		<div class="route">
+			<div class="st entry"><div class="rail"><i class="dot"></i><i class="seg"></i></div><p class="no">Stage 0</p><p class="nm">Consultation</p><p class="hint">Held · scope set: visa only</p></div>
+			<div class="st off"><div class="rail"><i class="dot"></i><i class="seg"></i></div><p class="no">Stage I</p><p class="nm">Admissions</p><p class="hint">Skipped — client holds an external offer</p></div>
+			<div class="st"><div class="rail"><i class="dot"></i><i class="seg"></i></div><p class="no">Stage II</p><p class="nm">Visa</p><p class="hint">Biometrics booked · handler: Ama S.</p></div>
+			<div class="st rec"><div class="rail"><i class="dot"></i><i class="seg"></i></div><p class="no">Stage III</p><p class="nm">Departure</p><p class="hint">Recommended — can be added at checkout</p></div>
+		</div>
+	</div>
+
+	<h2>Fix 3 — the rest is vocabulary, not layout</h2>
+	<p class="sub">Directory gains a scope column + filter; task subtitles read "Needs handler · II Visa · visa-only case"; TeamSheet lists only in-scope seats plus a muted "skipped" row; dashboard adds a scope mix card. Same data — <code>scopeStages</code> already travels on every case row — the surfaces just never read it.</p>
+</div>
+</body>
+</html>

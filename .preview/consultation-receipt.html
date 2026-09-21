@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portal — Chapter I · Consultation · invoice &amp; receipt (proposed)</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1120px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem}
+	.jump a{color:inherit}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.5rem clamp(1.25rem,3vw,2.25rem) 2.5rem}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+	.struck{text-decoration:line-through;opacity:.55}
+
+	/* ---- portal chrome ---- */
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.title{font-size:1.75rem;font-weight:500;letter-spacing:-.01em;margin-top:.25rem}
+	.lead{color:var(--fg-muted);font-size:.92rem;margin-top:.5rem;max-width:44rem}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--inv{background:#fff;color:var(--ink);border-color:#fff}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.pill{display:inline-flex;align-items:center;padding:.25rem .65rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line-light)}
+	.pill--done{background:var(--muted-bg);border-color:var(--line-light);color:var(--fg-muted)}
+
+	/* band */
+	.now{background:var(--ink);color:#fff;padding:1.6rem clamp(1.25rem,3vw,2.5rem);display:flex;flex-wrap:wrap;gap:1.25rem;justify-content:space-between;align-items:flex-start;margin-top:1.5rem}
+	.now .eyebrow{color:rgba(255,255,255,.6)}
+	.now h2{font-size:1.3rem;font-weight:500;margin-top:.35rem}
+	.now p.d{margin-top:.45rem;max-width:38rem;font-size:.9rem;color:#fff}
+
+	/* step strip */
+	.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem;margin-top:1.25rem}
+	.step{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border:1px solid var(--line-light);font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-muted);min-width:0}
+	.step .m{width:1.4rem;height:1.4rem;border:1px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;flex-shrink:0}
+	.step .l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+	.step .s{margin-left:auto;font-size:.58rem;opacity:.8;white-space:nowrap}
+	.step--done{background:var(--muted-bg)}
+	.step--on{border:1.5px solid var(--ink);color:var(--ink);font-weight:700}
+	.step--done .m,.step--on .m{background:var(--ink);color:#fff}
+
+	/* split + rail */
+	.split{display:grid;grid-template-columns:minmax(0,1fr) 21rem;gap:2rem;align-items:start;margin-top:1.75rem}
+	@media(max-width:900px){.split{grid-template-columns:1fr}.steps{grid-template-columns:1fr 1fr}}
+	.rail{display:flex;flex-direction:column;gap:.8rem}
+	.card{background:#fff;border:1px solid var(--ink);padding:1.25rem}
+	.rail .card{padding:1.1rem}
+	.card--key{border-width:1.5px}
+	.card--inv{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.card--inv .eyebrow{color:rgba(255,255,255,.6)}
+	.card--inv .muted{color:rgba(255,255,255,.7)}
+	.pkv{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--line-light);font-size:.78rem}
+	.pkv:last-child{border-bottom:none}
+	.pkv .k{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--micro);font-size:.64rem;padding-top:.1rem}
+	.pkv .v{text-align:right;min-width:0}
+	.pkv--due .k{color:var(--ink)} .pkv--due .v{font-family:var(--mono);font-weight:700;font-size:.9rem}
+	.card--inv .pkv{border-color:rgba(255,255,255,.25)} .card--inv .pkv .k{color:rgba(255,255,255,.6)}
+
+	/* sections */
+	.sec{margin-bottom:1.75rem}
+	.sh{display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem;flex-wrap:wrap}
+	.no{display:inline-flex;align-items:center;justify-content:center;width:1.4rem;height:1.4rem;border:1px solid var(--line);font-family:var(--mono);font-size:.65rem;font-weight:700}
+	.no--done{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.st{font-weight:700;font-size:.95rem}
+	.hint{font-family:var(--mono);font-size:.66rem;color:var(--fg-muted);letter-spacing:.04em;margin-left:.35rem}
+	.between{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.5rem}
+	.picks{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
+	@media(max-width:700px){.picks{grid-template-columns:1fr}}
+	.pick{border:1px solid var(--line-light);background:#fff;padding:1.1rem 1.15rem;text-align:left;font:inherit;cursor:pointer;display:flex;flex-direction:column;gap:.4rem}
+	.pick b{font-size:.95rem} .pick span{font-size:.78rem;color:var(--fg-muted);line-height:1.5}
+	.pick .price{font-family:var(--mono);font-weight:700;font-size:.8rem;color:var(--ink);margin-top:.2rem}
+	.pick--on{background:var(--ink);color:#fff;border-color:var(--ink)} .pick--on span{color:rgba(255,255,255,.65)} .pick--on .price{color:#fff}
+	.row{display:flex;justify-content:space-between;gap:1rem;padding:.55rem 0;border-bottom:1px solid var(--line-light);font-size:.88rem;align-items:center}
+	.row:last-child{border-bottom:none}
+	.row .k{color:var(--fg-muted)} .row .v{font-weight:500;text-align:right}
+	ul.list{list-style:none;padding:0;margin:.5rem 0 0}
+	.order{border:1.5px solid var(--ink);background:#fff}
+	.order .row{padding:.8rem 1.1rem}
+	.order .total{border-top:1.5px solid var(--ink);font-weight:700}
+	.sub{font-size:.85rem;color:var(--fg-muted);margin-top:.35rem}
+	.big{font-size:1.6rem;font-weight:700;margin-top:.3rem}
+	.mt1{margin-top:.5rem}.mt2{margin-top:.8rem}.mt3{margin-top:1rem}
+	.field{margin-bottom:.9rem}
+	.field label{display:block;font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--fg-muted);margin-bottom:.3rem}
+	.field .in{border:1px solid var(--line);padding:.55rem .7rem;font-size:.85rem;background:var(--muted-bg);color:var(--fg-muted)}
+	.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 1rem}
+	.slots{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.6rem}
+	.slot{font-family:var(--mono);font-size:.72rem;border:1px solid var(--line-light);padding:.45rem .7rem}
+	.slot--on{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.days{display:grid;grid-template-columns:repeat(7,1fr);gap:.4rem;margin-top:.6rem}
+	.day{border:1px solid var(--line-light);padding:.5rem .2rem;text-align:center;font-size:.7rem}
+	.day b{display:block;font-family:var(--mono);font-size:.62rem;margin-bottom:.2rem}
+	.day--on{border:1.5px solid var(--ink)}
+	.day--off{opacity:.4;text-decoration:line-through}
+	.tl{list-style:none;margin:.5rem 0 0;padding:0}
+	.tl li{padding:.7rem 0;border-bottom:1px solid var(--line-light)}
+	.tl .who{font-weight:600;font-size:.88rem} .tl .when{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);margin-left:.5rem}
+	.tl p{font-size:.85rem;margin-top:.15rem}
+	.tl li:last-child{border-bottom:none}
+
+	/* document links — underlined mono, no border */
+	.doc-link{font-family:var(--mono);font-size:.68rem;text-decoration:underline;background:none;border:none;padding:0;cursor:pointer;color:var(--ink)}
+	.doc-link + .doc-link{margin-left:1rem}
+
+	/* wiring table */
+	.wiring{border-collapse:collapse;width:100%;margin-top:.5rem}
+	.wiring th,.wiring td{border:1px solid #d4d4d8;font-family:var(--mono);font-size:.7rem;text-align:left;padding:.6rem .8rem;vertical-align:top}
+	.wiring th{text-transform:uppercase;letter-spacing:.1em;font-size:.6rem;background:var(--muted-bg)}
+	.wiring td:first-child{white-space:nowrap;font-weight:700}
+	.wiring code{font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<h1 class="page">Chapter I · Consultation — invoice &amp; receipt (proposed)</h1>
+	<p class="note">When the consultation is paid, the server already writes a paid invoice with a payment row and can stream both PDFs. The consultation page and the journey hub just never ask for them. This mock puts the documents where the payment happened.</p>
+	<div class="jump"><a href="#a">A · before</a><a href="#b">B · consultation rail</a><a href="#c">C · journey hub rail</a><a href="#d">D · wiring</a></div>
+
+	<!-- ================= SECTION A ================= -->
+	<span class="tag" id="a">Before · today</span>
+	<div class="mock">
+		<aside class="rail" style="max-width:21rem">
+			<div class="card">
+				<p class="eyebrow">Money · Chapter I</p>
+				<div class="mt1">
+					<div class="pkv"><span class="k">Consultation fee</span><span class="v">$75 · GH₵1,125 paid ✓</span></div>
+					<div class="pkv"><span class="k">Receipt</span><span class="v muted">in your Money ledger</span></div>
+				</div>
+			</div>
+		</aside>
+	</div>
+	<div class="callout"><b>A — what's wrong</b><ul>
+		<li>Fee shown is the catalogue price, not what was actually charged (a free rebooking charged GH₵0; a catalogue change after booking shows the new price).</li>
+		<li>"in your Money ledger" is plain text — no link, no invoice number, no download.</li>
+		<li>The journey hub's Money rail lists Deposit, Application fee, Visa fee, Milestone. Chapter I is missing altogether.</li>
+	</ul></div>
+
+	<!-- ================= SECTION B ================= -->
+	<span class="tag tag--after" id="b">After · Consultation page rail</span>
+	<div class="mock">
+		<div style="display:flex;gap:2rem;align-items:flex-start;flex-wrap:wrap">
+			<aside class="rail" style="max-width:21rem;flex:1;min-width:18rem">
+				<div class="card">
+					<p class="eyebrow">Money · Chapter I</p>
+					<p class="mono muted" style="font-size:.62rem;margin-top:.2rem">INV-2025-0142 · paid 18 Sep 2025</p>
+					<div class="mt1">
+						<div class="pkv"><span class="k">Consultation fee</span><span class="v">GH₵1,125.00 paid ✓<br><span class="muted" style="font-size:.68rem;font-weight:400">≈ $75 · Card Payment · Paystack ref CNIT-9F3A2B</span></span></div>
+					</div>
+					<div class="mt2">
+						<button class="doc-link" type="button">↓ invoice</button>
+						<button class="doc-link" type="button">↓ receipt</button>
+					</div>
+					<p class="muted" style="font-size:.7rem;margin-top:.35rem">Opens the PDF the office emailed you. Same document, byte for byte.</p>
+					<div class="mt2"><span class="btn btn--ghost btn--sm">Open Money →</span></div>
+				</div>
+			</aside>
+			<div style="flex:0 1 17rem;min-width:15rem">
+				<p class="mono muted" style="font-size:.6rem;margin-bottom:.4rem">fallback · invoice not yet on file (legacy bookings, webhook lag)</p>
+				<aside class="rail">
+					<div class="card">
+						<p class="eyebrow">Money · Chapter I</p>
+						<div class="mt1">
+							<div class="pkv"><span class="k">Consultation fee</span><span class="v">GH₵1,125.00 paid ✓</span></div>
+						</div>
+						<p class="muted" style="font-size:.7rem;margin-top:.5rem;line-height:1.5">Receipt is being written up. It appears here within a minute — refresh, or find it under Money.</p>
+						<div class="mt2"><span class="btn btn--ghost btn--sm">Open Money →</span></div>
+					</div>
+				</aside>
+			</div>
+		</div>
+
+		<div class="steps">
+			<div class="step step--done"><span class="m">✓</span><span class="l">Booked</span><span class="s">18 Sep · GH₵1,125 paid</span></div>
+			<div class="step step--on"><span class="m">2</span><span class="l">With your consultant</span><span class="s">assigning</span></div>
+			<div class="step"><span class="m">3</span><span class="l">Outcome</span><span class="s">after the session</span></div>
+			<div class="step"><span class="m">4</span><span class="l">Your call</span><span class="s">proceed or hold</span></div>
+		</div>
+	</div>
+	<div class="callout"><b>B — what changed</b><ul>
+		<li>One card now carries the invoice number, the paid date, the amount actually charged, the channel and the Paystack reference — and both PDFs are one click away.</li>
+		<li>Fallback shows the catalogue figure and honest "being written up" copy — never a fabricated document.</li>
+		<li>The step fact reads the invoice's paid amount, so a GH₵0 free rebooking reads "GH₵0 · covered", not "paid".</li>
+	</ul></div>
+
+	<!-- ================= SECTION C ================= -->
+	<span class="tag tag--after" id="c">After · Journey hub Money rail</span>
+	<div class="mock">
+		<aside class="rail" style="max-width:21rem">
+			<div class="card">
+				<p class="eyebrow">Money</p>
+				<div class="mt1">
+					<div class="pkv"><span class="k">Consultation</span><span class="v">Paid ✓ <button class="doc-link" type="button" style="font-size:.68rem">↓ receipt</button></span></div>
+					<div class="pkv"><span class="k">Deposit</span><span class="v">Due</span></div>
+					<div class="pkv"><span class="k">Application fee</span><span class="v muted">Not yet</span></div>
+					<div class="pkv"><span class="k">Visa fee</span><span class="v muted">Not yet</span></div>
+					<div class="pkv"><span class="k">Fee milestone</span><span class="v muted">After the visa</span></div>
+				</div>
+				<div class="mt2"><span class="btn btn--ghost btn--sm">Open Money →</span></div>
+			</div>
+		</aside>
+	</div>
+	<div class="callout"><b>C — what changed</b><ul>
+		<li>One extra row. Same "Paid ✓ / Due / Not yet" vocabulary as the others. The receipt link only appears when the paid invoice has a payment row.</li>
+	</ul></div>
+
+	<!-- ================= SECTION D ================= -->
+	<span class="tag" id="d">Wiring</span>
+	<div class="mock">
+		<table class="wiring">
+			<tr><th>Surface</th><th>Change</th></tr>
+			<tr><td>Consultation page rail (PortalPages.tsx PortalConsultation)</td><td><code>meApi.invoices({ type: "consultation" })</code> on mount + on syncTick, take the newest non-void row. Amount from <code>subtotalCents - balanceCents</code> in GHS via formatMoney; fall back to catalogue fee only while loading or when no invoice exists.</td></tr>
+			<tr><td>Consultation page rail — documents</td><td>Reuse <code>openInvoiceDocument(inv, "invoice" | "receipt")</code> from lib/receipt.ts (same PDF endpoint the Money ledger uses). Receipt link gated on <code>inv.payments.length &gt; 0</code>.</td></tr>
+			<tr><td>Step strip "Booked" fact</td><td><code>${bookedDay} · ${formatMoney(paidCents)} paid</code>; GH₵0 reads "covered".</td></tr>
+			<tr><td>Journey hub rail (PortalSections.tsx PortalJourney)</td><td>Add "Consultation" as the first pkv row. State from <code>booking.paymentStatus === "success"</code>; receipt link from the same consultation invoice fetch (one <code>meApi.invoices</code> call, shared via a small <code>useConsultationInvoice()</code> hook used by both pages).</td></tr>
+			<tr><td>Fallback</td><td>No invoice row → "Receipt is being written up" copy + Open Money. Never a fabricated document.</td></tr>
+			<tr><td>Server</td><td>No changes. <code>/me/invoices</code> already returns consultation invoices (applicationId null) and <code>/me/invoices/:id/pdf</code> already streams both kinds.</td></tr>
+			<tr><td>Out of scope</td><td>Emailing the receipt again, editing the invoice, ops-side changes.</td></tr>
+		</table>
+	</div>
+</div>
+</body>
+</html>

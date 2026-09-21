@@ -362,6 +362,18 @@ export type ApplicationData = {
 	applicationConsent: { decision: "pending" | "continue" | "hold" | "opt_out" } | null;
 	visaConsent: { decision: "pending" | "continue" | "hold" | "opt_out" } | null;
 	travelConsent: { decision: "pending" | "continue" | "hold" | "opt_out" } | null;
+	/**
+	 * Where a completion ended — the reached stage on an early finish, null
+	 * when the whole plan ran its course.
+	 */
+	completedAtStage: "admissions" | "visa" | "departure" | null;
+	/** Why the file closed where it did. */
+	completionNote: string | null;
+	/** The client's request for the stage beyond the plan's exit — pending waits on the office; the latest of any status carries a decline's reason. */
+	pendingContinuation: { id: string; stage: "visa" | "departure" | "admissions"; note: string | null; status: string; createdAt?: string } | null;
+	lastContinuation: { id: string; stage: "visa" | "departure" | "admissions"; note: string | null; status: string; decisionNote?: string | null; createdAt?: string } | null;
+	/** Answers a reopened stage asked for — keyed by stage. */
+	stageIntake: Record<string, Record<string, string>>;
 };
 
 export type ConsultationType = "online" | "in_person" | "";
@@ -644,6 +656,11 @@ const defaultApplication: ApplicationData = {
 	applicationConsent: null,
 	visaConsent: null,
 	travelConsent: null,
+	completedAtStage: null,
+	completionNote: null,
+	pendingContinuation: null,
+	lastContinuation: null,
+	stageIntake: {},
 };
 
 const defaultAssessment: AssessmentData = {
@@ -1272,6 +1289,8 @@ type AppStateContextValue = {
 	journeyPhase: { phase: number; label: string; nextUnlock: string | null; stage: ProcessStageId };
 	/** False until the first `/me/journey` answer (or a cached one) is in hand. */
 	journeyReady: boolean;
+	/** The server's derived journey — stage, unlocks, and the continuation offers. */
+	journey: DerivedJourney;
 	pendingAction: PendingAction | null;
 	processStage: ProcessStageId;
 	stageStatuses: Record<string, "done" | "current" | "locked" | "skipped"> | null;
@@ -2549,6 +2568,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					applicationConsent: (a as any).applicationConsent ?? prev.applicationConsent,
 					visaConsent: (a as any).visaConsent ?? prev.visaConsent,
 					travelConsent: (a as any).travelConsent ?? prev.travelConsent,
+					completedAtStage: a.completedAtStage ?? null,
+					completionNote: a.completionNote ?? null,
+					pendingContinuation: (a as any).pendingContinuation ?? null,
+					lastContinuation: (a as any).lastContinuation ?? null,
+					stageIntake: (a as any).stageIntake ?? prev.stageIntake,
+					// A completed file is closed — `applications.stage` is the fact.
+					// An early completion that reopens clears it; the legacy
+					// full-plan expression still fills it for settled cases.
+					completedAt: a.stage === "completed" ? (prev.completedAt ?? a.updatedAt ?? new Date().toISOString()) : (a.completedAtStage ? null : prev.completedAt),
 				}));
 			}
 		} catch {
@@ -2839,6 +2867,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			chapterUnlocks,
 			journeyPhase,
 			journeyReady,
+			journey,
 			pendingAction,
 			processStage,
 			stageStatuses,
@@ -2909,6 +2938,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			chapterUnlocks,
 			journeyPhase,
 			journeyReady,
+			journey,
 			pendingAction,
 			processStage,
 			stageStatuses,

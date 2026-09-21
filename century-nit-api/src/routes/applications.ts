@@ -78,6 +78,7 @@ import { setReleaseOverride } from "../services/release.js";
 
 
 import { getApplicationActivity } from "../services/applicationActivity.js";
+import { decideContinuation } from "../services/continuations.js";
 
 
 
@@ -120,6 +121,8 @@ import {
 	requestDocumentsSchema,
 	setStageSchema,
 	setVisaStageSchema,
+	decideContinuationSchema,
+	continuationRequestSchema,
 	updateVisaDetailsSchema,
 	updateDepartureDetailsSchema,
 	releaseOverrideSchema,
@@ -840,8 +843,44 @@ applicationsRouter.openapi(
 			c.req.valid("param").id,
 			c.req.valid("json").stage,
 			actorFrom(c.get("staff")!),
+			c.req.valid("json").note,
 		);
 		return c.json(await serializeApplication(updated));
+	},
+);
+
+/**
+ * The office decides a client's "continue to the next stage" request.
+ * Approving extends the plan — the stage's lines bill through the ordinary
+ * package machinery — and reopens the case into the stage's journey step.
+ */
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/continuations/{requestId}",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: z.object({ id: z.string().uuid(), requestId: z.string().uuid() }),
+			body: { content: { "application/json": { schema: decideContinuationSchema } }, required: true },
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: continuationRequestSchema } },
+				description: "Continuation decided",
+			},
+		},
+	}),
+	async (c) => {
+		await assertApplicationAccess(c, c.req.valid("param").id);
+		const { request } = await decideContinuation({
+			requestId: c.req.valid("param").requestId,
+			applicationId: c.req.valid("param").id,
+			decision: c.req.valid("json").decision,
+			note: c.req.valid("json").note,
+			actor: actorFrom(c.get("staff")!),
+		});
+		return c.json(request);
 	},
 );
 

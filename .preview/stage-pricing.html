@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stage-priced packages — mock</title>
+<style>
+  :root{
+    --background:#ffffff; --foreground:#0a0a0a;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#0a0a0a; --border-light:#d4d4d8;
+    --ok:#0d7a3f; --warn:#92400e; --bad:#b91c1c;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --text-xs:.72rem; --text-sm:.875rem;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:#fafafa;color:var(--foreground);font-size:var(--text-sm)}
+  .page{max-width:1240px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .page-title{font-size:1.9rem;font-weight:700;letter-spacing:-.02em}
+  .lead{color:var(--muted-foreground);max-width:48rem;line-height:1.6}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--muted-foreground)}
+  .head{margin-bottom:2rem}
+  .sec{margin:2.75rem 0 1rem}
+  .sec h2{font-size:1.15rem;font-weight:700}
+  .sec .sub{font-size:var(--text-xs);color:var(--muted-foreground);margin-top:.2rem;max-width:50rem;line-height:1.6}
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start;margin-top:1rem}
+  @media (max-width:1100px){.compare{grid-template-columns:1fr}}
+  .variant-label{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;
+    color:var(--muted-foreground);margin-bottom:.5rem;display:flex;align-items:center;gap:.5rem}
+  .variant-label .tag{border:1px solid var(--border-light);padding:.1rem .45rem;font-size:.58rem}
+  .variant-label .tag--new{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+  .frame{border:1.5px solid var(--border);background:var(--background);padding:1.4rem 1.5rem;overflow:hidden}
+  .frame--phone{padding:1rem .9rem;max-width:390px}
+  .callouts{list-style:none;margin-top:.75rem;padding:0;font-size:var(--text-xs);color:var(--muted-foreground)}
+  .callouts li{padding:.35rem 0 .35rem 1.4rem;position:relative;line-height:1.5}
+  .callouts li::before{content:attr(data-n);position:absolute;left:0;top:.3rem;font-family:var(--font-mono);
+    font-size:.6rem;border:1px solid var(--border-light);width:1.05rem;height:1.05rem;display:flex;
+    align-items:center;justify-content:center}
+  .callouts code{font-family:var(--font-mono);font-size:.62rem;background:var(--muted);padding:.05rem .3rem}
+  .btn{display:inline-flex;align-items:center;gap:.4rem;border:1.5px solid var(--border);background:var(--foreground);
+    color:var(--background);font-family:var(--font-mono);font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;
+    padding:.55rem .9rem;cursor:pointer;text-decoration:none}
+  .btn--ghost{background:var(--background);color:var(--foreground)}
+  .btn[disabled]{opacity:.35;cursor:not-allowed}
+  .bugbox{border:1.5px solid var(--bad);background:#fdf5f5;padding:1rem 1.2rem;margin-top:1rem}
+  .bugbox .eyebrow{color:var(--bad)}
+  .bugbox p{font-size:var(--text-xs);line-height:1.6;margin-top:.4rem}
+
+  /* ════════ TODAY ════════ */
+  .old-pk{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-top:1rem}
+  .old-pk .c{border:1.5px solid var(--border);padding:.9rem}
+  .old-pk .c.sel{background:var(--foreground);color:var(--background)}
+  .old-pk .nm{font-weight:700;font-size:.85rem}
+  .old-pk .pr{font-family:var(--font-mono);font-size:1.3rem;margin-top:.3rem}
+  .old-pk .tg{font-size:.64rem;opacity:.75;margin-top:.3rem;line-height:1.45}
+  .old-pk ul{padding-left:1rem;margin-top:.6rem;font-size:.64rem;line-height:1.6}
+  .ledger{border:1.5px solid var(--border);margin-top:1rem}
+  .ledger .r{display:grid;grid-template-columns:1.2fr 2fr auto;gap:.8rem;padding:.65rem .9rem;border-bottom:1px solid var(--border-light);font-size:.76rem;align-items:baseline}
+  .ledger .r:last-child{border-bottom:0}
+  .ledger .r .d{color:var(--muted-foreground);font-size:.66rem;line-height:1.45}
+  .ledger .r .a{font-family:var(--font-mono);text-align:right;white-space:nowrap}
+  .ledger .r.dead{color:var(--muted-foreground)}
+  .ledger .r.dead .a{text-decoration:line-through}
+  .ledger .r.tot{background:var(--muted);font-weight:700}
+  .ledger .r.tot .a{text-decoration:none}
+  .pill{font-family:var(--font-mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.08em;border:1px solid var(--border-light);padding:.1rem .4rem;margin-left:.4rem;vertical-align:middle}
+  .pill--ok{border-color:var(--ok);color:var(--ok)}
+  .pill--bad{border-color:var(--bad);color:var(--bad)}
+  .pill--warn{border-color:var(--warn);color:var(--warn)}
+
+  /* ════════ QUOTE BUILDER (portal) ════════ */
+  .q-hero{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;flex-wrap:wrap}
+  .q-hero h2{font-size:1.45rem;font-weight:700;letter-spacing:-.01em;margin-top:.2rem}
+  .q-hero p{font-size:.78rem;color:var(--muted-foreground);margin-top:.35rem;max-width:34rem;line-height:1.55}
+  .q-rec{border:1.5px solid var(--border);background:var(--muted);padding:.7rem .9rem;font-size:.72rem;max-width:22rem;line-height:1.5}
+  .q-rec b{display:block;font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:.25rem}
+  .tracks{display:flex;border:1.5px solid var(--border);margin-top:1.3rem;width:fit-content}
+  .tracks button{font-family:var(--font-mono);font-size:.64rem;text-transform:uppercase;letter-spacing:.08em;padding:.5rem .85rem;border:0;border-right:1.5px solid var(--border);background:var(--background);cursor:pointer;color:var(--foreground)}
+  .tracks button:last-child{border-right:0}
+  .tracks button.on{background:var(--foreground);color:var(--background)}
+  .q-grid{display:grid;grid-template-columns:1.35fr 1fr;gap:1.2rem;margin-top:1.1rem}
+  @media (max-width:760px){.q-grid{grid-template-columns:1fr}}
+  .stages{border:1.5px solid var(--border)}
+  .stage{display:grid;grid-template-columns:auto 1fr auto;gap:.9rem;padding:.9rem 1rem;border-bottom:1.5px solid var(--border);cursor:pointer;align-items:start}
+  .stage:last-child{border-bottom:0}
+  .stage.on{background:var(--muted)}
+  .stage.locked{cursor:not-allowed;color:var(--muted-foreground)}
+  .stage .box{width:1.1rem;height:1.1rem;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.7rem;margin-top:.15rem;background:var(--background)}
+  .stage.on .box{background:var(--foreground);color:var(--background)}
+  .stage.locked .box{border-color:var(--border-light)}
+  .stage .nm{font-weight:700;font-size:.85rem}
+  .stage .nm .pill{margin-left:.5rem}
+  .stage .ds{font-size:.66rem;color:var(--muted-foreground);line-height:1.5;margin-top:.2rem}
+  .stage .inc{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.45rem}
+  .stage .inc span{font-size:.58rem;border:1px solid var(--border-light);padding:.08rem .35rem;background:var(--background)}
+  .stage .pr{font-family:var(--font-mono);font-size:.95rem;text-align:right;white-space:nowrap}
+  .stage .pr small{display:block;font-size:.56rem;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.06em;margin-top:.15rem}
+  .addons{margin-top:.9rem;border:1.5px solid var(--border-light);padding:.7rem .9rem}
+  .addons .t{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground)}
+  .addons .a{display:flex;justify-content:space-between;font-size:.72rem;padding:.35rem 0;border-bottom:1px solid var(--border-light)}
+  .addons .a:last-child{border-bottom:0}
+  .addons .a .mono{font-size:.7rem}
+  .summary{border:1.5px solid var(--border);position:sticky;top:1rem}
+  .summary .h{padding:.85rem 1rem;border-bottom:1.5px solid var(--border);display:flex;justify-content:space-between;align-items:baseline}
+  .summary .h b{font-size:.85rem}
+  .summary .h .pill{margin:0}
+  .summary .line{display:flex;justify-content:space-between;padding:.45rem 1rem;font-size:.74rem;border-bottom:1px solid var(--border-light)}
+  .summary .line .mono{font-size:.72rem}
+  .summary .line.disc{color:var(--ok)}
+  .summary .tot{display:flex;justify-content:space-between;align-items:baseline;padding:.8rem 1rem;background:var(--foreground);color:var(--background)}
+  .summary .tot .n{font-family:var(--font-mono);font-size:1.5rem}
+  .summary .tot .ghs{font-size:.62rem;opacity:.75;font-family:var(--font-mono)}
+  .summary .ms{padding:.7rem 1rem .5rem}
+  .summary .ms .t{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);margin-bottom:.4rem}
+  .ms-row{display:grid;grid-template-columns:auto 1fr auto;gap:.6rem;font-size:.7rem;padding:.35rem 0;border-bottom:1px dashed var(--border-light);align-items:baseline}
+  .ms-row:last-child{border-bottom:0}
+  .ms-row .k{font-family:var(--font-mono);font-size:.58rem;color:var(--muted-foreground);width:1.2rem}
+  .ms-row .w{color:var(--muted-foreground);font-size:.62rem;display:block;margin-top:.1rem}
+  .ms-row .a{font-family:var(--font-mono);white-space:nowrap}
+  .stop{margin:.6rem 1rem .9rem;font-size:.64rem;line-height:1.55;color:var(--muted-foreground);border-left:2px solid var(--border);padding-left:.6rem}
+  .summary .cta{padding:0 1rem 1rem;display:flex;gap:.5rem;flex-wrap:wrap}
+  .plan-note{margin:0 1rem .8rem;font-size:.62rem;border:1px solid var(--border-light);padding:.5rem .6rem;line-height:1.5}
+  .plan-note.off{color:var(--muted-foreground)}
+
+  /* ════════ OPS ════════ */
+  .ops-sheet{border:1.5px solid var(--border);max-width:520px}
+  .ops-sheet .sh{padding:.8rem 1rem;border-bottom:1.5px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+  .ops-sheet .sh b{font-size:.9rem}
+  .ops-sheet .sh .x{font-family:var(--font-mono);font-size:.7rem}
+  .ops-sheet .bd{padding:1rem}
+  .ops-sheet .bd p{font-size:.72rem;color:var(--muted-foreground);line-height:1.55}
+  .fld{margin-top:.8rem}
+  .fld label{display:block;font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);margin-bottom:.3rem}
+  .fld .in{border:1.5px solid var(--border);padding:.5rem .65rem;font-size:.76rem;background:var(--background)}
+  .fld .chk{display:flex;gap:.6rem;align-items:center;font-size:.76rem;padding:.4rem 0}
+  .fld .chk i{width:.95rem;height:.95rem;border:1.5px solid var(--border);display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:.6rem}
+  .fld .chk i.on{background:var(--foreground);color:var(--background)}
+  .fld .chk .mono{margin-left:auto;font-size:.68rem}
+  .preset{display:flex;gap:.4rem;flex-wrap:wrap}
+  .preset button{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.06em;border:1px solid var(--border-light);background:var(--background);padding:.3rem .55rem;cursor:pointer}
+  .preset button.on{border-color:var(--border);background:var(--foreground);color:var(--background)}
+  .ops-tot{display:flex;justify-content:space-between;align-items:baseline;border-top:1.5px solid var(--border);margin-top:1rem;padding-top:.7rem;font-size:.78rem}
+  .ops-tot .mono{font-size:1.1rem}
+  .ops-ft{display:flex;justify-content:flex-end;gap:.5rem;padding:.8rem 1rem;border-top:1.5px solid var(--border);background:var(--muted)}
+
+  .upgrade{border:1.5px solid var(--border);max-width:560px}
+  .upgrade .top{padding:.9rem 1rem;border-bottom:1.5px solid var(--border);display:flex;gap:.8rem;align-items:flex-start}
+  .upgrade .top .ic{width:2rem;height:2rem;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:.7rem;flex:none}
+  .upgrade .top b{font-size:.88rem;display:block}
+  .upgrade .top p{font-size:.7rem;color:var(--muted-foreground);line-height:1.5;margin-top:.2rem}
+  .upgrade .row{display:flex;justify-content:space-between;align-items:center;padding:.7rem 1rem;border-bottom:1px solid var(--border-light);font-size:.74rem}
+  .upgrade .row .mono{font-size:.72rem}
+  .upgrade .row.hint{color:var(--muted-foreground);font-size:.64rem;line-height:1.5}
+  .upgrade .ft{display:flex;gap:.5rem;padding:.8rem 1rem;justify-content:flex-end}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-top:1rem;align-items:start}
+  @media (max-width:900px){.two{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="head">
+    <div class="eyebrow">Mock · portal + ops · stage-priced packages</div>
+    <h1 class="page-title">Choose the stages, pay for the stages</h1>
+    <p class="lead">Today a package is a funding track with one flat price for the whole journey and a 10 / 30 / 60 payment split gated on visa approval and arrival. This mock separates <b>track</b> (how hard Century searches) from <b>scope</b> (which stages Century does), prices each stage, and lets the milestones follow the scope. Numbers are illustrative.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ TODAY -->
+  <div class="sec">
+    <h2>Today — what "stop at applications" actually costs</h2>
+    <p class="sub">Reconstructed from <code class="mono">seed-packages.ts</code> and the raise in <code class="mono">cases.ts:2450</code>. The client picks one of three tracks; the price is always the full journey.</p>
+  </div>
+  <div class="frame">
+    <div class="eyebrow">Portal · your package</div>
+    <div class="old-pk">
+      <div class="c sel"><div class="nm">Non-Scholarship</div><div class="pr">$1,500</div><div class="tg">Streamlined admission &amp; visa support for self-funded students.</div>
+        <ul><li>Document review</li><li>University matching · 3 schools</li><li>Application submission</li><li>Visa document prep</li><li>Interview coaching</li><li>Travel coordination</li><li>Pre-departure briefing</li></ul></div>
+      <div class="c"><div class="nm">Hybrid</div><div class="pr">$2,000</div><div class="tg">Start non-scholarship; upgrade to scholarship search.</div><ul><li>Everything in Non-Scholarship</li><li>Scholarship eligibility audit</li><li>4 schools</li></ul></div>
+      <div class="c"><div class="nm">Scholarship</div><div class="pr">$2,500</div><div class="tg">Full scholarship search and negotiation.</div><ul><li>Multi-institution scholarship matching</li><li>End-to-end visa filing</li><li>5 schools</li><li>Senior advisor</li></ul></div>
+    </div>
+    <div class="eyebrow" style="margin-top:1.3rem">Agency invoice raised on selection · client stops after the offer letter</div>
+    <div class="ledger">
+      <div class="r"><div>Service fee · deposit</div><div class="d">Required before choosing your payment plan</div><div class="a">$150 <span class="pill pill--ok">paid</span></div></div>
+      <div class="r dead"><div>Service fee · pre-departure</div><div class="d">Due after your visa is approved — never triggers</div><div class="a">$450</div></div>
+      <div class="r dead"><div>Service fee · post-arrival</div><div class="d">After you arrive — never triggers</div><div class="a">$900</div></div>
+      <div class="r tot"><div>Century is paid</div><div class="d">for document review, matching, 3 submissions and offer negotiation</div><div class="a">$150</div></div>
+    </div>
+    <div class="bugbox">
+      <div class="eyebrow">The gap</div>
+      <p>The split is an affordability plan for a client who goes all the way, not a price for the work. Admissions is the heaviest stage and is paid at 10 %. A visa refusal after full admissions work leaves Century with $150 and an "issued" invoice that never resolves — there is no rule in the code for a case that stops.</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ PORTAL QUOTE -->
+  <div class="sec">
+    <h2>Proposed — the portal after the consultation</h2>
+    <p class="sub">The consultant's recommendation lands here as a pre-filled quote. The client can change track or untick stages; total and milestones recompute live. <b>Try it — the toggles work.</b></p>
+  </div>
+
+  <div class="compare">
+    <div>
+      <div class="variant-label"><span class="tag tag--new">portal</span> your plan · after consultation</div>
+      <div class="frame" id="portal">
+        <div class="q-hero">
+          <div>
+            <div class="eyebrow">Step 2 of 6 · your plan</div>
+            <h2>Build your plan</h2>
+            <p>Pick the stages you want Century to handle. You pay for each stage when it opens, never for one you don't reach.</p>
+          </div>
+          <div class="q-rec"><b>Consultant's recommendation</b>Ama Owusu recommends <u>Non-Scholarship</u>, full journey — UK, MSc Data Science, Sept 2027 intake. Three target schools.</div>
+        </div>
+
+        <div class="tracks" id="tracks">
+          <button data-track="non" class="on">Non-scholarship</button>
+          <button data-track="hybrid">Hybrid</button>
+          <button data-track="schol">Scholarship</button>
+        </div>
+
+        <div class="q-grid">
+          <div>
+            <div class="stages" id="stages">
+              <div class="stage on" data-stage="adm">
+                <div class="box">✓</div>
+                <div>
+                  <div class="nm">Admissions <span class="pill">required</span></div>
+                  <div class="ds">Document review &amp; credential verification, university matching, application submissions, offer-letter review.</div>
+                  <div class="inc"><span id="inc-schools">Up to 3 schools</span><span>Credential evaluation</span><span id="inc-schol" hidden>Scholarship search</span></div>
+                </div>
+                <div class="pr"><span data-price="adm">$700</span><small>paid 50 % on start · 50 % on offer</small></div>
+              </div>
+              <div class="stage on" data-stage="visa">
+                <div class="box">✓</div>
+                <div>
+                  <div class="nm">Visa</div>
+                  <div class="ds">Financial documents, CAS / I-20 handling, visa filing, biometrics booking, mock interview coaching.</div>
+                  <div class="inc"><span>Embassy fees at cost</span><span>Reapplication support</span></div>
+                </div>
+                <div class="pr"><span data-price="visa">$700</span><small>paid when the visa file opens</small></div>
+              </div>
+              <div class="stage on" data-stage="dep">
+                <div class="box">✓</div>
+                <div>
+                  <div class="nm">Departure &amp; arrival</div>
+                  <div class="ds">Flight and housing coordination, airport pickup, pre-departure briefing, first-week check-in.</div>
+                  <div class="inc"><span>Travel assistance</span><span>Post-arrival instalments</span></div>
+                </div>
+                <div class="pr"><span data-price="dep">$300</span><small>paid on visa approval</small></div>
+              </div>
+            </div>
+            <div class="addons">
+              <div class="t">Add-ons · from the fee catalogue</div>
+              <div class="a"><span>Extra school beyond allowance</span><span class="mono">$70 each</span></div>
+              <div class="a"><span>Certified translation <span class="muted">· paid on your behalf</span></span><span class="mono">$50</span></div>
+            </div>
+          </div>
+
+          <div class="summary">
+            <div class="h"><b id="sum-title">Full journey</b><span class="pill pill--ok" id="sum-pill">bundle price</span></div>
+            <div id="sum-lines"></div>
+            <div class="tot"><span style="font-size:.7rem;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em">Service fee</span><span><span class="n" id="sum-total">$1,500</span> <span class="ghs" id="sum-ghs">≈ GH₵ 23,250</span></span></div>
+            <div class="ms">
+              <div class="t">When you pay</div>
+              <div id="sum-ms"></div>
+            </div>
+            <div class="plan-note" id="plan-note"></div>
+            <div class="stop" id="stop-note"></div>
+            <div class="cta"><a class="btn">Accept this plan</a><a class="btn btn--ghost">Ask my consultant</a></div>
+          </div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Track buttons change the <em>per-stage</em> prices and the school allowance; they no longer change the scope.</li>
+        <li data-n="2">Admissions is always on — every case starts there. Departure needs Visa (you can't tick it alone), so the only shapes are <code>A</code>, <code>A+V</code>, <code>A+V+D</code>.</li>
+        <li data-n="3">All three stages together get the bundle price — the current $1,500 / $2,000 / $2,500 — so today's packages survive as the "full journey" preset. À la carte is deliberately dearer.</li>
+        <li data-n="4">Milestones follow the scope. Admissions-only is two lines; full journey keeps the 10 / 30 / 60 split because that's the only scope where "post-arrival" exists.</li>
+        <li data-n="5">"If you stop" is stated on the quote itself. That sentence is the rule the ledger enforces: stages that never open are never owed.</li>
+      </ul>
+    </div>
+
+    <div>
+      <div class="variant-label"><span class="tag">phone</span> same builder · 390px</div>
+      <div class="frame frame--phone">
+        <div class="eyebrow">Step 2 of 6 · your plan</div>
+        <h2 style="font-size:1.2rem;font-weight:700;margin-top:.2rem">Build your plan</h2>
+        <div class="tracks" style="margin-top:.8rem;width:100%"><button class="on" style="flex:1">Non-schol.</button><button style="flex:1">Hybrid</button><button style="flex:1">Scholarship</button></div>
+        <div class="stages" style="margin-top:.8rem">
+          <div class="stage on" style="grid-template-columns:auto 1fr;padding:.75rem .8rem"><div class="box">✓</div><div><div class="nm" style="font-size:.8rem;display:flex;justify-content:space-between">Admissions <span class="mono" style="font-weight:400">$700</span></div><div class="ds">Docs, matching, 3 schools, offer review</div></div></div>
+          <div class="stage" style="grid-template-columns:auto 1fr;padding:.75rem .8rem"><div class="box"></div><div><div class="nm" style="font-size:.8rem;display:flex;justify-content:space-between">Visa <span class="mono" style="font-weight:400">$700</span></div><div class="ds">Filing, biometrics, interview coaching</div></div></div>
+          <div class="stage locked" style="grid-template-columns:auto 1fr;padding:.75rem .8rem"><div class="box"></div><div><div class="nm" style="font-size:.8rem;display:flex;justify-content:space-between">Departure &amp; arrival <span class="mono" style="font-weight:400">$300</span></div><div class="ds">Needs the Visa stage</div></div></div>
+        </div>
+        <div class="summary" style="margin-top:.8rem;position:static">
+          <div class="h"><b>Admissions only</b><span class="pill">à la carte</span></div>
+          <div class="tot"><span style="font-size:.65rem;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em">Service fee</span><span><span class="n">$700</span></span></div>
+          <div class="ms"><div class="t">When you pay</div>
+            <div class="ms-row"><span class="k">01</span><span>On acceptance<span class="w">Opens document verification</span></span><span class="a">$350</span></div>
+            <div class="ms-row"><span class="k">02</span><span>On first offer letter<span class="w">Closes the stage</span></span><span class="a">$350</span></div>
+          </div>
+          <div class="stop">Change your mind later? Add the Visa stage from your dashboard when your offer arrives — $700, at the à-la-carte rate.</div>
+          <div class="cta"><a class="btn" style="width:100%;justify-content:center">Accept this plan</a></div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="6">On the phone the price moves into the stage row header and the summary stops being sticky. One column, 44px rows.</li>
+        <li data-n="7">The upgrade hint is written into the "if you stop" slot when a stage is off — the nudge is the same sentence in both directions.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ LEDGER SHAPES -->
+  <div class="sec">
+    <h2>What the agency invoice looks like per scope</h2>
+    <p class="sub">One agency invoice per case, as today. The lines change; the ledger trigger in <code class="mono">drizzle/0073</code> keeps reading flags off lines, so nothing below it moves.</p>
+  </div>
+  <div class="two">
+    <div>
+      <div class="variant-label">Admissions only · $700</div>
+      <div class="ledger">
+        <div class="r"><div>Admissions · on acceptance</div><div class="d">Opens document verification</div><div class="a">$350</div></div>
+        <div class="r"><div>Admissions · on offer</div><div class="d">Due when the first offer letter is recorded</div><div class="a">$350</div></div>
+        <div class="r tot"><div>Total</div><div class="d">No post-arrival plan — there is no arrival</div><div class="a">$700</div></div>
+      </div>
+      <div class="variant-label" style="margin-top:1.2rem">Admissions + Visa · $1,400</div>
+      <div class="ledger">
+        <div class="r"><div>Admissions · on acceptance</div><div class="d"></div><div class="a">$350</div></div>
+        <div class="r"><div>Admissions · on offer</div><div class="d"></div><div class="a">$350</div></div>
+        <div class="r"><div>Visa · on file opened</div><div class="d">Due when the visa chapter opens; refunded if the offer never comes</div><div class="a">$700</div></div>
+        <div class="r tot"><div>Total</div><div class="d">Visa refused? Reapplication is the existing <span class="mono">visa_reapplication</span> item</div><div class="a">$1,400</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="variant-label">Full journey · $1,500 bundle · instalment plan</div>
+      <div class="ledger">
+        <div class="r"><div>Service fee · deposit</div><div class="d">10 % · required before choosing a payment plan</div><div class="a">$150</div></div>
+        <div class="r"><div>Service fee · pre-departure</div><div class="d">30 % · after visa approval, releases travel documents</div><div class="a">$450</div></div>
+        <div class="r"><div>Service fee · post-arrival</div><div class="d">60 % · on the schedule you choose, after arrival</div><div class="a">$900</div></div>
+        <div class="r tot"><div>Total</div><div class="d">Unchanged from today — but now it's a <em>feature</em> of the bundle, not the default for everyone</div><div class="a">$1,500</div></div>
+      </div>
+      <div class="variant-label" style="margin-top:1.2rem">Full journey · client stops after the offer <span class="pill pill--warn">withdrawn</span></div>
+      <div class="ledger">
+        <div class="r"><div>Service fee · deposit</div><div class="d"></div><div class="a">$150 <span class="pill pill--ok">paid</span></div></div>
+        <div class="r"><div>Admissions · stage owed</div><div class="d">Bundle unwinds to the à-la-carte price of the stages that opened, less the deposit</div><div class="a">$550</div></div>
+        <div class="r dead"><div>Pre-departure · post-arrival</div><div class="d">Voided — those stages never opened</div><div class="a">$1,350</div></div>
+        <div class="r tot"><div>Century is paid</div><div class="d">for the work it did</div><div class="a">$700</div></div>
+      </div>
+    </div>
+  </div>
+  <ul class="callouts">
+    <li data-n="8">The withdrawal rule is one sentence: <em>a stage that opened is owed at its à-la-carte price; a stage that didn't is void.</em> Whether Century actually chases the $550 is a business call — but the ledger now knows the number.</li>
+  </ul>
+
+  <!-- ═══════════════════════════════════════════════════════ OPS -->
+  <div class="sec">
+    <h2>Ops — the consultant builds the quote, the case offers the upgrade</h2>
+    <p class="sub"><code class="mono">PackageSheet</code> becomes a quote builder. The three current packages are presets that fill it. Later, when the offer letter lands on an admissions-only case, the case board prompts the handler to offer the next stage.</p>
+  </div>
+  <div class="two">
+    <div>
+      <div class="variant-label"><span class="tag tag--new">ops</span> consultation outcome · build quote</div>
+      <div class="ops-sheet">
+        <div class="sh"><b>Build quote</b><span class="x">esc</span></div>
+        <div class="bd">
+          <p>Sent to the client's portal as a pre-filled plan. They can change it before accepting; you'll see what they picked.</p>
+          <div class="fld"><label>Preset</label><div class="preset"><button>Admissions only</button><button>Admissions + Visa</button><button class="on">Full journey</button></div></div>
+          <div class="fld"><label>Track</label><div class="in">Non-Scholarship · up to 3 schools</div></div>
+          <div class="fld"><label>Stages</label>
+            <div class="chk"><i class="on">✓</i>Admissions<span class="mono">$700</span></div>
+            <div class="chk"><i class="on">✓</i>Visa<span class="mono">$700</span></div>
+            <div class="chk"><i class="on">✓</i>Departure &amp; arrival<span class="mono">$300</span></div>
+          </div>
+          <div class="fld"><label>Add-ons</label>
+            <div class="chk"><i></i>Extra schools <span class="muted" style="margin-left:.4rem">× 0</span><span class="mono">$70 ea</span></div>
+            <div class="chk"><i></i>Certified translation<span class="mono">$50</span></div>
+          </div>
+          <div class="fld"><label>Degree level</label><div class="in">Masters</div></div>
+          <div class="ops-tot"><span>Bundle · full journey <span class="pill pill--ok">−$200</span></span><span class="mono">$1,500</span></div>
+        </div>
+        <div class="ops-ft"><a class="btn btn--ghost">Save draft</a><a class="btn">Send quote to client</a></div>
+      </div>
+      <ul class="callouts">
+        <li data-n="9">Stage prices are <code>fee_items</code> rows (<code>kind = century</code>, chapter <code>apply / visa / depart</code>) — finance edits them where it already edits the consultation fee. The bundle discount lives on <code>service_packages</code>.</li>
+        <li data-n="10">The quote is a proposal until the client accepts; the agency invoice is raised on acceptance, not on "select package". That's the same shape as the post-arrival schedule request today.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="variant-label"><span class="tag tag--new">ops</span> case board · offer letter recorded on an admissions-only case</div>
+      <div class="upgrade">
+        <div class="top"><div class="ic">↑</div><div><b>Kwame's offer from Leeds is in — offer the Visa stage</b><p>This case is scoped to Admissions. The next chapter isn't covered. The client can add it from the portal, or you can send it now.</p></div></div>
+        <div class="row"><span>Visa stage · à la carte</span><span class="mono">$700</span></div>
+        <div class="row"><span>Visa + Departure &amp; arrival <span class="pill pill--ok">completes the bundle</span></span><span class="mono">$800 <span class="muted" style="text-decoration:line-through;font-size:.62rem">$1,000</span></span></div>
+        <div class="row hint">Adding both stages brings the case to the full-journey bundle price — the client pays $1,500 in total, same as if they'd chosen it upfront, and unlocks the post-arrival instalment plan.</div>
+        <div class="ft"><a class="btn btn--ghost">Not now</a><a class="btn">Send upgrade offer</a></div>
+      </div>
+      <ul class="callouts">
+        <li data-n="11">The journey gate refuses to open a stage outside the scope — which is exactly the moment to sell it. No new state: the gate already exists in <code>cases.gates</code>.</li>
+        <li data-n="12">"Complete the bundle" honours the bundle price retroactively. Whether to do that or charge à la carte is the one pricing lever you'd want to pull per client — make it a toggle on the offer, not a rule.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const RATE = 15.5;
+  const PRICES = {
+    non:    { adm: 700,  visa: 700, dep: 300, bundle: 1500, schools: 3, schol: false },
+    hybrid: { adm: 1000, visa: 700, dep: 400, bundle: 2000, schools: 4, schol: true },
+    schol:  { adm: 1400, visa: 800, dep: 500, bundle: 2500, schools: 5, schol: true },
+  };
+  const LABEL = { adm: "Admissions", visa: "Visa", dep: "Departure & arrival" };
+  let track = "non";
+  const on = { adm: true, visa: true, dep: true };
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const usd = (n) => "$" + n.toLocaleString("en-US");
+
+  function render() {
+    const p = PRICES[track];
+    $$("#tracks button").forEach((b) => b.classList.toggle("on", b.dataset.track === track));
+    $("#inc-schools").textContent = `Up to ${p.schools} schools`;
+    $("#inc-schol").hidden = !p.schol;
+    for (const k of ["adm", "visa", "dep"]) {
+      $(`[data-price="${k}"]`).textContent = usd(p[k]);
+      const el = $(`.stage[data-stage="${k}"]`, $("#portal"));
+      el.classList.toggle("on", on[k]);
+      el.classList.toggle("locked", k === "dep" && !on.visa);
+      $(".box", el).textContent = on[k] ? "✓" : "";
+    }
+    const chosen = ["adm", "visa", "dep"].filter((k) => on[k]);
+    const alacarte = chosen.reduce((n, k) => n + p[k], 0);
+    const full = chosen.length === 3;
+    const total = full ? p.bundle : alacarte;
+
+    $("#sum-title").textContent = full ? "Full journey" : chosen.length === 2 ? "Admissions + Visa" : "Admissions only";
+    $("#sum-pill").textContent = full ? "bundle price" : "à la carte";
+    $("#sum-pill").className = "pill " + (full ? "pill--ok" : "");
+    $("#sum-lines").innerHTML =
+      chosen.map((k) => `<div class="line"><span>${LABEL[k]}</span><span class="mono">${usd(p[k])}</span></div>`).join("") +
+      (full ? `<div class="line disc"><span>Full-journey bundle</span><span class="mono">−${usd(alacarte - p.bundle)}</span></div>` : "");
+    $("#sum-total").textContent = usd(total);
+    $("#sum-ghs").textContent = "≈ GH₵ " + Math.round(total * RATE).toLocaleString("en-US");
+
+    let ms;
+    if (full) {
+      const dep = Math.round(total * 0.1), pre = Math.round(total * 0.3);
+      ms = [["Deposit", "Before choosing a payment plan", dep], ["Pre-departure", "After visa approval · releases travel documents", pre], ["Post-arrival", "After you arrive, on the schedule you choose", total - dep - pre]];
+    } else {
+      ms = [["Admissions · start", "On acceptance", p.adm / 2], ["Admissions · offer", "When your first offer letter is recorded", p.adm / 2]];
+      if (on.visa) ms.push(["Visa", "When the visa file opens", p.visa]);
+    }
+    $("#sum-ms").innerHTML = ms.map(([l, w, a], i) =>
+      `<div class="ms-row"><span class="k">0${i + 1}</span><span>${l}<span class="w">${w}</span></span><span class="a">${usd(a)}</span></div>`).join("");
+
+    const note = $("#plan-note");
+    note.className = "plan-note" + (full ? "" : " off");
+    note.innerHTML = full
+      ? "<b>Instalment plan available.</b> Spread the post-arrival 60 % over 3–12 months after you land."
+      : "<b>Instalment plan not available</b> — it spreads the post-arrival portion, and this plan has no arrival stage. Add Departure &amp; arrival to unlock it.";
+
+    $("#stop-note").innerHTML = full
+      ? "If you stop part-way, you owe only the stages that opened, at their à-la-carte price. Stages that never open are never charged."
+      : chosen.length === 2
+        ? `Stop after the offer? Only Admissions is owed. Add Departure &amp; arrival later for ${usd(p.dep)}, or complete the bundle for ${usd(p.bundle - alacarte)} more.`
+        : `Change your mind later? Add the Visa stage from your dashboard when your offer arrives — ${usd(p.visa)}, at the à-la-carte rate.`;
+  }
+
+  $$("#tracks button").forEach((b) => b.addEventListener("click", () => { track = b.dataset.track; render(); }));
+  $$("#portal .stage").forEach((el) => el.addEventListener("click", () => {
+    const k = el.dataset.stage;
+    if (k === "adm") return;
+    if (k === "dep" && !on.visa) return;
+    on[k] = !on[k];
+    if (k === "visa" && !on.visa) on.dep = false;
+    render();
+  }));
+  render();
+})();
+</script>
+</body>
+</html>

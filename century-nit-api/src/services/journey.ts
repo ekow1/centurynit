@@ -15,6 +15,7 @@ import { resolvePreDepartureTasks } from "./preDeparture.js";
 import { applicationFeesSettled, visaCostsSettled } from "./cases.js";
 import { listSchoolsForApplication } from "./schools.js";
 import { getStageConsent } from "./stageConsents.js";
+import { pendingContinuationFor } from "./continuations.js";
 
 /**
  * Gathers the facts about one applicant's current case and derives their
@@ -132,5 +133,11 @@ export async function journeyForApplicant(
 				? (application.stage as JourneyStage)
 				: null,
 		scopeStages: application?.scopeStages ?? null,
+		completedAtStage: application?.completedAtStage ?? null,
+		completionNote: application?.completionNote ?? null,
+		pendingContinuationStage:
+			application?.stage === "completed"
+				? ((await pendingContinuationFor(application.id).catch(() => null))?.stage ?? null)
+				: null,
 	});
 }

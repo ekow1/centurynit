@@ -1182,6 +1182,19 @@ export const applications = pgTable(
 		postArrivalInterestPct: integer("post_arrival_interest_pct"),
 		agencyStageIndex: integer("agency_stage_index").notNull().default(0),
 		agencySettled: boolean("agency_settled").notNull().default(false),
+		/**
+		 * Where a mid-plan completion stopped — the reached service stage, for
+		 * "completed · ended at Applications". Null on a full-plan finish.
+		 */
+		completedAtStage: varchar("completed_at_stage", { length: 32 }).$type<ServiceStage>(),
+		/** Why the case ended where it did, recorded at a mid-plan completion. */
+		completionNote: text("completion_note"),
+		/**
+		 * Answers a stage asked for when the client continued into it after
+		 * completion — the intake a later entrant gives at booking. Keyed by
+		 * stage; each entry carries a `submittedAt` marker.
+		 */
+		stageIntake: jsonb("stage_intake").$type<Record<string, Record<string, string>>>().notNull().default({}),
 		/** True once the applicant has paid the 10% deposit (first agency milestone). */
 		depositPaid: boolean("deposit_paid").notNull().default(false),
 		appFeePaid: boolean("app_fee_paid").notNull().default(false),
@@ -2367,6 +2380,36 @@ export const stageConsents = pgTable(
 	(t) => ({
 		byApplication: index("stage_consents_application_idx").on(t.applicationId, t.stage),
 		uniqByApplicationStage: uniqueIndex("stage_consents_app_stage_uniq").on(t.applicationId, t.stage),
+	}),
+);
+
+/**
+ * Stage continuation — a completed client asks to take the stage beyond
+ * their plan's exit. Ops approves (the plan extends, the entry milestone
+ * bills, the case reopens at its facts) or declines with a reason.
+ */
+export const stageContinuationRequests = pgTable(
+	"stage_continuation_requests",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		applicationId: uuid("application_id")
+			.notNull()
+			.references(() => applications.id, { onDelete: "cascade" }),
+		stage: varchar("stage", { length: 32 }).$type<ServiceStage>().notNull(),
+		note: text("note"),
+		status: varchar("status", { length: 16 })
+			.$type<"pending" | "approved" | "declined" | "withdrawn">()
+			.notNull()
+			.default("pending"),
+		decisionNote: text("decision_note"),
+		decidedByOpsUserId: uuid("decided_by_ops_user_id").references(() => opsUsers.id, { onDelete: "set null" }),
+		decidedByName: text("decided_by_name"),
+		decidedAt: timestamp("decided_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byApplication: index("stage_continuation_application_idx").on(t.applicationId, t.status),
 	}),
 );
 

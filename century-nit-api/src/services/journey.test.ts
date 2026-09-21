@@ -151,10 +151,35 @@ describe("deriveJourney — gates", () => {
 		expect(j.portalStage).toBe("completed");
 	});
 
-	it("does not report completion from the coarse stage alone", () => {
+	it("honours an ops-marked completion — the write is the fact, its gates ran server-side", () => {
 		const j = deriveJourney({ ...upTo("booked"), coarseStage: "completed" });
-		expect(j.portalStage).not.toBe("completed");
-		expect(j.chapterUnlocks.complete).toBe(false);
+		expect(j.portalStage).toBe("completed");
+		expect(j.chapterUnlocks.complete).toBe(true);
+	});
+
+	it("an early completion names where it ended and does not fake later steps", () => {
+		const j = deriveJourney({
+			...upTo("admitted"),
+			coarseStage: "completed",
+			// An early completion prunes the plan to what was delivered —
+			// scope is the record of that.
+			scopeStages: ["admissions"],
+			completedAtStage: "admissions",
+			completionNote: "Client opted out of the Visa stage.",
+		});
+		expect(j.portalStage).toBe("completed");
+		expect(j.completedAtStage).toBe("admissions");
+		expect(j.completionNote).toBe("Client opted out of the Visa stage.");
+		// The visa and departure steps were never taken — not done, not current.
+		expect(j.stageStatuses.visa).not.toBe("done");
+		expect(j.stageStatuses.travel_assistance).not.toBe("done");
+		// The stage beyond the exit is the one the client can request.
+		expect(j.requestableStage).toBe("visa");
+	});
+
+	it("offers no next stage when the plan already covers the whole journey", () => {
+		const j = deriveJourney({ ...upTo("cleared"), coarseStage: "completed", scopeStages: ["admissions", "visa", "departure"] });
+		expect(j.requestableStage).toBeNull();
 	});
 });
 

@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portal — Document vault · preview, mobile, history (proposed)</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#52525b; --micro:#3f3f46; --line-light:#d4d4d8; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1120px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem}
+	.jump a{color:inherit}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.5rem clamp(1.25rem,3vw,2.25rem) 2.5rem}
+	.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+	.callout li{margin:.15rem 0 .15rem 1rem}
+
+	/* ---- portal chrome ---- */
+	.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.title{font-size:1.75rem;font-weight:500;letter-spacing:-.01em;margin-top:.25rem}
+	.lead{color:var(--fg-muted);font-size:.92rem;margin-top:.5rem;max-width:44rem}
+	.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.74rem;font-weight:700;padding:.75rem 1.3rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);cursor:pointer;font-family:var(--sans);white-space:nowrap;text-align:center}
+	.btn--ghost{background:#fff;color:var(--ink)}
+	.btn--inv{background:#fff;color:var(--ink);border-color:#fff}
+	.btn--sm{padding:.45rem .8rem;font-size:.64rem}
+	.pill{display:inline-flex;align-items:center;padding:.25rem .65rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);white-space:nowrap}
+	.pill--solid{background:var(--ink);color:#fff}
+	.pill--hollow{color:var(--fg-muted);border-color:var(--line-light)}
+	.pill--done{background:var(--muted-bg);border-color:var(--line-light);color:var(--fg-muted)}
+	.pill--ul{border-color:var(--ink);color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+
+	/* band */
+	.now{background:var(--ink);color:#fff;padding:1.6rem clamp(1.25rem,3vw,2.5rem);display:flex;flex-wrap:wrap;gap:1.25rem;justify-content:space-between;align-items:flex-start;margin-top:1.5rem}
+	.now .eyebrow{color:rgba(255,255,255,.6)}
+	.now h2{font-size:1.3rem;font-weight:500;margin-top:.35rem}
+	.now p.d{margin-top:.45rem;max-width:38rem;font-size:.9rem;color:#fff}
+
+	/* step strip */
+	.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem;margin-top:1.25rem}
+	.step{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border:1px solid var(--line-light);font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-muted);min-width:0}
+	.step .m{width:1.4rem;height:1.4rem;border:1px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;flex-shrink:0}
+	.step .l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+	.step .s{margin-left:auto;font-size:.58rem;opacity:.8;white-space:nowrap}
+	.step--done{background:var(--muted-bg)}
+	.step--on{border:1.5px solid var(--ink);color:var(--ink);font-weight:700}
+	.step--done .m,.step--on .m{background:var(--ink);color:#fff}
+
+	/* split + rail */
+	.split{display:grid;grid-template-columns:minmax(0,1fr) 21rem;gap:2rem;align-items:start;margin-top:1.75rem}
+	@media(max-width:900px){.split{grid-template-columns:1fr}.steps{grid-template-columns:1fr 1fr}}
+	.rail{display:flex;flex-direction:column;gap:.8rem}
+	.card{background:#fff;border:1px solid var(--ink);padding:1.25rem}
+	.rail .card{padding:1.1rem}
+	.card--key{border-width:1.5px}
+	.card--inv{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.card--inv .eyebrow{color:rgba(255,255,255,.6)}
+	.card--inv .muted{color:rgba(255,255,255,.7)}
+	.pkv{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--line-light);font-size:.78rem}
+	.pkv:last-child{border-bottom:none}
+	.pkv .k{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--micro);font-size:.64rem;padding-top:.1rem}
+	.pkv .v{text-align:right;min-width:0}
+	.pkv--due .k{color:var(--ink)} .pkv--due .v{font-family:var(--mono);font-weight:700;font-size:.9rem}
+	.card--inv .pkv{border-color:rgba(255,255,255,.25)} .card--inv .pkv .k{color:rgba(255,255,255,.6)}
+
+	/* sections */
+	.sec{margin-bottom:1.75rem}
+	.sh{display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem;flex-wrap:wrap}
+	.no{display:inline-flex;align-items:center;justify-content:center;width:1.4rem;height:1.4rem;border:1px solid var(--line);font-family:var(--mono);font-size:.65rem;font-weight:700}
+	.no--done{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.st{font-weight:700;font-size:.95rem}
+	.hint{font-family:var(--mono);font-size:.66rem;color:var(--fg-muted);letter-spacing:.04em;margin-left:.35rem}
+	.between{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.5rem}
+	.row{display:flex;justify-content:space-between;gap:1rem;padding:.55rem 0;border-bottom:1px solid var(--line-light);font-size:.88rem;align-items:center}
+	.row:last-child{border-bottom:none}
+	.row .k{color:var(--fg-muted)} .row .v{font-weight:500;text-align:right}
+	ul.list{list-style:none;padding:0;margin:.5rem 0 0}
+	.sub{font-size:.85rem;color:var(--fg-muted);margin-top:.35rem}
+	.big{font-size:1.6rem;font-weight:700;margin-top:.3rem}
+	.mt1{margin-top:.5rem}.mt2{margin-top:.8rem}.mt3{margin-top:1rem}
+
+	/* document rows — today */
+	.drow{display:grid;grid-template-columns:2.2rem 1fr auto auto;gap:.9rem;align-items:center;border:1px solid var(--line-light);padding:.8rem 1rem;margin-bottom:.6rem}
+	.dmark{width:1.5rem;height:1.5rem;border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.7rem;font-weight:700;flex-shrink:0}
+	.dmark--on{background:var(--ink);color:#fff;border-color:var(--ink)}
+	.dname{font-weight:600;font-size:.9rem}
+	.dhint{font-size:.75rem;color:var(--fg-muted)}
+	.dfile{font-family:var(--mono);font-size:.68rem;color:var(--fg-muted);margin-top:.15rem}
+	.dlinks{font-family:var(--mono);font-size:.68rem;white-space:nowrap}
+	.dlinks a{color:var(--ink);text-decoration:underline}
+	.dlinks a + a{margin-left:.7rem}
+	.note{border:1px solid var(--line-light);background:var(--muted-bg);padding:.45rem .7rem;font-size:.75rem;color:var(--fg-muted);margin-top:.4rem}
+
+	/* preview sheet */
+	.dsplit{display:flex;gap:1.5rem;align-items:stretch}
+	.dsplit > .docs{flex:1;min-width:0}
+	.sheet{width:360px;flex-shrink:0;border:1.5px solid var(--ink);background:#fff;padding:1.1rem;position:relative}
+	.sheet .x{position:absolute;top:.7rem;right:.8rem;font-family:var(--mono);font-size:.9rem;background:none;border:none;cursor:pointer;color:var(--ink)}
+	.frame{background:var(--muted-bg);border:1px solid var(--line-light);height:260px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.7rem;color:var(--fg-muted);margin-top:.7rem}
+	.hist{list-style:none;margin:.5rem 0 0;padding:0;font-family:var(--mono);font-size:.68rem;color:var(--fg-muted)}
+	.hist li{padding:.3rem 0;border-bottom:1px solid var(--line-light)}
+	.hist li:last-child{border-bottom:none}
+	.hist .dot{display:inline-block;width:.45rem;height:.45rem;border:1px solid var(--ink);margin-right:.5rem;vertical-align:middle}
+	.hist .dot--on{background:var(--ink)}
+
+	/* phone frame + mobile cards */
+	.phone{width:390px;border:1.5px solid var(--ink);margin:0 auto;background:#fff;padding:1rem;position:relative;overflow:hidden}
+	.counts{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:1rem}
+	.count{border:1px solid var(--line-light);padding:.6rem .7rem;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-muted)}
+	.count b{display:block;font-size:1.05rem;color:var(--ink);letter-spacing:0}
+	.count--inv{background:var(--ink);color:rgba(255,255,255,.7);border-color:var(--ink)}
+	.count--inv b{color:#fff}
+	.dcard{border:1px solid var(--line);padding:.8rem .9rem;margin-bottom:.6rem}
+	.dcard .top{display:flex;align-items:center;gap:.6rem}
+	.dcard .acts{display:flex;gap:.5rem;margin-top:.7rem}
+	.dcard .acts .btn{flex:1;padding:.7rem 0}
+	.handle{width:2.5rem;height:3px;background:var(--line-light);margin:0 auto .7rem}
+	.bottomsheet{position:absolute;left:0;right:0;bottom:0;height:65%;background:#fff;border-top:1.5px solid var(--ink);padding:.7rem 1rem 1rem}
+	.bottomsheet .frame{height:180px}
+
+	/* wiring table */
+	.wiring{border-collapse:collapse;width:100%;margin-top:.5rem}
+	.wiring th,.wiring td{border:1px solid #d4d4d8;font-family:var(--mono);font-size:.7rem;text-align:left;padding:.6rem .8rem;vertical-align:top}
+	.wiring th{text-transform:uppercase;letter-spacing:.1em;font-size:.6rem;background:var(--muted-bg)}
+	.wiring td:first-child{white-space:nowrap;font-weight:700}
+	.wiring code{font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<h1 class="page">Document vault — preview, mobile, history (proposed)</h1>
+	<p class="note">Preview opens a new tab that the popup helper immediately gave up on. Rows carry four actions in one line that wrap awkwardly under 900px. And the vault shows the current file only — a rejected-then-replaced document loses its history. This mock keeps the chapter-grouped rows and fixes those three.</p>
+	<div class="jump"><a href="#a">A · before</a><a href="#b">B · desktop sheet</a><a href="#c">C · mobile</a><a href="#d">D · wiring</a></div>
+
+	<!-- ================= SECTION A ================= -->
+	<span class="tag" id="a">Before · desktop row</span>
+	<div class="mock">
+		<div class="drow">
+			<span class="dmark dmark--on">✓</span>
+			<div>
+				<p class="dname">Passport</p>
+				<p class="dhint">Valid 6+ months past intake</p>
+				<p class="dfile">enoch-enu-passport.pdf · 18/09/2025</p>
+			</div>
+			<span class="pill pill--solid">Verified</span>
+			<span class="dlinks"><a>Preview</a></span>
+		</div>
+		<div class="drow">
+			<span class="dmark">!</span>
+			<div>
+				<p class="dname">Bank statement</p>
+				<p class="dhint">Last 3 months, stamped</p>
+				<p class="dfile">statement-aug.pdf · 12/09/2025</p>
+				<p class="note">Your consultant: pages 2–3 are missing</p>
+			</div>
+			<span class="pill pill--ul">Resubmit</span>
+			<span class="dlinks"><a>Preview</a><a>Replace</a><a>Remove</a></span>
+		</div>
+		<div class="drow">
+			<span class="dmark">·</span>
+			<div>
+				<p class="dname">Academic transcript</p>
+				<p class="dhint">Certified copy</p>
+			</div>
+			<span class="pill pill--hollow">Missing</span>
+			<span class="btn btn--sm">Upload</span>
+		</div>
+	</div>
+	<div class="callout"><b>A — what's wrong</b><ul>
+		<li>Preview → new tab → popup helper returns null → toast "browser blocked the new tab" + blank tab. Console shows the service worker's synthetic 503 Offline.</li>
+		<li>Nothing shows the file inside the portal; a phone user is bounced to a system PDF viewer with no way back.</li>
+		<li>History is lost: after Replace, the rejection note and the old file vanish.</li>
+	</ul></div>
+
+	<!-- ================= SECTION B ================= -->
+	<span class="tag tag--after" id="b">After · desktop: preview sheet</span>
+	<div class="mock">
+		<div class="dsplit">
+			<div class="docs">
+				<div class="drow">
+					<span class="dmark dmark--on">✓</span>
+					<div>
+						<p class="dname">Passport</p>
+						<p class="dhint">Valid 6+ months past intake</p>
+						<p class="dfile">enoch-enu-passport.pdf · 18/09/2025</p>
+					</div>
+					<span class="pill pill--solid">Verified</span>
+					<span class="dlinks"><a>Open</a><a>···</a></span>
+				</div>
+				<div class="drow" style="border-color:var(--ink);border-width:1.5px">
+					<span class="dmark">!</span>
+					<div>
+						<p class="dname">Bank statement</p>
+						<p class="dhint">Last 3 months, stamped</p>
+						<p class="dfile">statement-aug.pdf · 12/09/2025</p>
+					</div>
+					<span class="pill pill--ul">Resubmit</span>
+					<span class="dlinks"><a>Open</a><a>···</a></span>
+				</div>
+				<div class="drow">
+					<span class="dmark">·</span>
+					<div>
+						<p class="dname">Academic transcript</p>
+						<p class="dhint">Certified copy</p>
+					</div>
+					<span class="pill pill--hollow">Missing</span>
+					<span class="btn btn--sm">Upload</span>
+				</div>
+			</div>
+			<div class="sheet">
+				<button class="x" type="button">×</button>
+				<p class="eyebrow">Bank statement · Resubmit</p>
+				<p class="mono muted" style="font-size:.68rem;margin-top:.2rem">statement-aug.pdf · 240 KB · uploaded 12 Sep</p>
+				<div class="frame">PDF · page 1 of 3</div>
+				<p class="note">Your consultant · 14 Sep: pages 2–3 are missing</p>
+				<div class="mt2" style="display:flex;gap:.5rem;flex-wrap:wrap">
+					<span class="btn btn--sm">Replace</span>
+					<span class="btn btn--ghost btn--sm">Download ↓</span>
+					<span class="btn btn--ghost btn--sm">Open in tab ↗</span>
+				</div>
+				<p class="eyebrow mt3">History</p>
+				<ul class="hist">
+					<li><span class="dot"></span>14 Sep · Rejected · pages 2–3 missing</li>
+					<li><span class="dot dot--on"></span>12 Sep · Uploaded · statement-aug.pdf</li>
+					<li><span class="dot"></span>08 Sep · Rejected · unreadable scan</li>
+					<li><span class="dot"></span>06 Sep · Uploaded · statement.jpg → pdf</li>
+				</ul>
+			</div>
+		</div>
+	</div>
+	<div class="callout"><b>B — what changed</b><ul>
+		<li>The sheet is the same pattern the ops console uses (CaseScaffold detail pane). It loads <code class="mono">GET /documents/:id/download?inline=true</code> into an iframe; Download fetches a second ticket with attachment disposition inside the click. No new tab needed on desktop.</li>
+		<li>Row actions collapse to "Open" + a "···" overflow — one tap to the file, everything else behind the sheet.</li>
+		<li>The history list keeps rejected/superseded uploads with their review notes, newest first.</li>
+	</ul></div>
+
+	<!-- ================= SECTION C ================= -->
+	<span class="tag tag--after" id="c">After · mobile (390px)</span>
+	<div class="mock">
+		<div class="phone">
+			<div class="counts">
+				<div class="count"><b>5/8</b>On file</div>
+				<div class="count"><b>3</b>Verified</div>
+				<div class="count"><b>1</b>In review</div>
+				<div class="count count--inv"><b>2</b>Needs you</div>
+			</div>
+			<div class="dcard">
+				<div class="top">
+					<span class="dmark dmark--on">✓</span>
+					<p class="dname">Passport</p>
+					<span class="pill pill--solid" style="margin-left:auto">Verified</span>
+				</div>
+				<p class="dhint mt1">Valid 6+ months past intake</p>
+				<p class="dfile">enoch-enu-passport.pdf · 18/09/2025</p>
+				<div class="acts"><span class="btn btn--ghost">Open</span></div>
+			</div>
+			<div class="dcard">
+				<div class="top">
+					<span class="dmark">!</span>
+					<p class="dname">Bank statement</p>
+					<span class="pill pill--ul" style="margin-left:auto">Resubmit</span>
+				</div>
+				<p class="dhint mt1">Last 3 months, stamped</p>
+				<p class="dfile">statement-aug.pdf · 12/09/2025</p>
+				<div class="acts"><span class="btn btn--ghost">Open</span><span class="btn">Replace</span></div>
+			</div>
+			<div class="dcard">
+				<div class="top">
+					<span class="dmark">·</span>
+					<p class="dname">Academic transcript</p>
+					<span class="pill pill--hollow" style="margin-left:auto">Missing</span>
+				</div>
+				<p class="dhint mt1">Certified copy</p>
+				<div class="acts"><span class="btn">Upload</span></div>
+			</div>
+			<div class="bottomsheet">
+				<div class="handle"></div>
+				<p class="eyebrow">Bank statement · Resubmit</p>
+				<p class="mono muted" style="font-size:.68rem;margin-top:.2rem">statement-aug.pdf · 240 KB · uploaded 12 Sep</p>
+				<div class="frame">PDF · tap to open full screen</div>
+				<p class="note">Your consultant · 14 Sep: pages 2–3 are missing</p>
+				<div class="mt2" style="display:flex;gap:.5rem">
+					<span class="btn btn--ghost" style="flex:1">Download ↓</span>
+					<span class="btn" style="flex:1">Replace</span>
+				</div>
+			</div>
+		</div>
+		<p class="mono muted mt2" style="font-size:.68rem;max-width:32rem;margin-left:auto;margin-right:auto">On phones the PDF renders via the browser's inline viewer when supported; otherwise the tap opens it full screen in the same tab (history back returns here).</p>
+	</div>
+	<div class="callout"><b>C — what changed</b><ul>
+		<li>Under 900px the row grid already collapses to two columns, but the four inline actions wrap unpredictably. Cards with a fixed action bar and a bottom sheet replace them. Tap targets ≥ 44px.</li>
+	</ul></div>
+
+	<!-- ================= SECTION D ================= -->
+	<span class="tag" id="d">Wiring</span>
+	<div class="mock">
+		<table class="wiring">
+			<tr><th>Surface</th><th>Change</th></tr>
+			<tr><td>century-nit-core openInNewTab</td><td>Drop <code>noopener</code> from the feature string (returns null per spec); set <code>tab.opener = null</code> after open. This alone fixes today's Preview. Shipped.</td></tr>
+			<tr><td>Portal vault — desktop</td><td>New <code>DocumentSheet</code> component (right pane, <code>.psplit</code> collapses rail while open). iframe src from <code>documentsApi.downloadUrl(id, { inline: true })</code>; Download = second ticket via openInNewTab; "Open in tab" = same.</td></tr>
+			<tr><td>Portal vault — mobile</td><td>Same component rendered as a bottom sheet under 900px (<code>position: fixed; bottom: 0</code>), rows become <code>.dcard</code> with an action bar. Count band → 2×2 grid.</td></tr>
+			<tr><td>History</td><td><code>GET /documents?type=&lt;documentType&gt;&amp;includeSuperseded=1</code> — server already keeps replaced rows (status REJECTED/UPLOADED per row); list them newest-first with reviewNote. Verify the list route supports returning non-current rows; if not, add the query flag (API change, small).</td></tr>
+			<tr><td>Error state</td><td>Signed-URL failure shows the server message inside the sheet with Retry (same as the ops viewer fix), never a blank tab.</td></tr>
+			<tr><td>Service worker</td><td>No change. 503 Offline is its offline fallback; it stops appearing once the tab actually navigates.</td></tr>
+			<tr><td>Out of scope</td><td>Upload UX, official documents release, ops review flow.</td></tr>
+		</table>
+	</div>
+</div>
+</body>
+</html>

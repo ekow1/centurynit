@@ -721,9 +721,6 @@
 	align-items: stretch;
 	gap: 0.15rem;
 }
-.hsheet__row--stack .hsheet__hint {
-	white-space: normal;
-}
 
 .hsheet__row:last-child {
 	border-bottom: none;
@@ -756,7 +753,7 @@
 	font-size: var(--text-xs);
 	letter-spacing: 0.04em;
 	color: var(--muted-foreground);
-	white-space: nowrap;
+	white-space: normal;
 	line-height: 1.5;
 }
 

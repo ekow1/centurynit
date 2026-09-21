@@ -420,6 +420,9 @@ body.sheet-lock {
 .sheet__body {
 	flex: 1;
 	overflow-y: auto;
+	overflow-x: hidden;
+	min-width: 0;
+	overflow-wrap: anywhere;
 	-webkit-overflow-scrolling: touch;
 	overscroll-behavior: contain;
 	padding: 1rem 1.25rem 1.5rem;

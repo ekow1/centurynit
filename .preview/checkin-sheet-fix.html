@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Check-in sheet — the horizontal-scroll bug, before / after</title>
+<style>
+:root{--fg:#18181b;--muted:#f5f5f5;--mfg:#52525b;--border:#18181b;--bl:#d4d4d8;--thin:1px solid var(--border);--mono:ui-monospace,"Cascadia Code",Menlo,monospace;--sans:"Inter",system-ui,sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);color:var(--fg);background:#ececec;font-size:14px;line-height:1.5}
+.wrap{max-width:78rem;margin:0 auto;padding:2.5rem 1.5rem 4rem}
+h1{font-size:1.6rem;font-weight:600;letter-spacing:-.02em}
+h2{font-size:1.2rem;font-weight:600;margin:2.4rem 0 .4rem}
+.k{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.14em;color:var(--mfg)}
+.sub{color:var(--mfg);font-size:.86rem;max-width:56rem;margin-bottom:1rem}
+.sub b{color:var(--fg)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start}
+@media(max-width:900px){.pair{grid-template-columns:1fr}}
+.cap{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.12em;color:var(--mfg);margin-bottom:.5rem;display:flex;justify-content:space-between}
+.cap b{color:var(--fg)}
+.bad{color:#b91c1c}
+
+/* the sheet, faithfully */
+.panel{width:100%;max-width:34rem;border:2px solid var(--border);background:#fff;display:flex;flex-direction:column;max-height:560px;margin:0 auto}
+.head{display:flex;justify-content:space-between;align-items:center;padding:1.1rem 1.25rem .85rem;border-bottom:1px solid var(--bl)}
+.title{font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase}
+.body{flex:1;padding:1rem 1.25rem 1.5rem;overflow-y:auto}
+.body--bug{overflow-x:auto}
+.body--fix{overflow-x:hidden;overflow-wrap:anywhere}
+.eyebrow{font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin:1.1rem 0 .4rem}
+.hint{font-family:var(--mono);font-size:.62rem;letter-spacing:.04em;color:var(--mfg);line-height:1.5;display:block}
+.hint--nowrap{white-space:nowrap}
+.hint--intro{margin-bottom:.9rem}
+.list{border:1px solid var(--bl)}
+.row{display:flex;flex-direction:column;gap:.15rem;padding:.55rem .8rem;border-bottom:1px solid var(--bl);font-size:.85rem;cursor:pointer}
+.row:last-child{border-bottom:0}
+.row--on{background:var(--fg);color:#fff}
+.row--on .hint{color:rgba(255,255,255,.75)}
+.inp,select.inp,textarea.inp{width:100%;border:var(--thin);padding:.5rem .7rem;font:inherit;font-size:.85rem;background:#fff;display:block;margin-top:.3rem}
+.lbl{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.12em;color:var(--mfg)}
+.f{margin-top:.75rem}
+.foot{display:flex;gap:.6rem;margin-top:1.1rem}
+.btn{border:var(--thin);background:#fff;padding:.5rem 1rem;font:inherit;font-size:.78rem;cursor:pointer}
+.btn--pri{background:var(--fg);color:#fff}
+.mark{outline:2px dashed #b91c1c;outline-offset:2px}
+.callout{border-left:3px solid var(--fg);background:#fff;padding:.7rem .9rem;font-size:.8rem;margin:.75rem 0 0;max-width:56rem}
+.callout li{margin:.15rem 0 .15rem 1rem}
+code{font-family:var(--mono);font-size:.74rem;background:#fff;padding:.05rem .3rem;border:1px solid var(--bl)}
+.diff{font-family:var(--mono);font-size:.72rem;background:#fff;border:1px solid var(--bl);padding:.8rem 1rem;white-space:pre;overflow-x:auto;margin-top:.6rem;line-height:1.6}
+.diff .d{color:#b91c1c}.diff .a{color:#15803d}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<p class="k">Ops · check-in sheet — bug fix mock</p>
+	<h1>Why the sheet scrolled sideways, and the fix</h1>
+	<p class="sub">Your screenshot shows the body shoved left with a horizontal scrollbar. <b>Two rules combined:</b> the helper text under <em>Meeting link</em> uses <code>.hsheet__hint</code>, which is <code>white-space: nowrap</code> — so a full sentence can't wrap and forces the body wider than the panel. And <code>.sheet__body</code> only declares <code>overflow-y: auto</code>, which makes <code>overflow-x</code> compute to <code>auto</code> too — so instead of clipping the overflow, the sheet <em>scrolls</em> to it. Every field is then wider than the panel and the whole thing reads offset.</p>
+
+	<div class="pair">
+		<div>
+			<p class="cap"><span>Before — <b class="bad">as deployed</b></span><span>nowrap hint · overflow-x auto</span></p>
+			<div class="panel">
+				<div class="head"><span class="title">Check-in · Enoch Enu</span><span>✕</span></div>
+				<div class="body body--bug">
+					<span class="hint hint--nowrap hint--intro mark">Free for the client — part of the plan. They are emailed, reminded, and it sits on their portal.</span>
+					<p class="eyebrow">Purpose</p>
+					<select class="inp"><option>General check-in</option></select>
+					<p class="eyebrow">How</p>
+					<div class="list">
+						<div class="row row--on"><span>Online</span><span class="hint">Built-in call room — or paste a Zoom/Teams/Meet link to use that instead</span></div>
+						<div class="row"><span>In person</span><span class="hint">At a branch — the email carries the address</span></div>
+					</div>
+					<div class="f"><span class="lbl">Branch (host's diary)</span><select class="inp"><option>Accra</option></select></div>
+					<div class="f"><span class="lbl">Host</span><select class="inp"><option>You — ekowfirmino</option></select></div>
+					<div class="f"><span class="lbl">Meeting link — optional</span><input class="inp" placeholder="https://… Zoom, Teams, Meet">
+						<span class="hint hint--nowrap mark" style="margin-top:.3rem">Leave blank for the built-in call room — the client's Join button opens it in the portal. Paste one to meet elsewhere; you can also set or change it on the case later.</span>
+					</div>
+					<p class="eyebrow">Note for the client (goes in the email)</p>
+					<textarea class="inp" rows="2" placeholder="e.g. Bring your bank statements…"></textarea>
+					<div class="foot"><button class="btn btn--pri">Book check-in — Sep 28 10:00</button><button class="btn">Cancel</button></div>
+				</div>
+			</div>
+			<p class="k" style="margin-top:.5rem;text-align:center">↔ scroll the body sideways — the dashed lines are the two nowrap culprits</p>
+		</div>
+
+		<div>
+			<p class="cap"><span>After — <b>fixed</b></span><span>hints wrap · body clips x</span></p>
+			<div class="panel">
+				<div class="head"><span class="title">Check-in · Enoch Enu</span><span>✕</span></div>
+				<div class="body body--fix">
+					<span class="hint hint--intro">Free for the client — part of the plan. They are emailed, reminded, and it sits on their portal.</span>
+					<p class="eyebrow">Purpose</p>
+					<select class="inp"><option>General check-in</option></select>
+					<p class="eyebrow">How</p>
+					<div class="list">
+						<div class="row row--on"><span>Online</span><span class="hint">Built-in call room — or paste a Zoom/Teams/Meet link to use that instead</span></div>
+						<div class="row"><span>In person</span><span class="hint">At a branch — the email carries the address</span></div>
+					</div>
+					<div class="f"><span class="lbl">Branch (host's diary)</span><select class="inp"><option>Accra</option></select></div>
+					<div class="f"><span class="lbl">Host</span><select class="inp"><option>You — ekowfirmino</option></select></div>
+					<div class="f"><span class="lbl">Meeting link — optional</span><input class="inp" placeholder="https://… Zoom, Teams, Meet">
+						<span class="hint" style="margin-top:.3rem">Leave blank for the built-in call room — the client's Join button opens it in the portal. Paste one to meet elsewhere; you can also set or change it on the case later.</span>
+					</div>
+					<p class="eyebrow">Note for the client (goes in the email)</p>
+					<textarea class="inp" rows="2" placeholder="e.g. Bring your bank statements…"></textarea>
+					<div class="foot"><button class="btn btn--pri">Book check-in — Sep 28 10:00</button><button class="btn">Cancel</button></div>
+				</div>
+			</div>
+			<p class="k" style="margin-top:.5rem;text-align:center">everything inside the panel · no sideways scroll</p>
+		</div>
+	</div>
+
+	<h2>The fix — three lines, two layers</h2>
+	<p class="sub">Fix the sheet primitive so <em>no</em> sheet can do this again, then make the hint class safe outside a stacked row.</p>
+	<div class="callout">
+		<b>1 · <code>packages/core/styles/base.mobile.css</code> — the sheet body</b>
+		<div class="diff">.sheet__body {
+	flex: 1;
+	overflow-y: auto;
+<span class="a">+	overflow-x: hidden;         /* clip, never scroll sideways */</span>
+<span class="a">+	min-width: 0;               /* let flex children shrink */</span>
+<span class="a">+	overflow-wrap: anywhere;    /* a pasted URL can't force width either */</span>
+	…
+}</div>
+		<b style="display:block;margin-top:.9rem">2 · <code>century-nit-ops/src/styles/scheduling.css</code> — the hint</b>
+		<div class="diff">.hsheet__hint {
+	font-family: var(--font-mono);
+	…
+<span class="d">-	white-space: nowrap;</span>
+<span class="a">+	white-space: normal;        /* a sentence wraps; a row's short hint never needed nowrap */</span>
+}
+<span class="d">-.hsheet__row--stack .hsheet__hint { white-space: normal; }</span>   <span style="color:var(--mfg)">/* now redundant — drop */</span></div>
+		<b style="display:block;margin-top:.9rem">3 · <code>CheckInSheet.tsx</code></b>
+		<ul>
+			<li>Nothing structural — the same JSX renders correctly once the two rules above land.</li>
+			<li>Optional tidy: the intro <code>&lt;p className="hsheet__hint"&gt;</code> becomes a plain muted paragraph so it isn't mono-tracked like a field hint.</li>
+		</ul>
+	</div>
+
+	<h2>Why fix the primitive, not just the sheet</h2>
+	<p class="sub">The same <code>.hsheet__hint</code> lives in the Assign sheet, the Team sheet and the handoff sheet — they've survived only because their hints are short. And any sheet showing a pasted meeting URL, a long email, or an unbroken reference would hit the <code>overflow-x</code> gap the same way. Clipping at the body plus wrapping at the hint closes both doors.</p>
+</div>
+</body>
+</html>

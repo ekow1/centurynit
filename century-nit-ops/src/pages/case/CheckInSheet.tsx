@@ -102,7 +102,7 @@ export function CheckInSheet({
 
 	return (
 		<Sheet open={open} onClose={onClose} title={`Check-in · ${app.applicantName}`} size="tall">
-			<p className="hsheet__hint" style={{ marginBottom: "0.9rem" }}>
+			<p className="muted" style={{ marginBottom: "0.9rem", fontSize: "var(--text-sm)" }}>
 				Free for the client — part of the plan. They are emailed, reminded, and it sits on their portal.
 			</p>
 			{error && <p className="cn-assign__error" role="alert">{error}</p>}

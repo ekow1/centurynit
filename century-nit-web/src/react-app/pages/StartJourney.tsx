@@ -19,7 +19,39 @@ import {
 	completeEmailSignup,
 } from "../context/authStore";
 import { getAuthSettings, type AuthSettingsResponse } from "../lib/api";
-import { CHAPTERS } from "century-nit-shared";
+import { coreServices } from "century-nit-core";
+
+/*
+ * The route the account opens onto — Stage 0 through III, the same stages
+ * the homepage route and the portal scope use. Images come from the shared
+ * service content so they stay editable in one place.
+ */
+const AUTH_ROUTE = [
+	{
+		stage: "Stage 0 · always",
+		name: "Consultation",
+		blurb: "Online or in person — you pick the scope, your file opens the same day.",
+		image: coreServices.find((s) => s.id === "counseling")?.image,
+	},
+	{
+		stage: "Stage I",
+		name: "Admissions",
+		blurb: "Counselling, documents, submissions and offer tracking.",
+		image: coreServices.find((s) => s.id === "admission-docs")?.image,
+	},
+	{
+		stage: "Stage II",
+		name: "Visa",
+		blurb: "Embassy-ready file, biometrics booked, decision tracked.",
+		image: coreServices.find((s) => s.id === "visa-docs")?.image,
+	},
+	{
+		stage: "Stage III",
+		name: "Departure & arrival",
+		blurb: "Flight, housing, briefing and the first-week check-in.",
+		image: coreServices.find((s) => s.id === "travel")?.image,
+	},
+];
 
 /** Monochrome "G". The four-color logo was the only color on the page. */
 function GoogleMark() {
@@ -698,15 +730,19 @@ export function StartJourney() {
 						Your entire application journey. <em>in one place.</em>
 					</h2>
 					<p className="start-journey__brand-lead">
-						One account tracks you from first consultation to departure. This is what the portal holds:
+						One account tracks you from first consultation to departure — the same route,
+						stage by stage:
 					</p>
-					<div className="start-journey__chapters">
-						{CHAPTERS.map((ch) => (
-							<div key={ch.id} className="start-journey__chapter">
-								<span className="n">{ch.numeral}</span>
-								<span className="start-journey__chapter-body">
-									<span className="t">{ch.label}</span>
-									<span className="d">{ch.blurb}</span>
+					<div className="start-journey__route">
+						{AUTH_ROUTE.map((st) => (
+							<div key={st.name} className="start-journey__leg">
+								<span className="start-journey__leg-thumb">
+									{st.image ? <img src={st.image} alt="" loading="lazy" /> : null}
+								</span>
+								<span className="start-journey__leg-body">
+									<span className="start-journey__leg-stage">{st.stage}</span>
+									<span className="start-journey__leg-name">{st.name}</span>
+									<span className="start-journey__leg-blurb">{st.blurb}</span>
 								</span>
 							</div>
 						))}

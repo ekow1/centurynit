@@ -1,7 +1,8 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { db } from "../db/index.js";
-import { notifications, opsUsers, staffPresence } from "../db/schema.js";
+import { notificationPreferences, notifications, opsUsers, staffPresence } from "../db/schema.js";
+import { notificationEventDef } from "century-nit-shared";
 import { queueEmail, queuePush } from "../worker/queues.js";
 import { publishToUser } from "../worker/pubsub.js";
 import type { QueuedEmail } from "./notifications.js";
@@ -115,30 +116,106 @@ export async function notify(event: NotifyEvent): Promise<void> {
 		createdAt: new Date().toISOString(),
 	});
 
+	// Preferences gate push + email. In-app always lands — it IS the product.
+	// Required events (security, receipts) ignore prefs entirely.
+	const def = notificationEventDef(event.type);
+	const prefs = def?.required ? null : await getPrefsFor(event.recipientUserId);
+	const flags = prefs?.channelFlags?.[event.type] ?? {};
+	const pushAllowed = flags.push !== false && !inQuietHours(prefs?.quietHours);
+	const emailAllowed = flags.email !== false;
+
 	// 3. Enqueue a Web Push fan-out (push worker sends to all subscriptions)
-	try {
-		await queuePush({
-			userId: event.recipientUserId,
-			notification: {
-				id: insertedId,
-				type: event.type,
-				title: event.title,
-				body: event.body,
-				link: event.link ?? null,
-			},
-		});
-	} catch (err) {
-		console.error(`[notify] push queue failed for ${eventId}:`, err);
+	if (pushAllowed) {
+		try {
+			await queuePush({
+				userId: event.recipientUserId,
+				notification: {
+					id: insertedId,
+					type: event.type,
+					title: event.title,
+					body: event.body,
+					link: event.link ?? null,
+				},
+			});
+		} catch (err) {
+			console.error(`[notify] push queue failed for ${eventId}:`, err);
+		}
 	}
 
 	// 4. Optionally enqueue an email (with retry + audit log)
-	if (event.email) {
+	if (event.email && emailAllowed) {
 		try {
 			await queueEmail(event.email);
 		} catch (err) {
 			console.error(`[notify] email queue failed for ${eventId}:`, err);
 		}
 	}
+}
+
+/* ── Preferences (notification_preferences — the table was always there) ──── */
+
+type Prefs = {
+	channelFlags: Record<string, { inApp?: boolean; email?: boolean; push?: boolean; sms?: boolean }>;
+	quietHours?: { start?: string; end?: string; timezone?: string } | null;
+};
+
+async function getPrefsFor(userId: string): Promise<Prefs | null> {
+	try {
+		const [row] = await db
+			.select({ channelFlags: notificationPreferences.channelFlags, quietHours: notificationPreferences.quietHours })
+			.from(notificationPreferences)
+			.where(eq(notificationPreferences.userId, userId))
+			.limit(1);
+		return row ?? null;
+	} catch {
+		// A prefs read failure must not eat the notification — default to sending.
+		return null;
+	}
+}
+
+/** Local wall-clock inside the user's quiet window → push is held. */
+function inQuietHours(qh: { start?: string; end?: string; timezone?: string } | null | undefined): boolean {
+	if (!qh?.start || !qh.end) return false;
+	try {
+		const parts = new Intl.DateTimeFormat("en-US", {
+			timeZone: qh.timezone ?? "Africa/Accra",
+			hour: "numeric", minute: "numeric", hour12: false,
+		}).formatToParts(new Date());
+		const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+		const now = get("hour") * 60 + get("minute");
+		const toMin = (s: string) => { const [h, m] = s.split(":").map(Number); return h * 60 + m; };
+		const start = toMin(qh.start), end = toMin(qh.end);
+		// Overnight windows wrap midnight (21:00 → 07:00).
+		return start <= end ? now >= start && now < end : now >= start || now < end;
+	} catch {
+		return false;
+	}
+}
+
+/** Read the current user's notification preferences (client or staff). */
+export async function getNotificationPreferences(userId: string): Promise<Prefs> {
+	const prefs = await getPrefsFor(userId);
+	return prefs ?? { channelFlags: {}, quietHours: null };
+}
+
+/** Upsert preferences — partial flags merge over the stored row. */
+export async function setNotificationPreferences(
+	userId: string,
+	patch: { channelFlags?: Prefs["channelFlags"]; quietHours?: Prefs["quietHours"] },
+): Promise<Prefs> {
+	const current = await getNotificationPreferences(userId);
+	const next: Prefs = {
+		channelFlags: { ...current.channelFlags, ...(patch.channelFlags ?? {}) },
+		quietHours: patch.quietHours !== undefined ? patch.quietHours : current.quietHours,
+	};
+	await db
+		.insert(notificationPreferences)
+		.values({ userId, channelFlags: next.channelFlags, quietHours: next.quietHours ?? undefined })
+		.onConflictDoUpdate({
+			target: notificationPreferences.userId,
+			set: { channelFlags: next.channelFlags, quietHours: next.quietHours ?? null, updatedAt: new Date() },
+		});
+	return next;
 }
 
 /**

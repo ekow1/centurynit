@@ -8,6 +8,7 @@ import { bookings, conversations, conversationParticipants } from "../db/schema.
 import {
 	banClientUser,
 	deleteClientUser,
+	listClientSessions,
 	listClientUsers,
 	revokeClientSessions,
 	unbanClientUser,
@@ -364,4 +365,44 @@ clientUsersRouter.openapi(
 		});
 		return c.json(result);
 	},
+);
+
+/* ── GET /api/v1/client-users/sessions ─────────────────────────────────────────
+ * The client half of the Auth → Sessions tab. Revoke stays on
+ * POST /{id}/revoke-sessions; this only lists. Registered last — single
+ * segment, no collision with /{id}/… routes.
+ */
+
+clientUsersRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/sessions",
+		tags: ["Client Directory & Access Control"],
+		summary: "Active client sessions",
+		middleware: [requireAuth, requireCapability("see_all_cases")] as const,
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							sessions: z.array(
+								z.object({
+									id: z.string(),
+									userId: z.string(),
+									name: z.string(),
+									email: z.string(),
+									ip: z.string().nullable(),
+									userAgent: z.string().nullable(),
+									createdAt: z.string(),
+									expiresAt: z.string(),
+								}),
+							),
+						}),
+					},
+				},
+				description: "Live client sessions",
+			},
+		},
+	}),
+	async (c) => c.json({ sessions: await listClientSessions() }),
 );

@@ -693,9 +693,49 @@ export type NotificationLogItem = {
 	subject: string;
 	template: string | null;
 	status: string;
+	channel: string;
+	event: string | null;
 	reference: string | null;
 	errorMessage: string | null;
+	attempts?: number;
+	queuedAt?: string | null;
 	sentAt: string;
+};
+
+export type NotificationEventCatalogueItem = {
+	type: string;
+	label: string;
+	audience: string;
+	channels: string[];
+	timing: string;
+	required: boolean;
+};
+
+export type NotificationHealth = {
+	sent24h: number;
+	failed24h: number;
+	deliveryRate24h: number | null;
+	queueWaiting: number;
+	queueFailed: number;
+	pushSubscriptions: number;
+	lastDeliveryAt: string | null;
+};
+
+export type NotificationPreferences = {
+	channelFlags: Record<string, { inApp?: boolean; email?: boolean; push?: boolean; sms?: boolean }>;
+	quietHours?: { start?: string; end?: string; timezone?: string } | null;
+};
+
+export type NotificationLogQuery = {
+	limit?: number;
+	status?: "sent" | "failed";
+	channel?: "email" | "in_app" | "push" | "sms";
+	event?: string;
+	recipient?: string;
+	q?: string;
+	from?: string;
+	to?: string;
+	before?: string;
 };
 
 export type OpsNotification = {
@@ -709,17 +749,56 @@ export type OpsNotification = {
 };
 
 export const notificationsApi = {
-	log(limit?: number, status?: "sent" | "failed"): Promise<{
+	log(query?: NotificationLogQuery | number, status?: "sent" | "failed"): Promise<{
 		notifications: NotificationLogItem[];
 		total: number;
 		sent: number;
 		failed: number;
+		nextBefore: string | null;
 	}> {
+		// Back-compat: log(50, "failed") — the old positional signature.
+		const q: NotificationLogQuery = typeof query === "number" ? { limit: query, status } : (query ?? {});
 		const params = new URLSearchParams();
-		if (limit) params.set("limit", String(limit));
-		if (status) params.set("status", status);
+		for (const [k, v] of Object.entries(q)) {
+			if (v !== undefined && v !== "") params.set(k, String(v));
+		}
 		const qs = params.toString() ? `?${params.toString()}` : "";
 		return request(`${API_PREFIX}/notifications/log${qs}`);
+	},
+
+	/** The generated event catalogue — every type the system emits. */
+	catalogue(): Promise<{ events: NotificationEventCatalogueItem[] }> {
+		return request(`${API_PREFIX}/notifications/catalogue`);
+	},
+
+	/** A stored rendered body for "view the email". */
+	logEntry(id: string): Promise<{
+		id: string; recipient: string; subject: string; status: string;
+		bodyHtml: string | null; bodyText: string | null; errorMessage: string | null;
+	}> {
+		return request(`${API_PREFIX}/notifications/log/${id}`);
+	},
+
+	/** Re-queue a logged email from its stored body. */
+	resendLog(id: string): Promise<{ ok: boolean }> {
+		return request(`${API_PREFIX}/notifications/log/${id}/resend`, { method: "POST" });
+	},
+
+	/** Pipeline health — delivery rate, queue depth, push count. */
+	health(): Promise<NotificationHealth> {
+		return request(`${API_PREFIX}/notifications/health`);
+	},
+
+	/** The signed-in user's channel matrix + quiet hours. */
+	preferences(): Promise<NotificationPreferences> {
+		return request(`${API_PREFIX}/notifications/preferences`);
+	},
+
+	setPreferences(patch: Partial<NotificationPreferences>): Promise<NotificationPreferences> {
+		return request(`${API_PREFIX}/notifications/preferences`, {
+			method: "PUT",
+			body: JSON.stringify(patch),
+		});
 	},
 
 	/** Ops staff: list the signed-in member's notifications. */
@@ -735,6 +814,132 @@ export const notificationsApi = {
 	/** Ops staff: mark every notification read. */
 	opsMarkAllRead(): Promise<{ ok: boolean }> {
 		return request(`${API_PREFIX}/notifications/ops/read-all`, { method: "POST" });
+	},
+};
+
+/* Unified audit stream (migration 0112 — one feed over every trail) */
+
+export type AuditEvent = {
+	id: string;
+	source: string;
+	at: string;
+	category: string;
+	action: string;
+	actorLabel: string;
+	actorId: string | null;
+	actorType: string;
+	targetLabel: string | null;
+	targetId: string | null;
+	targetType: string;
+	severity: string;
+	detail: string | null;
+	ip: string | null;
+	userAgent: string | null;
+	oldMasked: string | null;
+	newMasked: string | null;
+};
+
+export type AuditEventsQuery = {
+	category?: string;
+	severity?: string;
+	source?: string;
+	actor?: string;
+	target?: string;
+	q?: string;
+	from?: string;
+	to?: string;
+	limit?: number;
+	before?: string;
+};
+
+export type AlertRules = {
+	failedSignins: boolean;
+	roleGrants: boolean;
+	newIpSignin: boolean;
+	moneyMoves: boolean;
+};
+
+export type AuthPolicy = {
+	sessionDays: number;
+	idleHours: number;
+	lockoutThreshold: number;
+	lockoutWindowMin: number;
+	lockoutMinutes: number;
+	passwordMinLength: number;
+	breachedCheck: boolean;
+	staffRotationDays: number;
+	mfaGraceDays: number;
+	rememberDeviceDays: number;
+};
+
+function auditQs(q: AuditEventsQuery): string {
+	const params = new URLSearchParams();
+	for (const [k, v] of Object.entries(q)) {
+		if (v !== undefined && v !== "") params.set(k, String(v));
+	}
+	return params.toString() ? `?${params.toString()}` : "";
+}
+
+export const auditApi = {
+	events(q: AuditEventsQuery): Promise<{
+		entries: AuditEvent[];
+		total: number;
+		nextBefore: string | null;
+		facets: Record<string, number>;
+	}> {
+		return request(`${API_PREFIX}/settings/audit/events${auditQs(q)}`);
+	},
+
+	related(actor: string, target: string | null, exclude: string): Promise<{ entries: AuditEvent[] }> {
+		const params = new URLSearchParams({ actor, exclude });
+		if (target) params.set("target", target);
+		return request(`${API_PREFIX}/settings/audit/related?${params.toString()}`);
+	},
+
+	verify(): Promise<{ checked: number; brokenAt: string | null }> {
+		return request(`${API_PREFIX}/settings/audit/verify`);
+	},
+
+	exportUrl(q: AuditEventsQuery): string {
+		return `${API_PREFIX}/settings/audit/export${auditQs(q)}`;
+	},
+
+	alertRules(): Promise<AlertRules> {
+		return request(`${API_PREFIX}/settings/alert-rules`);
+	},
+
+	setAlertRules(patch: Partial<AlertRules>): Promise<AlertRules> {
+		return request(`${API_PREFIX}/settings/alert-rules`, {
+			method: "PUT",
+			body: JSON.stringify(patch),
+		});
+	},
+
+	authPolicy(): Promise<AuthPolicy> {
+		return request(`${API_PREFIX}/settings/auth-policy`);
+	},
+
+	setAuthPolicy(patch: Partial<AuthPolicy>): Promise<AuthPolicy> {
+		return request(`${API_PREFIX}/settings/auth-policy`, {
+			method: "PUT",
+			body: JSON.stringify(patch),
+		});
+	},
+
+	unlock(email: string): Promise<{ ok: boolean; wasLocked: boolean }> {
+		return request(`${API_PREFIX}/settings/auth/unlock`, {
+			method: "POST",
+			body: JSON.stringify({ email }),
+		});
+	},
+
+	clientSessions(): Promise<{
+		sessions: {
+			id: string; userId: string; name: string; email: string;
+			ip: string | null; userAgent: string | null; createdAt: string; expiresAt: string;
+		}[];
+	}> {
+		return request(`${API_PREFIX}/client-users/sessions`);
 	},
 };
 

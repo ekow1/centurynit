@@ -25,3 +25,4 @@ export * from "./journey.js";
 export * from "./labels.js";
 export * from "./text.js";
 export * from "./stages.js";
+export * from "./notifications.js";

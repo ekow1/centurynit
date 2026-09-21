@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ops · Audit / Auth / Notifications — redesign mock</title>
+<style>
+	:root {
+		--ink: #17161a; --paper: #f5f4f0; --card: #fff; --line: #ddd9cf; --line-lt: #eae7de;
+		--muted: #6e6a60; --amber: #b97a10; --amber-soft: #f3e8d2; --green: #2e6b34; --red: #a33b2e;
+		--blue: #31577a;
+	}
+	* { box-sizing: border-box; margin: 0; padding: 0; }
+	body { font-family: Georgia, "Times New Roman", serif; background: var(--paper); color: var(--ink); font-size: 14px; }
+	.wrap { max-width: 1240px; margin: 0 auto; padding: 1.75rem 1.5rem 5rem; }
+	.mono { font-family: ui-monospace, monospace; }
+
+	.sect { margin-bottom: 4rem; }
+	.sect > .tag { font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber); }
+	.sect > h2 { font-size: 1.2rem; margin: 0.3rem 0 0.25rem; }
+	.sect > p.note { font-size: 0.78rem; color: var(--muted); max-width: 76ch; line-height: 1.55; margin-bottom: 1rem; }
+	.sect > p.note code { font-family: ui-monospace, monospace; font-size: 0.72rem; background: var(--amber-soft); padding: 0 0.3em; }
+	.frame { border: 1px solid var(--line); background: var(--card); padding: 0; }
+	.new { outline: 2px solid var(--amber); outline-offset: -2px; position: relative; }
+	.new::before { content: "NEW"; position: absolute; top: -0.55rem; left: 0.6rem; background: var(--amber); color: #fff; font-family: ui-monospace, monospace; font-size: 0.5rem; letter-spacing: 0.12em; padding: 0.1rem 0.4rem; z-index: 2; }
+	.newb { outline: 2px solid var(--blue); outline-offset: -2px; position: relative; }
+	.newb::before { content: "CHANGED"; position: absolute; top: -0.55rem; left: 0.6rem; background: var(--blue); color: #fff; font-family: ui-monospace, monospace; font-size: 0.5rem; letter-spacing: 0.12em; padding: 0.1rem 0.4rem; z-index: 2; }
+
+	/* shared chrome */
+	.pagebar { display: flex; align-items: center; gap: 0.7rem; padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--line); background: #fbfaf7; }
+	.pagebar h3 { font-size: 0.9rem; }
+	.pagebar .crumb { font-family: ui-monospace, monospace; font-size: 0.62rem; color: var(--muted); }
+	.pagebar .right { margin-left: auto; display: flex; gap: 0.45rem; align-items: center; }
+	.btn { font-family: ui-monospace, monospace; font-size: 0.62rem; letter-spacing: 0.06em; border: 1px solid var(--ink); background: var(--ink); color: #fff; padding: 0.4rem 0.7rem; cursor: pointer; }
+	.btn.ghost { background: none; color: var(--ink); border-color: var(--line); }
+	.btn.ghost:hover { border-color: var(--ink); }
+	.btn.warn { border-color: var(--red); color: var(--red); background: none; }
+	.btn.small { padding: 0.25rem 0.5rem; font-size: 0.58rem; }
+	.live { display: inline-flex; align-items: center; gap: 0.35rem; font-family: ui-monospace, monospace; font-size: 0.58rem; color: var(--green); letter-spacing: 0.08em; }
+	.live::before { content: ""; width: 6px; height: 6px; background: var(--green); animation: blink 1.6s infinite; }
+	@keyframes blink { 50% { opacity: 0.25; } }
+
+	/* tabs */
+	.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); background: #fbfaf7; }
+	.tab { font-family: ui-monospace, monospace; font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.6rem 1rem; border: none; border-right: 1px solid var(--line); background: none; cursor: pointer; color: var(--muted); }
+	.tab.on { color: var(--ink); font-weight: 700; box-shadow: inset 0 -2px 0 var(--ink); background: var(--card); }
+	.tab .n { color: var(--amber); font-weight: 700; margin-left: 0.3rem; }
+
+	/* filter bar */
+	.fbar { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--line); }
+	.chip { font-family: ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.04em; border: 1px solid var(--line); background: none; padding: 0.3rem 0.55rem; cursor: pointer; color: var(--ink); display: inline-flex; gap: 0.35rem; align-items: baseline; }
+	.chip .c { color: var(--muted); font-size: 0.55rem; }
+	.chip.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+	.chip.on .c { color: #cdb98a; }
+	.pick { font-family: ui-monospace, monospace; font-size: 0.58rem; border: 1px dashed var(--line); padding: 0.3rem 0.55rem; color: var(--muted); background: none; cursor: pointer; }
+	.pick.set { border-style: solid; border-color: var(--amber); color: var(--amber); }
+	.urlnote { margin-left: auto; font-family: ui-monospace, monospace; font-size: 0.55rem; color: var(--muted); }
+
+	/* audit feed */
+	.feed { display: grid; grid-template-columns: 1fr 330px; }
+	.feedlist { min-width: 0; }
+	.dayhead { font-family: ui-monospace, monospace; font-size: 0.55rem; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; padding: 0.5rem 0.9rem 0.35rem; border-bottom: 1px solid var(--line-lt); background: #fbfaf7; }
+	.ev { display: grid; grid-template-columns: 64px 18px 1fr auto; gap: 0.6rem; align-items: center; padding: 0.5rem 0.9rem; border-bottom: 1px solid var(--line-lt); cursor: pointer; font-size: 0.78rem; }
+	.ev:hover { background: #fbf7ec; }
+	.ev.sel { background: var(--amber-soft); }
+	.ev .t { font-family: ui-monospace, monospace; font-size: 0.58rem; color: var(--muted); }
+	.ev .dot { width: 8px; height: 8px; }
+	.dot.info { background: var(--line); }
+	.dot.warn { background: var(--amber); }
+	.dot.bad { background: var(--red); }
+	.dot.good { background: var(--green); }
+	.ev .who { font-weight: 600; }
+	.ev .what { color: var(--muted); font-size: 0.72rem; }
+	.ev .cat { font-family: ui-monospace, monospace; font-size: 0.52rem; letter-spacing: 0.06em; border: 1px solid var(--line); padding: 0.12rem 0.35rem; color: var(--muted); white-space: nowrap; }
+	.ev .cat.access { border-color: var(--red); color: var(--red); }
+	.ev .cat.money { border-color: var(--amber); color: var(--amber); }
+	.ev .cat.auth { border-color: var(--blue); color: var(--blue); }
+
+	/* side pane */
+	.pane { border-left: 1px solid var(--line); padding: 0.9rem; font-size: 0.75rem; }
+	.pane h4 { font-size: 0.8rem; margin-bottom: 0.15rem; }
+	.pane .sub { font-family: ui-monospace, monospace; font-size: 0.56rem; color: var(--muted); margin-bottom: 0.8rem; }
+	.kv { display: grid; grid-template-columns: 74px 1fr; gap: 0.3rem 0.6rem; margin-bottom: 0.8rem; }
+	.kv dt { font-family: ui-monospace, monospace; font-size: 0.55rem; color: var(--muted); letter-spacing: 0.05em; padding-top: 0.1rem; }
+	.kv dd { font-size: 0.72rem; }
+	.diff { border: 1px solid var(--line); margin-bottom: 0.8rem; }
+	.diff .dh { font-family: ui-monospace, monospace; font-size: 0.52rem; letter-spacing: 0.1em; color: var(--muted); padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--line-lt); background: #fbfaf7; }
+	.diff .dr { display: grid; grid-template-columns: 1fr 1fr; font-family: ui-monospace, monospace; font-size: 0.6rem; }
+	.diff .dr > div { padding: 0.35rem 0.5rem; }
+	.diff .old { color: var(--red); border-right: 1px solid var(--line-lt); text-decoration: line-through; }
+	.diff .newv { color: var(--green); }
+	.rel { font-family: ui-monospace, monospace; font-size: 0.58rem; color: var(--muted); }
+	.rel a { color: var(--blue); cursor: pointer; text-decoration: underline; }
+
+	/* alert strip */
+	.alerts { display: flex; gap: 0.5rem; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--line); background: #fdf9f0; align-items: center; flex-wrap: wrap; }
+	.alerts .lab { font-family: ui-monospace, monospace; font-size: 0.55rem; letter-spacing: 0.1em; color: var(--amber); text-transform: uppercase; }
+	.arule { font-family: ui-monospace, monospace; font-size: 0.56rem; border: 1px solid var(--line); background: var(--card); padding: 0.3rem 0.5rem; display: inline-flex; gap: 0.4rem; align-items: center; }
+	.arule .sw { width: 18px; height: 10px; background: var(--green); display: inline-block; position: relative; }
+	.arule .sw::after { content: ""; position: absolute; right: 1px; top: 1px; width: 8px; height: 8px; background: #fff; }
+
+	/* policy grid */
+	.polgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line-lt); }
+	.pol { background: var(--card); padding: 0.8rem 0.9rem; }
+	.pol .pl { font-family: ui-monospace, monospace; font-size: 0.55rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.35rem; }
+	.pol .pv { display: flex; gap: 0.5rem; align-items: baseline; }
+	.pol .pv b { font-size: 0.85rem; }
+	.pol .pv .unit { font-size: 0.65rem; color: var(--muted); }
+	.pol .pd { font-size: 0.65rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.4; }
+	.pol input[type="number"], .pol select { font: inherit; font-size: 0.75rem; border: 1px solid var(--line); padding: 0.2rem 0.35rem; width: 72px; background: #fff; }
+	.savebar { display: flex; gap: 0.6rem; align-items: center; padding: 0.55rem 0.9rem; background: var(--ink); color: #fff; }
+	.savebar .warn-t { font-family: ui-monospace, monospace; font-size: 0.58rem; color: #e8c98a; }
+	.savebar .btn { border-color: #fff; }
+
+	/* sessions table */
+	table.tbl { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
+	.tbl th { font-family: ui-monospace, monospace; font-size: 0.53rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 0.45rem 0.9rem; border-bottom: 1px solid var(--line); background: #fbfaf7; }
+	.tbl td { padding: 0.5rem 0.9rem; border-bottom: 1px solid var(--line-lt); vertical-align: middle; }
+	.tbl tr:last-child td { border-bottom: none; }
+	.pill { font-family: ui-monospace, monospace; font-size: 0.52rem; letter-spacing: 0.05em; border: 1px solid var(--line); padding: 0.12rem 0.4rem; white-space: nowrap; }
+	.pill.green { color: var(--green); border-color: var(--green); }
+	.pill.red { color: var(--red); border-color: var(--red); }
+	.pill.amber { color: var(--amber); border-color: var(--amber); }
+	.pill.blue { color: var(--blue); border-color: var(--blue); }
+	.flag { font-family: ui-monospace, monospace; font-size: 0.52rem; color: var(--red); }
+
+	/* catalogue */
+	.cat-row { display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 0.7rem; align-items: center; padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--line-lt); font-size: 0.74rem; }
+	.cat-row .en { font-weight: 600; font-family: ui-monospace, monospace; font-size: 0.66rem; }
+	.cat-row .ed { color: var(--muted); font-size: 0.66rem; }
+	.chans { display: flex; gap: 0.25rem; }
+	.ch { font-family: ui-monospace, monospace; font-size: 0.5rem; border: 1px solid var(--line); padding: 0.12rem 0.32rem; color: var(--muted); }
+	.ch.on { color: var(--ink); border-color: var(--ink); font-weight: 700; }
+	.ch.off { opacity: 0.45; text-decoration: line-through; }
+
+	/* prefs matrix */
+	.mx { display: grid; grid-template-columns: 1fr repeat(3, 74px); font-size: 0.7rem; }
+	.mx > div { padding: 0.4rem 0.9rem; border-bottom: 1px solid var(--line-lt); }
+	.mx .hd { font-family: ui-monospace, monospace; font-size: 0.53rem; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; background: #fbfaf7; }
+	.mx .cell { font-family: ui-monospace, monospace; font-size: 0.6rem; }
+	.mx .cell.on { color: var(--ink); font-weight: 700; }
+	.mx .cell.off { color: var(--line); }
+
+	/* health */
+	.hgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line-lt); }
+	.hcard { background: var(--card); padding: 0.75rem 0.9rem; }
+	.hcard .hl { font-family: ui-monospace, monospace; font-size: 0.52rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+	.hcard .hv { font-size: 1.15rem; font-weight: 700; margin: 0.2rem 0 0.1rem; }
+	.hcard .hv.ok { color: var(--green); } .hcard .hv.warn { color: var(--amber); } .hcard .hv.bad { color: var(--red); }
+	.hcard .hn { font-size: 0.6rem; color: var(--muted); }
+
+	/* change list */
+	.changes { border: 1px solid var(--line); background: var(--card); }
+	.changes .crow { display: grid; grid-template-columns: 150px 1fr; border-bottom: 1px solid var(--line-lt); }
+	.changes .crow:last-child { border-bottom: none; }
+	.changes .cl { font-family: ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 0.55rem 0.8rem; border-right: 1px solid var(--line-lt); }
+	.changes .cv { padding: 0.55rem 0.8rem; font-size: 0.74rem; line-height: 1.5; }
+	.changes .cv code { font-family: ui-monospace, monospace; font-size: 0.66rem; background: var(--amber-soft); padding: 0 0.3em; }
+	.todo-tag { font-family: ui-monospace, monospace; font-size: 0.52rem; border: 1px solid var(--amber); color: var(--amber); padding: 0.1rem 0.3rem; margin-right: 0.35rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ═══════════════════════════ 1 · AUDIT ═══════════════════════════ -->
+<div class="sect">
+	<span class="tag">Mock 1 of 3 · /audit</span>
+	<h2>Audit — one event stream, not one table</h2>
+	<p class="note">
+		The page reads a single <code>audit_events</code> stream unioned server-side from
+		<code>admin_audit</code> + <code>settings_audit</code> + <code>invoice_events</code> +
+		<code>application_activity</code> + <code>booking_events</code> + <code>lead_events</code> +
+		the newly instrumented writes (auth failures, MFA, role grants, refunds, exports, on-behalf).
+		Every event carries <code>actor</code> / <code>target</code> (typed) / <code>category</code> / <code>severity</code> —
+		which is what makes the filters, the pane and the alerts possible.
+	</p>
+
+	<div class="frame">
+		<div class="pagebar">
+			<div>
+				<h3>Audit</h3>
+				<div class="crumb">ops / administration / audit</div>
+			</div>
+			<div class="right">
+				<span class="live">LIVE TAIL</span>
+				<button class="btn ghost small">⚙ Alert rules (4)</button>
+				<button class="btn small">↓ Export query</button>
+			</div>
+		</div>
+
+		<div class="alerts">
+			<span class="lab">Watching</span>
+			<span class="arule"><span class="sw"></span>≥5 failed sign-ins / 10 min → page duty officer</span>
+			<span class="arule"><span class="sw"></span>Any role grant to manager+ → notify super admin</span>
+			<span class="arule"><span class="sw"></span>Session from new country → flag + email staff</span>
+			<span class="arule"><span class="sw"></span>Refund / void / manual payment → log + finance</span>
+		</div>
+
+		<div class="fbar">
+			<button class="chip on">All <span class="c">1,842</span></button>
+			<button class="chip">Access <span class="c">96</span></button>
+			<button class="chip">Auth <span class="c">431</span></button>
+			<button class="chip">Money <span class="c">218</span></button>
+			<button class="chip">Case <span class="c">560</span></button>
+			<button class="chip">Booking <span class="c">144</span></button>
+			<button class="chip">Settings <span class="c">303</span></button>
+			<button class="chip">Data <span class="c">90</span></button>
+			<button class="pick set">Actor: Efua A. ✕</button>
+			<button class="pick">Target: any</button>
+			<button class="pick">Last 7 days ▾</button>
+			<span class="urlnote">/audit?actor=efua&days=7 — filters live in the URL</span>
+		</div>
+
+		<div class="feed">
+			<div class="feedlist">
+				<div class="dayhead">Today — since you last looked (14 new)</div>
+				<div class="ev sel"><span class="t">10:42</span><span class="dot bad"></span><div><span class="who">Efua Asante</span> <span class="what">granted role <b>manager</b> to Kofi M.</span></div><span class="cat access">ACCESS</span></div>
+				<div class="ev"><span class="t">10:31</span><span class="dot warn"></span><div><span class="who">Ama Serwaa</span> <span class="what">failed sign-in ×3 (portal)</span></div><span class="cat auth">AUTH</span></div>
+				<div class="ev"><span class="t">10:18</span><span class="dot warn"></span><div><span class="who">Selorm K.</span> <span class="what">recorded manual payment ₵4,000 · INV-2025-0142</span></div><span class="cat money">MONEY</span></div>
+				<div class="ev"><span class="t">09:55</span><span class="dot info"></span><div><span class="who">Yaw Osei</span> <span class="what">moved case CN-2025-0891 to Visa · stage consent signed</span></div><span class="cat">CASE</span></div>
+				<div class="ev"><span class="t">09:12</span><span class="dot good"></span><div><span class="who">Adjoa M.</span> <span class="what">resolved request REQ-118 “Can't pay this week”</span></div><span class="cat">CASE</span></div>
+				<div class="dayhead">Yesterday</div>
+				<div class="ev"><span class="t">17:44</span><span class="dot bad"></span><div><span class="who">system</span> <span class="what">locked account k****@gmail.com — 5 failed sign-ins in 8 min</span></div><span class="cat auth">AUTH</span></div>
+				<div class="ev"><span class="t">16:02</span><span class="dot warn"></span><div><span class="who">Efua Asante</span> <span class="what">exported client directory CSV (2,431 rows)</span></div><span class="cat">DATA</span></div>
+				<div class="ev"><span class="t">14:20</span><span class="dot info"></span><div><span class="who">Adjoa M.</span> <span class="what">edited fee schedule — Visa assistance ₵2,500 → ₵2,800</span></div><span class="cat">SETTINGS</span></div>
+				<div class="ev"><span class="t">11:37</span><span class="dot info"></span><div><span class="who">Selorm K.</span> <span class="what">booked check-in for case CN-2025-0855 · Zoom</span></div><span class="cat">BOOKING</span></div>
+			</div>
+
+			<div class="pane new">
+				<h4>Granted role “manager” to Kofi M.</h4>
+				<div class="sub">10:42:18 · Tue 3 Feb · access · id a9f3…c2</div>
+				<dl class="kv">
+					<dt>Actor</dt><dd>Efua Asante · efua@… · staff</dd>
+					<dt>Target</dt><dd>Kofi Mensah · staff account</dd>
+					<dt>Device</dt><dd>Chrome 131 · Windows · 197.251.•.• (Accra)</dd>
+					<dt>UA</dt><dd class="mono" style="font-size:0.6rem">Mozilla/5.0 … Chrome/131</dd>
+				</dl>
+				<div class="diff">
+					<div class="dh">BEFORE → AFTER</div>
+					<div class="dr"><div class="old">role: coordinator</div><div class="newv">role: manager</div></div>
+					<div class="dr"><div class="old">modules: 6</div><div class="newv">modules: 9</div></div>
+				</div>
+				<div class="rel">
+					Related — same target:<br>
+					<a>09:58 · Kofi M. signed in (new device)</a><br>
+					<a>Jan 28 · invited by Efua Asante</a><br><br>
+					Integrity: row sealed · hash 8c4e… matches chain ✓<br>
+					Export: this event is in the current query — ↓ included
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<p class="note" style="margin-top:0.7rem">
+		Row click opens the pane (no modal repeating the row). <b>Severity dots</b> drive the eye:
+		grey = routine, amber = money/security-relevant, red = access change or lockout, green = resolution.
+		The <b>Integrity</b> line is real once rows are written append-only with a hash chain —
+		the page states it plainly instead of implying it.
+	</p>
+</div>
+
+<!-- ═══════════════════════════ 2 · AUTH ═══════════════════════════ -->
+<div class="sect">
+	<span class="tag">Mock 2 of 3 · /auth</span>
+	<h2>Authentication — Policy · Sessions · Events</h2>
+	<p class="note">
+		The long scroll becomes three tabs. <b>Policy</b> holds real settings (writes to
+		<code>auth_settings</code>, enforced by middleware + Better Auth config) with a confirm bar —
+		nothing saves on a mis-click. <b>Sessions</b> covers staff <i>and</i> clients.
+		<b>Events</b> is the auth slice of the audit stream — failures and lockouts included.
+	</p>
+
+	<div class="frame">
+		<div class="pagebar">
+			<div><h3>Authentication</h3><div class="crumb">ops / administration / authentication</div></div>
+		</div>
+		<div class="tabs">
+			<button class="tab on">Policy</button>
+			<button class="tab">Sessions <span class="n">23</span></button>
+			<button class="tab">Events <span class="n">4</span></button>
+		</div>
+
+		<div class="polgrid">
+			<div class="pol">
+				<div class="pl">Session lifetime</div>
+				<div class="pv"><input type="number" value="14"> <span class="unit">days · ops console</span></div>
+				<div class="pd">Was “30 days (Better Auth default)” — now a real setting. Applies to new sessions.</div>
+			</div>
+			<div class="pol">
+				<div class="pl">Idle timeout</div>
+				<div class="pv"><input type="number" value="8"> <span class="unit">hours · revoke on idle</span></div>
+				<div class="pd">Was “None enforced” — enforced by session heartbeat sweep.</div>
+			</div>
+			<div class="pol">
+				<div class="pl">Lockout</div>
+				<div class="pv"><input type="number" value="5"> <span class="unit">failures in</span> <input type="number" value="10"> <span class="unit">min → lock</span> <input type="number" value="15"> <span class="unit">min</span></div>
+				<div class="pd">Staff and portal share the rule; the Events tab shows who is locked.</div>
+			</div>
+			<div class="pol">
+				<div class="pl">Password rules</div>
+				<div class="pv"><b>min 12</b> <span class="unit">· breached-list check</span> <span class="pill green">ON</span></div>
+				<div class="pd">Rotation reminders for staff after <input type="number" value="180" style="width:56px"> days.</div>
+			</div>
+			<div class="pol">
+				<div class="pl">MFA grace period</div>
+				<div class="pv"><input type="number" value="7"> <span class="unit">days for new staff</span></div>
+				<div class="pd">Past grace → sign-in blocked until enrolled. Drives the “require by” date on the roster.</div>
+			</div>
+			<div class="pol">
+				<div class="pl">Remember this device</div>
+				<div class="pv"><input type="number" value="30"> <span class="unit">days · skips MFA on that device</span></div>
+				<div class="pd">Trusted-device cookie; revocable per session on the Sessions tab.</div>
+			</div>
+		</div>
+		<div class="savebar">
+			<span class="warn-t">2 unsaved changes — policy writes are audited</span>
+			<span style="flex:1"></span>
+			<button class="btn ghost small" style="color:#fff;border-color:#5a5a5e">Discard</button>
+			<button class="btn small" style="background:var(--amber);border-color:var(--amber)">Save policy</button>
+		</div>
+
+		<div class="tabs" style="border-top:1px solid var(--line)">
+			<button class="tab">Sessions · Staff <span class="n">14</span></button>
+			<button class="tab">Sessions · Clients <span class="n">9</span></button>
+			<button class="tab">Events</button>
+		</div>
+		<table class="tbl">
+			<tr><th>Who</th><th>Device</th><th>Location · IP</th><th>Signed in</th><th>Last active</th><th></th></tr>
+			<tr><td><b>Efua Asante</b> <span class="pill">this device</span></td><td>Chrome 131 · Windows</td><td>Accra · 197.251.•.•</td><td>Tue 08:12</td><td class="mono" style="font-size:0.6rem">now</td><td></td></tr>
+			<tr><td>Kofi Mensah</td><td>Safari · iPhone</td><td>Accra · 154.160.•.•</td><td>Tue 09:58</td><td class="mono" style="font-size:0.6rem">4m</td><td><span class="flag">⚑ new device</span></td></tr>
+			<tr><td>Selorm K.</td><td>Firefox · Linux</td><td>Kumasi · 41.66.•.•</td><td>Mon 14:02</td><td class="mono" style="font-size:0.6rem">2h</td><td><button class="btn ghost small">Revoke</button></td></tr>
+			<tr><td>Kofi Mensah</td><td>Chrome · Windows</td><td>Lagos · 105.112.•.•</td><td>Mon 22:41</td><td class="mono" style="font-size:0.6rem">yesterday</td><td><span class="flag">⚑ new country</span> <button class="btn warn small">Revoke</button></td></tr>
+			<tr><td colspan="6" style="text-align:center;padding:0.5rem"><button class="btn ghost small">Sign Kofi Mensah out everywhere</button> <span class="mono" style="font-size:0.55rem;color:var(--muted)">per-user — from this table, not the client directory</span></td></tr>
+		</table>
+
+		<div class="tabs" style="border-top:1px solid var(--line)">
+			<button class="tab">Events · auth slice</button>
+			<button class="tab" style="margin-left:auto">MFA roster → actions</button>
+		</div>
+		<table class="tbl">
+			<tr><th>When</th><th>Event</th><th>Who</th><th>Result</th><th></th></tr>
+			<tr><td class="mono" style="font-size:0.6rem">10:31</td><td>Sign-in failed ×3</td><td>ama@… (portal)</td><td><span class="pill amber">WATCH</span></td><td></td></tr>
+			<tr><td class="mono" style="font-size:0.6rem">07:55</td><td>Locked — 5 failures in 8 min</td><td>k****@gmail.com</td><td><span class="pill red">LOCKED</span></td><td><button class="btn ghost small">Unlock</button></td></tr>
+			<tr><td class="mono" style="font-size:0.6rem">09:58</td><td>Signed in · new device</td><td>Kofi Mensah</td><td><span class="pill green">OK</span></td><td></td></tr>
+			<tr><td class="mono" style="font-size:0.6rem">Yesterday</td><td>MFA enrolled (TOTP)</td><td>Adjoa M.</td><td><span class="pill green">OK</span></td><td></td></tr>
+			<tr>
+				<td colspan="5" style="padding:0.55rem 0.9rem;background:#fbfaf7">
+					<span class="mono" style="font-size:0.56rem;color:var(--muted)">MFA OUTSTANDING · 3 — </span>
+					<button class="btn ghost small">Send reminder ×3</button>
+					<button class="btn ghost small">Require by Fri</button>
+					<button class="btn ghost small">Reset MFA…</button>
+				</td>
+			</tr>
+		</table>
+	</div>
+</div>
+
+<!-- ═══════════════════════════ 3 · NOTIFICATIONS ═══════════════════════════ -->
+<div class="sect">
+	<span class="tag">Mock 3 of 3 · /notifications</span>
+	<h2>Notifications — Catalogue · Preferences · Log · Health</h2>
+	<p class="note">
+		The catalogue is generated from one <b>event registry in <code>packages/shared</code></b> —
+		every <code>notify()</code> call, every email renderer, every queued worker registers there,
+		so the page can never drift to seven rows again. <code>notification_preferences</code>
+		(the dead table) becomes the thing <code>notify()</code> reads before choosing channels.
+	</p>
+
+	<div class="frame">
+		<div class="pagebar">
+			<div><h3>Notifications</h3><div class="crumb">ops / administration / notifications</div></div>
+			<div class="right"><span class="live">WORKER · 40s ago</span></div>
+		</div>
+		<div class="tabs">
+			<button class="tab on">Catalogue <span class="n">31</span></button>
+			<button class="tab">Preferences</button>
+			<button class="tab">Log</button>
+			<button class="tab">Health</button>
+		</div>
+
+		<!-- Catalogue -->
+		<div>
+			<div class="cat-row" style="background:#fbfaf7">
+				<span class="mono" style="font-size:0.53rem;letter-spacing:0.1em;color:var(--muted)">EVENT → CHANNELS / AUDIENCE / TIMING</span>
+				<span></span><span></span><span></span><span></span>
+			</div>
+			<div class="cat-row">
+				<div><span class="en">invoice.milestone_due</span><br><span class="ed">Instalment due in 3 days → client + handler · digestable</span></div>
+				<span class="chans"><span class="ch on">IN-APP</span><span class="ch on">PUSH</span><span class="ch on">EMAIL</span></span>
+				<span class="pill">client</span>
+				<button class="btn ghost small">Edit copy…</button>
+				<button class="btn ghost small">▶ Test send</button>
+			</div>
+			<div class="cat-row">
+				<div><span class="en">chat.reply</span><br><span class="ed">Staff replied · delayed email if unseen in 5 min</span></div>
+				<span class="chans"><span class="ch on">IN-APP</span><span class="ch on">PUSH</span><span class="ch on">EMAIL+delay</span></span>
+				<span class="pill">client</span>
+				<button class="btn ghost small">Edit copy…</button>
+				<button class="btn ghost small">▶ Test send</button>
+			</div>
+			<div class="cat-row">
+				<div><span class="en">request.auto_assigned</span><br><span class="ed">Sweep routed an unclaimed request → agent</span></div>
+				<span class="chans"><span class="ch on">IN-APP</span><span class="ch off">PUSH</span><span class="ch off">EMAIL</span></span>
+				<span class="pill blue">staff</span>
+				<button class="btn ghost small">Edit copy…</button>
+				<button class="btn ghost small">▶ Test send</button>
+			</div>
+			<div class="cat-row">
+				<div><span class="en">document.reviewed</span><br><span class="ed">Officer accepted/rejected an upload</span></div>
+				<span class="chans"><span class="ch on">IN-APP</span><span class="ch on">PUSH</span><span class="ch on">EMAIL</span></span>
+				<span class="pill">client</span>
+				<button class="btn ghost small">Edit copy…</button>
+				<button class="btn ghost small">▶ Test send</button>
+			</div>
+			<div class="cat-row">
+				<div><span class="en">appointment.reminder</span><br><span class="ed">Before a booking — cadence editable here (was hard-coded 24h)</span></div>
+				<span class="chans"><span class="ch on">IN-APP</span><span class="ch on">EMAIL</span><span class="ch off">PUSH</span></span>
+				<span class="pill">client+staff</span>
+				<button class="btn ghost small">24h → edit</button>
+				<button class="btn ghost small">▶ Test send</button>
+			</div>
+			<div class="cat-row" style="background:#fbf7ec">
+				<div><span class="en" style="color:var(--muted)">… 26 more — grouped by domain: case · money · booking · chat · auth · marketing</span></div>
+				<span></span><span></span><span></span><span></span>
+			</div>
+		</div>
+
+		<!-- Preferences -->
+		<div class="tabs" style="border-top:1px solid var(--line)">
+			<button class="tab">Preferences — what a user can mute</button>
+			<span class="urlnote" style="align-self:center;padding-right:0.9rem">portal settings + staff profile write here; notify() reads it</span>
+		</div>
+		<div class="mx">
+			<div class="hd">Event group</div><div class="hd">In-app</div><div class="hd">Push</div><div class="hd">Email</div>
+			<div>Case progress & stage changes</div><div class="cell on">always</div><div class="cell on">opt</div><div class="cell on">opt</div>
+			<div>Money — invoices, receipts, due dates</div><div class="cell on">always</div><div class="cell on">opt</div><div class="cell on">opt</div>
+			<div>Chat replies</div><div class="cell on">always</div><div class="cell on">opt</div><div class="cell on">opt</div>
+			<div>Documents requested / reviewed</div><div class="cell on">always</div><div class="cell on">opt</div><div class="cell on">opt</div>
+			<div>Marketing & newsletters</div><div class="cell off">—</div><div class="cell off">—</div><div class="cell on">opt-out</div>
+			<div class="hd" style="grid-column:1/-1;padding-top:0.6rem">Quiet hours <span style="text-transform:none">— push held, email digested</span>: <b>21:00 → 07:00</b> &nbsp;·&nbsp; Daily digest: <b>07:30</b> &nbsp;·&nbsp; never muted: security & receipts</div>
+		</div>
+
+		<!-- Log -->
+		<div class="tabs" style="border-top:1px solid var(--line)">
+			<button class="tab">Log — all channels</button>
+			<span class="urlnote" style="align-self:center;padding-right:0.9rem">paged · filter by recipient / event / channel / status / date · resend · view rendered</span>
+		</div>
+		<table class="tbl">
+			<tr><th>When</th><th>To</th><th>Event · subject</th><th>Channel</th><th>Status</th><th></th></tr>
+			<tr><td class="mono" style="font-size:0.6rem">10:42</td><td>ama@…</td><td>chat.reply · “Adjoa replied…”</td><td><span class="ch on">EMAIL</span></td><td><span class="pill green">SENT</span></td><td><button class="btn ghost small">View</button></td></tr>
+			<tr><td class="mono" style="font-size:0.6rem">10:40</td><td>Kofi Mensah</td><td>request.auto_assigned</td><td><span class="ch on">IN-APP</span></td><td><span class="pill green">DELIVERED</span></td><td></td></tr>
+			<tr><td class="mono" style="font-size:0.6rem">10:12</td><td>ama@…</td><td>invoice.milestone_due</td><td><span class="ch on">PUSH</span></td><td><span class="pill amber">NO SUB</span></td><td></td></tr>
+			<tr><td class="mono" style="font-size:0.6rem">09:58</td><td>k****@gmail</td><td>auth.locked</td><td><span class="ch on">EMAIL</span></td><td><span class="pill red">BOUNCED</span></td><td><button class="btn ghost small">Retry</button> <button class="btn ghost small">View</button></td></tr>
+		</table>
+
+		<!-- Health -->
+		<div class="tabs" style="border-top:1px solid var(--line)"><button class="tab">Health</button></div>
+		<div class="hgrid">
+			<div class="hcard"><div class="hl">Delivery (7d)</div><div class="hv ok">98.2%</div><div class="hn">4,102 sent · 73 failed</div></div>
+			<div class="hcard"><div class="hl">Bounce rate</div><div class="hv warn">1.4%</div><div class="hn">58 bounces · Resend webhook</div></div>
+			<div class="hcard"><div class="hl">Queue depth</div><div class="hv ok">3</div><div class="hn">email · push · chatReply queues</div></div>
+			<div class="hcard"><div class="hl">Push subscriptions</div><div class="hv">212</div><div class="hn">active endpoints</div></div>
+		</div>
+	</div>
+</div>
+
+<!-- ═══════════════════════════ CHANGE LIST ═══════════════════════════ -->
+<div class="sect">
+	<span class="tag">What it takes</span>
+	<h2>Change list — one migration + one registry</h2>
+	<div class="changes">
+		<div class="crow"><div class="cl">Migration</div><div class="cv">
+			<code>audit_events</code> as a view over the six existing event tables +
+			new columns on <code>admin_audit</code> (<code>actor_type</code>, <code>target_type</code>,
+			<code>severity</code>, <code>prev_hash</code>, <code>hash</code>). <code>notification_log</code>
+			gains <code>channel</code>, <code>event</code>, <code>queued_at</code>, <code>delivered_at</code>.
+			<code>auth_settings</code> keys: <code>authPolicy</code> (lifetime/idle/lockout/password/mfaGrace/rememberDays),
+			<code>alertRules</code>. No new tables except optional <code>event_registry</code> overrides
+			(copy edits, channel toggles) — the registry itself is code in <code>packages/shared</code>.
+		</div></div>
+		<div class="crow"><div class="cl">Instrument</div><div class="cv">
+			~20 new <code>recordAdminEvent</code> sites: failed sign-in + lockout, MFA enrol/reset,
+			role & module grants, staff deactivate, CSV exports, impersonation/on-behalf,
+			refund/void/manual payment, plan changes, template edits, bulk imports.
+			Lockout middleware enforces the policy settings. Hash chain written on insert.
+		</div></div>
+		<div class="crow"><div class="cl">Endpoints</div><div class="cv">
+			<code>GET /audit/events</code> (actor/target/category/severity/date, cursor paging, facets with counts),
+			<code>GET /audit/export</code> (whole query, itself audited), <code>GET/PUT /auth-policy</code>,
+			<code>GET /sessions?kind=staff|client</code>, <code>POST /sessions/revoke-all</code>,
+			<code>POST /auth/unlock</code>, <code>POST /staff/:id/mfa-reminder|mfa-reset|mfa-require</code>,
+			<code>GET /notifications/catalogue</code>, <code>POST /notifications/test-send</code>,
+			<code>GET /notifications/log</code> (cursor), <code>POST /notifications/:id/resend</code>,
+			<code>GET /notifications/health</code>, <code>GET/PUT /notification-preferences</code> (client + staff).
+		</div></div>
+		<div class="crow"><div class="cl">Behaviour</div><div class="cv">
+			<code>notify()</code> reads <code>notification_preferences</code> before choosing channels —
+			in-app always on for security/receipts, push/email per user flags, quiet hours hold push,
+			daily digest batches opt-in events. Alert rules evaluated in the audit write path
+			(5-fail lockout already exists in the worker pattern).
+		</div></div>
+		<div class="crow"><div class="cl">Deferred</div><div class="cv">
+			<span class="todo-tag">LATER</span> SSO/SAML surface, IP allow-list, digest scheduling UI,
+			archive/cold-storage of audit rows, SIEM export. The registry + event stream are designed
+			so each lands without re-plumbing.
+		</div></div>
+	</div>
+</div>
+
+</div>
+</body>
+</html>

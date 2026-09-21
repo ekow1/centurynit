@@ -59,8 +59,12 @@ export type QueuedEmail = {
 	idempotencyKey: string;
 	/** Human-readable template name for the notification log (e.g. "Booking created"). */
 	template?: string;
+	/** Registry event type for the notification log (e.g. "invoice.raised"). Defaults to `template`. */
+	event?: string;
 	/** Business reference (booking ref, consultation ref) for the notification log. */
 	reference?: string;
+	/** Stamped by queueEmail — shown as queue lag in the log. */
+	queuedAt?: string;
 	/**
 	 * Attachments for the worker. `path` is sent as-is; `key` is a document-
 	 * storage object key the worker resolves to a fresh download URL at send

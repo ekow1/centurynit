@@ -22,6 +22,10 @@ export type EmailLogMeta = {
 	idempotencyKey?: string;
 	/** Which attempt this send was — from the BullMQ job when queued. */
 	attempts?: number;
+	/** Registry event type (e.g. "invoice.raised") for log filtering. */
+	event?: string;
+	/** When the job entered the queue — shows queue lag in the log. */
+	queuedAt?: Date;
 };
 
 /**
@@ -35,6 +39,8 @@ async function logDelivery(e: {
 	subject: string;
 	status: "sent" | "failed";
 	errorMessage?: string;
+	bodyHtml?: string | null;
+	bodyText?: string | null;
 } & EmailLogMeta): Promise<void> {
 	try {
 		const values = {
@@ -46,6 +52,11 @@ async function logDelivery(e: {
 			idempotencyKey: e.idempotencyKey ?? null,
 			errorMessage: e.errorMessage ?? null,
 			attempts: e.attempts ?? 1,
+			channel: "email",
+			event: e.event ?? e.template ?? null,
+			queuedAt: e.queuedAt ?? null,
+			bodyHtml: e.bodyHtml ?? null,
+			bodyText: e.bodyText ?? null,
 			sentAt: new Date(),
 		};
 		if (e.idempotencyKey) {
@@ -63,6 +74,11 @@ async function logDelivery(e: {
 						reference: values.reference,
 						recipient: values.recipient,
 						subject: values.subject,
+						channel: values.channel,
+						event: values.event,
+						queuedAt: values.queuedAt,
+						bodyHtml: values.bodyHtml,
+						bodyText: values.bodyText,
 					},
 				});
 		} else {
@@ -108,7 +124,7 @@ export async function sendEmail({
 			return { id: `console-${Date.now()}` };
 		}
 		console.warn("[email] RESEND_API_KEY is not configured.", { to, subject });
-		await logDelivery({ to, subject, status: "failed", errorMessage: "RESEND_API_KEY is not configured", ...log });
+		await logDelivery({ to, subject, status: "failed", errorMessage: "RESEND_API_KEY is not configured", bodyHtml: html, bodyText: text, ...log });
 		throw new HttpError(
 			400,
 			"EMAIL_NOT_CONFIGURED",
@@ -130,7 +146,7 @@ export async function sendEmail({
 
 	if (res.error) {
 		console.error(`[email] Resend delivery error to ${to} (from ${from}):`, res.error);
-		await logDelivery({ to, subject, status: "failed", errorMessage: res.error.message, ...log });
+		await logDelivery({ to, subject, status: "failed", errorMessage: res.error.message, bodyHtml: html, bodyText: text, ...log });
 		throw new HttpError(
 			400,
 			"EMAIL_DELIVERY_FAILED",
@@ -138,7 +154,7 @@ export async function sendEmail({
 		);
 	}
 
-	await logDelivery({ to, subject, status: "sent", ...log });
+	await logDelivery({ to, subject, status: "sent", bodyHtml: html, bodyText: text, ...log });
 	console.log(`[email] Successfully sent to ${to} (id: ${res.data?.id})`);
 	return res.data;
 }

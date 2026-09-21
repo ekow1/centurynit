@@ -106,7 +106,7 @@ export const automationSweepQueue = new Queue("automationSweep", { connection })
  * id rather than sending a second copy (§14).
  */
 export async function queueEmail(message: QueuedEmail): Promise<void> {
-	await addEmailJob(message);
+	await addEmailJob({ ...message, queuedAt: new Date().toISOString() });
 }
 
 /* ── Client reply emails ────────────────────────────────────────────────── */

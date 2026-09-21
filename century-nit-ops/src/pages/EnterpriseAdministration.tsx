@@ -4,7 +4,7 @@ import { CmsManager } from "./CmsManager";
 import { useOpsAuth, ROLE_LABELS, type OpsRole } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
 import { OPS_BRANCHES, staffBranchName } from "century-nit-core/ops";
-import { ApiError, staffApi, notificationsApi, type NotificationLogItem } from "century-nit-core/api";
+import { ApiError, staffApi, notificationsApi, auditApi, type NotificationLogItem, type AuditEvent, type AuthPolicy, type NotificationEventCatalogueItem, type NotificationHealth, type NotificationPreferences } from "century-nit-core/api";
 import { MODULE_GROUPS, API_PREFIX, CAPABILITIES, defaultPermissionsOf, type Capability, type OpsModule, type SystemRole } from "century-nit-shared";
 import { apiFetch, getAuthSettings, updateAuthSettings as updateAuthSettingsApi, type AuthSettingsResponse } from "../lib/api";
 import { PlatformSettings } from "./PlatformSettings";
@@ -2081,9 +2081,16 @@ function AuthSettings() {
 		id: string; email: string; name: string; role: string; ip: string | null;
 		userAgent: string | null; createdAt: string; expiresAt: string; current: boolean;
 	}[]>([]);
-	const [signInEvents, setSignInEvents] = useState<
-		{ id: string; action: string; actorEmail: string | null; ip: string | null; at: string }[]
+	const [signInEvents, setSignInEvents] = useState<AuditEvent[]>([]);
+	const [clientSessionRows, setClientSessionRows] = useState<
+		{ id: string; userId: string; name: string; email: string; ip: string | null; userAgent: string | null; createdAt: string; expiresAt: string }[]
 	>([]);
+	const [tab, setTab] = useState<"policy" | "sessions" | "events">("policy");
+	const [authPolicy, setAuthPolicy] = useState<AuthPolicy | null>(null);
+	const [policyDraft, setPolicyDraft] = useState<Partial<AuthPolicy>>({});
+	const [policySaving, setPolicySaving] = useState(false);
+	const [policySaved, setPolicySaved] = useState(false);
+	const [unlocking, setUnlocking] = useState<string | null>(null);
 	const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
@@ -2096,16 +2103,18 @@ function AuthSettings() {
 			getAuthSettings(),
 			staffApi.authStats(),
 			staffApi.sessions().catch(() => ({ sessions: [] })),
-			apiFetch<{ entries: { id: string; action: string; actorEmail: string | null; ip: string | null; at: string }[] }>(
-				`${API_PREFIX}/settings/admin-audit?category=Authentication&limit=8`,
-			).catch(() => ({ entries: [] })),
+			auditApi.events({ category: "Authentication", limit: 40 }).catch(() => ({ entries: [], total: 0, nextBefore: null, facets: {} })),
+			auditApi.authPolicy().catch(() => null),
+			auditApi.clientSessions().catch(() => ({ sessions: [] })),
 		])
-			.then(([s, st, se, ev]) => {
+			.then(([s, st, se, ev, pol, cs]) => {
 				if (!active) return;
 				setSettings(s);
 				setStats(st);
 				setSessionRows(se.sessions);
 				setSignInEvents(ev.entries);
+				setAuthPolicy(pol);
+				setClientSessionRows(cs.sessions);
 				setError(null);
 			})
 			.catch((e: unknown) => {
@@ -2141,6 +2150,35 @@ function AuthSettings() {
 			setError(e instanceof Error ? e.message : "Could not save settings.");
 		} finally {
 			setSaving(false);
+		}
+	}
+
+	async function savePolicy() {
+		if (!authPolicy || Object.keys(policyDraft).length === 0) return;
+		setPolicySaving(true);
+		setPolicySaved(false);
+		try {
+			const next = await auditApi.setAuthPolicy(policyDraft);
+			setAuthPolicy(next);
+			setPolicyDraft({});
+			setPolicySaved(true);
+			setTimeout(() => setPolicySaved(false), 3000);
+		} catch (e: unknown) {
+			setError(e instanceof Error ? e.message : "Could not save the policy.");
+		} finally {
+			setPolicySaving(false);
+		}
+	}
+
+	async function unlockAccount(email: string) {
+		setUnlocking(email);
+		try {
+			await auditApi.unlock(email);
+			setSignInEvents((prev) => prev.filter((e) => !(e.action.startsWith("Account locked") && e.targetLabel === email)));
+		} catch (e: unknown) {
+			setError(e instanceof Error ? e.message : "Could not unlock the account.");
+		} finally {
+			setUnlocking(null);
 		}
 	}
 
@@ -2188,7 +2226,28 @@ function AuthSettings() {
 					✓ Settings saved. Changes take effect on next login.
 				</div>
 			)}
+			{policySaved && (
+				<div className="admin-flash admin-flash--ok" role="status">
+					✓ Policy saved. Applies to new sign-ins immediately.
+				</div>
+			)}
 
+			{/* Policy · Sessions · Events */}
+			<div className="admin-env-tabs" style={{ marginBottom: "1.25rem" }}>
+				{(["policy", "sessions", "events"] as const).map((t) => (
+					<button
+						key={t}
+						type="button"
+						onClick={() => setTab(t)}
+						className={`admin-env-tab${tab === t ? " admin-env-tab--active" : ""}`}
+					>
+						{t === "policy" ? "Policy" : t === "sessions" ? `Sessions · ${sessionRows.length + clientSessionRows.length}` : "Events"}
+					</button>
+				))}
+			</div>
+
+			{tab === "policy" && (
+			<>
 			{/* Sign-in policy at a glance + who still owes MFA */}
 			{stats && (
 				<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
@@ -2414,7 +2473,54 @@ function AuthSettings() {
 				</div>
 			</div>
 
-			{/* Active sessions + sign-in events — both real streams */}
+			{/* Session & password policy — real settings, confirm-on-save */}
+			{authPolicy && (
+				<div className="card" style={{ marginBottom: "1.5rem" }}>
+					<div className="admin-section-head" style={{ marginBottom: "0.75rem" }}>
+						<h2 className="section-title" style={{ margin: 0 }}>Session &amp; password policy</h2>
+						<span className="mono muted" style={{ fontSize: "0.62rem" }}>applies to new sign-ins</span>
+					</div>
+					<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.85rem" }}>
+						<PolicyNum label="Session lifetime (days)" hint="How long a sign-in lasts" value={policyDraft.sessionDays ?? authPolicy.sessionDays} min={1} max={90} onChange={(v) => setPolicyDraft((p) => ({ ...p, sessionDays: v }))} />
+						<PolicyNum label="Idle timeout (hours)" hint="Auto sign-out when idle" value={policyDraft.idleHours ?? authPolicy.idleHours} min={1} max={72} onChange={(v) => setPolicyDraft((p) => ({ ...p, idleHours: v }))} />
+						<PolicyNum label="Lockout threshold" hint="Failures before lock" value={policyDraft.lockoutThreshold ?? authPolicy.lockoutThreshold} min={3} max={20} onChange={(v) => setPolicyDraft((p) => ({ ...p, lockoutThreshold: v }))} />
+						<PolicyNum label="Lockout window (min)" hint="Failures counted inside" value={policyDraft.lockoutWindowMin ?? authPolicy.lockoutWindowMin} min={5} max={60} onChange={(v) => setPolicyDraft((p) => ({ ...p, lockoutWindowMin: v }))} />
+						<PolicyNum label="Lockout duration (min)" hint="How long the lock holds" value={policyDraft.lockoutMinutes ?? authPolicy.lockoutMinutes} min={5} max={1440} onChange={(v) => setPolicyDraft((p) => ({ ...p, lockoutMinutes: v }))} />
+						<PolicyNum label="Password min length" hint="New passwords only" value={policyDraft.passwordMinLength ?? authPolicy.passwordMinLength} min={8} max={64} onChange={(v) => setPolicyDraft((p) => ({ ...p, passwordMinLength: v }))} />
+						<PolicyNum label="MFA grace (days)" hint="Require-by deadline for staff" value={policyDraft.mfaGraceDays ?? authPolicy.mfaGraceDays} min={0} max={30} onChange={(v) => setPolicyDraft((p) => ({ ...p, mfaGraceDays: v }))} />
+						<PolicyNum label="Remember device (days)" hint="Skip MFA on a trusted device" value={policyDraft.rememberDeviceDays ?? authPolicy.rememberDeviceDays} min={0} max={90} onChange={(v) => setPolicyDraft((p) => ({ ...p, rememberDeviceDays: v }))} />
+						<label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "var(--text-sm)", padding: "0.5rem 0" }}>
+							<input
+								type="checkbox"
+								checked={policyDraft.breachedCheck ?? authPolicy.breachedCheck}
+								onChange={(e) => setPolicyDraft((p) => ({ ...p, breachedCheck: e.target.checked }))}
+								disabled={policySaving}
+							/>
+							Reject breached passwords
+						</label>
+						<PolicyNum label="Staff rotation (days)" hint="Password age for staff" value={policyDraft.staffRotationDays ?? authPolicy.staffRotationDays} min={30} max={365} onChange={(v) => setPolicyDraft((p) => ({ ...p, staffRotationDays: v }))} />
+					</div>
+					{Object.keys(policyDraft).length > 0 && (
+						<div style={{ display: "flex", gap: "0.5rem", marginTop: "0.9rem", borderTop: "1px solid var(--border-light)", paddingTop: "0.75rem" }}>
+							<button type="button" className="btn btn--primary btn--sm" onClick={() => void savePolicy()} disabled={policySaving}>
+								{policySaving ? "Saving…" : `Save policy (${Object.keys(policyDraft).length} change${Object.keys(policyDraft).length === 1 ? "" : "s"})`}
+							</button>
+							<button type="button" className="btn btn--ghost btn--sm" onClick={() => setPolicyDraft({})} disabled={policySaving}>
+								Discard
+							</button>
+						</div>
+					)}
+					<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem" }}>
+						Password hashing stays Scrypt (Better Auth); reset links keep their 1-hour expiry — neither is editable.
+					</p>
+				</div>
+			)}
+			</>
+			)}
+
+			{tab === "sessions" && (
+			<>
+			{/* Staff + client sessions — revoke stays per-row / per-user */}
 			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "1rem", marginBottom: "1.5rem", alignItems: "start" }}>
 				<div className="card" style={{ marginBottom: 0, padding: 0, overflow: "hidden" }}>
 					<div style={{ padding: "0.85rem 1.25rem", borderBottom: "1px solid var(--border-light)" }}>
@@ -2473,29 +2579,86 @@ function AuthSettings() {
 				</div>
 
 				<div className="card" style={{ marginBottom: 0, padding: 0, overflow: "hidden" }}>
-					<div style={{ padding: "0.85rem 1.25rem", borderBottom: "1px solid var(--border-light)" }}>
-						<h2 className="section-title" style={{ margin: 0, fontSize: "0.95rem" }}>Recent sign-in events</h2>
+					<div style={{ padding: "0.85rem 1.25rem", borderBottom: "1px solid var(--border-light)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+						<h2 className="section-title" style={{ margin: 0, fontSize: "0.95rem" }}>Active client sessions</h2>
+						<span className="portal-pill portal-pill--hollow">{clientSessionRows.length}</span>
 					</div>
-					{signInEvents.length === 0 ? (
-						<p className="muted" style={{ fontSize: "var(--text-sm)", padding: "1rem 1.25rem" }}>No sign-in events recorded yet — the stream fills as staff sign in.</p>
+					{clientSessionRows.length === 0 ? (
+						<p className="muted" style={{ fontSize: "var(--text-sm)", padding: "1rem 1.25rem" }}>No client sessions right now.</p>
 					) : (
-						<ul style={{ listStyle: "none", padding: "0.3rem 0", margin: 0 }}>
-							{signInEvents.map((e) => (
-								<li key={e.id} className="cl-kv" style={{ borderBottom: "1px solid var(--border-light)", fontSize: "var(--text-xs)" }}>
-									<span className="cl-kv__k mono muted">{new Date(e.at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>
-									<span>{e.actorEmail ?? "unknown"} · {e.ip ?? "—"}</span>
+						<ul style={{ listStyle: "none", padding: "0.3rem 0", margin: 0, maxHeight: "26rem", overflow: "auto" }}>
+							{clientSessionRows.map((r) => (
+								<li key={r.id} className="cl-kv" style={{ borderBottom: "1px solid var(--border-light)", fontSize: "var(--text-xs)" }}>
+									<span className="cl-kv__k" style={{ fontWeight: 600 }}>
+										{r.name}
+										<span className="muted" style={{ display: "block", fontWeight: 400 }}>{r.email}</span>
+									</span>
+									<span className="muted" style={{ textAlign: "right" }}>
+										{shortUserAgent(r.userAgent)} · {r.ip ?? "—"}
+										<span className="mono" style={{ display: "block", fontSize: "0.62rem" }}>
+											in {new Date(r.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+										</span>
+									</span>
 								</li>
 							))}
 						</ul>
 					)}
 					<div style={{ borderTop: "1px solid var(--border-light)", padding: "0.5rem 1.25rem" }}>
-						<Link to="/audit" className="dash-link">full log → /audit</Link>
+						<Link to="/clients" className="dash-link">revoke per client → /clients</Link>
 					</div>
 				</div>
 			</div>
+			</>
+			)}
+
+			{tab === "events" && (
+			<>
+			{/* The auth slice of the audit stream — successes, failures, lockouts */}
+			<div className="card" style={{ marginBottom: "1.5rem", padding: 0, overflow: "hidden" }}>
+				<div style={{ padding: "0.85rem 1.25rem", borderBottom: "1px solid var(--border-light)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+					<h2 className="section-title" style={{ margin: 0, fontSize: "0.95rem" }}>Authentication events</h2>
+					<Link to="/audit?category=Authentication" className="dash-link">full feed → /audit</Link>
+				</div>
+				{signInEvents.length === 0 ? (
+					<p className="muted" style={{ fontSize: "var(--text-sm)", padding: "1rem 1.25rem" }}>No auth events yet — sign-ins, failures and lockouts land here.</p>
+				) : (
+					<ul style={{ listStyle: "none", padding: "0.3rem 0", margin: 0, maxHeight: "30rem", overflow: "auto" }}>
+						{signInEvents.map((e) => {
+							const locked = e.action.startsWith("Account locked");
+							return (
+								<li key={`${e.source}-${e.id}`} className="cl-kv" style={{ borderBottom: "1px solid var(--border-light)", fontSize: "var(--text-xs)", alignItems: "center" }}>
+									<span className="cl-kv__k">
+										<span className="mono muted">{new Date(e.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+										<span style={{ display: "block" }}>
+											<span style={{ color: e.severity === "bad" ? "#b91c1c" : e.severity === "warn" ? "#b45309" : "inherit" }}>●</span>{" "}
+											{e.action}
+										</span>
+									</span>
+									<span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+										<span className="muted">{e.actorLabel} · {e.ip ?? "—"}</span>
+										{locked && e.targetLabel && (
+											<button
+												type="button"
+												className="dash-link"
+												style={{ background: "none", border: "1px solid var(--border)", padding: "0.15rem 0.5rem", cursor: "pointer" }}
+												disabled={unlocking === e.targetLabel}
+												onClick={() => void unlockAccount(e.targetLabel!)}
+											>
+												{unlocking === e.targetLabel ? "unlocking…" : "unlock"}
+											</button>
+										)}
+									</span>
+								</li>
+							);
+						})}
+					</ul>
+				)}
+			</div>
+			</>
+			)}
 
 			{/* MFA roster — who is and isn't enrolled */}
-			{stats && stats.mfaRoster.length > 0 && (
+			{tab === "policy" && stats && stats.mfaRoster.length > 0 && (
 				<div className="card" style={{ marginBottom: "1.5rem" }}>
 					<h2 className="section-title mb-3">MFA Roster</h2>
 					<p className="muted mb-3" style={{ fontSize: "var(--text-sm)" }}>
@@ -2536,24 +2699,36 @@ function AuthSettings() {
 				</div>
 			)}
 
-			{/* Session & Password Policy */}
-			<div className="card">
-				<h2 className="section-title mb-3">Session & Password Policy</h2>
-				<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-						<Row label="Session expiry" value="30 days (Better Auth default)" />
-						<Row label="Idle timeout" value="None enforced" />
-					</ul>
-					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-						<Row label="Password hashing" value="Scrypt (Better Auth)" />
-						<Row label="Password reset" value="Email link, 1-hour expiry" />
-					</ul>
-				</div>
-				<p className="muted mt-3" style={{ fontSize: "var(--text-xs)" }}>
-					These are code-defined defaults and cannot be changed from this page.
-				</p>
-			</div>
 		</>
+	);
+}
+
+/** A numbered policy row — label, hint, and a bounded number input. */
+function PolicyNum({ label, hint, value, min, max, onChange }: {
+	label: string;
+	hint: string;
+	value: number;
+	min: number;
+	max: number;
+	onChange: (v: number) => void;
+}) {
+	return (
+		<label style={{ display: "block" }}>
+			<span style={{ fontWeight: 500, fontSize: "var(--text-sm)", display: "block" }}>{label}</span>
+			<span className="muted" style={{ fontSize: "var(--text-xs)", display: "block", marginBottom: "0.25rem" }}>{hint}</span>
+			<input
+				type="number"
+				className="input input--sm input--full-border"
+				style={{ width: "6rem" }}
+				value={value}
+				min={min}
+				max={max}
+				onChange={(e) => {
+					const v = Number(e.target.value);
+					if (Number.isFinite(v)) onChange(Math.min(max, Math.max(min, Math.round(v))));
+				}}
+			/>
+		</label>
 	);
 }
 
@@ -2662,140 +2837,426 @@ function SiteSettings() {
 
 /* ─── System notifications ─── */
 
-/* ─── System notifications ─── */
-
-const REAL_TEMPLATES = [
-	{ name: "Booking Received", trigger: "Client books a consultation", channel: "Email" },
-	{ name: "New Booking Awaiting Assignment", trigger: "New booking arrives unassigned", channel: "Email" },
-	{ name: "Appointment Confirmed", trigger: "Staff assigned to booking", channel: "Email" },
-	{ name: "Consultation Assigned", trigger: "Consultation assigned without booking", channel: "Email" },
-	{ name: "Appointment Rescheduled", trigger: "Booking time changed", channel: "Email" },
-	{ name: "Appointment Cancelled", trigger: "Booking or consultation cancelled", channel: "Email" },
-	{ name: "Appointment Reminder", trigger: "24 hours before appointment", channel: "Email" },
-];
-
 function SystemNotifications() {
+	const [tab, setTab] = useState<"catalogue" | "preferences" | "log" | "health">("catalogue");
+	const [catalogue, setCatalogue] = useState<NotificationEventCatalogueItem[]>([]);
+	const [health, setHealth] = useState<NotificationHealth | null>(null);
 	const [logs, setLogs] = useState<NotificationLogItem[]>([]);
 	const [stats, setStats] = useState<{ total: number; sent: number; failed: number }>({ total: 0, sent: 0, failed: 0 });
+	const [nextBefore, setNextBefore] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
+	const [loadingMore, setLoadingMore] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [statusFilter, setStatusFilter] = useState<"all" | "sent" | "failed">("all");
+	const [channelFilter, setChannelFilter] = useState<"all" | "email" | "in_app" | "push">("all");
+	const [logSearch, setLogSearch] = useState("");
+	const [debouncedSearch, setDebouncedSearch] = useState("");
+	const [viewing, setViewing] = useState<{ subject: string; recipient: string; bodyHtml: string | null; bodyText: string | null; errorMessage: string | null } | null>(null);
+	const [resending, setResending] = useState<string | null>(null);
+	const [resentIds, setResentIds] = useState<Set<string>>(new Set());
+	const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+	const [prefsSaving, setPrefsSaving] = useState(false);
+	const [prefsSaved, setPrefsSaved] = useState(false);
+
+	useEffect(() => {
+		const t = window.setTimeout(() => setDebouncedSearch(logSearch.trim()), 350);
+		return () => window.clearTimeout(t);
+	}, [logSearch]);
+
+	useEffect(() => {
+		notificationsApi.catalogue().then((r) => setCatalogue(r.events)).catch(() => setCatalogue([]));
+		notificationsApi.health().then(setHealth).catch(() => setHealth(null));
+		notificationsApi.preferences().then(setPrefs).catch(() => setPrefs(null));
+	}, []);
+
+	const logQuery = useMemo(
+		() => ({
+			limit: 50,
+			status: statusFilter === "all" ? undefined : statusFilter,
+			channel: channelFilter === "all" ? undefined : channelFilter,
+			q: debouncedSearch || undefined,
+		}),
+		[statusFilter, channelFilter, debouncedSearch],
+	);
 
 	useEffect(() => {
 		let active = true;
-		const filter = statusFilter === "all" ? undefined : statusFilter;
+		setLoading(true);
 		notificationsApi
-			.log(50, filter)
+			.log(logQuery)
 			.then((res) => {
 				if (!active) return;
 				setLogs(res.notifications);
 				setStats({ total: res.total, sent: res.sent, failed: res.failed });
+				setNextBefore(res.nextBefore);
 				setError(null);
 			})
 			.catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Could not load notifications."); })
 			.finally(() => { if (active) setLoading(false); });
 		return () => { active = false; };
-	}, [statusFilter]);
+	}, [logQuery]);
+
+	async function loadMoreLogs() {
+		if (!nextBefore) return;
+		setLoadingMore(true);
+		try {
+			const res = await notificationsApi.log({ ...logQuery, before: nextBefore });
+			setLogs((prev) => [...prev, ...res.notifications]);
+			setNextBefore(res.nextBefore);
+		} finally {
+			setLoadingMore(false);
+		}
+	}
+
+	async function viewEntry(id: string) {
+		try {
+			const r = await notificationsApi.logEntry(id);
+			setViewing(r);
+		} catch {
+			setError("Could not load the rendered message.");
+		}
+	}
+
+	async function resend(id: string) {
+		setResending(id);
+		try {
+			await notificationsApi.resendLog(id);
+			setResentIds((prev) => new Set(prev).add(id));
+		} catch (e: unknown) {
+			setError(e instanceof Error ? e.message : "Resend failed.");
+		} finally {
+			setResending(null);
+		}
+	}
+
+	async function savePrefs(patch: Partial<NotificationPreferences>) {
+		setPrefsSaving(true);
+		setPrefsSaved(false);
+		try {
+			const next = await notificationsApi.setPreferences(patch);
+			setPrefs(next);
+			setPrefsSaved(true);
+			setTimeout(() => setPrefsSaved(false), 2500);
+		} catch {
+			setError("Could not save preferences.");
+		} finally {
+			setPrefsSaving(false);
+		}
+	}
+
+	function flagFor(type: string, channel: "inApp" | "push" | "email"): boolean {
+		return prefs?.channelFlags?.[type]?.[channel] !== false;
+	}
+
+	function toggleFlag(type: string, channel: "inApp" | "push" | "email") {
+		if (!prefs) return;
+		const cur = flagFor(type, channel);
+		void savePrefs({ channelFlags: { [type]: { ...(prefs.channelFlags?.[type] ?? {}), [channel]: !cur } } });
+	}
+
+	const mailable = useMemo(() => catalogue.filter((e) => e.channels.includes("email")), [catalogue]);
 
 	return (
 		<>
-			<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
-				<Stat label="Total Sent" value={String(stats.total)} note="All time" />
-				<Stat label="Delivered" value={String(stats.sent)} note="Successfully sent" />
-				<Stat label="Failed" value={String(stats.failed)} note="Delivery errors" inverted={stats.failed > 0} />
-				<Stat label="Templates" value={String(REAL_TEMPLATES.length)} note="Email templates" />
+			<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "1.25rem" }}>
+				<Stat label="Events" value={String(catalogue.length || "—")} note="In the shared registry" />
+				<Stat label="Delivered 24h" value={health ? String(health.sent24h) : "—"} note={health?.deliveryRate24h != null ? `${health.deliveryRate24h}% delivery` : "All deliveries"} />
+				<Stat label="Failed 24h" value={health ? String(health.failed24h) : "—"} note="Delivery errors" inverted={!!health && health.failed24h > 0} />
+				<Stat label="Queue" value={health ? String(health.queueWaiting) : "—"} note={health ? `${health.queueFailed} failed jobs` : "Waiting emails"} />
 			</div>
 
-			<div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: "2rem" }}>
-				<div style={{ padding: "1.25rem 1.25rem 0.5rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-					<h2 className="section-title">Email Templates</h2>
-				</div>
-				<p className="muted" style={{ fontSize: "var(--text-sm)", padding: "0 1.25rem 0.75rem" }}>
-					Templates are code-defined and sent automatically at the events described below. They cannot be edited from this page.
-				</p>
-				<div className="ops-table-wrap">
-					<table className="admin-table">
-						<thead>
-							<tr>
-								<th>Template</th>
-								<th>Trigger</th>
-								<th>Channel</th>
-							</tr>
-						</thead>
-						<tbody>
-							{REAL_TEMPLATES.map((t) => (
-								<tr key={t.name}>
-									<td style={{ fontWeight: 500 }}>{t.name}</td>
-									<td className="muted">{t.trigger}</td>
-									<td>{t.channel}</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
-				</div>
+			<div className="admin-env-tabs" style={{ marginBottom: "1.25rem" }}>
+				{(["catalogue", "preferences", "log", "health"] as const).map((t) => (
+					<button
+						key={t}
+						type="button"
+						onClick={() => setTab(t)}
+						className={`admin-env-tab${tab === t ? " admin-env-tab--active" : ""}`}
+					>
+						{t === "catalogue" ? `Catalogue · ${catalogue.length}` : t === "preferences" ? "Preferences" : t === "log" ? "Delivery log" : "Health"}
+					</button>
+				))}
 			</div>
 
-			<div className="card" style={{ padding: 0, overflow: "hidden" }}>
-				<div style={{ padding: "1.25rem 1.25rem 0.75rem", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
-					<h2 className="section-title">Delivery Log</h2>
-					<div style={{ display: "flex", gap: "0.25rem" }}>
-						{(["all", "sent", "failed"] as const).map((s) => (
-							<button
-								key={s}
-								className={`btn btn--sm ${statusFilter === s ? "btn--primary" : "btn--ghost"}`}
-								onClick={() => setStatusFilter(s)}
-							>
-								{s === "all" ? "All" : s === "sent" ? "Delivered" : "Failed"}
-							</button>
-						))}
+			{tab === "catalogue" && (
+				<div className="card" style={{ padding: 0, overflow: "hidden" }}>
+					<div style={{ padding: "1rem 1.25rem 0.75rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+						<h2 className="section-title" style={{ margin: 0 }}>Event catalogue</h2>
+						<span className="mono muted" style={{ fontSize: "0.62rem" }}>generated from the shared registry — it can't drift</span>
 					</div>
-				</div>
-				{loading ? (
-					<p className="muted" style={{ padding: "1.25rem" }}>Loading delivery log…</p>
-				) : error ? (
-					<p className="ops-modal__error" role="alert" style={{ margin: "1.25rem" }}>{error}</p>
-				) : logs.length === 0 ? (
-					<p className="muted" style={{ padding: "1.25rem" }}>No notifications sent yet. Emails will appear here when bookings are created, assigned, rescheduled, or cancelled.</p>
-				) : (
 					<div className="ops-table-wrap">
 						<table className="admin-table">
 							<thead>
 								<tr>
-									<th>Recipient</th>
-									<th>Subject</th>
-									<th>Template</th>
-									<th>Status</th>
-									<th>Sent</th>
-									<th>Error</th>
+									<th>Event</th>
+									<th>Audience</th>
+									<th>Channels</th>
+									<th>Timing</th>
+									<th></th>
 								</tr>
 							</thead>
 							<tbody>
-								{logs.map((n) => (
-									<tr key={n.id}>
-										<td className="admin-table__mono" style={{ fontSize: "var(--text-xs)" }}>{n.recipient}</td>
-										<td style={{ fontWeight: 500 }}>{n.subject}</td>
-										<td className="muted">{n.template ?? "—"}</td>
-										<td>
-											<span
-												className={`portal-pill${n.status === "sent" ? "" : " portal-pill--hollow"}`}
-												style={n.status === "sent" ? { background: "var(--foreground)", color: "var(--background)", fontSize: "var(--text-xs)" } : { fontSize: "var(--text-xs)", textDecoration: "underline", textDecorationStyle: "wavy" }}
-											>
-												{n.status === "sent" ? "Delivered" : "Failed"}
-											</span>
-										</td>
-										<td className="muted" style={{ fontSize: "var(--text-xs)" }}>
-											{new Date(n.sentAt).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}
-										</td>
-										<td className="muted" style={{ fontSize: "var(--text-xs)", maxWidth: "18rem" }}>
-											{n.status === "sent" ? "—" : (n.errorMessage ?? "delivery failed")}
-										</td>
-									</tr>
-								))}
+								{catalogue.length === 0 ? (
+									<tr><td colSpan={5} className="muted" style={{ padding: "2rem", textAlign: "center" }}>Loading the registry…</td></tr>
+								) : (
+									catalogue.map((e) => (
+										<tr key={e.type}>
+											<td>
+												<code className="mono" style={{ fontSize: "0.72rem", fontWeight: 600 }}>{e.type}</code>
+												<span className="muted" style={{ display: "block", fontSize: "var(--text-xs)" }}>{e.label}</span>
+											</td>
+											<td className="muted" style={{ fontSize: "var(--text-xs)" }}>{e.audience}</td>
+											<td>
+												<span style={{ display: "flex", gap: "0.3rem" }}>
+													{e.channels.map((ch) => (
+														<span key={ch} className="portal-pill portal-pill--hollow" style={{ fontSize: "0.62rem" }}>{ch}</span>
+													))}
+												</span>
+											</td>
+											<td className="mono muted" style={{ fontSize: "var(--text-xs)" }}>{e.timing}</td>
+											<td>
+												{e.required && (
+													<span className="mono" title="Security and receipt events can't be muted" style={{ fontSize: "0.6rem", border: "1px solid var(--border)", padding: "0.1rem 0.3rem" }}>always</span>
+												)}
+											</td>
+										</tr>
+									))
+								)}
 							</tbody>
 						</table>
 					</div>
-				)}
-			</div>
+					{mailable.length > 0 && (
+						<p className="muted" style={{ fontSize: "var(--text-xs)", padding: "0.6rem 1.25rem" }}>
+							{mailable.length} of these carry an email — wording is code-defined; a copy change is a deploy.
+						</p>
+					)}
+				</div>
+			)}
+
+			{tab === "preferences" && (
+				<div className="card" style={{ padding: 0, overflow: "hidden" }}>
+					<div style={{ padding: "1rem 1.25rem 0.75rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+						<div>
+							<h2 className="section-title" style={{ margin: 0 }}>My channel matrix</h2>
+							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
+								Your own preferences — clients set theirs in the portal. In-app always lands; security events can't be muted.
+							</p>
+						</div>
+						{prefsSaved && <span className="mono" style={{ fontSize: "0.62rem" }}>✓ saved</span>}
+					</div>
+					{!prefs ? (
+						<p className="muted" style={{ padding: "1.25rem" }}>Loading preferences…</p>
+					) : (
+						<>
+							<div className="ops-table-wrap">
+								<table className="admin-table">
+									<thead>
+										<tr>
+											<th>Event</th>
+											<th style={{ textAlign: "center", width: "5rem" }}>Push</th>
+											<th style={{ textAlign: "center", width: "5rem" }}>Email</th>
+										</tr>
+									</thead>
+									<tbody>
+										{catalogue.map((e) => (
+											<tr key={e.type}>
+												<td>
+													<code className="mono" style={{ fontSize: "0.72rem" }}>{e.type}</code>
+													{e.required && <span className="mono muted" style={{ fontSize: "0.6rem", marginLeft: "0.4rem" }}>always on</span>}
+												</td>
+												<td style={{ textAlign: "center" }}>
+													<input
+														type="checkbox"
+														checked={e.channels.includes("push") ? flagFor(e.type, "push") : false}
+														disabled={!e.channels.includes("push") || e.required || prefsSaving}
+														onChange={() => toggleFlag(e.type, "push")}
+													/>
+												</td>
+												<td style={{ textAlign: "center" }}>
+													<input
+														type="checkbox"
+														checked={e.channels.includes("email") ? flagFor(e.type, "email") : false}
+														disabled={!e.channels.includes("email") || e.required || prefsSaving}
+														onChange={() => toggleFlag(e.type, "email")}
+													/>
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+							<div style={{ padding: "0.85rem 1.25rem", borderTop: "1px solid var(--border-light)", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+								<span style={{ fontSize: "var(--text-sm)", fontWeight: 500 }}>Quiet hours</span>
+								<input
+									type="time"
+									className="input input--sm input--full-border"
+									value={prefs.quietHours?.start ?? ""}
+									onChange={(e) => void savePrefs({ quietHours: { ...(prefs.quietHours ?? {}), start: e.target.value, timezone: "Africa/Accra" } })}
+								/>
+								<span className="muted" style={{ fontSize: "var(--text-xs)" }}>→</span>
+								<input
+									type="time"
+									className="input input--sm input--full-border"
+									value={prefs.quietHours?.end ?? ""}
+									onChange={(e) => void savePrefs({ quietHours: { ...(prefs.quietHours ?? {}), end: e.target.value, timezone: "Africa/Accra" } })}
+								/>
+								{prefs.quietHours?.start && (
+									<button type="button" className="dash-link" style={{ background: "none", border: 0, cursor: "pointer" }} onClick={() => void savePrefs({ quietHours: null })}>
+										clear
+									</button>
+								)}
+								<span className="muted" style={{ fontSize: "var(--text-xs)" }}>push is held inside the window — in-app and email still land</span>
+							</div>
+						</>
+					)}
+				</div>
+			)}
+
+			{tab === "log" && (
+				<div className="card" style={{ padding: 0, overflow: "hidden" }}>
+					<div style={{ padding: "1.25rem 1.25rem 0.75rem", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+						<h2 className="section-title" style={{ margin: 0 }}>Delivery log</h2>
+						<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+							<input
+								type="search"
+								placeholder="recipient, subject, ref…"
+								className="input input--sm input--full-border"
+								style={{ width: "11rem" }}
+								value={logSearch}
+								onChange={(e) => setLogSearch(e.target.value)}
+							/>
+							<div style={{ display: "flex", gap: "0.25rem" }}>
+								{(["all", "email", "in_app", "push"] as const).map((ch) => (
+									<button key={ch} className={`btn btn--sm ${channelFilter === ch ? "btn--primary" : "btn--ghost"}`} onClick={() => setChannelFilter(ch)}>
+										{ch === "all" ? "All" : ch === "in_app" ? "in-app" : ch}
+									</button>
+								))}
+							</div>
+							<div style={{ display: "flex", gap: "0.25rem" }}>
+								{(["all", "sent", "failed"] as const).map((s) => (
+									<button key={s} className={`btn btn--sm ${statusFilter === s ? "btn--primary" : "btn--ghost"}`} onClick={() => setStatusFilter(s)}>
+										{s === "all" ? "any" : s}
+									</button>
+								))}
+							</div>
+						</div>
+					</div>
+					{loading ? (
+						<p className="muted" style={{ padding: "1.25rem" }}>Loading delivery log…</p>
+					) : error ? (
+						<p className="ops-modal__error" role="alert" style={{ margin: "1.25rem" }}>{error}</p>
+					) : logs.length === 0 ? (
+						<p className="muted" style={{ padding: "1.25rem" }}>Nothing matches — widen the filters or wait for the next send.</p>
+					) : (
+						<>
+							<div className="ops-table-wrap">
+								<table className="admin-table">
+									<thead>
+										<tr>
+											<th>Recipient</th>
+											<th>Subject</th>
+											<th>Channel</th>
+											<th>Status</th>
+											<th>Sent</th>
+											<th style={{ textAlign: "right" }}></th>
+										</tr>
+									</thead>
+									<tbody>
+										{logs.map((n) => (
+											<tr key={n.id}>
+												<td className="admin-table__mono" style={{ fontSize: "var(--text-xs)" }}>{n.recipient}</td>
+												<td style={{ fontWeight: 500 }}>
+													{n.subject}
+													<span className="muted" style={{ display: "block", fontSize: "var(--text-xs)", fontWeight: 400 }}>
+														{n.template ?? n.event ?? "—"}
+														{n.status !== "sent" && n.errorMessage ? ` · ${n.errorMessage}` : ""}
+													</span>
+												</td>
+												<td><span className="portal-pill portal-pill--hollow" style={{ fontSize: "0.62rem" }}>{n.channel}</span></td>
+												<td>
+													<span
+														className={`portal-pill${n.status === "sent" ? "" : " portal-pill--hollow"}`}
+														style={n.status === "sent" ? { background: "var(--foreground)", color: "var(--background)", fontSize: "var(--text-xs)" } : { fontSize: "var(--text-xs)", textDecoration: "underline", textDecorationStyle: "wavy" }}
+													>
+														{n.status}
+														{(n.attempts ?? 1) > 1 ? ` ·${n.attempts}` : ""}
+													</span>
+												</td>
+												<td className="muted" style={{ fontSize: "var(--text-xs)" }}>
+													{new Date(n.sentAt).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}
+												</td>
+												<td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+													<button type="button" className="dash-link" style={{ background: "none", border: 0, cursor: "pointer" }} onClick={() => void viewEntry(n.id)}>
+														view
+													</button>
+													{n.status === "failed" && n.channel === "email" && (
+														<button
+															type="button"
+															className="dash-link"
+															style={{ background: "none", border: 0, cursor: "pointer", marginLeft: "0.5rem" }}
+															disabled={resending === n.id || resentIds.has(n.id)}
+															onClick={() => void resend(n.id)}
+														>
+															{resentIds.has(n.id) ? "resent ✓" : resending === n.id ? "sending…" : "resend"}
+														</button>
+													)}
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+							<div style={{ padding: "0.75rem 1.25rem", borderTop: "1px solid var(--border-light)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+								<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>{logs.length} of {stats.total} entries</span>
+								{nextBefore && (
+									<button type="button" className="btn btn--ghost btn--sm" onClick={() => void loadMoreLogs()} disabled={loadingMore}>
+										{loadingMore ? "Loading…" : "Load 50 more"}
+									</button>
+								)}
+							</div>
+						</>
+					)}
+				</div>
+			)}
+
+			{tab === "health" && health && (
+				<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem" }}>
+					<Stat label="Delivery rate" value={health.deliveryRate24h != null ? `${health.deliveryRate24h}%` : "—"} note={`${health.sent24h} sent · ${health.failed24h} failed · 24h`} inverted={health.deliveryRate24h != null && health.deliveryRate24h < 90} />
+					<Stat label="Email queue" value={String(health.queueWaiting)} note={`${health.queueFailed} dead-lettered jobs`} inverted={health.queueFailed > 0} />
+					<Stat label="Push subscriptions" value={String(health.pushSubscriptions)} note="Browsers registered for Web Push" />
+					<Stat label="Last delivery" value={health.lastDeliveryAt ? new Date(health.lastDeliveryAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "—"} note={health.lastDeliveryAt ? new Date(health.lastDeliveryAt).toLocaleDateString() : "worker heartbeat"} />
+				</div>
+			)}
+			{tab === "health" && !health && (
+				<div className="card" style={{ padding: "2rem", textAlign: "center" }}>
+					<p className="muted">Health data didn't load — the queue counters need Redis; the rest comes from the delivery log.</p>
+				</div>
+			)}
+
+			{/* Rendered-message viewer */}
+			{viewing && (
+				<div className="ops-modal-backdrop" onClick={() => setViewing(null)} role="dialog" aria-modal="true">
+					<div className="ops-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "42rem" }}>
+						<header className="ops-modal__head">
+							<div>
+								<p className="invite-card__eyebrow" style={{ margin: 0 }}>to {viewing.recipient}</p>
+								<h2 className="ops-modal__title" style={{ marginTop: "0.25rem" }}>{viewing.subject}</h2>
+							</div>
+							<button type="button" className="btn btn--ghost btn--sm" onClick={() => setViewing(null)}>✕ Close</button>
+						</header>
+						{viewing.bodyHtml ? (
+							<div style={{ marginTop: "1rem", border: "var(--thin)", maxHeight: "60vh", overflow: "auto" }}>
+								<iframe title="Rendered email" srcDoc={viewing.bodyHtml} style={{ width: "100%", height: "55vh", border: 0 }} sandbox="" />
+							</div>
+						) : viewing.bodyText ? (
+							<pre style={{ marginTop: "1rem", padding: "0.75rem", border: "var(--thin)", fontSize: "var(--text-xs)", whiteSpace: "pre-wrap", maxHeight: "50vh", overflow: "auto" }}>{viewing.bodyText}</pre>
+						) : (
+							<p className="muted" style={{ marginTop: "1rem" }}>Logged before bodies were stored — only the envelope survives.</p>
+						)}
+						{viewing.errorMessage && <p className="ops-modal__error" style={{ marginTop: "0.75rem" }}>{viewing.errorMessage}</p>}
+					</div>
+				</div>
+			)}
 		</>
 	);
 }

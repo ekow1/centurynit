@@ -31,11 +31,13 @@ export const emailWorker = new Worker<{
 	attachments?: Array<{ filename: string; path?: string; key?: string; content?: string }>;
 	idempotencyKey?: string;
 	template?: string;
+	event?: string;
 	reference?: string;
+	queuedAt?: string;
 }>(
 	"email",
 	async (job) => {
-		const { to, subject, html, text, attachments, idempotencyKey, template, reference } = job.data;
+		const { to, subject, html, text, attachments, idempotencyKey, template, event, reference, queuedAt } = job.data;
 		console.log(`[email] -> ${to} — ${subject}`);
 
 		// Storage keys are resolved at send time — a presigned URL baked into the
@@ -66,7 +68,14 @@ export const emailWorker = new Worker<{
 			html,
 			text,
 			attachments: resolved,
-			log: { template, reference, idempotencyKey, attempts: job.attemptsMade + 1 },
+			log: {
+				template,
+				event,
+				reference,
+				idempotencyKey,
+				attempts: job.attemptsMade + 1,
+				queuedAt: queuedAt ? new Date(queuedAt) : undefined,
+			},
 		});
 		return { ok: true };
 	},

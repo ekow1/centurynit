@@ -178,6 +178,56 @@ export async function listClientUsers(query?: {
 }
 
 /**
+ * Active client sessions — the Sessions tab's client half. Same "not staff"
+ * rule as listClientUsers, joined to live session rows.
+ */
+export async function listClientSessions(): Promise<
+	Array<{
+		id: string;
+		userId: string;
+		name: string;
+		email: string;
+		ip: string | null;
+		userAgent: string | null;
+		createdAt: string;
+		expiresAt: string;
+	}>
+> {
+	const staffRows = await db.query.opsUsers.findMany();
+	const staffEmails = new Set(staffRows.map((s) => s.email.toLowerCase().trim()));
+
+	const now = new Date();
+	const rows = await db
+		.select({
+			id: sessions.id,
+			userId: sessions.userId,
+			ip: sessions.ipAddress,
+			userAgent: sessions.userAgent,
+			createdAt: sessions.createdAt,
+			expiresAt: sessions.expiresAt,
+			name: users.name,
+			email: users.email,
+		})
+		.from(sessions)
+		.innerJoin(users, eq(sessions.userId, users.id))
+		.where(gt(sessions.expiresAt, now))
+		.orderBy(desc(sessions.createdAt));
+
+	return rows
+		.filter((r) => !staffEmails.has(r.email.toLowerCase().trim()))
+		.map((r) => ({
+			id: r.id,
+			userId: r.userId,
+			name: r.name ?? r.email,
+			email: r.email,
+			ip: r.ip,
+			userAgent: r.userAgent,
+			createdAt: r.createdAt.toISOString(),
+			expiresAt: r.expiresAt.toISOString(),
+		}));
+}
+
+/**
  * Revoke all active sessions for a given user (force logout).
  */
 export async function revokeClientSessions(userId: string): Promise<{ revokedCount: number }> {

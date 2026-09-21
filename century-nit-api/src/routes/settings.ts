@@ -9,7 +9,20 @@ import {
 	type SettingKey,
 } from "../services/settings.js";
 import { getDocumentStorage } from "../services/storage/index.js";
-import { getUnifiedAuditLog } from "../services/audit.js";
+import {
+	getUnifiedAuditLog,
+	queryAuditEvents,
+	exportAuditEventsCsv,
+	relatedAuditEvents,
+	verifyAuditChain,
+	getAlertRules,
+	setAlertRules,
+	getAuthPolicy,
+	updateAuthPolicy,
+	signInLockRemaining,
+	recordAdminEvent,
+	requestIp,
+} from "../services/audit.js";
 import { getAuthInstance } from "./auth.js";
 import { HttpError, validationHook } from "../middleware/error.js";
 import {
@@ -511,6 +524,304 @@ settingsRouter.openapi(
 			reachable,
 			probeError,
 		});
+	},
+);
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * The unified audit stream — every event table, one feed (migration 0112)
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+const auditEventSchema = z.object({
+	id: z.string(),
+	source: z.string(),
+	at: z.string(),
+	category: z.string(),
+	action: z.string(),
+	actorLabel: z.string(),
+	actorId: z.string().nullable(),
+	actorType: z.string(),
+	targetLabel: z.string().nullable(),
+	targetId: z.string().nullable(),
+	targetType: z.string(),
+	severity: z.string(),
+	detail: z.string().nullable(),
+	ip: z.string().nullable(),
+	userAgent: z.string().nullable(),
+	oldMasked: z.string().nullable(),
+	newMasked: z.string().nullable(),
+});
+
+const auditEventsQuerySchema = z.object({
+	category: z.string().optional(),
+	severity: z.string().optional(),
+	source: z.string().optional(),
+	actor: z.string().optional(),
+	target: z.string().optional(),
+	q: z.string().optional(),
+	from: z.string().optional(),
+	to: z.string().optional(),
+	limit: z.coerce.number().int().min(1).max(200).optional(),
+	before: z.string().optional(),
+});
+
+/* GET /settings/audit/events — the feed. Keyset-paged, facet counts included. */
+settingsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/audit/events",
+		tags: ["Settings"],
+		summary: "Unified audit event stream",
+		middleware: [requireAuth, requireMfa, requireModule("system")] as const,
+		request: { query: auditEventsQuerySchema },
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							entries: z.array(auditEventSchema),
+							total: z.number(),
+							nextBefore: z.string().nullable(),
+							facets: z.record(z.string(), z.number()),
+						}),
+					},
+				},
+				description: "Audit events, newest first",
+			},
+		},
+	}),
+	async (c) => {
+		const q = c.req.valid("query");
+		return c.json(await queryAuditEvents(q));
+	},
+);
+
+/* GET /settings/audit/export — CSV of the whole filtered query, itself audited. */
+settingsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/audit/export",
+		tags: ["Settings"],
+		summary: "Export the audit query as CSV",
+		middleware: [requireAuth, requireMfa, requireModule("system")] as const,
+		request: { query: auditEventsQuerySchema },
+		responses: {
+			200: {
+				content: { "text/csv": { schema: z.string() } },
+				description: "CSV export",
+			},
+		},
+	}),
+	async (c) => {
+		const q = c.req.valid("query");
+		const staff = c.get("staff")!;
+		const csv = await exportAuditEventsCsv(q);
+		await recordAdminEvent({
+			category: "Data",
+			action: `Exported audit log CSV (${csv.split("\n").length - 1} rows)`,
+			actorId: staff.opsUserId,
+			actorEmail: staff.email,
+			targetType: "system",
+			severity: "warn",
+			detail: `filters: ${JSON.stringify(q)}`,
+			ip: requestIp(c),
+		});
+		return c.text(csv, 200, {
+			"Content-Type": "text/csv; charset=utf-8",
+			"Content-Disposition": `attachment; filename="audit-${new Date().toISOString().slice(0, 10)}.csv"`,
+		});
+	},
+);
+
+/* GET /settings/audit/related — the pane's "same actor/target" list. */
+settingsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/audit/related",
+		tags: ["Settings"],
+		summary: "Events sharing the same actor or target",
+		middleware: [requireAuth, requireMfa, requireModule("system")] as const,
+		request: {
+			query: z.object({
+				actor: z.string(),
+				target: z.string().optional(),
+				exclude: z.string(),
+			}),
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.object({ entries: z.array(auditEventSchema) }) } },
+				description: "Related events",
+			},
+		},
+	}),
+	async (c) => {
+		const { actor, target, exclude } = c.req.valid("query");
+		return c.json({ entries: await relatedAuditEvents(actor, target ?? null, exclude) });
+	},
+);
+
+/* GET /settings/audit/verify — hash-chain integrity over the newest rows. */
+settingsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/audit/verify",
+		tags: ["Settings"],
+		summary: "Verify the audit hash chain",
+		middleware: [requireAuth, requireMfa, requireModule("system")] as const,
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({ checked: z.number(), brokenAt: z.string().nullable() }),
+					},
+				},
+				description: "Chain verification result",
+			},
+		},
+	}),
+	async (c) => c.json(await verifyAuditChain(500)),
+);
+
+/* GET/PUT /settings/alert-rules — the four desk rules. */
+const alertRulesSchema = z.object({
+	failedSignins: z.boolean(),
+	roleGrants: z.boolean(),
+	newIpSignin: z.boolean(),
+	moneyMoves: z.boolean(),
+});
+
+settingsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/alert-rules",
+		tags: ["Settings"],
+		summary: "Audit alert rules",
+		middleware: [requireAuth, requireMfa, requireModule("system")] as const,
+		responses: {
+			200: { content: { "application/json": { schema: alertRulesSchema } }, description: "Alert rules" },
+		},
+	}),
+	async (c) => c.json(await getAlertRules()),
+);
+
+settingsRouter.openapi(
+	createRoute({
+		method: "put",
+		path: "/alert-rules",
+		tags: ["Settings"],
+		summary: "Update audit alert rules",
+		middleware: [requireAuth, requireMfa, requireModule("system")] as const,
+		request: { body: { content: { "application/json": { schema: alertRulesSchema.partial() } }, required: true } },
+		responses: {
+			200: { content: { "application/json": { schema: alertRulesSchema } }, description: "Updated rules" },
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const body = c.req.valid("json");
+		const next = await setAlertRules(body, staff.email);
+		await recordAdminEvent({
+			category: "Configuration",
+			action: "Updated audit alert rules",
+			actorId: staff.opsUserId,
+			actorEmail: staff.email,
+			targetType: "setting",
+			detail: JSON.stringify(body),
+			ip: requestIp(c),
+		});
+		return c.json(next);
+	},
+);
+
+/* GET/PUT /settings/auth-policy — real session/lockout/password settings. */
+const authPolicySchema = z.object({
+	sessionDays: z.number().int().min(1).max(90),
+	idleHours: z.number().int().min(1).max(72),
+	lockoutThreshold: z.number().int().min(3).max(20),
+	lockoutWindowMin: z.number().int().min(5).max(60),
+	lockoutMinutes: z.number().int().min(5).max(1440),
+	passwordMinLength: z.number().int().min(8).max(64),
+	breachedCheck: z.boolean(),
+	staffRotationDays: z.number().int().min(30).max(365),
+	mfaGraceDays: z.number().int().min(0).max(30),
+	rememberDeviceDays: z.number().int().min(0).max(90),
+});
+
+settingsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/auth-policy",
+		tags: ["Settings"],
+		summary: "Session, lockout and password policy",
+		middleware: [requireAuth, requireMfa, requireModule("auth")] as const,
+		responses: {
+			200: { content: { "application/json": { schema: authPolicySchema } }, description: "Auth policy" },
+		},
+	}),
+	async (c) => c.json(await getAuthPolicy()),
+);
+
+settingsRouter.openapi(
+	createRoute({
+		method: "put",
+		path: "/auth-policy",
+		tags: ["Settings"],
+		summary: "Update auth policy",
+		middleware: [requireAuth, requireMfa, requireModule("auth")] as const,
+		request: { body: { content: { "application/json": { schema: authPolicySchema.partial() } }, required: true } },
+		responses: {
+			200: { content: { "application/json": { schema: authPolicySchema } }, description: "Updated policy" },
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const body = c.req.valid("json");
+		const next = await updateAuthPolicy(body, staff.email);
+		await recordAdminEvent({
+			category: "Authentication",
+			action: "Updated authentication policy",
+			actorId: staff.opsUserId,
+			actorEmail: staff.email,
+			targetType: "setting",
+			severity: "warn",
+			detail: JSON.stringify(body),
+			ip: requestIp(c),
+		});
+		return c.json(next);
+	},
+);
+
+/* POST /settings/auth/unlock — audited unlock of a locked account. */
+settingsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/auth/unlock",
+		tags: ["Settings"],
+		summary: "Unlock an account locked by failed sign-ins",
+		middleware: [requireAuth, requireMfa, requireModule("auth")] as const,
+		request: {
+			body: {
+				content: { "application/json": { schema: z.object({ email: z.string().email() }) } },
+				required: true,
+			},
+		},
+		responses: { 200: { description: "Unlocked" } },
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const { email } = c.req.valid("json");
+		const remaining = await signInLockRemaining(email.toLowerCase());
+		await recordAdminEvent({
+			category: "Authentication",
+			action: `Account unlocked by ${staff.email}`,
+			actorId: staff.opsUserId,
+			actorEmail: staff.email,
+			target: email.toLowerCase(),
+			targetType: "client",
+			severity: "warn",
+			ip: requestIp(c),
+		});
+		return c.json({ ok: true, wasLocked: remaining > 0 });
 	},
 );
 

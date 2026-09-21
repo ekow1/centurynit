@@ -56,6 +56,7 @@ import {
 	settleInvoicePayment,
 } from "../services/paymentSettlement.js";
 import { generateInvoicePdf, generateReceiptPdf } from "../services/pdfEngine.js";
+import { getNotificationPreferences, setNotificationPreferences } from "../services/notify.js";
 import { INVOICE_CHAPTERS } from "../services/receiptEmail.js";
 import { journeyForApplicant } from "../services/journey.js";
 
@@ -1684,6 +1685,63 @@ meRouter.openapi(
 			.where(eq(schema.applicants.id, applicant.id));
 		return c.json(merged);
 	},
+);
+
+/* ── /me notification preferences ─────────────────────────────────────────── */
+
+const mePrefsSchema = z.object({
+	channelFlags: z.record(
+		z.string(),
+		z.object({
+			inApp: z.boolean().optional(),
+			email: z.boolean().optional(),
+			push: z.boolean().optional(),
+			sms: z.boolean().optional(),
+		}),
+	),
+	quietHours: z
+		.object({
+			start: z.string().optional(),
+			end: z.string().optional(),
+			timezone: z.string().optional(),
+		})
+		.nullable()
+		.optional(),
+});
+
+meRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/notification-preferences",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		responses: {
+			200: {
+				content: { "application/json": { schema: mePrefsSchema } },
+				description: "The client's notification channel preferences",
+			},
+		},
+	}),
+	async (c) => c.json(await getNotificationPreferences(c.get("user").id)),
+);
+
+meRouter.openapi(
+	createRoute({
+		method: "put",
+		path: "/notification-preferences",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			body: { content: { "application/json": { schema: mePrefsSchema.partial() } }, required: true },
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: mePrefsSchema } },
+				description: "Updated preferences",
+			},
+		},
+	}),
+	async (c) => c.json(await setNotificationPreferences(c.get("user").id, c.req.valid("json"))),
 );
 
 /* ── /me notifications ────────────────────────────────────────────────────── */

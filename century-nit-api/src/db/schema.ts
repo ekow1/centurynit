@@ -852,15 +852,27 @@ export const adminAudit = pgTable(
 		action: text("action").notNull(),
 		actorId: uuid("actor_id").references(() => opsUsers.id, { onDelete: "set null" }),
 		actorEmail: varchar("actor_email", { length: 255 }),
+		/** staff | client | system — who the actor IS, for the typed filter. */
+		actorType: varchar("actor_type", { length: 16 }).notNull().default("staff"),
 		target: text("target"),
+		/** staff | client | case | invoice | setting | session | system — what was touched. */
+		targetType: varchar("target_type", { length: 16 }).notNull().default("system"),
+		/** info | warn | bad | good — the severity dot on the feed. */
+		severity: varchar("severity", { length: 8 }).notNull().default("info"),
 		detail: text("detail"),
 		ip: text("ip"),
 		userAgent: text("user_agent"),
+		/** Hash chain: hash = sha256(prevHash + canonical row). Tamper-evident, not tamper-proof. */
+		prevHash: varchar("prev_hash", { length: 64 }),
+		hash: varchar("hash", { length: 64 }),
 		at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
 	},
 	(t) => ({
 		byAt: index("admin_audit_at_idx").on(t.at),
 		byCategory: index("admin_audit_category_idx").on(t.category, t.at),
+		byActor: index("admin_audit_actor_idx").on(t.actorEmail, t.at),
+		byTarget: index("admin_audit_target_idx").on(t.target, t.at),
+		bySeverity: index("admin_audit_severity_idx").on(t.severity, t.at),
 	}),
 );
 
@@ -2241,6 +2253,15 @@ export const notificationLog = pgTable(
 		errorMessage: text("error_message"),
 		/** How many send attempts the row reflects — a retry updates the row, not adds one. */
 		attempts: integer("attempts").notNull().default(1),
+		/** email | push | in_app — the channel this delivery used (email-only before 0112). */
+		channel: varchar("channel", { length: 16 }).notNull().default("email"),
+		/** The registry event that produced it, e.g. "chat.reply". */
+		event: varchar("event", { length: 80 }),
+		queuedAt: timestamp("queued_at", { withTimezone: true }),
+		deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+		/** Rendered copy kept for "view rendered" + resend — same body the recipient got. */
+		bodyHtml: text("body_html"),
+		bodyText: text("body_text"),
 		sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
 	},
 	(t) => ({

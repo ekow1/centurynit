@@ -128,7 +128,44 @@ function createAuth(config: GoogleSocialConfig) {
 					message: "Password sign-in is turned off. Use a code or Google to sign in.",
 				});
 			}
+			// Lockout: derived from the audit stream — N failures inside the
+			// window minted a lock row younger than lockoutMinutes, and only an
+			// audited unlock event (or time) clears it.
+			const { signInLockRemaining } = await import("../services/audit.js");
+			const remaining = await signInLockRemaining(email);
+			if (remaining > 0) {
+				throw APIError.from("TOO_MANY_REQUESTS", {
+					code: "ACCOUNT_LOCKED",
+					message: `This account is locked after repeated failed sign-ins. Try again in ${Math.ceil(remaining / 60000)} min.`,
+				});
+			}
 		}),
+	},
+	onAPIError: {
+		// Failed sign-ins never reach session.create — they land here. Record
+		// real credential failures only: METHOD_DISABLED and ACCOUNT_LOCKED are
+		// policy rejections, not wrong passwords.
+		onError: async (error, ctx) => {
+			try {
+				const path = (ctx as { path?: string } | null | undefined)?.path ?? "";
+				if (path !== "/sign-in/email") return;
+				const code = (error as { body?: { code?: string } } | null | undefined)?.body?.code ?? "";
+				if (code === "METHOD_DISABLED" || code === "ACCOUNT_LOCKED") return;
+				const emailRaw = (ctx as { body?: { email?: unknown } } | null | undefined)?.body?.email;
+				const email = typeof emailRaw === "string" ? emailRaw.trim().toLowerCase() : "";
+				if (!email) return;
+				const { recordFailedSignIn } = await import("../services/audit.js");
+				await recordFailedSignIn(
+					email,
+					(ctx as { headers?: Headers } | null | undefined)?.headers?.get("cf-connecting-ip")
+						?? (ctx as { headers?: Headers } | null | undefined)?.headers?.get("x-forwarded-for")?.split(",")[0]?.trim()
+						?? null,
+					(ctx as { headers?: Headers } | null | undefined)?.headers?.get("user-agent") ?? null,
+				);
+			} catch (err) {
+				console.error("[auth] failed-sign-in audit error:", err);
+			}
+		},
 	},
 	databaseHooks: {
 		user: {

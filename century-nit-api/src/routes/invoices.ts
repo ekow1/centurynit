@@ -224,6 +224,20 @@ invoicesRouter.openapi(
 			actor: actorFrom(staff),
 			options: { recordGatewayTransaction: false },
 		});
+		// Money writes are the other half of "who touched what" — every
+		// staff-recorded payment lands on the audit stream.
+		const { recordAdminEvent, requestIp } = await import("../services/audit.js");
+		await recordAdminEvent({
+			category: "Financials",
+			action: `Recorded manual payment ₵${(body.amountCents / 100).toLocaleString()} on invoice ${id.slice(0, 8)}`,
+			actorId: staff.opsUserId,
+			actorEmail: staff.email,
+			target: id,
+			targetType: "invoice",
+			severity: "warn",
+			detail: `${body.method}${body.reference ? ` · ref ${body.reference}` : ""}${body.gateway ? ` · ${body.gateway}` : ""}`,
+			ip: requestIp(c),
+		});
 		return c.json(await serializeInvoice(row));
 	},
 );
@@ -256,6 +270,18 @@ invoicesRouter.openapi(
 		const body = c.req.valid("json");
 		const staff = c.get("staff")!;
 		const row = await voidInvoice({ invoiceId: id, reason: body.reason, actor: actorFrom(staff) });
+		const { recordAdminEvent, requestIp } = await import("../services/audit.js");
+		await recordAdminEvent({
+			category: "Financials",
+			action: `Voided invoice ${id.slice(0, 8)}`,
+			actorId: staff.opsUserId,
+			actorEmail: staff.email,
+			target: id,
+			targetType: "invoice",
+			severity: "bad",
+			detail: body.reason,
+			ip: requestIp(c),
+		});
 		return c.json(await serializeInvoice(row));
 	},
 );
@@ -292,6 +318,18 @@ invoicesRouter.openapi(
 			amountCents: body.amountCents,
 			reason: body.reason,
 			actor: actorFrom(staff),
+		});
+		const { recordAdminEvent, requestIp } = await import("../services/audit.js");
+		await recordAdminEvent({
+			category: "Financials",
+			action: `Issued credit note ₵${(body.amountCents / 100).toLocaleString()} on invoice ${id.slice(0, 8)}`,
+			actorId: staff.opsUserId,
+			actorEmail: staff.email,
+			target: id,
+			targetType: "invoice",
+			severity: "warn",
+			detail: body.reason,
+			ip: requestIp(c),
 		});
 		return c.json(await serializeInvoice(row));
 	},

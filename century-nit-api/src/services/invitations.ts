@@ -486,6 +486,45 @@ export async function updateStaff(input: {
 		});
 	}
 
+	// Access changes are the first thing an auditor asks about — role grants,
+	// deactivations and reactivations all land on the trail with the diff.
+	try {
+		const { recordAdminEvent } = await import("./audit.js");
+		const [actorRow] = await db
+			.select({ email: opsUsers.email })
+			.from(opsUsers)
+			.where(eq(opsUsers.id, input.actor.opsUserId))
+			.limit(1);
+		if (input.patch.role !== undefined && input.patch.role !== currentRole) {
+			await recordAdminEvent({
+				category: "Roles & Access",
+				action: `Granted role "${input.patch.role}" to ${target.name} (was ${currentRole})`,
+				actorId: input.actor.opsUserId,
+				actorEmail: actorRow?.email ?? null,
+				target: target.email,
+				targetType: "staff",
+				severity: /manager|admin/i.test(input.patch.role) ? "bad" : "warn",
+				detail: `role: ${currentRole} → ${input.patch.role}`,
+			});
+		}
+		if (input.patch.active !== undefined && input.patch.active !== target.active) {
+			await recordAdminEvent({
+				category: "Roles & Access",
+				action: input.patch.active
+					? `Reactivated staff account ${target.email}`
+					: `Deactivated staff account ${target.email}`,
+				actorId: input.actor.opsUserId,
+				actorEmail: actorRow?.email ?? null,
+				target: target.email,
+				targetType: "staff",
+				severity: input.patch.active ? "info" : "bad",
+				detail: `active: ${target.active} → ${input.patch.active}`,
+			});
+		}
+	} catch (err) {
+		console.error("[audit] staff update record failed:", err);
+	}
+
 	return updated;
 }
 

@@ -30,17 +30,24 @@ section{position:relative}
 .map__row .tag{font-family:var(--font-mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground)}
 @media(max-width:720px){.map{grid-template-columns:1fr}.map__mid{display:none}}
 
-/* explore — clean top tabs, one hairline */
+/* explore — top tabs with image thumbs */
 .xp{background:#fff}
-.xp__tabs{display:flex;gap:2rem;border-bottom:var(--thin);overflow-x:auto}
-.xp__tab{border:0;background:transparent;padding:0 0 .9rem;cursor:pointer;display:flex;align-items:baseline;gap:.6rem;font-family:var(--sans);color:var(--muted-foreground);white-space:nowrap;position:relative}
-.xp__tab .no{font-family:var(--font-mono);font-size:.6rem}
-.xp__tab .nm{font-family:var(--display);font-size:1.25rem;font-weight:600;letter-spacing:-.02em}
-.xp__tab .nm small{font-family:var(--font-mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;font-weight:400;color:var(--muted-foreground);margin-left:.5rem}
+.xp__tabs{display:flex;border-bottom:var(--thin)}
+.xp__tab{flex:1;min-width:0;border:0;background:transparent;padding:1rem .8rem .95rem;cursor:pointer;display:flex;align-items:center;gap:.75rem;font-family:var(--sans);color:var(--muted-foreground);position:relative;text-align:left}
+.xp__tab:first-child{padding-left:0}
+.xp__tab:last-child{padding-right:0}
+.xp__tab .thumb{width:2.9rem;height:2.9rem;flex:none;border:var(--thin);overflow:hidden}
+.xp__tab .thumb img{width:100%;height:100%;object-fit:cover;filter:grayscale(1);transition:filter .2s}
+.xp__tab .tx{min-width:0}
+.xp__tab .tx .nm{font-family:var(--display);font-size:1.2rem;font-weight:600;letter-spacing:-.02em;display:block;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xp__tab .tx .ct{font-family:var(--font-mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);display:block;margin-top:.2rem}
 .xp__tab::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:transparent}
 .xp__tab:hover{color:var(--foreground)}
+.xp__tab:hover .thumb img{filter:grayscale(0)}
 .xp__tab[aria-selected="true"]{color:var(--foreground)}
 .xp__tab[aria-selected="true"]::after{background:var(--foreground)}
+.xp__tab[aria-selected="true"] .thumb img{filter:grayscale(0)}
+@media(max-width:640px){.xp__tab{padding:.85rem .4rem .8rem;gap:.5rem;justify-content:center}.xp__tab .thumb{width:2rem;height:2rem}.xp__tab .tx .nm{font-size:.95rem}.xp__tab .tx .ct{display:none}}
 .xp__cta{display:none}
 .xp__body{display:flex;flex-direction:column;min-width:0}
 .xp__pane{display:none;padding:1.6rem 0;flex:1}
@@ -90,6 +97,77 @@ section{position:relative}
 .fund__dead{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground)}
 .fund__go{font-family:var(--font-mono);font-size:.66rem;font-weight:700;text-align:right}
 @media(max-width:720px){.fund__row{grid-template-columns:6rem 1fr 3rem}.fund__dead{display:none}}
+
+/* universities — horizontal index rows: square image left, ledger body right */
+.ucard{display:grid;grid-template-columns:7.5rem 1fr auto;border:var(--thin);border-bottom:0;text-decoration:none;color:inherit;background:#fff;align-items:stretch}
+.ucard:last-child{border-bottom:var(--thin)}
+.ucard__img{position:relative;border-right:var(--thin);overflow:hidden}
+.ucard__img img{width:100%;height:100%;object-fit:cover;filter:grayscale(1);transition:filter .25s;display:block}
+.ucard:hover .ucard__img img{filter:grayscale(0)}
+.ucard__rank{position:absolute;bottom:0;left:0;right:0;background:#fff;border-top:var(--thin);font-family:var(--font-mono);font-size:.5rem;text-transform:uppercase;letter-spacing:.06em;padding:.25rem .4rem;text-align:center}
+.ucard__body{padding:1rem 1.3rem;display:flex;flex-direction:column;justify-content:center;min-width:0}
+.ucard__title{font-family:var(--display);font-size:1.35rem;font-weight:600;letter-spacing:-.01em}
+.ucard__meta{font-family:var(--font-mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-foreground);margin-top:.35rem}
+.ucard__tags{font-size:.78rem;color:var(--muted-foreground);margin-top:.4rem}
+.ucard__go{display:flex;align-items:center;padding:0 1.4rem;font-family:var(--font-mono);font-size:.75rem}
+.ucard:hover .ucard__go{color:#b45309}
+@media(max-width:560px){.ucard{grid-template-columns:5rem 1fr}.ucard__go{display:none}.ucard__title{font-size:1.05rem}}
+
+/* funding — split cards: amount block left, image right */
+.fcard{display:grid;grid-template-columns:11rem 1fr;border:var(--thin);text-decoration:none;color:inherit;background:#fff;overflow:hidden}
+.fcard__amt{padding:1.4rem 1.3rem;display:flex;flex-direction:column;justify-content:center;gap:.3rem}
+.fcard__amt b{font-family:var(--display);font-size:1.7rem;font-weight:600;letter-spacing:-.02em;line-height:1}
+.fcard__amt span{font-family:var(--font-mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground)}
+.fcard__img{border-left:var(--thin);aspect-ratio:21/8;overflow:hidden;position:relative}
+.fcard__img img{width:100%;height:100%;object-fit:cover;filter:grayscale(1);transition:filter .25s}
+.fcard:hover .fcard__img img{filter:grayscale(0)}
+.fcard__img span{position:absolute;bottom:.5rem;left:.6rem;background:#fff;border:var(--thin);font-family:var(--font-mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.08em;padding:.25rem .5rem}
+.fcard__meta{grid-column:1/-1;border-top:var(--thin);padding:.7rem 1.3rem;display:flex;justify-content:space-between;gap:1rem;font-family:var(--font-mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground)}
+.fcard__meta b{color:var(--foreground)}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem}
+@media(max-width:720px){.fgrid{grid-template-columns:1fr}.fcard__img{aspect-ratio:21/7}}
+
+/* services — ledger rows with a thumb, not cards */
+.srow{display:grid;grid-template-columns:4.2rem 3rem 1.2fr 1fr auto;gap:1.2rem;align-items:center;padding:.9rem .2rem;border-bottom:1px solid var(--border-light);text-decoration:none;color:inherit}
+.srow:first-child{border-top:1px solid var(--border-light)}
+.srow:hover{background:var(--muted)}
+.srow__img{width:4.2rem;height:3rem;border:var(--thin);overflow:hidden}
+.srow__img img{width:100%;height:100%;object-fit:cover;filter:grayscale(1);transition:filter .2s}
+.srow:hover .srow__img img{filter:grayscale(0)}
+.srow__no{font-family:var(--font-mono);font-size:.62rem;color:var(--muted-foreground)}
+.srow__name{font-weight:600;font-size:.95rem}
+.srow__name small{display:block;font-family:var(--font-mono);font-size:.53rem;text-transform:uppercase;letter-spacing:.08em;font-weight:400;color:var(--muted-foreground);margin-top:.15rem}
+.srow__what{font-size:.78rem;color:var(--muted-foreground);line-height:1.5}
+.srow__go{font-family:var(--font-mono);font-size:.66rem;font-weight:700}
+@media(max-width:720px){.srow{grid-template-columns:4.2rem 1fr auto}.srow__no,.srow__what{display:none}}
+
+/* services — alternating feature rows: image ↔ editorial body */
+.svc{border-top:var(--thin)}
+.svc__row{display:grid;grid-template-columns:17rem 1fr;border-bottom:var(--thin);text-decoration:none;color:inherit;background:#fff;transition:background .15s}
+.svc__row:hover{background:var(--muted)}
+.svc__img{border-right:var(--thin);overflow:hidden;position:relative;min-height:11rem}
+.svc__img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:grayscale(1);transition:filter .3s,transform .3s}
+.svc__row:hover .svc__img img{filter:grayscale(0);transform:scale(1.03)}
+.svc__img .no{position:absolute;top:0;left:0;background:var(--foreground);color:#fff;font-family:var(--font-mono);font-size:.55rem;letter-spacing:.1em;padding:.35rem .6rem;z-index:2}
+.svc__row:nth-child(even){grid-template-columns:1fr 17rem}
+.svc__row:nth-child(even) .svc__img{order:2;border-right:0;border-left:var(--thin)}
+.svc__body{padding:1.6rem 1.8rem;display:flex;flex-direction:column;justify-content:center;gap:.5rem}
+.svc__eyebrow{font-family:var(--font-mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+.svc__eyebrow b{color:#b45309;font-weight:600}
+.svc__title{font-family:var(--display);font-size:1.6rem;font-weight:600;letter-spacing:-.02em;line-height:1.15}
+.svc__list{list-style:none;display:flex;flex-wrap:wrap;gap:.35rem 1.4rem;font-size:.8rem;color:var(--muted-foreground)}
+.svc__list li::before{content:"— ";color:#b45309}
+.svc__foot{display:flex;align-items:center;gap:1.2rem;margin-top:.5rem}
+.svc__dur{font-family:var(--font-mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.08em;border:var(--thin);padding:.3rem .6rem}
+.svc__cta{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+.svc__row:hover .svc__cta{text-decoration:underline}
+@media(max-width:720px){
+	.svc__row,.svc__row:nth-child(even){grid-template-columns:1fr}
+	.svc__img,.svc__row:nth-child(even) .svc__img{order:0;border-left:0;border-right:0;border-bottom:var(--thin);aspect-ratio:21/9;min-height:0}
+	.svc__img img{position:static;aspect-ratio:21/9}
+	.svc__body{padding:1.2rem 1rem}
+	.svc__title{font-size:1.3rem}
+}
 </style>
 </head>
 <body>
@@ -133,10 +211,10 @@ section{position:relative}
 
 		<div class="xp">
 			<div class="xp__tabs" role="tablist">
-				<button class="xp__tab" role="tab" aria-selected="true" data-pane="d"><span class="no">01</span><span class="nm">Destinations<small>6 countries</small></span></button>
-				<button class="xp__tab" role="tab" aria-selected="false" data-pane="u"><span class="no">02</span><span class="nm">Universities<small>100+ partners</small></span></button>
-				<button class="xp__tab" role="tab" aria-selected="false" data-pane="p"><span class="no">03</span><span class="nm">Programs<small>Featured</small></span></button>
-				<button class="xp__tab" role="tab" aria-selected="false" data-pane="f"><span class="no">04</span><span class="nm">Funding<small>Scholarships</small></span></button>
+				<button class="xp__tab" role="tab" aria-selected="true" data-pane="d"><span class="thumb"><img src="https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=200&q=60" alt=""></span><span class="tx"><span class="nm">Destinations</span><span class="ct">6 countries</span></span></button>
+				<button class="xp__tab" role="tab" aria-selected="false" data-pane="u"><span class="thumb"><img src="https://images.unsplash.com/photo-1580537659466-0a9bfa916a54?w=200&q=60" alt=""></span><span class="tx"><span class="nm">Universities</span><span class="ct">100+ partners</span></span></button>
+				<button class="xp__tab" role="tab" aria-selected="false" data-pane="p"><span class="thumb"><img src="https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=200&q=60" alt=""></span><span class="tx"><span class="nm">Programs</span><span class="ct">Featured</span></span></button>
+				<button class="xp__tab" role="tab" aria-selected="false" data-pane="f"><span class="thumb"><img src="https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=200&q=60" alt=""></span><span class="tx"><span class="nm">Funding</span><span class="ct">Scholarships</span></span></button>
 			</div>
 			<div class="xp__body">
 
@@ -152,12 +230,13 @@ section{position:relative}
 				</div>
 			</div>
 
-			<!-- Universities -->
+			<!-- Universities — horizontal index rows -->
 			<div class="xp__pane" id="pane-u">
-				<div class="mgrid">
-					<a class="mcard" href="#"><div class="mcard__img"><img src="https://images.unsplash.com/photo-1580537659466-0a9bfa916a54?w=800&q=70" alt=""><span class="mcard__stat">#1 UK · #3 WORLD</span></div><div class="mcard__body"><p class="eyebrow">Oxford · Public Research</p><h3 class="mcard__title">University of Oxford</h3><p class="mcard__text">Russell Group · Research intensive · Tutorial system</p><span class="mcard__cta">View university →</span></div></a>
-					<a class="mcard" href="#"><div class="mcard__img"><img src="https://images.unsplash.com/photo-1529655683826-aba9b3e77383?w=800&q=70" alt=""><span class="mcard__stat">#2 UK · #6 WORLD</span></div><div class="mcard__body"><p class="eyebrow">London · Public Research</p><h3 class="mcard__title">Imperial College London</h3><p class="mcard__text">STEM focus · Industry links · Russell Group</p><span class="mcard__cta">View university →</span></div></a>
-					<a class="mcard" href="#"><div class="mcard__img"><img src="https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&q=70" alt=""><span class="mcard__stat">#3 UK · #9 WORLD</span></div><div class="mcard__body"><p class="eyebrow">London · Public Research</p><h3 class="mcard__title">University College London</h3><p class="mcard__text">Multidisciplinary · Central London campus</p><span class="mcard__cta">View university →</span></div></a>
+				<div>
+					<a class="ucard" href="#"><div class="ucard__img"><img src="https://images.unsplash.com/photo-1580537659466-0a9bfa916a54?w=400&q=70" alt=""><span class="ucard__rank">#1 UK</span></div><div class="ucard__body"><h3 class="ucard__title">University of Oxford</h3><p class="ucard__meta">Oxford · Public Research · #3 World</p><p class="ucard__tags">Russell Group · Tutorial system</p></div><span class="ucard__go">→</span></a>
+					<a class="ucard" href="#"><div class="ucard__img"><img src="https://images.unsplash.com/photo-1529655683826-aba9b3e77383?w=400&q=70" alt=""><span class="ucard__rank">#2 UK</span></div><div class="ucard__body"><h3 class="ucard__title">Imperial College London</h3><p class="ucard__meta">London · Public Research · #6 World</p><p class="ucard__tags">STEM focus · Industry links</p></div><span class="ucard__go">→</span></a>
+					<a class="ucard" href="#"><div class="ucard__img"><img src="https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=400&q=70" alt=""><span class="ucard__rank">#3 UK</span></div><div class="ucard__body"><h3 class="ucard__title">University College London</h3><p class="ucard__meta">London · Public Research · #9 World</p><p class="ucard__tags">Multidisciplinary · Central London</p></div><span class="ucard__go">→</span></a>
+					<a class="ucard" href="#"><div class="ucard__img"><img src="https://images.unsplash.com/photo-1508433957232-3107f5d5995d?w=400&q=70" alt=""><span class="ucard__rank">#1 USA</span></div><div class="ucard__body"><h3 class="ucard__title">MIT</h3><p class="ucard__meta">Cambridge, MA · Private Research · #1 World</p><p class="ucard__tags">Engineering · Research powerhouse</p></div><span class="ucard__go">→</span></a>
 				</div>
 			</div>
 
@@ -170,21 +249,79 @@ section{position:relative}
 				</div>
 			</div>
 
-			<!-- Funding -->
+			<!-- Funding — split cards: amount block + image + meta strip -->
 			<div class="xp__pane" id="pane-f">
-				<div class="fund">
-					<a class="fund__row" href="#"><span class="fund__amt">$25,000<small>Up to</small></span><span class="fund__name">Century Global Excellence Award<span>Merit · any destination</span></span><span class="fund__dead">Closes Mar 15</span><span class="fund__go">→</span></a>
-					<a class="fund__row" href="#"><span class="fund__amt">50%<small>Tuition</small></span><span class="fund__name">Coventry Merit Award<span>UK · postgraduate</span></span><span class="fund__dead">Closes Mar 30</span><span class="fund__go">→</span></a>
-					<a class="fund__row" href="#"><span class="fund__amt">$5,000<small>Entrance</small></span><span class="fund__name">Manitoba Entrance Scholarship<span>Canada · undergraduate</span></span><span class="fund__dead">Rolling</span><span class="fund__go">→</span></a>
-					<a class="fund__row" href="#"><span class="fund__amt">Full<small>Ride</small></span><span class="fund__name">DAAD Scholarship<span>Germany · competitive</span></span><span class="fund__dead">Oct intake</span><span class="fund__go">→</span></a>
+				<div class="fgrid">
+					<a class="fcard" href="#"><div class="fcard__amt"><b>$25,000</b><span>Up to · Merit</span></div><div class="fcard__img"><img src="https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=800&q=70" alt=""><span>Century Global Excellence Award</span></div><div class="fcard__meta"><span>Any destination · strong academics</span><b>Closes Mar 15</b></div></a>
+					<a class="fcard" href="#"><div class="fcard__amt"><b>50%</b><span>Tuition · UK</span></div><div class="fcard__img"><img src="https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=70" alt=""><span>Coventry Merit Award</span></div><div class="fcard__meta"><span>Postgraduate · automatic on offer</span><b>Closes Mar 30</b></div></a>
+					<a class="fcard" href="#"><div class="fcard__amt"><b>$5,000</b><span>Entrance · Canada</span></div><div class="fcard__img"><img src="https://images.unsplash.com/photo-1503614472-8c93d56e92ce?w=800&q=70" alt=""><span>Manitoba Entrance Scholarship</span></div><div class="fcard__meta"><span>Undergraduate · first-year entrants</span><b>Rolling</b></div></a>
+					<a class="fcard" href="#"><div class="fcard__amt"><b>Full</b><span>Ride · Germany</span></div><div class="fcard__img"><img src="https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=800&q=70" alt=""><span>DAAD Scholarship</span></div><div class="fcard__meta"><span>Competitive · tuition + stipend</span><b>Oct intake</b></div></a>
 				</div>
 			</div>
+
 
 			<div class="xp__foot">
 				<p id="xp-foot-label">All 6 destinations live on their own page</p>
 				<a class="link-arrow" href="#" id="xp-foot-link">View all →</a>
 			</div>
 			</div>
+		</div>
+	</div>
+</section>
+
+<!-- STANDALONE SERVICES SECTION — ledger with thumbs, outside the tabs -->
+<section class="section" style="border-top:var(--thin)"><span class="chip">Services — own section, thumbs added</span>
+	<div class="container">
+		<div class="section__head">
+			<div><p class="eyebrow">Our services</p><h2 class="section-title">Five services. Pick one, or the whole journey.</h2></div>
+			<a class="link-arrow" href="#">Student services →</a>
+		</div>
+		<div class="svc">
+			<a class="svc__row" href="#">
+				<span class="svc__img"><span class="no">A</span><img src="https://images.unsplash.com/photo-1521791136064-7986c2920216?w=700&q=70" alt=""></span>
+				<span class="svc__body">
+					<span class="svc__eyebrow">Part of <b>Stage I · Admissions</b></span>
+					<span class="svc__title">Education Advice &amp; Career Counseling</span>
+					<ul class="svc__list"><li>One-on-one consultation, in-office or online</li><li>Personalised programme &amp; university shortlist</li></ul>
+					<span class="svc__foot"><span class="svc__dur">1–2 sessions</span><span class="svc__cta">View service →</span></span>
+				</span>
+			</a>
+			<a class="svc__row" href="#">
+				<span class="svc__img"><span class="no">B</span><img src="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=700&q=70" alt=""></span>
+				<span class="svc__body">
+					<span class="svc__eyebrow">Part of <b>Stage I · Admissions</b></span>
+					<span class="svc__title">Admission Documentation</span>
+					<ul class="svc__list"><li>Complete document checklist per university</li><li>Personal statement review &amp; coaching</li></ul>
+					<span class="svc__foot"><span class="svc__dur">2–6 weeks</span><span class="svc__cta">View service →</span></span>
+				</span>
+			</a>
+			<a class="svc__row" href="#">
+				<span class="svc__img"><span class="no">C</span><img src="https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=700&q=70" alt=""></span>
+				<span class="svc__body">
+					<span class="svc__eyebrow">Part of <b>Stage II · Visa</b></span>
+					<span class="svc__title">Visa Documentation</span>
+					<ul class="svc__list"><li>Embassy-ready visa file</li><li>Financial evidence review &amp; organisation</li></ul>
+					<span class="svc__foot"><span class="svc__dur">1–3 weeks</span><span class="svc__cta">View service →</span></span>
+				</span>
+			</a>
+			<a class="svc__row" href="#">
+				<span class="svc__img"><span class="no">D</span><img src="https://images.unsplash.com/photo-1521295121783-8a321d551ad2?w=700&q=70" alt=""></span>
+				<span class="svc__body">
+					<span class="svc__eyebrow">Part of <b>Stage II · Visa</b></span>
+					<span class="svc__title">Study Visa</span>
+					<ul class="svc__list"><li>Complete visa application filed</li><li>Biometrics appointment scheduled</li></ul>
+					<span class="svc__foot"><span class="svc__dur">2–8 weeks</span><span class="svc__cta">View service →</span></span>
+				</span>
+			</a>
+			<a class="svc__row" href="#">
+				<span class="svc__img"><span class="no">E</span><img src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=700&q=70" alt=""></span>
+				<span class="svc__body">
+					<span class="svc__eyebrow">Part of <b>Stage III · Departure</b></span>
+					<span class="svc__title">Travel Arrangements</span>
+					<ul class="svc__list"><li>Flight booking guidance</li><li>Airport pickup &amp; accommodation support</li></ul>
+					<span class="svc__foot"><span class="svc__dur">1–2 weeks</span><span class="svc__cta">View service →</span></span>
+				</span>
+			</a>
 		</div>
 	</div>
 </section>

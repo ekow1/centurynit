@@ -1134,6 +1134,7 @@ export const coreServices = [
 			"Refine choices with your advisor and confirm targets",
 		],
 		duration: "1–2 sessions",
+		image: "https://images.unsplash.com/photo-1521791136064-7986c2920216?w=900&q=80",
 	},
 	{
 		id: "admission-docs",
@@ -1155,6 +1156,7 @@ export const coreServices = [
 			"Applications submitted and tracked to decision",
 		],
 		duration: "2–6 weeks",
+		image: "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=900&q=80",
 	},
 	{
 		id: "visa-docs",
@@ -1176,6 +1178,7 @@ export const coreServices = [
 			"File ready for embassy submission",
 		],
 		duration: "1–3 weeks",
+		image: "https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=900&q=80",
 	},
 	{
 		id: "study-visa",
@@ -1197,6 +1200,7 @@ export const coreServices = [
 			"Visa decision tracked and communicated",
 		],
 		duration: "2–8 weeks",
+		image: "https://images.unsplash.com/photo-1521295121783-8a321d551ad2?w=900&q=80",
 	},
 	{
 		id: "travel",
@@ -1218,6 +1222,7 @@ export const coreServices = [
 			"Departure and post-arrival check-in",
 		],
 		duration: "1–2 weeks",
+		image: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=900&q=80",
 	},
 ];
 
@@ -1429,6 +1434,7 @@ export const scholarships = [
 		deadline: "15 Mar 2026",
 		eligibility: "Outstanding academic profile · Any destination",
 		type: "Merit",
+		image: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=900&q=80",
 		description:
 			"Our flagship award recognises students with exceptional academic records and clear, ambitious study goals. It is open to all destinations and levels of study.",
 		criteria: [
@@ -1464,6 +1470,7 @@ export const scholarships = [
 		deadline: "30 Apr 2026",
 		eligibility: "STEM postgraduate applicants · UK, USA, Canada",
 		type: "Field-specific",
+		image: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=900&q=80",
 		description:
 			"Designed for students pursuing advanced degrees in science, technology, engineering, or mathematics at leading institutions in the UK, USA, or Canada.",
 		criteria: [
@@ -1499,6 +1506,7 @@ export const scholarships = [
 		deadline: "1 May 2026",
 		eligibility: "Female applicants · Business & Public Policy",
 		type: "Need + Merit",
+		image: "https://images.unsplash.com/photo-1571260899304-425eee4c7efc?w=900&q=80",
 		description:
 			"This bursary supports women entering business, public policy, and leadership programs. It combines need-based and merit-based review.",
 		criteria: [
@@ -1535,6 +1543,7 @@ export const scholarships = [
 		deadline: "Rolling",
 		eligibility: "Canadian universities · PGWP-eligible programs",
 		type: "Destination",
+		image: "https://images.unsplash.com/photo-1503614472-8c93d56e92ce?w=900&q=80",
 		description:
 			"A destination grant for students choosing Canada and a post-graduation work permit-eligible program. It is awarded on a rolling basis as funds remain.",
 		criteria: [

@@ -51,10 +51,10 @@ const SERVICE_STAGE_TAG: Record<string, string> = {
 
 /** The Explore tabs — destinations, partners, programs and funding share one section. */
 const EXPLORE_TABS = [
-	{ id: "d", label: "Destinations", caption: "6 countries", foot: "All 6 destinations live on their own page", to: "/destinations" },
-	{ id: "u", label: "Universities", caption: "100+ partners", foot: "100+ partner institutions", to: "/universities" },
-	{ id: "p", label: "Programs", caption: "Featured", foot: "Full program catalogue", to: "/programs" },
-	{ id: "f", label: "Funding", caption: "Scholarships", foot: "All scholarships & deadlines", to: "/scholarships" },
+	{ id: "d", label: "Destinations", caption: "6 countries", foot: "All 6 destinations live on their own page", to: "/destinations", thumb: destinations[0]?.image },
+	{ id: "u", label: "Universities", caption: "100+ partners", foot: "100+ partner institutions", to: "/universities", thumb: universities[0]?.image },
+	{ id: "p", label: "Programs", caption: "Featured", foot: "Full program catalogue", to: "/programs", thumb: universities[2]?.image },
+	{ id: "f", label: "Funding", caption: "Scholarships", foot: "All scholarships & deadlines", to: "/scholarships", thumb: scholarships[0]?.image },
 ] as const;
 type ExploreTab = (typeof EXPLORE_TABS)[number]["id"];
 /** The pathways the old spotlight row featured — they lead the destinations grid. */
@@ -269,18 +269,23 @@ export function Home() {
 					<div className="svc">
 						{coreServices.map((s, i) => (
 							<Link key={s.id} to={`/services/${s.id}`} className="svc__row">
-								<span className="svc__num">{String(i + 1).padStart(2, "0")}</span>
-								<span className="svc__name">
-									{s.title}
-									<small>Part of {SERVICE_STAGE_TAG[s.id] ?? "the journey"}</small>
+								<span className="svc__img">
+									<span className="no">{String.fromCharCode(65 + i)}</span>
+									<img src={s.image} alt="" />
 								</span>
-								<ul className="svc__del">
-									{s.deliverables.slice(0, 2).map((d) => (
-										<li key={d}>{d}</li>
-									))}
-								</ul>
-								<span className="svc__dur">{s.duration}</span>
-								<span className="svc__go">→</span>
+								<span className="svc__body">
+									<span className="svc__eyebrow">Part of <b>{SERVICE_STAGE_TAG[s.id] ?? "the journey"}</b></span>
+									<span className="svc__title">{s.title}</span>
+									<ul className="svc__list">
+										{s.deliverables.slice(0, 2).map((d) => (
+											<li key={d}>{d}</li>
+										))}
+									</ul>
+									<span className="svc__meta">
+										<span className="svc__dur">{s.duration}</span>
+										<span className="svc__cta">View service →</span>
+									</span>
+								</span>
 							</Link>
 						))}
 					</div>
@@ -312,7 +317,7 @@ export function Home() {
 
 					<div className="xp">
 						<div className="xp__tabs" role="tablist" aria-label="Explore">
-							{EXPLORE_TABS.map((t, i) => (
+							{EXPLORE_TABS.map((t) => (
 								<button
 									key={t.id}
 									type="button"
@@ -321,10 +326,14 @@ export function Home() {
 									className="xp__tab"
 									onClick={() => setExplore(t.id)}
 								>
-									<span className="no">{String(i + 1).padStart(2, "0")}</span>
-									<span className="nm">
-										{t.label}
-										<small>{t.caption}</small>
+									{t.thumb && (
+										<span className="thumb" aria-hidden>
+											<img src={t.thumb} alt="" />
+										</span>
+									)}
+									<span className="tx">
+										<span className="nm">{t.label}</span>
+										<span className="ct">{t.caption}</span>
 									</span>
 								</button>
 							))}
@@ -355,20 +364,19 @@ export function Home() {
 
 						{explore === "u" && (
 							<div className="xp__pane" data-open>
-								<div className="card-grid card-grid--3">
+								<div>
 									{universities.slice(0, 6).map((u) => (
-										<Link key={u.id} to={`/universities/${u.id}`} className="media-card" aria-label={`View ${u.name}`}>
-											<span className="media-card__hint" aria-hidden>→</span>
-											<div className="media-card__img">
-												<span className="media-card__stat">{u.ranking}</span>
+										<Link key={u.id} to={`/universities/${u.id}`} className="ucard" aria-label={`View ${u.name}`}>
+											<span className="ucard__img">
 												<img src={u.image} alt="" />
-											</div>
-											<div className="media-card__body">
-												<span className="eyebrow">{u.city} · {u.type}</span>
-												<h3 className="media-card__title">{u.name}</h3>
-												<p className="media-card__text">{u.tags.join(" · ")}</p>
-												<span className="media-card__cta">View university <span aria-hidden>→</span></span>
-											</div>
+												<span className="ucard__rank">{u.ranking}</span>
+											</span>
+											<span className="ucard__body">
+												<span className="ucard__title">{u.name}</span>
+												<span className="ucard__meta">{u.city} · {u.type}</span>
+												<span className="ucard__tags">{u.tags.join(" · ")}</span>
+											</span>
+											<span className="ucard__go" aria-hidden>→</span>
 										</Link>
 									))}
 								</div>
@@ -402,19 +410,21 @@ export function Home() {
 
 						{explore === "f" && (
 							<div className="xp__pane" data-open>
-								<div className="fund">
-									{scholarships.slice(0, 6).map((s) => (
-										<Link key={s.id} to={`/scholarships/${s.id}`} className="fund__row">
-											<span className="fund__amt">
-												{s.amount.replace(/^Up to\s*/i, "")}
-												{s.amountQualifier && <small>{s.amountQualifier}</small>}
+								<div className="fgrid">
+									{scholarships.slice(0, 4).map((s) => (
+										<Link key={s.id} to={`/scholarships/${s.id}`} className="fcard" aria-label={`View ${s.name}`}>
+											<span className="fcard__amt">
+												<b>{s.amount.replace(/^Up to\s*/i, "")}</b>
+												<span>{s.amountQualifier ? `${s.amountQualifier} · ${s.type}` : s.type}</span>
 											</span>
-											<span className="fund__name">
-												{s.name}
-												<span>{s.type} · {s.eligibility}</span>
+											<span className="fcard__img">
+												<img src={s.image} alt="" />
+												<span>{s.name}</span>
 											</span>
-											<span className="fund__dead">Deadline · {s.deadline}</span>
-											<span className="fund__go">→</span>
+											<span className="fcard__meta">
+												<span>{s.eligibility}</span>
+												<b>{s.deadline === "Rolling" ? "Rolling" : `Closes ${s.deadline}`}</b>
+											</span>
 										</Link>
 									))}
 								</div>

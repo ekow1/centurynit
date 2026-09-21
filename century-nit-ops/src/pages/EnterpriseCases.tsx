@@ -23,6 +23,7 @@ import {
 } from "century-nit-shared";
 import { ApplicationAssignSheet, AssignChip, assignmentNeeded } from "./case/ApplicationAssignSheet";
 import { caseHandlerName, tasksForApplication, taskActionLabel } from "../lib/pendingTasks";
+import { ScopeChip } from "../components/ScopeRoute";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { fmtBoth } from "./currency";
 
@@ -50,9 +51,22 @@ function quietDays(app: MockApplication, now: number): number {
 	return Number.isFinite(t) ? Math.floor((now - t) / 86_400_000) : 0;
 }
 
+/**
+ * The filter pills speak the journey's stages. The old chapter ids stay as
+ * the URL values (bookmarked links keep working); enrol and apply are the
+ * two halves of Stage I — documents, then offers.
+ */
+const CHAPTER_LABEL: Record<ChapterId, string> = {
+	consult: "0 · Consultation",
+	enrol: "I · Documents",
+	apply: "I · Offers",
+	visa: "II · Visa",
+	depart: "III · Departure",
+	done: "Done",
+};
 const CHAPTER_FILTERS: { id: "all" | ChapterId; label: string }[] = [
 	{ id: "all", label: "All" },
-	...CHAPTERS.filter((c) => c.id !== "consult").map((c) => ({ id: c.id, label: c.label })),
+	...CHAPTERS.filter((c) => c.id !== "consult").map((c) => ({ id: c.id, label: CHAPTER_LABEL[c.id] })),
 ];
 
 /** The chapter filter named in the URL, or "all" for anything unknown. */
@@ -233,7 +247,7 @@ export function EnterpriseCases() {
 	const filterChips = (
 		<>
 			<FilterGroup
-				label="Chapter"
+				label="Stage"
 				options={CHAPTER_FILTERS.map((c) => ({ id: c.id, label: c.label, count: chapterCounts.get(c.id) ?? 0 }))}
 				value={chapter}
 				onChange={(v) => setChapter(v)}
@@ -268,7 +282,7 @@ export function EnterpriseCases() {
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.25rem", flexWrap: "wrap", gap: "0.75rem" }}>
 				<div>
 					<h1 className="page-title">Cases</h1>
-					<p className="lead mt-1">Every client's journey — one list, by chapter; open a case to work it.</p>
+					<p className="lead mt-1">Every client's journey — one list, by stage; open a case to work it.</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
 					<div className="cn-scaffold__chips" role="tablist" aria-label="View">
@@ -347,7 +361,7 @@ export function EnterpriseCases() {
 							<div className="ops-dkv"><span className="ops-dkv__k">Needs handler</span><span>{unassignedCases} {unassignedCases > 0 && `— oldest ${quietDays(roleScopedApps.filter(needsHandler).sort((a, b) => Date.parse(a.submittedDate) - Date.parse(b.submittedDate))[0] ?? roleScopedApps[0], now)}d`}</span></div>
 							<div className="ops-dkv"><span className="ops-dkv__k">Stalled 7d+</span><span>{roleScopedApps.filter((a) => a.stage !== "completed" && quietDays(a, now) >= 7).length}</span></div>
 							<div className="ops-dkv"><span className="ops-dkv__k">Awaiting client</span><span>{roleScopedApps.filter((a) => a.status === "Action Required").length}</span></div>
-							<p className="ops-dsec" style={{ marginTop: "0.9rem" }}>By chapter</p>
+							<p className="ops-dsec" style={{ marginTop: "0.9rem" }}>By stage</p>
 							{CHAPTER_FILTERS.filter((c) => c.id !== "all").map((c) => (
 								<div className="ops-dkv" key={c.id}>
 									<span className="ops-dkv__k">{c.label}</span>
@@ -415,6 +429,7 @@ export function EnterpriseCases() {
 														{app.university} · {app.program}
 														{tasks.length > 0 && <span> — <strong>{tasks[0].subtitle || taskActionLabel(tasks[0])}</strong></span>}
 													</p>
+													<ScopeChip scopeStages={app.scopeStages} className="cn-row__scope" />
 													<div className="cn-row__meta">
 														{(() => {
 															const seatName = caseHandlerName(app);

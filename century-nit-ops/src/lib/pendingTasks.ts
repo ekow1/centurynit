@@ -13,6 +13,7 @@ import { invoiceBalance, invoiceAgeDays } from "century-nit-core/ops";
 import {
 	JOURNEY_STAGE_LABELS,
 	SERVICE_STAGE_LABELS,
+	scopeLabel,
 	type JourneyStage,
 	type StageHandoff,
 	type Booking,
@@ -217,9 +218,14 @@ export const VISA_STEP_LABELS = VISA_STAGE_LABELS;
  * same step as the portal; the coarse ops stage otherwise.
  */
 export function stageMeta(a: MockApplication): string {
-	return a.journey
-		? `Client sees: ${a.journey.label}`
-		: `Stage: ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage}`;
+	// Scope rides every task line — "visa only" is what tells the handler
+	// why a case sits in Visa with no Applications work behind it.
+	const scope = a.scopeStages ? ` · ${scopeLabel(a.scopeStages)}` : "";
+	return (
+		(a.journey
+			? `Client sees: ${a.journey.label}`
+			: `Stage: ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage}`) + scope
+	);
 }
 
 export function visaInvoiceFor(invoices: Invoice[], app: MockApplication): Invoice | undefined {

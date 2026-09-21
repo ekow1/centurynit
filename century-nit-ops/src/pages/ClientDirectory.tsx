@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { API_PREFIX, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import { ScopeChip } from "../components/ScopeRoute";
 import { branchName, OPS_BRANCHES } from "century-nit-core/ops";
 import { apiFetch, listClientUsers, type ClientUser } from "../lib/api";
 import { useOpsAuth } from "./OpsAuthContext";
@@ -557,6 +558,8 @@ export function ClientDirectory() {
 										{a.branch ? ` · ${branchName(a.branch)}` : ""}
 										{" · "}
 										<Link to={`/applications?id=${a.id}`} className="dash-link">open →</Link>
+										{" "}
+										<ScopeChip scopeStages={a.scopeStages} />
 									</span>
 								</div>
 							))

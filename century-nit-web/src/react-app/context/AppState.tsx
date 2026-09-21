@@ -374,6 +374,8 @@ export type ApplicationData = {
 	lastContinuation: { id: string; stage: "visa" | "departure" | "admissions"; note: string | null; status: string; decisionNote?: string | null; createdAt?: string } | null;
 	/** Answers a reopened stage asked for — keyed by stage. */
 	stageIntake: Record<string, Record<string, string>>;
+	/** The applicant's profile as the server stores it — intake fields skip what it already answers. */
+	applicantProfile: Record<string, string>;
 };
 
 export type ConsultationType = "online" | "in_person" | "";
@@ -661,6 +663,7 @@ const defaultApplication: ApplicationData = {
 	pendingContinuation: null,
 	lastContinuation: null,
 	stageIntake: {},
+	applicantProfile: {},
 };
 
 const defaultAssessment: AssessmentData = {
@@ -2496,6 +2499,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					nationality: prev.nationality || a.profile?.nationality || "",
 					destinationId: prev.destinationId || a.targetCountry || "",
 					referralSource: prev.referralSource || a.profile?.referralSource || "",
+					applicantProfile: (a.profile as Record<string, string> | undefined) ?? prev.applicantProfile,
 				}));
 			}
 			if (res.application) {

@@ -19,6 +19,7 @@ import { VisaTab } from "./tabs/VisaTab";
 import { DepartureTab } from "./tabs/DepartureTab";
 import { MoneyTab } from "./tabs/MoneyTab";
 import { caseHandlerName, tasksForApplication, taskActionLabel, type PendingTask } from "../../lib/pendingTasks";
+import { ScopeRoute } from "../../components/ScopeRoute";
 import { listInvoices, getApplicationActivity, type ApiInvoice } from "../../lib/api";
 import { CaseHeader, Sheet, type NextAction } from "century-nit-core/ui";
 import { CaseTodo } from "./CaseTodo";
@@ -45,6 +46,7 @@ import {
 	scopeLabel,
 	entryStage,
 	SERVICE_STAGE_LABELS,
+	STAGE_INTAKE,
 	type ServiceStage,
 } from "century-nit-shared";
 
@@ -495,10 +497,14 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// decision — approving extends the plan and reopens the case.
 	if (app.pendingContinuation) {
 		const cont = app.pendingContinuation;
+		const intake = STAGE_INTAKE[cont.stage as Exclude<ServiceStage, "admissions">];
+		const intakeNote = intake
+			? ` On approval the portal asks the intake — ${intake.fields.length} questions, ${intake.documentIds.length} documents (anything already on file is skipped).`
+			: "";
 		nextActions.push({
 			id: `continuation-${cont.id}`,
 			title: `Client requested the ${SERVICE_STAGE_LABELS[cont.stage]} stage`,
-			detail: `${cont.note ? `"${cont.note}" — ` : ""}Approving extends the plan, bills the stage's first milestone, and reopens the case. Declining needs a reason.`,
+			detail: `${cont.note ? `"${cont.note}" — ` : ""}Approving extends the plan, bills the stage's first milestone, and reopens the case.${intakeNote} Declining needs a reason.`,
 			tone: "blocked",
 			action: mayAdvance ? (
 				<span style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
@@ -608,6 +614,18 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					{ label: "Programme", value: app.program || "—" },
 				]}
 			/>
+
+			{/* The plan drawn as the route — the same picture the portal shows:
+			    stages on the scope inked, skipped struck, the offer tagged. */}
+			{scope || app.plannedStages ? (
+				<div style={{ border: "1px solid var(--border)", background: "var(--card)", padding: "0 1rem 0.9rem", marginBottom: "0.75rem" }}>
+					<ScopeRoute
+						scopeStages={app.scopeStages ?? null}
+						recommended={!scope && app.plannedStages ? normaliseScope(app.plannedStages) : undefined}
+					/>
+					{planLine ? <p className="muted" style={{ fontSize: "var(--text-xs)", margin: "0.25rem 0 0" }}>{planLine}</p> : null}
+				</div>
+			) : null}
 
 			<CaseStateLine app={app} closed={caseClosed} />
 

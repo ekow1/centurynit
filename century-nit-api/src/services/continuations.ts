@@ -9,7 +9,7 @@ import {
 	type ServiceStage,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { applications, caseComments, stageContinuationRequests } from "../db/schema.js";
+import { applicants, applications, caseComments, stageContinuationRequests } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import { notify } from "./notify.js";
 import { emitDomain } from "../worker/pubsub.js";
@@ -265,7 +265,7 @@ export async function submitStageIntake(input: {
 	stage: ServiceStage;
 	answers: Record<string, string>;
 }): Promise<Record<string, Record<string, string>>> {
-	const { application } = await getApplicationForClientUser(input.applicantUserId);
+	const { applicant, application } = await getApplicationForClientUser(input.applicantUserId);
 	if (input.stage === "admissions") {
 		throw new HttpError(400, "INTAKE_STAGE_INVALID", "Admissions intake is collected at assessment.");
 	}
@@ -280,6 +280,18 @@ export async function submitStageIntake(input: {
 	}
 	const merged = { ...(application.stageIntake as Record<string, Record<string, string>> | null), [input.stage]: answers };
 	await db.update(applications).set({ stageIntake: merged, updatedAt: new Date() }).where(eq(applications.id, application.id));
+
+	// The intake field ids are the profile's own keys — write the answers
+	// where an entrant's would have landed, so the review surfaces and the
+	// portal's "already on file" check read one store. Never overwrite an
+	// existing answer: the first answer on file stands.
+	if (Object.keys(answers).length > 0) {
+		const profile = { ...((applicant.profile as Record<string, string> | null) ?? {}) };
+		for (const [k, v] of Object.entries(answers)) {
+			if (!profile[k]?.trim()) profile[k] = v;
+		}
+		await db.update(applicants).set({ profile, updatedAt: new Date() }).where(eq(applicants.id, applicant.id));
+	}
 
 	await db.insert(caseComments).values({
 		targetType: "application",

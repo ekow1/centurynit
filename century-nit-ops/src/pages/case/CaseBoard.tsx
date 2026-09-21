@@ -13,6 +13,7 @@ import {
 	type JourneyStage,
 } from "century-nit-shared";
 import { caseHandlerName } from "../../lib/pendingTasks";
+import { ScopeChip } from "../../components/ScopeRoute";
 
 /**
  * The cases as columns, one per stage, under a rail of the chapters the
@@ -34,6 +35,19 @@ const CHAPTER_STAGES: Record<ChapterId, JourneyStage[]> = CHAPTERS.reduce(
 	(acc, c) => ({ ...acc, [c.id]: JOURNEY_STAGES.filter((s) => STAGE_CHAPTER[s] === c.id) }),
 	{} as Record<ChapterId, JourneyStage[]>,
 );
+
+/**
+ * The rail speaks the journey's stages, not the old chapters — the coarse
+ * columns group under the service stage they belong to (a visa-only file's
+ * "Applications" columns are never where it should end up; scope is on the
+ * card). Stage 0 has no column: a case only exists once the consultation
+ * opened the file, so the amber dot on each card's mini-route marks it done.
+ */
+const STAGE_RAIL: { id: string; no: string; label: string; stages: JourneyStage[] }[] = [
+	{ id: "admissions", no: "I", label: "Admissions", stages: ["document_verification", "school_submission", "offer_letter_review"] },
+	{ id: "visa", no: "II", label: "Visa", stages: ["visa_processing"] },
+	{ id: "departure", no: "III", label: "Departure & arrival", stages: ["travel_assistance", "payment_execution"] },
+];
 
 export type BoardOrder = "age" | "recent" | "name";
 export const BOARD_ORDERS: { id: BoardOrder; label: string }[] = [
@@ -180,11 +194,11 @@ export function CaseBoard({
 	const boardShape = shape(stages.flatMap((s) => columns.get(s) ?? []));
 	const doneCount = columns.get("completed")?.length ?? 0;
 
-	// The chapters over the shown columns, each spanning its stages.
-	const rail = CHAPTERS.filter((c) => c.id !== "consult" && c.id !== "done" && CHAPTER_STAGES[c.id].some((s) => stages.includes(s))).map((c) => ({
-		...c,
-		span: CHAPTER_STAGES[c.id].filter((s) => stages.includes(s)).length,
-		count: CHAPTER_STAGES[c.id].reduce((n, s) => n + (columns.get(s)?.length ?? 0), 0),
+	// The service stages over the shown columns, each spanning its columns.
+	const rail = STAGE_RAIL.filter((r) => r.stages.some((s) => stages.includes(s))).map((r) => ({
+		...r,
+		span: r.stages.filter((s) => stages.includes(s)).length,
+		count: r.stages.reduce((n, s) => n + (columns.get(s)?.length ?? 0), 0),
 	}));
 
 	async function move(app: MockApplication, to: JourneyStage) {
@@ -241,6 +255,7 @@ export function CaseBoard({
 					<span className="ops-kase__ref">{app.appId}</span>
 					{app.university ? ` · ${app.university}` : ""}
 				</div>
+				<ScopeChip scopeStages={app.scopeStages} />
 				<div className="ops-kase__gate">
 					<span className={`ops-gate-dot${gate.kind === "wait" ? " ops-gate-dot--hollow" : ""}`} aria-hidden />
 					<span className={`ops-kase__gate-text${gate.kind === "wait" ? " ops-kase__gate-text--wait" : ""}`}>{gate.label}</span>
@@ -305,19 +320,19 @@ export function CaseBoard({
 			<div className="ops-board__rail" style={{ gridTemplateColumns: template }}>
 				{rail.map((c) => (
 					<div key={c.id} className="ops-board__chapter" style={{ gridColumn: `span ${c.span}` }}>
-						<span className="ops-board__numeral">{c.numeral}</span>
+						<span className="ops-board__numeral">{c.no}</span>
 						{c.label}
 						<span className="ops-board__chapter-n">{c.count}</span>
 					</div>
 				))}
 				{showDone && chapter === "all" && (
-					<div className="ops-board__chapter ops-board__chapter--done">
-						<span className="ops-board__numeral">VI</span>
+					<div className="ops-board__chapter ops-board__chapter--done" title={`${doneCount} completed`}>
+						<span className="ops-board__numeral">✓</span>
 					</div>
 				)}
 				{chapter === "done" && (
 					<div className="ops-board__chapter">
-						<span className="ops-board__numeral">VI</span>
+						<span className="ops-board__numeral">✓</span>
 						Done
 						<span className="ops-board__chapter-n">{doneCount}</span>
 					</div>
@@ -383,6 +398,7 @@ export function CaseBoard({
 			</div>
 
 			<p className="ops-board__foot">
+				Every case on the board entered at Stage 0 · Consultation — the amber dot on each card.{" "}
 				{apps.length - hidden} case{apps.length - hidden === 1 ? "" : "s"} on the board
 				{shapeText(boardShape) ? ` · ${shapeText(boardShape)}` : ""}
 				{hidden > 0 ? ` · ${hidden} further along — see the list` : ""}

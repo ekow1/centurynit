@@ -19,10 +19,30 @@ export function StageIntakeCard({ stage }: { stage: Exclude<ServiceStage, "admis
 	const [busy, setBusy] = useState(false);
 
 	const continued = application.lastContinuation?.status === "approved" && application.lastContinuation.stage === stage;
-	const answered = Boolean(application.stageIntake?.[stage] && Object.keys(application.stageIntake[stage]).length > 0);
-	if (!continued || answered) return null;
 
-	const visible = pack.fields.filter((f) => !f.showIf || answers[f.showIf.id] === f.showIf.equals);
+	// Never re-ask what the file already knows: the intake field ids are the
+	// profile's own keys, so an answer given at assessment (or in an earlier
+	// partial submission) satisfies the field here.
+	const prior: Record<string, string> = {};
+	for (const f of pack.fields) {
+		const v = application.applicantProfile?.[f.id] ?? application.stageIntake?.[stage]?.[f.id];
+		if (typeof v === "string" && v.trim()) prior[f.id] = v.trim();
+	}
+
+	const needed = pack.fields.filter((f) => {
+		if (prior[f.id]) return false;
+		// A conditional field is only owed when its trigger already fired —
+		// a known "no" on the parent means the child is answered by omission.
+		if (f.showIf && prior[f.showIf.id] !== undefined && prior[f.showIf.id] !== f.showIf.equals) return false;
+		return true;
+	});
+	if (!continued || needed.length === 0) return null;
+
+	const visible = needed.filter((f) => {
+		if (!f.showIf) return true;
+		const parent = answers[f.showIf.id] ?? prior[f.showIf.id];
+		return parent === f.showIf.equals;
+	});
 
 	async function submit() {
 		setBusy(true);

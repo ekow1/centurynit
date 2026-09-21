@@ -122,7 +122,7 @@ export function PaySheet({
 		<div className="paysheet" role="dialog" aria-modal="true" aria-label={`Pay ${invoice.invoiceNumber}`}>
 			<div className="paysheet__panel">
 				<div className="paysheet__head">
-					<h3>{phase === "paid" ? "Payment received" : "Pay the balance"}</h3>
+					<h3>{phase === "paid" ? "Payment received" : invoice.nextDue ? "Pay the next milestone" : "Pay the balance"}</h3>
 					<span className="paysheet__inv">{invoice.invoiceNumber}</span>
 					<button type="button" className="paysheet__x" onClick={onClose} aria-label="Close">✕</button>
 				</div>
@@ -132,16 +132,20 @@ export function PaySheet({
 						<>
 							<div className="paysheet__sum">
 								<span>
-									{invoice.lines.map((l) => l.label).join(" · ") || "Invoice balance"}
-									<small>{invoice.status === "issued" ? "outstanding balance" : invoice.status}</small>
+									{invoice.nextDue ? invoice.nextDue.label : invoice.lines.map((l) => l.label).join(" · ") || "Invoice balance"}
+									<small>
+										{invoice.nextDue
+											? `${invoice.nextDue.dueAt ? `due ${new Date(invoice.nextDue.dueAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })} · ` : ""}then ${formatMoney(invoice.nextDue.remainingCents)} over the rest of your plan`
+											: invoice.status === "issued" ? "outstanding balance" : invoice.status}
+									</small>
 								</span>
-								<span className="paysheet__amt">{formatMoney(invoice.balanceCents)}</span>
+								<span className="paysheet__amt">{formatMoney(invoice.nextDue?.amountCents ?? invoice.balanceCents)}</span>
 							</div>
 
 							<p className="paysheet__note">A secure Paystack checkout opens over this page — pay by card or Mobile Money. Your payment details never touch our servers.</p>
 							{error ? <p className="paysheet__err">{error}</p> : null}
 							<button type="button" className="paysheet__pay" disabled={phase === "sending"} onClick={() => void payWithPaystack()}>
-								{phase === "sending" ? "Opening…" : `Pay ${formatMoney(invoice.balanceCents, "ghs")}`}
+								{phase === "sending" ? "Opening…" : `Pay ${formatMoney(invoice.nextDue?.amountCents ?? invoice.balanceCents, "ghs")}`}
 							</button>
 							<p className="paysheet__secure">Paystack hosts the checkout · PCI stays with them</p>
 						</>

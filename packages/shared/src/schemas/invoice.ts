@@ -175,6 +175,20 @@ export const invoiceLineSchema = z.object({
 	dueOn: z.string().nullable().optional(),
 });
 
+/**
+ * The next thing to pay on a milestone invoice: the first line the payments
+ * have not covered, less whatever of it already is. Never the balance —
+ * a client pays one milestone at a time.
+ */
+export const invoiceNextDueSchema = z.object({
+	label: z.string(),
+	amountCents: z.number().int(),
+	dueOn: z.string().nullable(),
+	dueAt: z.string().datetime().nullable(),
+	/** What is still owed after this milestone. */
+	remainingCents: z.number().int(),
+});
+
 export const invoicePaymentSchema = z.object({
 	id: z.string().uuid(),
 	amountCents: z.number().int(),
@@ -207,6 +221,8 @@ export const invoiceSchema = z.object({
 	paidCents: z.number().int(),
 	creditedCents: z.number().int(),
 	balanceCents: z.number().int(),
+	/** The next milestone to pay, when the invoice is paid in milestones; null on a one-line invoice or a settled one. */
+	nextDue: invoiceNextDueSchema.nullable().optional(),
 	note: z.string().nullable(),
 	/** Who raised it. The chapter owner, the client via the portal, or "System". */
 	raisedByName: z.string().nullable(),

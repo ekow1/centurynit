@@ -5,7 +5,7 @@ import { applicantDocuments, applicants, applications, consultations, invoiceEve
 import { serializeApplication, setApplicationPackage } from "./cases.js";
 import { completeConsultationAssessment } from "./consultations.js";
 import { recordPayment } from "./invoice.js";
-import { fireDueTrigger, reconcileDueTriggers } from "./serviceFee.js";
+import { fireDueTrigger, reconcileDueTriggers, setPostArrivalSchedule } from "./serviceFee.js";
 import { processConsentDecision } from "../routes/me.js";
 
 /**
@@ -257,6 +257,16 @@ describe("stage-priced plans", () => {
 		// Two re-selections happened while unpaid (one void each); the upgrade added none.
 		const stillVoid = await db.select().from(invoices).where(sql`${invoices.applicationId} = ${appId} AND ${invoices.status} = 'void'`);
 		expect(stillVoid).toHaveLength(2);
+
+		// ── A per-stage plan has no post-arrival part: a schedule is refused, not corrupted ──
+		await db.update(applications).set({ paymentPlanId: "installment" }).where(eq(applications.id, appId));
+		await expect(setPostArrivalSchedule({ applicationId: appId, choice: { months: 6, frequency: "monthly" }, actor: { name: "Client" } })).rejects.toMatchObject({ code: "NO_POST_ARRIVAL" });
+		({ row, lines } = await agencyInvoice(appId));
+		expect(lines.map((l) => l.dueOn)).toEqual(["acceptance", "offer", "visa_open", "visa_approved"]);
+		// And the invoice says what to pay next: the offer milestone, not the balance.
+		const { serializeInvoice } = await import("./invoice.js");
+		const api = await serializeInvoice(row);
+		expect(api.nextDue).toMatchObject({ label: "Admissions · on offer", amountCents: 35_000, remainingCents: 70_000 + 10_000 });
 
 		// ── Shrinking: a stage that never opened comes off; one that opened is owed ──
 		// Departure has not opened (its line is undated): it can come off, and the

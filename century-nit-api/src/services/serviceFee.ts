@@ -319,6 +319,15 @@ export async function setPostArrivalSchedule(input: {
 	if (app.paymentPlanId !== "installment") {
 		throw new HttpError(409, "PLAN_NOT_INSTALMENT", "A post-arrival schedule applies to the instalment plan only.");
 	}
+	// A per-stage plan (stopped short, or grown stage by stage) has nothing
+	// "after you arrive" to spread — its stages are paid as they open.
+	const liveInv = await liveAgencyInvoice(app.id);
+	if (liveInv) {
+		const { lines } = await linesAndPaid(liveInv.id);
+		if (splitPostArrival(lines).tail.length === 0) {
+			throw new HttpError(409, "NO_POST_ARRIVAL", "This plan has no post-arrival part to spread — its stages are paid as each opens.");
+		}
+	}
 	if (app.postArrivalStatus === "approved") {
 		throw new HttpError(409, "SCHEDULE_LOCKED", "The post-arrival plan is approved — it can no longer change.");
 	}
@@ -435,12 +444,26 @@ export async function declinePostArrivalSchedule(input: {
  * While a request is pending or declined the remainder is a single undated
  * line — nothing looks payable on a schedule nobody has approved.
  */
+/**
+ * Which lines are the post-arrival remainder. On a plan raised as the
+ * full-journey split they carry `dueOn: arrival` (one line) or
+ * `scheduled` (dated instalments). A legacy invoice (no triggers) is the
+ * old shape: everything after the deposit and the pre-departure milestone.
+ * A per-stage invoice — Admissions on acceptance, Visa, Departure — has no
+ * remainder at all: nothing on it is "after you arrive".
+ */
+function splitPostArrival<L extends { dueOn?: string | null }>(lines: L[]): { head: L[]; tail: L[] } {
+	const tagged = lines.some((l) => l.dueOn != null);
+	if (!tagged) return { head: lines.slice(0, 2), tail: lines.slice(2) };
+	const isTail = (l: L) => l.dueOn === "arrival" || l.dueOn === "scheduled";
+	return { head: lines.filter((l) => !isTail(l)), tail: lines.filter(isTail) };
+}
+
 async function collapsePostArrivalTail(applicationId: string): Promise<void> {
 	const inv = await liveAgencyInvoice(applicationId);
 	if (!inv) return;
 	const { lines, paidCents } = await linesAndPaid(inv.id);
-	const head = lines.slice(0, 2);
-	const tail = lines.slice(2);
+	const { head, tail } = splitPostArrival(lines);
 	if (tail.length === 0) return;
 	const headCents = head.reduce((n, l) => n + l.amountCents, 0);
 	if (paidCents > headCents) {
@@ -502,9 +525,8 @@ export async function rewritePostArrivalLines(applicationId: string): Promise<vo
 	const inv = await liveAgencyInvoice(applicationId);
 	if (!inv) return;
 	const { lines, paidCents } = await linesAndPaid(inv.id);
-	// The remainder is everything after the first two milestones.
-	const head = lines.slice(0, 2);
-	const tail = lines.slice(2);
+	// The remainder is the post-arrival part — the line that says so.
+	const { head, tail } = splitPostArrival(lines);
 	const headCents = head.reduce((n, l) => n + l.amountCents, 0);
 	const remainderCents = tail.reduce((n, l) => n + l.amountCents, 0);
 	if (remainderCents <= 0) return;

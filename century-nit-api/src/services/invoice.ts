@@ -196,6 +196,23 @@ export async function serializeInvoice(row: InvoiceRow): Promise<ApiInvoice> {
 		paidCents,
 		creditedCents: row.creditedCents,
 		balanceCents: balanceOf(row, paidCents),
+		nextDue: (() => {
+			// One milestone at a time: the first line the payments have not
+			// covered, less whatever of it already is; then what remains after it.
+			if (row.status === "void" || lines.length < 2) return null;
+			const balance = balanceOf(row, paidCents);
+			if (balance <= 0) return null;
+			let cum = 0;
+			for (const l of lines) {
+				const before = cum;
+				cum += l.amountCents;
+				if (paidCents < cum) {
+					const amountCents = Math.min(cum - Math.max(paidCents, before), balance);
+					return { label: l.label, amountCents, dueOn: l.dueOn ?? null, dueAt: l.dueAt?.toISOString() ?? null, remainingCents: Math.max(0, balance - amountCents) };
+				}
+			}
+			return null;
+		})(),
 		note: row.note ?? null,
 		raisedByName: publicName(row.raisedByName),
 		raisedAt: row.createdAt.toISOString(),

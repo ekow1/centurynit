@@ -1396,6 +1396,8 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 	const consultInvoiceType = invoicesLoaded ? invoices.find((i) => i.type === "consultation") : null;
 	const agencyInvoiceType = invoicesLoaded ? invoices.find((i) => i.type === "agency") : null;
 	const travelInvoiceType = invoicesLoaded ? invoices.find((i) => i.type === "travel" && i.status !== "void") : null;
+	// A service fee paid in stages: its lines name the stages, not the split.
+	const stageLined = Boolean(agencyInvoiceType?.lines.some((l) => l.label.startsWith("Admissions") || l.label === "Visa" || l.label.startsWith("Departure")));
 
 	const appPaid = isAppInvoicePaid(a) || (invoicesLoaded && appInvoiceType?.status === "paid");
 	const visaPaid = isVisaInvoicePaid(a) || (invoicesLoaded && visaInvoiceType?.status === "paid");
@@ -1599,6 +1601,59 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 										) : null}
 									</div>
 								</div>
+								{/* The service fee, from the invoice's own lines: one row per
+								    milestone, in the order they fall due. A plan paid in stages has
+								    no "deposit · 10%" and no post-arrival part; the lines say what
+								    it has. */}
+								{stageLined && agencyInvoiceType ? (
+									(() => {
+										let cum = 0;
+										return agencyInvoiceType.lines.map((l, i) => {
+											const before = cum;
+											cum += l.amountCents;
+											const paidOn = agencyInvoiceType.paidCents >= cum;
+											const isNext = !paidOn && agencyInvoiceType.paidCents >= before;
+											const fired = Boolean(l.dueAt);
+											const when =
+												l.dueOn === "acceptance" ? "on acceptance"
+												: l.dueOn === "offer" ? "when your first offer is recorded"
+												: l.dueOn === "visa_open" ? "when your visa file opens"
+												: l.dueOn === "visa_approved" ? "after your visa is approved"
+												: l.dueOn === "arrival" ? "after you arrive"
+												: l.dueOn === "scheduled" ? "on your schedule"
+												: "";
+											return (
+												<div key={l.id} className={`pledger__row${paidOn ? " pledger__row--settled" : isNext && fired ? " pledger__row--due" : ""}`}>
+													<span className="pledger__mark">{i === 0 ? "II" : ""}</span>
+													<div className="pledger__body">
+														<p className="pledger__name">{l.label}</p>
+														<p className="pledger__sub">
+															{i === 0 && agencyInvoiceType ? `${agencyInvoiceType.invoiceNumber} · ` : ""}
+															{when}
+															{l.detail ? ` · ${l.detail}` : ""}
+														</p>
+													</div>
+													<div className="pledger__amt">
+														<Money usd={l.amountCents / 100} />
+													</div>
+													<span className="pledger__status">
+														<span className={`portal-pill${paidOn ? " portal-pill--solid" : isNext && fired ? "" : " portal-pill--hollow"}`}>
+															{paidOn ? "Paid" : isNext && fired ? "Due" : "Not yet"}
+														</span>
+													</span>
+													<div className="pledger__acts">
+														{isNext && fired ? (
+															<Button to="/portal/payment-execution" size="sm" variant="primary">
+																Pay →
+															</Button>
+														) : null}
+														{i === 0 && agencyInvoiceType ? <DocLinks invoice={agencyInvoiceType} /> : null}
+													</div>
+												</div>
+											);
+										});
+									})()
+								) : (
 								<div className={`pledger__row${a.agencyTotal > 0 && !depositPaid ? " pledger__row--due" : depositPaid ? " pledger__row--settled" : ""}`}>
 									<span className="pledger__mark">II</span>
 									<div className="pledger__body">
@@ -1630,6 +1685,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 										) : null}
 									</div>
 								</div>
+								)}
 								<div className={`pledger__row${appOutstanding > 0 ? " pledger__row--due" : appPaid ? " pledger__row--settled" : ""}`}>
 									<span className="pledger__mark">III</span>
 									<div className="pledger__body">
@@ -1694,6 +1750,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 										) : null}
 									</div>
 								</div>
+								{!stageLined ? (
 								<div
 									className={`pledger__row${
 										depositPaid && plan && !settled && (a.paymentPlanId === "full" || a.agencyStageIndex === 0)
@@ -1742,6 +1799,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 										{agencyInvoiceType ? <DocLinks invoice={agencyInvoiceType} /> : null}
 									</div>
 								</div>
+								) : null}
 								{(() => {
 									const travelInvoice = travelInvoiceType;
 									if (!travelInvoice) return null;
@@ -1778,7 +1836,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 										</div>
 									);
 								})()}
-								{a.paymentPlanId === "installment" && a.agencyTotal > 0 ? (
+								{!stageLined && a.paymentPlanId === "installment" && a.agencyTotal > 0 ? (
 									<div className={`pledger__row${settled ? " pledger__row--settled" : ""}`}>
 										<span className="pledger__mark">VI</span>
 										<div className="pledger__body">

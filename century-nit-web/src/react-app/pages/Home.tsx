@@ -275,152 +275,36 @@ export function Home() {
 
 			<hr className="section-rule" />
 
-			{/* Services — the journey composes; à la carte below */}
+			{/* Core services — a plain list of what we offer */}
 			<section className="section texture-grid">
 				<div className="container">
 					<div className="section__head">
 						<div>
 							<p className="eyebrow">What we offer</p>
-							<h2 className="section-title">It starts with a consultation. Then the stages you pick.</h2>
-							<p className="lead" style={{ maxWidth: "36rem", marginTop: ".7rem" }}>
-								The consultation opens your file. What you choose there sets the form, the stages, the
-								documents — everything that follows.
-							</p>
+							<h2 className="section-title">Our services</h2>
 						</div>
 						<Link to="/student-services" className="link-arrow">
 							Student services →
 						</Link>
 					</div>
-
-					{/* the stages */}
-					<div className="jrn">
-						<div className="jrn__stage jrn__stage--entry">
-							<p className="jrn__stno">Stage 0 — always</p>
-							<h3>Consultation</h3>
-							<p className="jrn__req">The door in</p>
-							<ul className="jrn__inc">
-								<li>Online or in person — Accra or Kumasi</li>
-								<li>You pick your scope here</li>
-								<li>Your file opens the same day</li>
-							</ul>
-							<p className="jrn__prc">
-								Fixed fee<b>US${CONSULTATION_FEE}</b>
-							</p>
-							<span className="jrn__arr" aria-hidden>→</span>
-						</div>
-						{SERVICE_STAGES.map((stage, i) => (
-							<div key={stage} className="jrn__stage">
-								<p className="jrn__stno">
-									Stage {STAGE_NUMERAL[i]}
-									{i > 0 ? ` — needs ${STAGE_NUMERAL[i - 1]}` : ""}
-								</p>
-								<h3>{SERVICE_STAGE_LABELS[stage]}</h3>
-								<p className="jrn__req">{STAGE_REQ[stage]}</p>
-								<ul className="jrn__inc">
-									{STAGE_INCLUDES[stage].map((x) => (
-										<li key={x}>{x}</li>
+					<div className="svc">
+						{coreServices.map((s, i) => (
+							<Link key={s.id} to={`/services/${s.id}`} className="svc__row">
+								<span className="svc__num">{String(i + 1).padStart(2, "0")}</span>
+								<span className="svc__name">
+									{s.title}
+									<small>Part of {SERVICE_STAGE_TAG[s.id] ?? "the journey"}</small>
+								</span>
+								<ul className="svc__del">
+									{s.deliverables.slice(0, 2).map((d) => (
+										<li key={d}>{d}</li>
 									))}
 								</ul>
-								<p className="jrn__prc">
-									Stage fee<b>quoted at consultation</b>
-								</p>
-								{i < SERVICE_STAGES.length - 1 && (
-									<span className="jrn__arr" aria-hidden>→</span>
-								)}
-							</div>
+								<span className="svc__dur">{s.duration}</span>
+								<span className="svc__go">→</span>
+							</Link>
 						))}
 					</div>
-
-					{/* the three ways to buy it */}
-					<div className="scopes">
-						<Link className="scope" to="/start">
-							<p className="eyebrow">Just admissions</p>
-							<h4>Admissions only</h4>
-							<div className="scope__stages"><span>I · Admissions</span></div>
-							<p className="scope__meta">
-								Counselling to offer letter.<br />Visa help added later if you want it.
-							</p>
-							<p className="scope__save">Stage I fee</p>
-						</Link>
-						<Link className="scope" to="/start">
-							<p className="eyebrow">Most common</p>
-							<h4>Admissions + Visa</h4>
-							<div className="scope__stages"><span>I · Admissions</span><span>II · Visa</span></div>
-							<p className="scope__meta">
-								Offer in hand, visa filed.<br />Add Departure any time before you fly.
-							</p>
-							<p className="scope__save">Two stages · less than à la carte</p>
-						</Link>
-						<Link className="scope scope--hero" to="/start">
-							<span className="scope__tag">Best value</span>
-							<p className="eyebrow">The whole way</p>
-							<h4>Full journey</h4>
-							<div className="scope__stages"><span>I</span><span>II</span><span>III</span></div>
-							<p className="scope__meta">
-								Counselling to first-week check-in.<br />One plan, one portal, priced as a bundle.
-							</p>
-							<p className="scope__save">Bundle — the parts cost more apart</p>
-						</Link>
-					</div>
-
-					{/* what the choice sets up */}
-					<p className="eyebrow" style={{ marginTop: "1.8rem", marginBottom: ".8rem" }}>
-						Chosen at the consultation — example: <b>Visa only</b>
-					</p>
-					<div className="fx">
-						<div className="fx__cell">
-							<p className="fx__k">Consultation form</p>
-							<h5>Asks visa questions, not school questions</h5>
-							<p>Destination, intake date, prior refusals, sponsor — the intake adapts to the scope you pick.</p>
-						</div>
-						<div className="fx__cell">
-							<p className="fx__k">Stages</p>
-							<h5>Unlocked · skipped · recommended</h5>
-							<ul>
-								<li className="off">I · Admissions — skipped</li>
-								<li className="on">II · Visa — unlocked</li>
-								<li>III · Departure — recommended later</li>
-							</ul>
-						</div>
-						<div className="fx__cell">
-							<p className="fx__k">Documents</p>
-							<h5>The checklist matches the scope</h5>
-							<ul>
-								<li>Offer letter / CAS or I-20</li>
-								<li>Bank statements &amp; sponsor</li>
-								<li className="off">Transcripts — not asked</li>
-							</ul>
-						</div>
-						<div className="fx__cell">
-							<p className="fx__k">Portal</p>
-							<h5>Your file opens scoped</h5>
-							<p>Stages, tasks and invoices are generated for what you bought — nothing extra, nothing missing.</p>
-						</div>
-					</div>
-
-					{/* à la carte */}
-					<div style={{ marginTop: "3rem" }}>
-						<p className="eyebrow" style={{ marginBottom: ".8rem" }}>À la carte — just need one thing?</p>
-						<div className="svc">
-							{coreServices.map((s, i) => (
-								<Link key={s.id} to={`/services/${s.id}`} className="svc__row">
-									<span className="svc__num">{String.fromCharCode(65 + i)}</span>
-									<span className="svc__name">
-										{s.title}
-										<small>Part of {SERVICE_STAGE_TAG[s.id] ?? "the journey"}</small>
-									</span>
-									<ul className="svc__del">
-										{s.deliverables.slice(0, 2).map((d) => (
-											<li key={d}>{d}</li>
-										))}
-									</ul>
-									<span className="svc__dur">{s.duration}</span>
-									<span className="svc__go">→</span>
-								</Link>
-							))}
-						</div>
-					</div>
-
 					<div className="svc__foot">
 						<p>
 							Every engagement starts with one consultation — <b>online or in person</b>
@@ -692,6 +576,115 @@ export function Home() {
 							</li>
 						))}
 					</ol>
+
+					{/* What you buy — the stages compose, consultation is the door in */}
+					<p className="eyebrow" style={{ marginTop: "3.5rem", marginBottom: ".8rem" }}>
+						Your journey — pick the stages, or take them all
+					</p>
+					<div className="jrn">
+						<div className="jrn__stage jrn__stage--entry">
+							<p className="jrn__stno">Stage 0 — always</p>
+							<h3>Consultation</h3>
+							<p className="jrn__req">The door in</p>
+							<ul className="jrn__inc">
+								<li>Online or in person — Accra or Kumasi</li>
+								<li>You pick your scope here</li>
+								<li>Your file opens the same day</li>
+							</ul>
+							<p className="jrn__prc">
+								Fixed fee<b>US${CONSULTATION_FEE}</b>
+							</p>
+							<span className="jrn__arr" aria-hidden>→</span>
+						</div>
+						{SERVICE_STAGES.map((stage, i) => (
+							<div key={stage} className="jrn__stage">
+								<p className="jrn__stno">
+									Stage {STAGE_NUMERAL[i]}
+									{i > 0 ? ` — needs ${STAGE_NUMERAL[i - 1]}` : ""}
+								</p>
+								<h3>{SERVICE_STAGE_LABELS[stage]}</h3>
+								<p className="jrn__req">{STAGE_REQ[stage]}</p>
+								<ul className="jrn__inc">
+									{STAGE_INCLUDES[stage].map((x) => (
+										<li key={x}>{x}</li>
+									))}
+								</ul>
+								<p className="jrn__prc">
+									Stage fee<b>quoted at consultation</b>
+								</p>
+								{i < SERVICE_STAGES.length - 1 && (
+									<span className="jrn__arr" aria-hidden>→</span>
+								)}
+							</div>
+						))}
+					</div>
+
+					{/* the three ways to buy it */}
+					<div className="scopes">
+						<Link className="scope" to="/start">
+							<p className="eyebrow">Just admissions</p>
+							<h4>Admissions only</h4>
+							<div className="scope__stages"><span>I · Admissions</span></div>
+							<p className="scope__meta">
+								Counselling to offer letter.<br />Visa help added later if you want it.
+							</p>
+							<p className="scope__save">Stage I fee</p>
+						</Link>
+						<Link className="scope" to="/start">
+							<p className="eyebrow">Most common</p>
+							<h4>Admissions + Visa</h4>
+							<div className="scope__stages"><span>I · Admissions</span><span>II · Visa</span></div>
+							<p className="scope__meta">
+								Offer in hand, visa filed.<br />Add Departure any time before you fly.
+							</p>
+							<p className="scope__save">Two stages · less than à la carte</p>
+						</Link>
+						<Link className="scope scope--hero" to="/start">
+							<span className="scope__tag">Best value</span>
+							<p className="eyebrow">The whole way</p>
+							<h4>Full journey</h4>
+							<div className="scope__stages"><span>I</span><span>II</span><span>III</span></div>
+							<p className="scope__meta">
+								Counselling to first-week check-in.<br />One plan, one portal, priced as a bundle.
+							</p>
+							<p className="scope__save">Bundle — the parts cost more apart</p>
+						</Link>
+					</div>
+
+					{/* what the choice sets up */}
+					<p className="eyebrow" style={{ marginTop: "1.8rem", marginBottom: ".8rem" }}>
+						Chosen at the consultation — example: <b>Visa only</b>
+					</p>
+					<div className="fx">
+						<div className="fx__cell">
+							<p className="fx__k">Consultation form</p>
+							<h5>Asks visa questions, not school questions</h5>
+							<p>Destination, intake date, prior refusals, sponsor — the intake adapts to the scope you pick.</p>
+						</div>
+						<div className="fx__cell">
+							<p className="fx__k">Stages</p>
+							<h5>Unlocked · skipped · recommended</h5>
+							<ul>
+								<li className="off">I · Admissions — skipped</li>
+								<li className="on">II · Visa — unlocked</li>
+								<li>III · Departure — recommended later</li>
+							</ul>
+						</div>
+						<div className="fx__cell">
+							<p className="fx__k">Documents</p>
+							<h5>The checklist matches the scope</h5>
+							<ul>
+								<li>Offer letter / CAS or I-20</li>
+								<li>Bank statements &amp; sponsor</li>
+								<li className="off">Transcripts — not asked</li>
+							</ul>
+						</div>
+						<div className="fx__cell">
+							<p className="fx__k">Portal</p>
+							<h5>Your file opens scoped</h5>
+							<p>Stages, tasks and invoices are generated for what you bought — nothing extra, nothing missing.</p>
+						</div>
+					</div>
 				</div>
 			</section>
 

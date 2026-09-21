@@ -1717,6 +1717,29 @@ export const conversations = pgTable(
 			onDelete: "set null",
 		}),
 		escalationReason: text("escalation_reason"),
+
+		/* ── Request layer (0110) — a support thread is one request, not a
+		   client's whole history. ── */
+		/** One-line request subject, from intake or staff logging. */
+		subject: text("subject"),
+		/** payment | documents | application | visa | departure | account | other */
+		category: varchar("category", { length: 24 }),
+		/** normal | high | urgent */
+		priority: varchar("priority", { length: 16 }).notNull().default("normal"),
+		/** Whose move: "us" (desk owes a reply), "client", or null (unsettled). */
+		waitingOn: varchar("waiting_on", { length: 8 }),
+		/** client (portal-visible) | internal (ops-only ticket). */
+		audience: varchar("audience", { length: 16 }).notNull().default("client"),
+		/** Set when the office logged the request on the client's behalf. */
+		raisedByOpsUserId: uuid("raised_by_ops_user_id").references(() => opsUsers.id, { onDelete: "set null" }),
+		/** First staff public reply — first-response SLA is measured to this. */
+		firstResponseAt: timestamp("first_response_at", { withTimezone: true }),
+		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+		reopenedCount: integer("reopened_count").notNull().default(0),
+		/** Post-resolve rating: 1 (thumbs down) or 5 (thumbs up). */
+		csatScore: integer("csat_score"),
+		csatNote: text("csat_note"),
+
 		/** Denormalised last-activity timestamp for sorting / unread queries. */
 		lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
 		/** Lifecycle: open (default) / closed (read-only for customers) / archived. */
@@ -1730,8 +1753,27 @@ export const conversations = pgTable(
 		byEntity: index("conversations_entity_idx").on(t.linkedEntityType, t.linkedEntityId),
 		byUser: index("conversations_user_idx").on(t.userId),
 		byStage: index("conversations_stage_idx").on(t.linkedEntityType, t.linkedEntityId, t.stageKey),
+		queue: index("conversations_queue_idx").on(t.type, t.status, t.waitingOn, t.category),
+		userOpen: index("conversations_user_open_idx").on(t.userId, t.status),
 	}),
 );
+
+/**
+ * Desk canned replies (0110): managed snippets with {{variable}} placeholders
+ * filled at send time. Scope narrows a reply to a branch or journey stage;
+ * "all" shows it everywhere.
+ */
+export const cannedReplies = pgTable("canned_replies", {
+	id: uuid("id").primaryKey().defaultRandom(),
+	label: text("label").notNull(),
+	body: text("body").notNull(),
+	/** all | branch | stage */
+	scope: varchar("scope", { length: 16 }).notNull().default("all"),
+	scopeValue: varchar("scope_value", { length: 80 }),
+	createdBy: uuid("created_by").references(() => opsUsers.id, { onDelete: "set null" }),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const messages = pgTable(
 	"messages",
@@ -2262,6 +2304,14 @@ export const marketingCampaigns = pgTable("marketing_campaigns", {
 	body: text("body").notNull(),
 	templateId: uuid("template_id"),
 	mailingListId: uuid("mailing_list_id"),
+	/** Live-audience alternative to mailing_list_id — evaluated at send. */
+	segmentId: uuid("segment_id").references(() => marketingSegments.id, { onDelete: "set null" }),
+	/** Inbox preview text and sender identity overrides. */
+	preheader: varchar("preheader", { length: 500 }),
+	fromName: varchar("from_name", { length: 255 }),
+	replyTo: varchar("reply_to", { length: 255 }),
+	/** Block-composer tree; renders to `body` at send/preview when set. */
+	blocks: jsonb("blocks"),
 	sentBy: text("sent_by"),
 	sentAt: timestamp("sent_at", { withTimezone: true }),
 	// When set, the campaign is queued to fire at this instant instead of
@@ -2308,6 +2358,10 @@ export const campaignRecipients = pgTable("campaign_recipients", {
 	openedAt: timestamp("opened_at", { withTimezone: true }),
 	/** Set by the Resend webhook on a hard bounce. */
 	bouncedAt: timestamp("bounced_at", { withTimezone: true }),
+	/** Set by the tracked-link redirect — the click is recorded before Resend hears of it. */
+	clickedAt: timestamp("clicked_at", { withTimezone: true }),
+	/** The URL the recipient clicked last — the per-row "what did they open". */
+	clickedUrl: text("clicked_url"),
 	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
 	byCampaign: index("campaign_recipients_campaign_idx").on(t.campaignId),
@@ -2335,6 +2389,9 @@ export const mailingListContacts = pgTable("mailing_list_contacts", {
 	confirmToken: uuid("confirm_token"),
 	confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
 	unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
+	/** Where consent came from — confirm_link | offline_note | staff_verified | grandfathered. */
+	consentSource: varchar("consent_source", { length: 40 }),
+	consentNote: text("consent_note"),
 	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
 	byList: index("mlc_list_idx").on(t.mailingListId),
@@ -2353,9 +2410,139 @@ export const emailTemplate = pgTable("email_templates", {
 	footer: text("footer"),
 	isCustom: boolean("is_custom").notNull().default(false),
 	createdBy: text("created_by"),
+	/** Block-composer tree; when set it renders to `body` at send/preview. */
+	blocks: jsonb("blocks"),
+	/** Inbox preview text, from-name override, and reply routing. */
+	preheader: varchar("preheader", { length: 500 }),
+	fromName: varchar("from_name", { length: 255 }),
+	replyTo: varchar("reply_to", { length: 255 }),
+	/** campaigns | automations | both — a picker hint, not a constraint. */
+	usedFor: varchar("used_for", { length: 24 }).notNull().default("both"),
+	/** System starters are read-only; editing forks them into a custom. */
+	isPreset: boolean("is_preset").notNull().default(false),
 	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/* ── Marketing: consent, suppression, segments, tracking, automations ──── */
+
+/**
+ * Marketing opt-in, keyed by email address — the person, not the list row.
+ * One consent state covers every list and segment the address sits in;
+ * applicants' portal preference writes here too. `source` records where the
+ * consent came from so an address's "confirmed" is never a mystery.
+ */
+export const marketingOptins = pgTable("marketing_optins", {
+	email: varchar("email", { length: 255 }).primaryKey(),
+	/** confirm_link | portal | offline_note | grandfathered | staff_verified */
+	source: varchar("source", { length: 40 }).notNull(),
+	/** The audit note — required for offline/staff consent ("Kumasi fair · E.F."). */
+	note: text("note"),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Global suppression — an address that must never be mailed again, whatever
+ * list or segment it appears on. Written by bounces, complaints, footer
+ * unsubscribes, and staff action; read at snapshot AND at send time.
+ */
+export const marketingSuppressions = pgTable("marketing_suppressions", {
+	email: varchar("email", { length: 255 }).primaryKey(),
+	/** bounced | complained | unsubscribed | manual */
+	reason: varchar("reason", { length: 24 }).notNull(),
+	detail: text("detail"),
+	/** The campaign that caused it, when the event came through a send. */
+	campaignId: uuid("campaign_id").references(() => marketingCampaigns.id, { onDelete: "set null" }),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * A saved live audience — a filter set evaluated over the suite's own data
+ * at send time, not a copied list. `filters` is [{field, op, value}] against
+ * the entity's field registry in services/marketing.ts.
+ */
+export const marketingSegments = pgTable("marketing_segments", {
+	id: uuid("id").defaultRandom().primaryKey(),
+	name: varchar("name", { length: 255 }).notNull(),
+	/** applicants | leads | contacts */
+	entity: varchar("entity", { length: 24 }).notNull(),
+	filters: jsonb("filters").notNull().$type<{ field: string; op: string; value: unknown }[]>(),
+	createdBy: uuid("created_by").references(() => opsUsers.id, { onDelete: "set null" }),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * One tracked link in a campaign — the URL and its click count, so the
+ * report can name top links without parsing bodies after the fact.
+ */
+export const campaignLinks = pgTable("campaign_links", {
+	id: uuid("id").defaultRandom().primaryKey(),
+	campaignId: uuid("campaign_id")
+		.notNull()
+		.references(() => marketingCampaigns.id, { onDelete: "cascade" }),
+	url: text("url").notNull(),
+	clicks: integer("clicks").notNull().default(0),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+	byCampaign: index("campaign_links_campaign_idx").on(t.campaignId),
+	uniqUrl: uniqueIndex("campaign_links_url_uniq").on(t.campaignId, t.url),
+}));
+
+/**
+ * An automation: domain event → segment → template → delay. When the event
+ * fires, matching opted-in recipients enter `automation_sends` after the
+ * delay; each send is ledgered exactly like a campaign recipient.
+ */
+export const marketingAutomations = pgTable("marketing_automations", {
+	id: uuid("id").defaultRandom().primaryKey(),
+	name: varchar("name", { length: 255 }).notNull(),
+	/** The domain event key that fires it, e.g. "visa.approved". */
+	event: varchar("event", { length: 80 }).notNull(),
+	/** Extra filter — the event's own segment; null = everyone the event names. */
+	segmentId: uuid("segment_id").references(() => marketingSegments.id, { onDelete: "set null" }),
+	templateId: uuid("template_id").references(() => emailTemplate.id, { onDelete: "set null" }),
+	/** Optional subject/body override when no template is attached. */
+	subject: varchar("subject", { length: 500 }),
+	body: text("body"),
+	delayMinutes: integer("delay_minutes").notNull().default(0),
+	/** draft | live | paused */
+	status: varchar("status", { length: 16 }).notNull().default("draft"),
+	createdBy: uuid("created_by").references(() => opsUsers.id, { onDelete: "set null" }),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Per-recipient automation ledger — one row per (automation, trigger key,
+ * email) so a recipient is never mailed twice for the same firing.
+ */
+export const automationSends = pgTable("automation_sends", {
+	id: uuid("id").defaultRandom().primaryKey(),
+	automationId: uuid("automation_id")
+		.notNull()
+		.references(() => marketingAutomations.id, { onDelete: "cascade" }),
+	/** The firing's identity — e.g. the application id the offer landed on. */
+	triggerKey: varchar("trigger_key", { length: 128 }).notNull(),
+	email: varchar("email", { length: 255 }).notNull(),
+	name: varchar("name", { length: 255 }),
+	/** pending → sent | failed | skipped (suppressed/opted-out at send). */
+	status: varchar("status", { length: 16 }).notNull().default("pending"),
+	scheduledFor: timestamp("scheduled_for", { withTimezone: true }).notNull(),
+	sentAt: timestamp("sent_at", { withTimezone: true }),
+	error: text("error"),
+	providerMessageId: varchar("provider_message_id", { length: 128 }),
+	openedAt: timestamp("opened_at", { withTimezone: true }),
+	clickedAt: timestamp("clicked_at", { withTimezone: true }),
+	bouncedAt: timestamp("bounced_at", { withTimezone: true }),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+	byAutomation: index("automation_sends_auto_idx").on(t.automationId),
+	byStatus: index("automation_sends_status_idx").on(t.status, t.scheduledFor),
+	byProviderId: index("automation_sends_provider_idx").on(t.providerMessageId),
+	uniqFire: uniqueIndex("automation_sends_fire_uniq").on(t.automationId, t.triggerKey, t.email),
+}));
 
 /**
  * Stage consent — the applicant's explicit decision to start, hold, or opt

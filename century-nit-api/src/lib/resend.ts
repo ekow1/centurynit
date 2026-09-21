@@ -80,6 +80,8 @@ export async function sendEmail({
 	text,
 	attachments,
 	log,
+	fromName,
+	replyTo,
 }: {
 	to: string;
 	subject: string;
@@ -88,9 +90,14 @@ export async function sendEmail({
 	attachments?: Array<{ filename: string; content?: Buffer | string; path?: string }>;
 	/** Audit metadata — every send lands in notification_log, queued or not. */
 	log?: EmailLogMeta;
+	/** Display name over the configured sender ("Century NIT · Accra <mail@…>"). */
+	fromName?: string;
+	/** Where replies go — the branch mailbox for campaigns. */
+	replyTo?: string;
 }) {
 	const apiKey = await getSetting("RESEND_API_KEY");
-	const from = (await getSetting("RESEND_FROM")) ?? env.RESEND_FROM;
+	const fromAddress = (await getSetting("RESEND_FROM")) ?? env.RESEND_FROM;
+	const from = fromName ? `${fromName} <${fromAddress}>` : fromAddress;
 
 	if (!apiKey) {
 		// Outside production every flow must stay completable without a
@@ -117,6 +124,7 @@ export async function sendEmail({
 		subject,
 		...(html ? { html } : {}),
 		...(text ? { text } : {}),
+		...(replyTo ? { replyTo } : {}),
 		...(attachments ? { attachments } : {}),
 	} as never);
 

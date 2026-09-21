@@ -10,7 +10,6 @@ import {
 	articles,
 	company,
 	coreServices,
-	CONSULTATION_FEE,
 	destinations,
 	programs,
 	scholarships,
@@ -649,7 +648,6 @@ export function Home() {
 								<li>You pick your scope here</li>
 								<li>Your file opens the same day</li>
 							</ul>
-							<p className="route__fee">US${CONSULTATION_FEE} · fixed</p>
 						</li>
 						{SERVICE_STAGES.map((stage, i) => {
 							const s = PROCESS_SCOPES.find((x) => x.id === scope)!;
@@ -666,7 +664,6 @@ export function Home() {
 											<li key={x}>{x}</li>
 										))}
 									</ul>
-									<p className="route__fee">Quoted at consultation</p>
 								</li>
 							);
 						})}

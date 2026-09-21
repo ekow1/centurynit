@@ -5745,27 +5745,8 @@ img.profile-monogram {
 	color: var(--muted-foreground);
 	line-height: 1.9;
 }
-.route__list li::before {
-	content: "— ";
-	color: #b45309;
-}
-.route__fee {
-	margin-top: 1.15rem;
-	font-family: var(--font-mono);
-	font-size: 0.6rem;
-	text-transform: uppercase;
-	letter-spacing: 0.08em;
-	border: var(--thin);
-	display: inline-block;
-	padding: 0.3rem 0.6rem;
-	width: max-content;
-}
 .route__stage--entry .route__dot {
 	background: #b45309;
-}
-.route__stage--entry .route__fee {
-	border-color: var(--foreground);
-	font-weight: 700;
 }
 .route__stage.is-off {
 	opacity: 0.35;

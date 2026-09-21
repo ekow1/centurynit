@@ -11323,88 +11323,70 @@ a.portal-ch--on:hover {
 
 /* ============ Explore — destinations · universities · programs · funding ============ */
 .xp {
-	display: grid;
-	grid-template-columns: 19rem 1fr;
 	background: #fff;
 }
-.xp__rail {
-	border-right: var(--thin);
+.xp__tabs {
 	display: flex;
-	flex-direction: column;
+	gap: 2rem;
+	border-bottom: var(--thin);
+	overflow-x: auto;
 }
 .xp__tab {
 	border: 0;
-	border-bottom: 1px solid var(--border-light);
 	background: transparent;
-	text-align: left;
-	padding: 1.3rem 1.4rem 1.3rem 0;
+	padding: 0 0 0.9rem;
 	cursor: pointer;
-	display: grid;
-	grid-template-columns: 2.2rem 1fr auto;
-	gap: 0.9rem;
+	display: flex;
 	align-items: baseline;
-	transition: background 0.12s;
-	color: var(--foreground);
-}
-.xp__tab:hover {
-	background: var(--muted);
+	gap: 0.6rem;
+	color: var(--muted-foreground);
+	white-space: nowrap;
+	position: relative;
 }
 .xp__tab .no {
 	font-family: var(--font-mono);
-	font-size: 0.62rem;
-	color: var(--muted-foreground);
+	font-size: 0.6rem;
 }
 .xp__tab .nm {
 	font-family: var(--font-display, inherit);
-	font-size: 1.35rem;
+	font-size: 1.25rem;
 	font-weight: 600;
 	letter-spacing: -0.02em;
-	line-height: 1.1;
 }
 .xp__tab .nm small {
-	display: block;
 	font-family: var(--font-mono);
 	font-size: 0.55rem;
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
 	font-weight: 400;
 	color: var(--muted-foreground);
-	margin-top: 0.3rem;
+	margin-left: 0.5rem;
 }
-.xp__tab .go {
-	font-family: var(--font-mono);
-	font-size: 0.7rem;
-	color: var(--muted-foreground);
+.xp__tab::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: -1px;
+	height: 2px;
+	background: transparent;
 }
-.xp__tab[aria-selected="true"] .nm {
-	text-decoration: underline;
-	text-underline-offset: 0.3rem;
-	text-decoration-thickness: 2px;
-}
-.xp__tab[aria-selected="true"] .no {
+.xp__tab:hover {
 	color: var(--foreground);
-	font-weight: 700;
 }
-.xp__tab[aria-selected="true"] .go {
-	color: #fbbf24;
+.xp__tab[aria-selected="true"] {
+	color: var(--foreground);
 }
-.xp__cta {
-	margin-top: auto;
-	padding: 1.1rem 1.4rem 1.1rem 0;
-	font-family: var(--font-mono);
-	font-size: 0.58rem;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
-	color: var(--muted-foreground);
+.xp__tab[aria-selected="true"]::after {
+	background: var(--foreground);
 }
 .xp__body {
 	display: flex;
 	flex-direction: column;
 	min-width: 0;
-	padding-left: 1.5rem;
 }
 .xp__pane {
-	padding: 0 0 1.5rem;
+	padding: 1.6rem 0;
 	flex: 1;
 }
 .xp__foot {
@@ -11423,38 +11405,10 @@ a.portal-ch--on:hover {
 	letter-spacing: 0.1em;
 	color: var(--muted-foreground);
 }
-/* the narrower pane wants two columns, not three */
-.xp__pane .card-grid--3,
-.xp__pane .card-grid--2 {
-	grid-template-columns: 1fr 1fr;
-}
+/* three cards fit the full-width pane */
 @media (max-width: 900px) {
-	.xp {
-		grid-template-columns: 1fr;
-	}
-	.xp__rail {
-		border-right: 0;
-		border-bottom: var(--thin);
-		flex-direction: row;
-		overflow-x: auto;
-	}
-	.xp__tab {
-		border-bottom: 0;
-		padding: 1rem 1.2rem 1rem 0;
-		grid-template-columns: auto 1fr;
-		min-width: 9.5rem;
-	}
-	.xp__tab .go {
-		display: none;
-	}
-	.xp__cta {
-		display: none;
-	}
-	.xp__body {
-		padding-left: 0;
-	}
 	.xp__pane {
-		padding-top: 1.2rem;
+		padding: 1.2rem 0;
 	}
 }
 @media (max-width: 640px) {

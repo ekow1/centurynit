@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Century NIT — one Explore section</title>
+<style>
+:root{--foreground:#000;--muted:#f5f5f5;--muted-foreground:#52525b;--border:#000;--border-light:#a3a3a3;--thin:1px solid var(--border);--font-mono:ui-monospace,"Cascadia Code",Menlo,monospace;--display:"Fraunces",Georgia,serif;--sans:"Inter",system-ui,sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);color:var(--foreground);background:#fff;font-size:16px}
+.container{max-width:76rem;margin:0 auto;padding:0 1.5rem}
+.eyebrow{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--muted-foreground)}
+.section{padding:4.5rem 0}
+.section__head{display:flex;justify-content:space-between;align-items:flex-end;gap:2rem;margin-bottom:2.2rem;flex-wrap:wrap}
+.section-title{font-family:var(--display);font-size:clamp(1.9rem,3.4vw,2.9rem);font-weight:600;letter-spacing:-.02em;line-height:1.05}
+.lead{color:var(--muted-foreground);font-size:1rem;line-height:1.6}
+.link-arrow{font-family:var(--font-mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--foreground);text-decoration:none}
+.link-arrow:hover{text-decoration:underline}
+.btn{display:inline-flex;align-items:center;gap:.5rem;background:var(--foreground);color:#fff;border:var(--thin);padding:.7rem 1.3rem;font-family:var(--font-mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;text-decoration:none}
+.chip{position:absolute;top:.9rem;left:.4rem;background:var(--foreground);color:#fff;font-family:var(--font-mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.1em;padding:.2rem .5rem;z-index:5}
+section{position:relative}
+
+/* merge map */
+.map{display:grid;grid-template-columns:1fr 3rem 1fr;border:var(--thin)}
+.map__col{padding:1.4rem 1.6rem}
+.map__mid{display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:1rem}
+.map__col h4{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground);margin-bottom:1rem}
+.map__row{font-size:.85rem;padding:.45rem 0;border-bottom:1px solid #e4e4e7;display:flex;justify-content:space-between;gap:1rem}
+.map__row:last-child{border-bottom:0}
+.map__row .gone{color:var(--muted-foreground);text-decoration:line-through}
+.map__row .tag{font-family:var(--font-mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground)}
+@media(max-width:720px){.map{grid-template-columns:1fr}.map__mid{display:none}}
+
+/* explore — clean top tabs, one hairline */
+.xp{background:#fff}
+.xp__tabs{display:flex;gap:2rem;border-bottom:var(--thin);overflow-x:auto}
+.xp__tab{border:0;background:transparent;padding:0 0 .9rem;cursor:pointer;display:flex;align-items:baseline;gap:.6rem;font-family:var(--sans);color:var(--muted-foreground);white-space:nowrap;position:relative}
+.xp__tab .no{font-family:var(--font-mono);font-size:.6rem}
+.xp__tab .nm{font-family:var(--display);font-size:1.25rem;font-weight:600;letter-spacing:-.02em}
+.xp__tab .nm small{font-family:var(--font-mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;font-weight:400;color:var(--muted-foreground);margin-left:.5rem}
+.xp__tab::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:transparent}
+.xp__tab:hover{color:var(--foreground)}
+.xp__tab[aria-selected="true"]{color:var(--foreground)}
+.xp__tab[aria-selected="true"]::after{background:var(--foreground)}
+.xp__cta{display:none}
+.xp__body{display:flex;flex-direction:column;min-width:0}
+.xp__pane{display:none;padding:1.6rem 0;flex:1}
+.xp__pane[data-open]{display:block}
+.xp__foot{display:flex;justify-content:space-between;align-items:center;border-top:var(--thin);padding:.95rem 0 0;gap:1rem;flex-wrap:wrap}
+.xp__foot p{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground)}
+@media(max-width:900px){.xp__pane{padding:1.2rem 0}}
+
+/* media cards */
+.mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4rem}
+.mcard{border:var(--thin);text-decoration:none;color:inherit;display:block;background:#fff;position:relative}
+.mcard__img{aspect-ratio:16/10;overflow:hidden;border-bottom:var(--thin);position:relative}
+.mcard__img img{width:100%;height:100%;object-fit:cover;filter:grayscale(1);transition:filter .3s,transform .3s}
+.mcard:hover .mcard__img img{filter:grayscale(0);transform:scale(1.03)}
+.mcard__feat{position:absolute;top:0;left:0;background:var(--foreground);color:#fff;font-family:var(--font-mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.1em;padding:.3rem .6rem;z-index:2}
+.mcard__stat{position:absolute;bottom:0;right:0;background:#fff;border:var(--thin);border-right:0;border-bottom:0;font-family:var(--font-mono);font-size:.55rem;padding:.3rem .55rem}
+.mcard__body{padding:1.1rem 1.2rem 1.3rem}
+.mcard__title{font-family:var(--display);font-size:1.3rem;font-weight:600;letter-spacing:-.01em;margin:.35rem 0 .3rem}
+.mcard__text{font-size:.82rem;color:var(--muted-foreground);line-height:1.55}
+.mcard__cta{display:block;margin-top:.8rem;font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em}
+.mcard:hover .mcard__cta{text-decoration:underline}
+@media(max-width:860px){.mgrid{grid-template-columns:1fr}}
+.xp__pane .mgrid,.xp__pane .pgrid{grid-template-columns:1fr 1fr;gap:1.1rem}
+@media(max-width:640px){.xp__pane .mgrid,.xp__pane .pgrid{grid-template-columns:1fr}}
+
+/* programs — typographic cards on a duotone image band */
+.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4rem}
+.pcard{border:var(--thin);text-decoration:none;color:inherit;display:flex;flex-direction:column;background:#fff}
+.pcard__band{aspect-ratio:21/6;overflow:hidden;border-bottom:var(--thin);position:relative}
+.pcard__band img{width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.1);opacity:.85;transition:filter .3s}
+.pcard:hover .pcard__band img{filter:grayscale(0)}
+.pcard__band span{position:absolute;bottom:.5rem;left:.6rem;background:#fff;border:var(--thin);font-family:var(--font-mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.08em;padding:.25rem .5rem}
+.pcard__body{padding:1rem 1.2rem 1.2rem;flex:1}
+.pcard__title{font-size:1.05rem;font-weight:600;letter-spacing:-.01em;margin:.3rem 0 .25rem}
+.pcard__meta{font-family:var(--font-mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-foreground);line-height:1.7}
+.pcard__cta{margin-top:.8rem;font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em}
+@media(max-width:860px){.pgrid{grid-template-columns:1fr}}
+
+/* funding rows */
+.fund{border-top:1px solid var(--border-light)}
+.fund__row{display:grid;grid-template-columns:8rem 1.4fr 1fr 6rem;gap:1.4rem;padding:1.05rem .25rem;border-bottom:1px solid var(--border-light);align-items:baseline;text-decoration:none;color:inherit}
+.fund__row:hover{background:var(--muted)}
+.fund__amt{font-family:var(--display);font-size:1.4rem;font-weight:600}
+.fund__amt small{display:block;font-family:var(--font-mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.08em;font-weight:400;color:var(--muted-foreground)}
+.fund__name{font-weight:600;font-size:.95rem}
+.fund__name span{display:block;font-weight:400;font-size:.75rem;color:var(--muted-foreground);margin-top:.15rem}
+.fund__dead{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-foreground)}
+.fund__go{font-family:var(--font-mono);font-size:.66rem;font-weight:700;text-align:right}
+@media(max-width:720px){.fund__row{grid-template-columns:6rem 1fr 3rem}.fund__dead{display:none}}
+</style>
+</head>
+<body>
+
+<!-- THE MAP -->
+<section class="section"><span class="chip">The merge — 4 sections → 1 tabbed section</span>
+	<div class="container">
+		<div class="section__head">
+			<div><p class="eyebrow">Explore, tabbed</p><h2 class="section-title">Four grids become one.</h2>
+			<p class="lead" style="max-width:36rem;margin-top:.6rem">Destinations, universities, programs and funding all answer the same question — "where could I go?" — so they share one section. Tabs switch the view; every card keeps its image and its link to the full index.</p></div>
+		</div>
+		<div class="map">
+			<div class="map__col">
+				<h4>Today — 4 separate sections</h4>
+				<div class="map__row"><b>Spotlight · pathways</b><span class="tag gone">merge ↓</span></div>
+				<div class="map__row"><b>Destinations · 6 cards</b><span class="tag gone">tab 1</span></div>
+				<div class="map__row"><b>Universities · 4 cards</b><span class="tag gone">tab 2</span></div>
+				<div class="map__row"><b>Programs · 6 cards</b><span class="tag gone">tab 3</span></div>
+				<div class="map__row"><b>Scholarships · 4 cards</b><span class="tag gone">tab 4</span></div>
+			</div>
+			<div class="map__mid">→</div>
+			<div class="map__col">
+				<h4>After — one "Explore" section</h4>
+				<div class="map__row"><b>Tab 1 · Destinations</b><span class="tag">image cards + featured tag</span></div>
+				<div class="map__row"><b>Tab 2 · Universities</b><span class="tag">image cards + rank chip</span></div>
+				<div class="map__row"><b>Tab 3 · Programs</b><span class="tag">duotone image band cards</span></div>
+				<div class="map__row"><b>Tab 4 · Funding</b><span class="tag">amount-led ledger rows</span></div>
+				<div class="map__row"><b>Footer</b><span class="tag">per-tab "view all" link</span></div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- THE TABBED SECTION -->
+<section class="section" style="border-top:var(--thin);background:var(--muted)"><span class="chip">Explore — one section, four views, all visuals kept</span>
+	<div class="container">
+		<div class="section__head">
+			<div><p class="eyebrow">Explore</p><h2 class="section-title">Where could you go?</h2></div>
+			<a class="link-arrow" href="#">Talk it through →</a>
+		</div>
+
+		<div class="xp">
+			<div class="xp__tabs" role="tablist">
+				<button class="xp__tab" role="tab" aria-selected="true" data-pane="d"><span class="no">01</span><span class="nm">Destinations<small>6 countries</small></span></button>
+				<button class="xp__tab" role="tab" aria-selected="false" data-pane="u"><span class="no">02</span><span class="nm">Universities<small>100+ partners</small></span></button>
+				<button class="xp__tab" role="tab" aria-selected="false" data-pane="p"><span class="no">03</span><span class="nm">Programs<small>Featured</small></span></button>
+				<button class="xp__tab" role="tab" aria-selected="false" data-pane="f"><span class="no">04</span><span class="nm">Funding<small>Scholarships</small></span></button>
+			</div>
+			<div class="xp__body">
+
+			<!-- Destinations -->
+			<div class="xp__pane" data-open id="pane-d">
+				<div class="mgrid">
+					<a class="mcard" href="#"><div class="mcard__img"><span class="mcard__feat">Featured</span><img src="https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=70" alt=""></div><div class="mcard__body"><p class="eyebrow">🇬🇧 Europe</p><h3 class="mcard__title">United Kingdom</h3><p class="mcard__text">World-class universities, rich academic heritage.</p><span class="mcard__cta">Explore destination →</span></div></a>
+					<a class="mcard" href="#"><div class="mcard__img"><span class="mcard__feat">Featured</span><img src="https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=800&q=70" alt=""></div><div class="mcard__body"><p class="eyebrow">🇩🇪 Europe</p><h3 class="mcard__title">Germany</h3><p class="mcard__text">Tuition-free excellence in the heart of Europe.</p><span class="mcard__cta">Explore destination →</span></div></a>
+					<a class="mcard" href="#"><div class="mcard__img"><span class="mcard__feat">Featured</span><img src="https://images.unsplash.com/photo-1503614472-8c93d56e92ce?w=800&q=70" alt=""></div><div class="mcard__body"><p class="eyebrow">🇨🇦 North America</p><h3 class="mcard__title">Canada</h3><p class="mcard__text">Safe, welcoming, and pathway-rich.</p><span class="mcard__cta">Explore destination →</span></div></a>
+					<a class="mcard" href="#"><div class="mcard__img"><img src="https://images.unsplash.com/photo-1508433957232-3107f5d5995d?w=800&q=70" alt=""></div><div class="mcard__body"><p class="eyebrow">🇺🇸 North America</p><h3 class="mcard__title">United States</h3><p class="mcard__text">Innovation campuses and unlimited opportunity.</p><span class="mcard__cta">Explore destination →</span></div></a>
+					<a class="mcard" href="#"><div class="mcard__img"><img src="https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=800&q=70" alt=""></div><div class="mcard__body"><p class="eyebrow">🇦🇺 Oceania</p><h3 class="mcard__title">Australia</h3><p class="mcard__text">Research powerhouses by the ocean.</p><span class="mcard__cta">Explore destination →</span></div></a>
+					<a class="mcard" href="#"><div class="mcard__img"><img src="https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=800&q=70" alt=""></div><div class="mcard__body"><p class="eyebrow">🇦🇪 Middle East</p><h3 class="mcard__title">United Arab Emirates</h3><p class="mcard__text">Global branch campuses in a dynamic hub.</p><span class="mcard__cta">Explore destination →</span></div></a>
+				</div>
+			</div>
+
+			<!-- Universities -->
+			<div class="xp__pane" id="pane-u">
+				<div class="mgrid">
+					<a class="mcard" href="#"><div class="mcard__img"><img src="https://images.unsplash.com/photo-1580537659466-0a9bfa916a54?w=800&q=70" alt=""><span class="mcard__stat">#1 UK · #3 WORLD</span></div><div class="mcard__body"><p class="eyebrow">Oxford · Public Research</p><h3 class="mcard__title">University of Oxford</h3><p class="mcard__text">Russell Group · Research intensive · Tutorial system</p><span class="mcard__cta">View university →</span></div></a>
+					<a class="mcard" href="#"><div class="mcard__img"><img src="https://images.unsplash.com/photo-1529655683826-aba9b3e77383?w=800&q=70" alt=""><span class="mcard__stat">#2 UK · #6 WORLD</span></div><div class="mcard__body"><p class="eyebrow">London · Public Research</p><h3 class="mcard__title">Imperial College London</h3><p class="mcard__text">STEM focus · Industry links · Russell Group</p><span class="mcard__cta">View university →</span></div></a>
+					<a class="mcard" href="#"><div class="mcard__img"><img src="https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&q=70" alt=""><span class="mcard__stat">#3 UK · #9 WORLD</span></div><div class="mcard__body"><p class="eyebrow">London · Public Research</p><h3 class="mcard__title">University College London</h3><p class="mcard__text">Multidisciplinary · Central London campus</p><span class="mcard__cta">View university →</span></div></a>
+				</div>
+			</div>
+
+			<!-- Programs -->
+			<div class="xp__pane" id="pane-p">
+				<div class="pgrid">
+					<a class="pcard" href="#"><div class="pcard__band"><img src="https://images.unsplash.com/photo-1580537659466-0a9bfa916a54?w=800&q=70" alt=""><span>Oxford</span></div><div class="pcard__body"><p class="eyebrow">Postgraduate · Computer Science</p><h3 class="pcard__title">MSc Computer Science</h3><p class="pcard__meta">1 year · £38,760 · Oct 2026 intake<br>IELTS 7.5 · deadline Jan 8, 2026</p><p class="pcard__cta">View program →</p></div></a>
+					<a class="pcard" href="#"><div class="pcard__band"><img src="https://images.unsplash.com/photo-1529655683826-aba9b3e77383?w=800&q=70" alt=""><span>Imperial</span></div><div class="pcard__body"><p class="eyebrow">Postgraduate · Engineering</p><h3 class="pcard__title">MEng Mechanical Engineering</h3><p class="pcard__meta">1 year · £40,940 · Oct 2026 intake<br>First-class honours required</p><p class="pcard__cta">View program →</p></div></a>
+					<a class="pcard" href="#"><div class="pcard__band"><img src="https://images.unsplash.com/photo-1503614472-8c93d56e92ce?w=800&q=70" alt=""><span>Manitoba</span></div><div class="pcard__body"><p class="eyebrow">Undergraduate · Business</p><h3 class="pcard__title">BComm (Hons) Finance</h3><p class="pcard__meta">4 years · CA$21,000/yr · Sep 2026<br>IELTS 6.5 · co-op available</p><p class="pcard__cta">View program →</p></div></a>
+				</div>
+			</div>
+
+			<!-- Funding -->
+			<div class="xp__pane" id="pane-f">
+				<div class="fund">
+					<a class="fund__row" href="#"><span class="fund__amt">$25,000<small>Up to</small></span><span class="fund__name">Century Global Excellence Award<span>Merit · any destination</span></span><span class="fund__dead">Closes Mar 15</span><span class="fund__go">→</span></a>
+					<a class="fund__row" href="#"><span class="fund__amt">50%<small>Tuition</small></span><span class="fund__name">Coventry Merit Award<span>UK · postgraduate</span></span><span class="fund__dead">Closes Mar 30</span><span class="fund__go">→</span></a>
+					<a class="fund__row" href="#"><span class="fund__amt">$5,000<small>Entrance</small></span><span class="fund__name">Manitoba Entrance Scholarship<span>Canada · undergraduate</span></span><span class="fund__dead">Rolling</span><span class="fund__go">→</span></a>
+					<a class="fund__row" href="#"><span class="fund__amt">Full<small>Ride</small></span><span class="fund__name">DAAD Scholarship<span>Germany · competitive</span></span><span class="fund__dead">Oct intake</span><span class="fund__go">→</span></a>
+				</div>
+			</div>
+
+			<div class="xp__foot">
+				<p id="xp-foot-label">All 6 destinations live on their own page</p>
+				<a class="link-arrow" href="#" id="xp-foot-link">View all →</a>
+			</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- what the page becomes -->
+<section class="section" style="border-top:var(--thin);background:var(--foreground);color:#fff">
+	<div class="container">
+		<p class="eyebrow" style="color:#a1a1aa">The page, after</p>
+		<div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin-top:1.5rem;font-family:var(--font-mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.1em">
+			<span style="border:1px solid #fff;padding:.6rem 1rem">Hero</span>
+			<span style="border:1px solid #fff;padding:.6rem 1rem">Services</span>
+			<span style="border:1px solid #fbbf24;color:#fbbf24;padding:.6rem 1rem">Explore ← 4 in 1</span>
+			<span style="border:1px solid #fff;padding:.6rem 1rem">How it works</span>
+			<span style="border:1px solid #fff;padding:.6rem 1rem">Red Seat</span>
+			<span style="border:1px solid #fff;padding:.6rem 1rem">CTA</span>
+		</div>
+		<p class="eyebrow" style="color:#a1a1aa;margin-top:1.5rem">12 blocks → 6. Journal → footer links · Stats → hero meta.</p>
+	</div>
+</section>
+
+<script>
+const labels={d:"All 6 destinations live on their own page",u:"100+ partner institutions",p:"Full program catalogue",f:"All scholarships & deadlines"};
+const links={d:"/destinations",u:"/universities",p:"/programs",f:"/scholarships"};
+document.querySelectorAll(".xp__tab").forEach(t=>t.addEventListener("click",()=>{
+	document.querySelectorAll(".xp__tab").forEach(x=>x.setAttribute("aria-selected","false"));
+	document.querySelectorAll(".xp__pane").forEach(x=>x.removeAttribute("data-open"));
+	t.setAttribute("aria-selected","true");
+	document.getElementById("pane-"+t.dataset.pane).setAttribute("data-open","");
+	document.getElementById("xp-foot-label").textContent=labels[t.dataset.pane];
+	document.getElementById("xp-foot-link").setAttribute("href",links[t.dataset.pane]);
+}));
+</script>
+</body>
+</html>

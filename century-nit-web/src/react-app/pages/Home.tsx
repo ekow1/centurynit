@@ -311,7 +311,7 @@ export function Home() {
 					</div>
 
 					<div className="xp">
-						<div className="xp__rail" role="tablist" aria-label="Explore">
+						<div className="xp__tabs" role="tablist" aria-label="Explore">
 							{EXPLORE_TABS.map((t, i) => (
 								<button
 									key={t.id}
@@ -326,10 +326,8 @@ export function Home() {
 										{t.label}
 										<small>{t.caption}</small>
 									</span>
-									<span className="go" aria-hidden>→</span>
 								</button>
 							))}
-							<p className="xp__cta">Not sure? The consultation picks for you.</p>
 						</div>
 						<div className="xp__body">
 

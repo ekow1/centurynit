@@ -11321,6 +11321,125 @@ a.portal-ch--on:hover {
 	opacity: 0.8;
 }
 
+/* Entry summary strip — the receipt for the pick — and the ask/skip
+   legend that makes a shorter form read as scoped, not broken. */
+.eform-meta {
+	margin-top: 0.9rem;
+	border: 1.5px solid var(--border);
+	display: flex;
+	align-items: center;
+	gap: 0.7rem;
+	padding: 0.5rem 0.7rem;
+	flex-wrap: wrap;
+}
+
+.eform-meta__chip {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	background: var(--foreground);
+	color: var(--accent-foreground);
+	padding: 0.3rem 0.6rem;
+	white-space: nowrap;
+}
+
+.eform-meta__stat {
+	font-family: var(--font-mono);
+	font-size: 0.66rem;
+	color: var(--muted-foreground);
+	white-space: nowrap;
+}
+
+.eform-meta__change {
+	margin-left: auto;
+	font-family: var(--font-mono);
+	font-size: 0.66rem;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--foreground);
+	background: none;
+	border: none;
+	padding: 0 0.25rem;
+	min-height: 44px;
+	display: inline-flex;
+	align-items: center;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+
+.eform-note {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	color: var(--muted-foreground);
+	margin: 0.45rem 0 0;
+	line-height: 1.55;
+}
+
+.eform-legend {
+	display: grid;
+	grid-template-columns: 1fr;
+	margin-top: 0.9rem;
+	border-top: 1px solid var(--border-light);
+	border-bottom: 1px solid var(--border-light);
+}
+
+.eform-legend > div {
+	padding: 0.6rem 0;
+}
+
+.eform-legend > div + div {
+	border-top: 1px solid var(--border-light);
+}
+
+.eform-legend h5 {
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--foreground);
+	margin: 0 0 0.3rem;
+}
+
+.eform-legend p {
+	margin: 0;
+	font-size: 0.72rem;
+	color: var(--muted-foreground);
+	line-height: 1.55;
+}
+
+@media (min-width: 640px) {
+	.eform-legend {
+		grid-template-columns: 1fr 1fr;
+	}
+	.eform-legend > div {
+		padding: 0.65rem 0.8rem;
+	}
+	.eform-legend > div:first-child {
+		padding-left: 0;
+	}
+	.eform-legend > div:last-child {
+		padding-right: 0;
+	}
+	.eform-legend > div + div {
+		border-top: none;
+		border-left: 1px solid var(--border-light);
+	}
+}
+
+/* The muted "why we ask" line under the intent-shaped sections. */
+.eform-why {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	color: var(--muted-foreground);
+	margin: 0.7rem 0 0;
+	line-height: 1.55;
+	border-left: 2px solid var(--border-light);
+	padding-left: 0.6rem;
+}
+
 /* ============ Explore — destinations · universities · programs · funding ============ */
 .xp {
 	background: #fff;

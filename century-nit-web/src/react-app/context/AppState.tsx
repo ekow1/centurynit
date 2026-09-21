@@ -437,7 +437,21 @@ export type AssessmentData = {
 	// A departure entry: the visa already held.
 	visaGrantReference: string;
 	visaGrantDate: string;
+	// A visa entry: prior refusals and travel — the risk inputs the
+	// consultant builds the file around.
+	visaRefusedBefore: string;
+	visaRefusalCountry: string;
+	visaRefusalYear: string;
+	visaRefusalReason: string;
+	priorApplications: string;
+	travelHistory: string;
+	// A departure entry: where the client lands and what they need there.
 	arrivalWindow: string;
+	arrivalCity: string;
+	arrivalAirport: string;
+	needsAccommodation: string;
+	needsPickup: string;
+	dependants: string;
 };
 
 export type BookingData = {
@@ -678,7 +692,18 @@ const defaultAssessment: AssessmentData = {
 	offerDepositPaid: "",
 	visaGrantReference: "",
 	visaGrantDate: "",
+	visaRefusedBefore: "",
+	visaRefusalCountry: "",
+	visaRefusalYear: "",
+	visaRefusalReason: "",
+	priorApplications: "",
+	travelHistory: "",
 	arrivalWindow: "",
+	arrivalCity: "",
+	arrivalAirport: "",
+	needsAccommodation: "",
+	needsPickup: "",
+	dependants: "",
 };
 
 export function emptyStudyChoice(): StudyChoice {

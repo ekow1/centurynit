@@ -473,7 +473,20 @@ export const applicantProfileSchema = z.object({
 	/** A departure entry: the visa the client already holds. */
 	visaGrantReference: z.string().optional(),
 	visaGrantDate: z.string().optional(),
+	/** A visa entry: prior refusals and travel — the risk inputs the file is built around. */
+	visaRefusedBefore: z.string().optional(),
+	visaRefusalCountry: z.string().optional(),
+	visaRefusalYear: z.string().optional(),
+	visaRefusalReason: z.string().optional(),
+	priorApplications: z.string().optional(),
+	travelHistory: z.string().optional(),
+	/** A departure entry: where the client lands and what they need there. */
 	arrivalWindow: z.string().optional(),
+	arrivalCity: z.string().optional(),
+	arrivalAirport: z.string().optional(),
+	needsAccommodation: z.string().optional(),
+	needsPickup: z.string().optional(),
+	dependants: z.string().optional(),
 });
 export type ApplicantProfile = z.infer<typeof applicantProfileSchema>;
 

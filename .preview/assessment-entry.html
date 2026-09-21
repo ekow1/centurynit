@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Assessment form — entry point reshapes sections, dynamic numbering (proposed)</title>
+<style>
+	:root{
+		--bg:#fff; --ink:#000; --muted-bg:#f5f5f5;
+		--fg-muted:#525252; --micro:#3f3f3f; --line-light:#d4d4d4; --line:#a3a3a3;
+		--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+		--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+	}
+	*{box-sizing:border-box;margin:0}
+	body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+	.wrap{max-width:1240px;margin:0 auto}
+	h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+	.banner{font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;background:var(--ink);color:#fff;padding:.35rem .7rem;margin-bottom:.8rem}
+	p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+	p.note b{color:var(--ink)}
+	.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+	.tag--after{background:var(--ink);color:#fff}
+	.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem}
+	.jump a{color:inherit}
+	.mock{background:#fff;border:1px solid #bbb;padding:1.5rem clamp(1.25rem,3vw,2.25rem) 2.5rem}
+	.sidebyside{display:flex;gap:2rem;flex-wrap:wrap;align-items:flex-start}
+	.cap{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.5rem}
+	.fcap{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);margin-top:.55rem;line-height:1.55;max-width:26rem}
+	code{font-family:var(--mono);font-size:.7rem;background:var(--muted-bg);padding:.05em .3em}
+	.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)}
+	.sk{height:.6rem;background:var(--muted-bg);margin:.5rem 0}
+	.dimline{display:flex;align-items:center;gap:.4rem;font-family:var(--mono);font-size:.6rem;color:var(--fg-muted);margin:.4rem 0}
+
+	/* ---- desktop frame ---- */
+	.desk{border:1.5px solid var(--ink);background:#fff;overflow:hidden;flex-shrink:0}
+	.desk__bar{display:flex;align-items:center;gap:.45rem;padding:.42rem .7rem;border-bottom:1px solid var(--line-light);background:var(--muted-bg)}
+	.desk__bar i{width:8px;height:8px;background:var(--line);display:inline-block;flex-shrink:0}
+	.desk__url{font-family:var(--mono);font-size:.58rem;color:var(--fg-muted);letter-spacing:.05em;margin-left:.35rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+	.dbody{padding:.9rem}
+
+	/* ---- intent cards ---- */
+	.eyebrow{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.12em;color:var(--fg-muted)}
+	.secttl{display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;font-size:.85rem;font-weight:700;border-bottom:1.5px solid var(--ink);padding-bottom:.4rem;margin:.5rem 0 .55rem}
+	.secttl i{font-style:normal;font-family:var(--mono);font-size:.55rem;font-weight:400;color:var(--fg-muted)}
+	.pint{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+	.icard{border:1.5px solid var(--line-light);padding:.55rem .6rem;background:#fff;display:grid;gap:.18rem;align-content:start}
+	.icard--on{border-color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink)}
+	.icard__k{font-family:var(--mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.1em;color:var(--fg-muted)}
+	.icard--on .icard__k{color:var(--ink)}
+	.icard__n{font-size:.76rem;font-weight:700;line-height:1.2}
+	.icard__d{font-size:.58rem;color:var(--fg-muted);line-height:1.4}
+	.icard__ev{font-family:var(--mono);font-size:.5rem;color:var(--micro);border-top:1px dashed var(--line-light);padding-top:.3rem;margin-top:.15rem;line-height:1.45}
+
+	/* ---- entry summary strip ---- */
+	.estrip{margin-top:.65rem;border:1.5px solid var(--ink);display:flex;align-items:center;gap:.55rem;padding:.5rem .65rem;flex-wrap:wrap}
+	.echip{font-family:var(--mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;background:var(--ink);color:#fff;padding:.28rem .55rem;white-space:nowrap}
+	.estat{font-family:var(--mono);font-size:.6rem;color:var(--micro);white-space:nowrap}
+	.echange{margin-left:auto;font-family:var(--mono);font-size:.6rem;color:var(--ink);text-decoration:underline;text-underline-offset:2px;white-space:nowrap}
+	.enote{font-family:var(--mono);font-size:.53rem;color:var(--fg-muted);margin-top:.35rem;line-height:1.55}
+	.legend{display:grid;grid-template-columns:1fr 1fr;margin-top:.7rem;border:1px solid var(--line-light)}
+	.legend>div{padding:.55rem .7rem}
+	.legend>div+div{border-left:1px solid var(--line-light)}
+	.legend h5{font-family:var(--mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.12em;color:var(--ink);margin-bottom:.3rem}
+	.legend ul{list-style:none;font-size:.62rem;display:grid;gap:.18rem;color:var(--micro);line-height:1.4}
+	.legend .skipline{font-size:.58rem;color:var(--fg-muted);line-height:1.5}
+	.legend .skipline::before{content:"— "}
+
+	/* ---- confirm overlay ---- */
+	.veil{position:relative}
+	.veil__dim{position:absolute;inset:0;background:rgba(0,0,0,.32);display:flex;align-items:center;justify-content:center;padding:1rem}
+	.dlg{background:#fff;border:1.5px solid var(--ink);max-width:19rem;padding:.9rem 1rem 1rem;box-shadow:.4rem .4rem 0 rgba(0,0,0,.18)}
+	.dlg b{display:block;font-size:.78rem;margin-bottom:.35rem}
+	.dlg p{font-size:.66rem;color:var(--micro);line-height:1.5;margin-bottom:.7rem}
+	.dlg .row{display:flex;gap:.5rem;justify-content:flex-end}
+	.btn{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;padding:.45rem .75rem;border:1.5px solid var(--ink);background:#fff;color:var(--ink)}
+	.btn--solid{background:var(--ink);color:#fff}
+
+	/* ---- three matrices ---- */
+	.cols3{display:flex;gap:1.25rem;flex-wrap:wrap;align-items:flex-start}
+	.col{flex:1;min-width:20rem}
+	.mini{display:flex;align-items:stretch}
+	.toc{flex:0 0 44%;border-right:1px solid var(--line-light);padding:.55rem .5rem .55rem .7rem}
+	.toc h6{font-family:var(--mono);font-size:.5rem;text-transform:uppercase;letter-spacing:.12em;color:var(--fg-muted);margin-bottom:.3rem}
+	.toc a{display:flex;justify-content:space-between;align-items:baseline;gap:.4rem;font-size:.6rem;padding:.26rem 0;color:var(--ink);text-decoration:none}
+	.toc a b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+	.toc a i{font-style:normal;font-family:var(--mono);font-size:.5rem;color:var(--fg-muted);flex-shrink:0}
+	.sheads{flex:1;padding:.55rem .7rem;display:grid;gap:.35rem;align-content:start}
+	.shead{border:1px solid var(--line-light);padding:.38rem .55rem;background:#fff}
+	.shead b{display:flex;align-items:baseline;gap:.4rem;font-size:.66rem;line-height:1.3}
+	.shead i{display:block;font-style:normal;font-family:var(--mono);font-size:.5rem;color:var(--fg-muted);margin-top:.14rem}
+	.shead--new{border:1.5px solid var(--ink);background:var(--muted-bg)}
+	.newchip{font-family:var(--mono);font-size:.48rem;letter-spacing:.1em;background:var(--ink);color:#fff;padding:.12rem .35rem;text-transform:uppercase}
+	.gaprow{border:1px dashed var(--line);padding:.3rem .55rem;font-family:var(--mono);font-size:.52rem;color:var(--fg-muted);background:rgba(0,0,0,.03)}
+
+	/* ---- field mocks ---- */
+	.mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem .7rem;margin-top:.6rem}
+	.mfield{min-width:0}
+	.mfield label{display:block;font-size:.6rem;font-weight:600;margin-bottom:.22rem}
+	.mfield label em{font-style:normal;font-family:var(--mono);font-size:.5rem;color:var(--fg-muted);font-weight:400}
+	.minp{border:1px solid var(--line);min-height:1.9rem;display:flex;align-items:center;padding:0 .55rem;font-family:var(--mono);font-size:.58rem;color:var(--fg-muted);background:#fff;gap:.3rem}
+	.minp b{color:var(--ink);font-weight:600}
+	.minp .caret{margin-left:auto;color:var(--line)}
+	.minp--ta{min-height:3.2rem;align-items:flex-start;padding-top:.45rem}
+	.mchips{display:flex;gap:.3rem;flex-wrap:wrap;border:1px solid var(--line);min-height:1.9rem;padding:.32rem .45rem;align-items:center;align-content:flex-start}
+	.mchip{border:1px solid var(--micro);font-family:var(--mono);font-size:.52rem;padding:.14rem .45rem;color:var(--micro);background:#fff}
+	.mchip--add{border-style:dashed;color:var(--fg-muted)}
+	.whynote{font-family:var(--mono);font-size:.53rem;color:var(--fg-muted);margin-top:.55rem;line-height:1.55;border-left:2px solid var(--line-light);padding-left:.55rem}
+
+	/* wiring table */
+	.wiring{border-collapse:collapse;width:100%;margin-top:.5rem}
+	.wiring th,.wiring td{border:1px solid var(--line-light);font-family:var(--mono);font-size:.7rem;text-align:left;padding:.6rem .8rem;vertical-align:top}
+	.wiring th{text-transform:uppercase;letter-spacing:.1em;font-size:.6rem;background:var(--muted-bg)}
+	.wiring td:first-child{white-space:nowrap;font-weight:700}
+	.wiring code{font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<span class="banner">Mock · proposal — all names, counts and routes illustrative</span>
+	<h1 class="page">Assessment form — the entry point reshapes the sections (proposed)</h1>
+	<p class="note">The booking assessment already gates on the entry pick: the four intent cards render alone and the whole form mounts once <code>entryIntent</code> is set. <code>sectionShown</code> / <code>ADMISSIONS_ONLY_SECTIONS</code> hide academics for offer-holders, and <code>ENTRY_DOC_FIELDS</code> swaps the document list. What's missing: the section numbers are literals, a visa-only client is never asked about refusals, a departure client is never asked about arrival, and nothing tells the entrant <b>why</b> their form is shorter. This mock proposes computed numbering, two new sections (<code>visa_history</code>, <code>arrival</code>), and an entry summary strip that makes the shape feel intentional.</p>
+	<div class="jump"><a href="#a">A · what's wrong</a><a href="#b">B · the entry card after pick</a><a href="#c">C · three section matrices</a><a href="#d">D · wiring</a></div>
+
+	<!-- ================= SECTION A ================= -->
+	<span class="tag" id="a">A · What's wrong today</span>
+	<div class="mock">
+		<div class="sidebyside">
+			<div style="flex:1;min-width:19rem">
+				<p class="cap" style="border-bottom:1.5px solid var(--ink);padding-bottom:.35rem">Five gaps between intent and form</p>
+				<ul style="margin:.7rem 0 0 1.1rem;font-size:.78rem;display:grid;gap:.55rem">
+					<li><b>1 · Number collisions and gaps.</b> Section heads carry literal numbers: <code>03 · Your offer</code> <em>and</em> <code>03 · Education</code> both claim 03 (likewise <code>04 · Your visa</code> / <code>04 · Employment</code>). For a visa entrant the visible sequence renders <b>01, 02, 03, 07, 08</b> — 04–06 vanished but Financial still reads 07, implying hidden work. Numbers must be computed from <code>visibleSections</code>, not literals.</li>
+					<li><b>2 · Visa entrants are never asked about visa history.</b> Prior refusals, previous applications, travel history — on a visa-only case that's the single biggest risk input the consultant needs, and the form skips it entirely.</li>
+					<li><b>3 · Departure entrants aren't asked what they need on arrival.</b> Housing help, airport pickup, destination city/airport, dependants travelling — only <code>arrivalWindow</code> exists.</li>
+					<li><b>4 · No "why we ask less" signal.</b> A visa entrant seeing 6 sections instead of 9 should <em>feel</em> the shape match their purchase — "you only pay for the stretch you ride" → "we only ask for the stretch we work". Today the shorter form reads as missing pages, not a matched scope.</li>
+					<li><b>5 · Changing the entry silently hides filled answers.</b> Pick a different intent after typing and whole sections — with their answers — unmount with no warning. Needs a confirm.</li>
+				</ul>
+				<p class="fcap">Literals: <code>PortalPages.tsx</code> ~1674–1946 · gating: <code>sectionShown</code> ~1542 · doc sets: <code>ENTRY_DOC_FIELDS</code> ~1288.</p>
+			</div>
+			<div>
+				<p class="cap">today · visa entry picked · heads as shipped</p>
+				<div class="desk" style="width:23rem">
+					<div class="desk__bar"><i></i><i></i><i></i><span class="desk__url">portal.centurynit.com/start · assessment</span></div>
+					<div class="dbody">
+						<div class="sheads" style="padding:0">
+							<div class="shead"><b>01 · Personal</b><i>0/9 · 4 required</i></div>
+							<div class="shead"><b>02 · Passport</b><i>0/4 filled</i></div>
+							<div class="shead"><b>03 · Your offer</b><i>0/8 filled</i></div>
+							<div class="gaprow">04 · 05 · 06 — literals assigned to hidden sections; nothing renders here</div>
+							<div class="shead"><b>07 · Financial</b><i>0/4 filled ← still says 07</i></div>
+							<div class="shead"><b>08 · Documents</b><i>0/5 · entry set</i></div>
+						</div>
+					</div>
+				</div>
+				<p class="fcap">The entrant reads "07 · Financial" as the seventh thing — it's the fifth. In the source the collision is latent: <code>03 · Your offer</code> (~1742) vs <code>03 · Education</code> (~1816), <code>04 · Your visa</code> (~1795) vs <code>04 · Employment</code> (~1848) — never on screen together, so it hides until someone reorders.</p>
+			</div>
+		</div>
+	</div>
+
+	<!-- ================= SECTION B ================= -->
+	<span class="tag tag--after" id="b">B · The entry card — after the pick</span>
+	<div class="mock">
+		<div class="sidebyside">
+			<div>
+				<p class="cap">after · visa picked · narrow desktop window · ~430px</p>
+				<div class="desk" style="width:26.9rem">
+					<div class="desk__bar"><i></i><i></i><i></i><span class="desk__url">portal.centurynit.com/start · assessment</span></div>
+					<div class="dbody">
+						<p class="eyebrow">Assessment form</p>
+						<div class="secttl"><span>Start · Where are you on the journey?</span><i>1/1 · 1 required</i></div>
+						<div class="pint">
+							<div class="icard">
+								<span class="icard__k">Enter at admissions</span>
+								<span class="icard__n">I need a school</span>
+								<span class="icard__d">No offer yet. We match you to schools, prepare and lodge applications.</span>
+							</div>
+							<div class="icard icard--on">
+								<span class="icard__k">Enter at visa</span>
+								<span class="icard__n">I have an offer</span>
+								<span class="icard__d">We check the offer, build the financial file, lodge the visa.</span>
+							</div>
+							<div class="icard">
+								<span class="icard__k">Enter at departure</span>
+								<span class="icard__n">I have a visa</span>
+								<span class="icard__d">Flights, housing, airport pickup, pre-departure briefing.</span>
+							</div>
+							<div class="icard">
+								<span class="icard__k">Full journey</span>
+								<span class="icard__n">All three stages</span>
+								<span class="icard__d">The bundle price, with post-arrival instalments.</span>
+							</div>
+						</div>
+						<div class="estrip">
+							<span class="echip">Your form · Visa entry</span>
+							<span class="estat">6 sections</span>
+							<span class="estat">~8 min</span>
+							<a class="echange" href="#">Change</a>
+						</div>
+						<p class="enote">Changing entry hides sections you've filled — we keep the answers.</p>
+						<div class="legend">
+							<div>
+								<h5>We ask</h5>
+								<ul>
+									<li>Personal &amp; passport</li>
+									<li>Your offer — verified first</li>
+									<li>Visa history <span class="newchip" style="vertical-align:1px">new</span></li>
+									<li>Financial &amp; documents</li>
+								</ul>
+							</div>
+							<div>
+								<h5>We skip</h5>
+								<ul>
+									<li class="skipline">education history · employment</li>
+									<li class="skipline">English test · school preferences</li>
+									<li class="skipline">another office already made that call</li>
+								</ul>
+							</div>
+						</div>
+					</div>
+				</div>
+				<p class="fcap">The strip is the receipt for the pick: chip + section count + time estimate + a quiet <code>Change</code>. The legend makes the shorter form read as <em>scoped</em>, not broken.</p>
+			</div>
+			<div>
+				<p class="cap">after · Change with filled hidden sections → confirm</p>
+				<div class="desk veil" style="width:24rem">
+					<div class="desk__bar"><i></i><i></i><i></i><span class="desk__url">portal.centurynit.com/start · assessment</span></div>
+					<div class="dbody" style="padding-bottom:4.5rem">
+						<div class="sk" style="width:52%"></div>
+						<div class="sk" style="width:88%"></div>
+						<div class="sk" style="width:71%"></div>
+						<div class="veil__dim">
+							<div class="dlg">
+								<b>Switch to Departure entry?</b>
+								<p>Your offer, visa history and financial sections will be hidden — <b>3 sections you've started</b>. The answers are kept and come back if you switch back.</p>
+								<div class="row">
+									<span class="btn">Stay on visa entry</span>
+									<span class="btn btn--solid">Switch anyway</span>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<p class="fcap">The confirm fires only when the incoming intent would hide a section whose <code>done &gt; 0</code>. Answers stay in <code>AssessmentData</code> — hidden ≠ deleted — so switching back restores them untouched.</p>
+			</div>
+		</div>
+	</div>
+
+	<!-- ================= SECTION C ================= -->
+	<span class="tag tag--after" id="c">C · Three section matrices — one list per entry</span>
+	<div class="mock">
+		<div class="cols3">
+			<div class="col">
+				<p class="cap">admissions / full journey · 8 sections</p>
+				<div class="desk">
+					<div class="desk__bar"><i></i><i></i><i></i><span class="desk__url">/start · intent=full</span></div>
+					<div class="mini">
+						<div class="toc">
+							<h6>Sections</h6>
+							<a href="#"><b>Personal</b><i>0/9</i></a>
+							<a href="#"><b>Passport</b><i>0/4</i></a>
+							<a href="#"><b>Education</b><i>0/5</i></a>
+							<a href="#"><b>Employment</b><i>0/4</i></a>
+							<a href="#"><b>English</b><i>0/3</i></a>
+							<a href="#"><b>Preferences</b><i>0/2</i></a>
+							<a href="#"><b>Financial</b><i>0/4</i></a>
+							<a href="#"><b>Documents</b><i>0/8</i></a>
+						</div>
+						<div class="sheads">
+							<div class="shead"><b>01 · Personal</b><i>0/9 · 4 required</i></div>
+							<div class="shead"><b>02 · Passport</b><i>0/4</i></div>
+							<div class="shead"><b>03 · Education</b><i>0/5</i></div>
+							<div class="shead"><b>04 · Employment</b><i>0/4</i></div>
+							<div class="shead"><b>05 · English</b><i>0/3</i></div>
+							<div class="shead"><b>06 · Preferences</b><i>0/2</i></div>
+							<div class="shead"><b>07 · Financial</b><i>0/4</i></div>
+							<div class="shead"><b>08 · Documents</b><i>academic set · 8 slots</i></div>
+						</div>
+					</div>
+				</div>
+				<p class="fcap">The shape today, kept — but the numbers are now computed, not lucky literals. Docs: passport, certificates, transcripts, CV, English result, financial proof, sponsorship, additional.</p>
+			</div>
+			<div class="col">
+				<p class="cap">visa entry · 6 sections</p>
+				<div class="desk">
+					<div class="desk__bar"><i></i><i></i><i></i><span class="desk__url">/start · intent=visa</span></div>
+					<div class="mini">
+						<div class="toc">
+							<h6>Sections</h6>
+							<a href="#"><b>Personal</b><i>0/9</i></a>
+							<a href="#"><b>Passport</b><i>0/4</i></a>
+							<a href="#"><b>Your offer</b><i>0/8</i></a>
+							<a href="#"><b>Visa history</b><i>0/4</i></a>
+							<a href="#"><b>Financial</b><i>0/4</i></a>
+							<a href="#"><b>Documents</b><i>0/5</i></a>
+						</div>
+						<div class="sheads">
+							<div class="shead"><b>01 · Personal</b><i>0/9 · 4 required</i></div>
+							<div class="shead"><b>02 · Passport</b><i>0/4</i></div>
+							<div class="shead"><b>03 · Your offer</b><i>verify-first · 0/8 · required</i></div>
+							<div class="shead shead--new"><b>04 · Visa history <span class="newchip">new</span></b><i>refusals · applications · travel</i></div>
+							<div class="shead"><b>05 · Financial</b><i>0/4</i></div>
+							<div class="shead"><b>06 · Documents</b><i>entry set · 5 slots</i></div>
+						</div>
+					</div>
+				</div>
+				<p class="fcap">Today this column reads 01 · 02 · 03 · <b>07</b> · 08. Computed numbering closes the gap; <code>visa_history</code> fills it with the question the consultant actually needs. Docs: offer letter, passport, financial proof, sponsorship, additional.</p>
+			</div>
+			<div class="col">
+				<p class="cap">departure entry · 5 sections</p>
+				<div class="desk">
+					<div class="desk__bar"><i></i><i></i><i></i><span class="desk__url">/start · intent=departure</span></div>
+					<div class="mini">
+						<div class="toc">
+							<h6>Sections</h6>
+							<a href="#"><b>Personal</b><i>0/9</i></a>
+							<a href="#"><b>Passport</b><i>0/4</i></a>
+							<a href="#"><b>Your visa</b><i>0/3</i></a>
+							<a href="#"><b>Arrival</b><i>0/5</i></a>
+							<a href="#"><b>Documents</b><i>0/4</i></a>
+						</div>
+						<div class="sheads">
+							<div class="shead"><b>01 · Personal</b><i>0/9 · 4 required</i></div>
+							<div class="shead"><b>02 · Passport</b><i>0/4</i></div>
+							<div class="shead"><b>03 · Your visa</b><i>grant ref · granted-on · window</i></div>
+							<div class="shead shead--new"><b>04 · Arrival <span class="newchip">new</span></b><i>city · housing · pickup · dependants</i></div>
+							<div class="shead"><b>05 · Documents</b><i>visa-grant set · 4 slots</i></div>
+						</div>
+					</div>
+				</div>
+				<p class="fcap"><code>offer</code> and <code>financial</code> drop for departure — the grant already vouched for both; the offer becomes a document upload, not a re-verification. Docs: visa grant, offer letter, passport, additional.</p>
+			</div>
+		</div>
+
+		<div class="sidebyside" style="margin-top:2.5rem">
+			<div style="flex:1;min-width:26rem">
+				<p class="cap">new section rendered · visa entry · 04 · Visa history</p>
+				<div class="desk">
+					<div class="desk__bar"><i></i><i></i><i></i><span class="desk__url">/start · intent=visa · #assess-visa_history</span></div>
+					<div class="dbody">
+						<div class="secttl"><span>04 · Visa history</span><i>2/6 · verify-first</i></div>
+						<div class="mgrid">
+							<div class="mfield">
+								<label>Ever been refused a visa? *</label>
+								<div class="minp"><b>Yes</b><span class="caret">▾</span></div>
+							</div>
+							<div class="mfield">
+								<label>Which country <em>(if yes)</em></label>
+								<div class="minp">United Kingdom</div>
+							</div>
+							<div class="mfield">
+								<label>When <em>(year)</em></label>
+								<div class="minp">2023</div>
+							</div>
+							<div class="mfield" style="grid-column:1/-1">
+								<label>Reason given <em>(as stated on the refusal letter)</em></label>
+								<div class="minp minp--ta">"Not satisfied you would leave the UK at the end of your visit" — funds unclear</div>
+							</div>
+							<div class="mfield">
+								<label>Previous visa applications</label>
+								<div class="minp">1–2<span class="caret">▾</span></div>
+							</div>
+							<div class="mfield" style="grid-column:2/-1">
+								<label>Countries visited in the last 5 years</label>
+								<div class="mchips"><span class="mchip">United Arab Emirates</span><span class="mchip">South Africa</span><span class="mchip mchip--add">+ add country</span></div>
+							</div>
+						</div>
+						<p class="whynote">Why we ask — a prior refusal is the single biggest risk flag on a visa file; the consultant builds the financial evidence around it before lodging.</p>
+					</div>
+				</div>
+			</div>
+			<div style="flex:1;min-width:26rem">
+				<p class="cap">new section rendered · departure entry · 04 · Arrival</p>
+				<div class="desk">
+					<div class="desk__bar"><i></i><i></i><i></i><span class="desk__url">/start · intent=departure · #assess-arrival</span></div>
+					<div class="dbody">
+						<div class="secttl"><span>04 · Arrival</span><i>0/5 · feeds checklist</i></div>
+						<div class="mgrid">
+							<div class="mfield">
+								<label>Destination city</label>
+								<div class="minp">Toronto</div>
+							</div>
+							<div class="mfield">
+								<label>Arrival airport</label>
+								<div class="minp">YYZ — Pearson Intl</div>
+							</div>
+							<div class="mfield">
+								<label>Dependants travelling</label>
+								<div class="minp">None<span class="caret">▾</span></div>
+							</div>
+							<div class="mfield">
+								<label>Need accommodation help?</label>
+								<div class="minp">Yes — find housing<span class="caret">▾</span></div>
+							</div>
+							<div class="mfield">
+								<label>Need airport pickup?</label>
+								<div class="minp">Yes<span class="caret">▾</span></div>
+							</div>
+							<div class="mfield">
+								<label>Arrival window <em>(existing)</em></label>
+								<div class="minp">Late Aug – early Sep<span class="caret">▾</span></div>
+							</div>
+						</div>
+						<p class="whynote">Why we ask — housing and pickup answers seed the departure checklist and the arrival booking, so the consultant isn't re-asking on the call.</p>
+					</div>
+				</div>
+			</div>
+		</div>
+		<p class="fcap" style="max-width:64rem">Numbering is sequential 01–0N with no gaps: heads render <code>{String(idx+1).padStart(2,"0")} · {label}</code> where <code>idx</code> is the section's position in <code>visibleSections</code> — the same list the TOC already maps, so nav and heads can never disagree.</p>
+	</div>
+
+	<!-- ================= SECTION D ================= -->
+	<span class="tag" id="d">D · Wiring</span>
+	<div class="mock">
+		<table class="wiring">
+			<tr><th>File</th><th>What changes</th></tr>
+			<tr>
+				<td>century-nit-web/src/react-app/pages/portal/PortalPages.tsx</td>
+				<td><code>ASSESSMENT_SECTIONS</code> (~1493): insert <code>{ id:"visa_history", label:"Visa history", required:2, fields:["visaRefusedBefore","visaRefusalDetail","priorApplications","travelHistory"] }</code> after <code>offer</code>, and <code>{ id:"arrival", label:"Arrival", required:2, fields:["arrivalCity","arrivalAirport","needsAccommodation","needsPickup","dependants","arrivalWindow"] }</code> after <code>visa</code>. <code>sectionShown</code> (~1542) gains <code>if (id === "visa_history") return entry === "visa";</code> and <code>if (id === "arrival") return entry === "departure";</code>; for departure, <code>offer</code> flips to <code>entry === "visa"</code> only and <code>financial</code> hides (grant already vouched for it). Section <code>required</code> counts are read per intent for the strip's estimate.</td>
+			</tr>
+			<tr>
+				<td>PortalPages.tsx — section heads</td>
+				<td>Titles stop hardcoding numbers (~1674–1946). Compute <code>const num = (id) =&gt; String(visibleSections.findIndex(s =&gt; s.id === id) + 1).padStart(2, "0")</code> once, then each head renders <code>{num("personal")} · Personal</code> — the TOC (<code>visibleSections.map</code> ~1659) can prepend the same index so nav and heads share one source. Collisions and gaps become impossible by construction.</td>
+			</tr>
+			<tr>
+				<td>century-nit-web/src/react-app/context/AppState.tsx</td>
+				<td><code>AssessmentData</code> (~379–438) and <code>defaultAssessment</code> (~633–679) gain: <code>visaRefusedBefore: string</code> ("yes"/"no"), <code>visaRefusalDetail: string</code> (country · year · reason composed, or split fields), <code>priorApplications: string</code>, <code>travelHistory: string[]</code>, <code>arrivalCity: string</code>, <code>arrivalAirport: string</code>, <code>needsAccommodation: string</code>, <code>needsPickup: string</code>, <code>dependants: string</code>. All default to <code>""</code>/<code>[]</code>; <code>arrivalWindow</code> moves under the arrival section's field list.</td>
+			</tr>
+			<tr>
+				<td>PortalPages.tsx — entry picker</td>
+				<td>After the picker (~1650), render the summary strip when <code>entry</code> is set: <code>Your form · {intent} entry</code> chip, <code>{visibleSections.length} sections</code>, <code>~{est} min</code>, and a quiet <code>Change</code> button that focuses the picker. Guard the intent onClick (~1641): if the incoming intent would hide a section whose <code>progress.done &gt; 0</code>, show the confirm dialog ("answers are kept") before calling <code>onUpdate({ entryIntent })</code>; otherwise switch directly. We-ask / We-skip legend renders from the same <code>sectionShown</code> predicate, so it can never drift from the form.</td>
+			</tr>
+			<tr>
+				<td>ENTRY_DOC_FIELDS + submit</td>
+				<td><code>ENTRY_DOC_FIELDS</code> (~1288) unchanged — already intent-shaped (visa: offer-letter/financial/sponsor set; departure: visa-grant set; admissions: full academic set). The assessment submit payload and <code>assessmentResult</code> carry the new fields through to the consultant's verdict, so a refusal flag or a pickup request is visible on the review without re-asking.</td>
+			</tr>
+		</table>
+	</div>
+</div>
+</body>
+</html>

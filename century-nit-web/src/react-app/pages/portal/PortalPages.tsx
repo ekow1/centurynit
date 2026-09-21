@@ -1498,7 +1498,9 @@ const ASSESSMENT_SECTIONS = [
 	{ id: "personal", label: "Personal", required: 4, fields: ["firstName", "middleName", "lastName", "email", "phone", "dateOfBirth", "gender", "nationality", "address"] },
 	{ id: "passport", label: "Passport", required: 0, fields: ["passportNumber", "passportCountry", "passportIssue", "passportExpiry"] },
 	{ id: "offer", label: "Your offer", required: 0, fields: ["offerUniversity", "offerProgram", "offerCountry", "offerType", "offerReference", "offerIntake", "offerTuition", "offerDepositPaid"] },
-	{ id: "visa", label: "Your visa", required: 0, fields: ["visaGrantReference", "visaGrantDate", "arrivalWindow"] },
+	{ id: "visa_history", label: "Visa history", required: 2, fields: ["visaRefusedBefore", "visaRefusalCountry", "visaRefusalYear", "visaRefusalReason", "priorApplications", "travelHistory"] },
+	{ id: "visa", label: "Your visa", required: 0, fields: ["visaGrantReference", "visaGrantDate"] },
+	{ id: "arrival", label: "Arrival", required: 2, fields: ["arrivalCity", "arrivalAirport", "needsAccommodation", "needsPickup", "dependants", "arrivalWindow"] },
 	{ id: "education", label: "Education", required: 0, fields: ["highestEducation", "institution", "fieldOfStudy", "graduationYear", "gpa"] },
 	{ id: "employment", label: "Employment", required: 0, fields: ["employmentStatus", "employer", "jobTitle", "yearsExperience"] },
 	{ id: "english", label: "English", required: 0, fields: ["englishTest", "englishScore", "englishDate"] },
@@ -1506,6 +1508,32 @@ const ASSESSMENT_SECTIONS = [
 	{ id: "financial", label: "Financial", required: 0, fields: ["fundingSource", "budgetRange", "sponsorName", "sponsorRelationship"] },
 	{ id: "documents", label: "Documents", required: 0, fields: [] as string[] },
 ] as const;
+
+/** The summary strip's name for the form each intent produces. */
+const ENTRY_FORM_LABELS: Record<string, string> = {
+	admissions: "Admissions entry",
+	visa: "Visa entry",
+	departure: "Departure entry",
+	full: "Full journey",
+};
+
+/**
+ * The ask/skip legend under the strip — why the form is the length it is.
+ * Copy stays in sync with `sectionShownFor` by hand; it names groups, not
+ * section ids, so it reads as scope rather than a field list.
+ */
+const ENTRY_LEGEND: Record<string, { ask: string; skip: string }> = {
+	admissions: { ask: "the full file", skip: "nothing — we work all three stages" },
+	full: { ask: "the full file", skip: "nothing — we work all three stages" },
+	visa: {
+		ask: "your offer · visa history · finances · documents",
+		skip: "education · employment · English · school preferences — the admissions office already made that call",
+	},
+	departure: {
+		ask: "your visa · arrival plans · documents",
+		skip: "academics · finances · school matching — your grant already vouched for those",
+	},
+};
 
 function AssessmentForm({
 	assessment,
@@ -1520,7 +1548,7 @@ function AssessmentForm({
 	onUpdate: (patch: Partial<AssessmentData>) => void;
 	onDocUpdate: (id: string, fileName: string | null, documentId?: string | null) => void;
 }) {
-	const { toast } = useNotifier();
+	const { toast, confirm } = useNotifier();
 	const { lookups, programs: catalogPrograms } = catalog;
 	// Distinct fields of study, in catalogue order; a programme without one contributes nothing.
 	const programFields = useMemo(
@@ -1541,14 +1569,25 @@ function AssessmentForm({
 	const bringsOffer = entry === "visa" || entry === "departure";
 	const docFields = assessmentDocFieldsFor(entry);
 	// The entry decides which sections exist: a client with an offer skips
-	// academics; the offer and visa sections exist only for them.
-	const sectionShown = (id: string) => {
-		if (ADMISSIONS_ONLY_SECTIONS.has(id)) return !bringsOffer;
-		if (id === "offer") return bringsOffer;
-		if (id === "visa") return entry === "departure";
+	// academics; the offer, visa-history, visa and arrival sections exist
+	// only for the intent that needs them. Departure entrants skip the offer
+	// and the financial file — the grant already vouched for both.
+	const sectionShownFor = (id: string, e: AssessmentData["entryIntent"]) => {
+		const brings = e === "visa" || e === "departure";
+		if (ADMISSIONS_ONLY_SECTIONS.has(id)) return !brings;
+		if (id === "offer") return e === "visa";
+		if (id === "visa_history") return e === "visa";
+		if (id === "visa") return e === "departure";
+		if (id === "arrival") return e === "departure";
+		if (id === "financial") return e !== "departure";
 		return true;
 	};
+	const sectionShown = (id: string) => sectionShownFor(id, entry);
 	const visibleSections = ASSESSMENT_SECTIONS.filter((s) => s.id !== "entry" && sectionShown(s.id));
+	// Section numbers are computed from the visible list, never literals —
+	// the TOC and the heads share one source, so gaps and collisions are
+	// impossible by construction.
+	const sectionNum = (id: string) => String(visibleSections.findIndex((s) => s.id === id) + 1).padStart(2, "0");
 	function sectionProgress(id: string, fields: readonly string[]): { done: number; total: number } {
 		if (id === "documents") {
 			const total = docFields.length;
@@ -1568,6 +1607,26 @@ function AssessmentForm({
 	) as Record<string, { done: number; total: number }>;
 	const sectionMeta = (id: string, required: number) =>
 		`${progress[id]?.done ?? 0}/${progress[id]?.total ?? 0}${required > 0 ? ` · ${required} required` : " filled"}`;
+
+	// Switching or clearing the entry can unmount whole sections. Warn only
+	// when a section that would disappear already holds answers — they are
+	// kept either way, so switching back restores them untouched.
+	async function pickIntent(next: AssessmentData["entryIntent"]) {
+		if (next === entry) return;
+		const losing = visibleSections.filter(
+			(s) => (progress[s.id]?.done ?? 0) > 0 && (next === "" || !sectionShownFor(s.id, next)),
+		);
+		if (losing.length > 0) {
+			const ok = await confirm({
+				title: next === "" ? "Change your entry point?" : `Switch to ${ENTRY_FORM_LABELS[next] ?? "a different entry"}?`,
+				message: `The ${losing.map((s) => s.label).join(", ")} ${losing.length === 1 ? "section" : "sections"} you've started will be hidden. Your answers are kept and come back if you switch back.`,
+				confirmText: next === "" ? "Change" : "Switch anyway",
+				cancelText: "Stay",
+			});
+			if (!ok) return;
+		}
+		onUpdate({ entryIntent: next });
+	}
 
 	function handleDocUpload(id: string) {
 		setPickDocId(id);
@@ -1641,7 +1700,7 @@ function AssessmentForm({
 							: it === "departure" ? "Flights, housing, airport pickup, pre-departure briefing and a first-week check-in."
 							: "All three stages, at the bundle price, with post-arrival instalments.";
 						return (
-							<button key={it} type="button" className={`pintent${on ? " pintent--on" : ""}`} onClick={() => onUpdate({ entryIntent: it })} aria-pressed={on}>
+							<button key={it} type="button" className={`pintent${on ? " pintent--on" : ""}`} onClick={() => void pickIntent(it)} aria-pressed={on}>
 								<span className="pintent__k">{it === "full" ? "Full journey" : `Enter at ${SERVICE_STAGE_LABELS[it === "admissions" ? "admissions" : it === "visa" ? "visa" : "departure"]}`}</span>
 								<span className="pintent__n">{SERVICE_INTENT_LABELS[it]}</span>
 								<span className="pintent__d">{what}</span>
@@ -1650,6 +1709,28 @@ function AssessmentForm({
 						);
 					})}
 				</div>
+				{entry && (
+					<>
+						<div className="eform-meta">
+							<span className="eform-meta__chip">Your form · {ENTRY_FORM_LABELS[entry] ?? "Entry"}</span>
+							<span className="eform-meta__stat">{visibleSections.length} sections</span>
+							<button type="button" className="eform-meta__change" onClick={() => void pickIntent("")}>
+								Change
+							</button>
+						</div>
+						<p className="eform-note">Changing entry hides sections you've filled — we keep the answers.</p>
+						<div className="eform-legend">
+							<div>
+								<h5>We ask</h5>
+								<p>{ENTRY_LEGEND[entry]?.ask ?? "the full file"}</p>
+							</div>
+							<div>
+								<h5>We skip</h5>
+								<p>{ENTRY_LEGEND[entry]?.skip ?? "nothing"}</p>
+							</div>
+						</div>
+					</>
+				)}
 			</section>
 			</div>
 
@@ -1674,7 +1755,7 @@ function AssessmentForm({
 				</nav>
 				<div className="assess-body">
 				<section id="assess-personal" className="assess-section">
-					<h3 className="assess-section__title"><span>01 · Personal</span><span className="assess-section__meta">{sectionMeta("personal", 4)}</span></h3>
+					<h3 className="assess-section__title"><span>{sectionNum("personal")} · Personal</span><span className="assess-section__meta">{sectionMeta("personal", 4)}</span></h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-fn">First name *</label>
@@ -1719,7 +1800,7 @@ function AssessmentForm({
 				</section>
 
 				<section id="assess-passport" className="assess-section">
-					<h3 className="assess-section__title"><span>02 · Passport</span><span className="assess-section__meta">{sectionMeta("passport", 0)}</span></h3>
+					<h3 className="assess-section__title"><span>{sectionNum("passport")} · Passport</span><span className="assess-section__meta">{sectionMeta("passport", 0)}</span></h3>
 					<div className="form-grid form-grid--2">
 						<div className="field">
 							<label htmlFor="a-pn">Passport number</label>
@@ -1740,9 +1821,9 @@ function AssessmentForm({
 					</div>
 				</section>
 
-				{bringsOffer && (
+				{entry === "visa" && (
 				<section id="assess-offer" className="assess-section">
-					<h3 className="assess-section__title"><span>03 · Your offer</span><span className="assess-section__meta">{sectionMeta("offer", 0)}</span></h3>
+					<h3 className="assess-section__title"><span>{sectionNum("offer")} · Your offer</span><span className="assess-section__meta">{sectionMeta("offer", 0)}</span></h3>
 					<p className="muted" style={{ fontSize: "0.85rem", marginBottom: "0.75rem" }}>The admission you already hold. Your consultant verifies it before anything else — it's the whole risk on a visa case.</p>
 					<div className="form-grid form-grid--2">
 						<div className="field">
@@ -1793,9 +1874,54 @@ function AssessmentForm({
 				</section>
 				)}
 
+				{entry === "visa" && (
+				<section id="assess-visa_history" className="assess-section">
+					<h3 className="assess-section__title"><span>{sectionNum("visa_history")} · Visa history</span><span className="assess-section__meta">{sectionMeta("visa_history", 2)}</span></h3>
+					<div className="form-grid form-grid--3">
+						<div className="field">
+							<label htmlFor="a-vref">Ever been refused a visa? *</label>
+							<select id="a-vref" className="select select--full-border" value={assessment.visaRefusedBefore} onChange={(e) => onUpdate({ visaRefusedBefore: e.target.value })}>
+								<option value="">Select</option>
+								<option value="yes">Yes</option>
+								<option value="no">No</option>
+							</select>
+						</div>
+						{assessment.visaRefusedBefore === "yes" && (
+						<>
+						<div className="field">
+							<label htmlFor="a-vrc">Which country refused you?</label>
+							<input id="a-vrc" className="input input--full-border" value={assessment.visaRefusalCountry} onChange={(e) => onUpdate({ visaRefusalCountry: e.target.value })} placeholder="United Kingdom" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-vry">When? <span className="muted">(year)</span></label>
+							<input id="a-vry" className="input input--full-border" value={assessment.visaRefusalYear} onChange={(e) => onUpdate({ visaRefusalYear: e.target.value })} placeholder="2023" />
+						</div>
+						<div className="field form-grid__span-3">
+							<label htmlFor="a-vrr">Reason given <span className="muted">(as stated on the refusal letter)</span></label>
+							<textarea id="a-vrr" className="input input--full-border" rows={3} value={assessment.visaRefusalReason} onChange={(e) => onUpdate({ visaRefusalReason: e.target.value })} placeholder="Funds unclear, ties to home country not shown…" />
+						</div>
+						</>
+						)}
+						<div className="field">
+							<label htmlFor="a-papp">Applied for a visa before? *</label>
+							<select id="a-papp" className="select select--full-border" value={assessment.priorApplications} onChange={(e) => onUpdate({ priorApplications: e.target.value })}>
+								<option value="">Select</option>
+								<option value="yes">Yes</option>
+								<option value="no">No</option>
+							</select>
+						</div>
+						<div className="field form-grid__span-2">
+							<label htmlFor="a-th">Countries visited in the last 5 years</label>
+							<input id="a-th" className="input input--full-border" value={assessment.travelHistory} onChange={(e) => onUpdate({ travelHistory: e.target.value })} placeholder="UAE, South Africa, UK…" />
+						</div>
+					</div>
+					<p className="eform-why">Refusals and prior travel shape the whole strategy — your consultant builds the file around them.</p>
+				</section>
+				)}
+
 				{entry === "departure" && (
 				<section id="assess-visa" className="assess-section">
-					<h3 className="assess-section__title"><span>04 · Your visa</span><span className="assess-section__meta">{sectionMeta("visa", 0)}</span></h3>
+					<h3 className="assess-section__title"><span>{sectionNum("visa")} · Your visa</span><span className="assess-section__meta">{sectionMeta("visa", 0)}</span></h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-vr">Visa / grant reference</label>
@@ -1805,18 +1931,56 @@ function AssessmentForm({
 							<label htmlFor="a-vd">Granted on</label>
 							<input id="a-vd" type="date" className="input input--full-border" value={assessment.visaGrantDate} onChange={(e) => onUpdate({ visaGrantDate: e.target.value })} />
 						</div>
+					</div>
+				</section>
+				)}
+
+				{entry === "departure" && (
+				<section id="assess-arrival" className="assess-section">
+					<h3 className="assess-section__title"><span>{sectionNum("arrival")} · Arrival</span><span className="assess-section__meta">{sectionMeta("arrival", 2)}</span></h3>
+					<div className="form-grid form-grid--3">
 						<div className="field">
-							<label htmlFor="a-aw">When do you want to arrive?</label>
+							<label htmlFor="a-ac">Destination city *</label>
+							<input id="a-ac" className="input input--full-border" value={assessment.arrivalCity} onChange={(e) => onUpdate({ arrivalCity: e.target.value })} placeholder="Toronto" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-aa">Arrival airport</label>
+							<input id="a-aa" className="input input--full-border" value={assessment.arrivalAirport} onChange={(e) => onUpdate({ arrivalAirport: e.target.value })} placeholder="YYZ — Pearson Intl" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-dep">Anyone travelling with you?</label>
+							<input id="a-dep" type="number" min="0" className="input input--full-border" value={assessment.dependants} onChange={(e) => onUpdate({ dependants: e.target.value })} placeholder="0" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-nacc">Need accommodation help?</label>
+							<select id="a-nacc" className="select select--full-border" value={assessment.needsAccommodation} onChange={(e) => onUpdate({ needsAccommodation: e.target.value })}>
+								<option value="">Select</option>
+								<option value="yes">Yes — find housing</option>
+								<option value="no">No, sorted</option>
+								<option value="unsure">Not sure yet</option>
+							</select>
+						</div>
+						<div className="field">
+							<label htmlFor="a-npick">Need airport pickup?</label>
+							<select id="a-npick" className="select select--full-border" value={assessment.needsPickup} onChange={(e) => onUpdate({ needsPickup: e.target.value })}>
+								<option value="">Select</option>
+								<option value="yes">Yes</option>
+								<option value="no">No</option>
+							</select>
+						</div>
+						<div className="field">
+							<label htmlFor="a-aw">When do you want to arrive? *</label>
 							<input id="a-aw" className="input input--full-border" value={assessment.arrivalWindow} onChange={(e) => onUpdate({ arrivalWindow: e.target.value })} placeholder="First week of September" />
 						</div>
 					</div>
+					<p className="eform-why">Housing and pickup answers seed the departure checklist and the arrival booking — your consultant won't re-ask on the call.</p>
 				</section>
 				)}
 
 				{!bringsOffer && (
 				<>
 				<section id="assess-education" className="assess-section">
-					<h3 className="assess-section__title"><span>03 · Education</span><span className="assess-section__meta">{sectionMeta("education", 0)}</span></h3>
+					<h3 className="assess-section__title"><span>{sectionNum("education")} · Education</span><span className="assess-section__meta">{sectionMeta("education", 0)}</span></h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-edu">Highest education</label>
@@ -1848,7 +2012,7 @@ function AssessmentForm({
 				</section>
 
 				<section id="assess-employment" className="assess-section">
-					<h3 className="assess-section__title"><span>04 · Employment</span><span className="assess-section__meta">{sectionMeta("employment", 0)}</span></h3>
+					<h3 className="assess-section__title"><span>{sectionNum("employment")} · Employment</span><span className="assess-section__meta">{sectionMeta("employment", 0)}</span></h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-es">Employment status</label>
@@ -1873,7 +2037,7 @@ function AssessmentForm({
 				</section>
 
 				<section id="assess-english" className="assess-section">
-					<h3 className="assess-section__title"><span>05 · English</span><span className="assess-section__meta">{sectionMeta("english", 0)}</span></h3>
+					<h3 className="assess-section__title"><span>{sectionNum("english")} · English</span><span className="assess-section__meta">{sectionMeta("english", 0)}</span></h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-et">English test taken</label>
@@ -1894,7 +2058,7 @@ function AssessmentForm({
 				</section>
 
 				<section id="assess-preferences" className="assess-section">
-					<h3 className="assess-section__title"><span>06 · Preferences</span><span className="assess-section__meta">{sectionMeta("preferences", 0)}</span></h3>
+					<h3 className="assess-section__title"><span>{sectionNum("preferences")} · Preferences</span><span className="assess-section__meta">{sectionMeta("preferences", 0)}</span></h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-pl">Level of study</label>
@@ -1917,8 +2081,9 @@ function AssessmentForm({
 				</>
 				)}
 
+				{entry !== "departure" && (
 				<section id="assess-financial" className="assess-section">
-					<h3 className="assess-section__title"><span>07 · Financial</span><span className="assess-section__meta">{sectionMeta("financial", 0)}</span></h3>
+					<h3 className="assess-section__title"><span>{sectionNum("financial")} · Financial</span><span className="assess-section__meta">{sectionMeta("financial", 0)}</span></h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-fs">Funding source</label>
@@ -1944,9 +2109,10 @@ function AssessmentForm({
 						</div>
 					</div>
 				</section>
+				)}
 
 			<section id="assess-documents" className="assess-section">
-				<h3 className="assess-section__title"><span>08 · Documents</span><span className="assess-section__meta">{sectionMeta("documents", 0)}</span></h3>
+				<h3 className="assess-section__title"><span>{sectionNum("documents")} · Documents</span><span className="assess-section__meta">{sectionMeta("documents", 0)}</span></h3>
 				<div>
 					<p className="muted mb-3" style={{ fontSize: "0.85rem" }}>
 						Upload scanned copies of your documents. Accepted: PDF only (max 15 MB each).
@@ -2165,7 +2331,18 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 					offerDepositPaid: booking.assessment.offerDepositPaid,
 					visaGrantReference: booking.assessment.visaGrantReference,
 					visaGrantDate: booking.assessment.visaGrantDate,
+					visaRefusedBefore: booking.assessment.visaRefusedBefore,
+					visaRefusalCountry: booking.assessment.visaRefusalCountry,
+					visaRefusalYear: booking.assessment.visaRefusalYear,
+					visaRefusalReason: booking.assessment.visaRefusalReason,
+					priorApplications: booking.assessment.priorApplications,
+					travelHistory: booking.assessment.travelHistory,
 					arrivalWindow: booking.assessment.arrivalWindow,
+					arrivalCity: booking.assessment.arrivalCity,
+					arrivalAirport: booking.assessment.arrivalAirport,
+					needsAccommodation: booking.assessment.needsAccommodation,
+					needsPickup: booking.assessment.needsPickup,
+					dependants: booking.assessment.dependants,
 				},
 			});
 

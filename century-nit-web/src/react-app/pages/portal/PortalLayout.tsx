@@ -5,6 +5,15 @@ import {
 	PORTAL_CHAPTERS,
 	type PortalChapterId,
 } from "century-nit-core";
+import {
+	chapterProgress,
+	intentScope,
+	normaliseScope,
+	planCompleteHint,
+	stageSkippedByEntry,
+	stageUnlockHint,
+	type ServiceStage,
+} from "century-nit-shared";
 import { STAGE_SHORT } from "../../data/stageLabels";
 import {
 	IconDoc,
@@ -98,16 +107,27 @@ export function PortalLayout() {
 	// next chapter is open; the last open one is current.
 	const unlocked = CHAPTER_NAV.map((c) => c.ids.some((id) => chapterUnlocks[id]));
 	const lastOpen = unlocked.lastIndexOf(true);
-	// A chapter the accepted plan does not include is not locked — it is not
-	// theirs. Applications for a client who brought an offer; Visa and
-	// Departure for a plan that stops at the offer.
-	const scope = application.scopeStages ?? null;
+	// The plan as it stands: the accepted scope, else the consultant's
+	// recommendation, else the booking's own intent, else the full journey.
+	// A chapter the plan does not include is not locked — it is not theirs.
+	const scope = application.scopeStages ?? application.plannedStages ?? (booking.assessment?.entryIntent ? intentScope(booking.assessment.entryIntent) : null);
+	const chapterStage = (c: (typeof CHAPTER_NAV)[number]): ServiceStage | null =>
+		c.ids.includes("application") || c.ids.includes("tracking") ? "admissions" : c.ids.includes("visa") ? "visa" : c.ids.includes("travel_assistance") || c.ids.includes("payment_execution") ? "departure" : null;
 	const offPlan = (c: (typeof CHAPTER_NAV)[number]) => {
-		if (!scope) return false;
-		const stage = c.ids.includes("application") ? "admissions" : c.ids.includes("visa") ? "visa" : c.ids.includes("travel_assistance") ? "departure" : null;
-		return stage != null && !scope.includes(stage);
+		const stage = chapterStage(c);
+		return stage != null && !normaliseScope(scope).includes(stage);
+	};
+	// What unlocks a chapter, named after the plan's own previous step — a
+	// visa entrant reads "after enrolment", not "when you're admitted".
+	const chapterHint = (c: (typeof CHAPTER_NAV)[number]): string => {
+		const stage = chapterStage(c);
+		if (stage) return stageUnlockHint(scope, stage);
+		if (c.ids.includes("complete")) return planCompleteHint(scope);
+		const meta = PORTAL_CHAPTERS.find((pc) => pc.id === c.ids[0]);
+		return meta?.unlockHint?.replace(/^Unlocks /i, "") ?? "complete the previous step";
 	};
 	const chapterState = (i: number): "done" | "current" | "locked" | "off" => (offPlan(CHAPTER_NAV[i]) ? "off" : !unlocked[i] ? "locked" : i < lastOpen ? "done" : "current");
+	const planProgress = chapterProgress(scope, currentStage);
 	const activeChapter = CHAPTER_NAV.findIndex((c) => c.prefixes.some((pre) => pathname.startsWith(pre)));
 	const kickerChapter = activeChapter >= 0 ? CHAPTER_NAV[activeChapter] : lastOpen >= 0 ? CHAPTER_NAV[lastOpen] : null;
 
@@ -135,22 +155,36 @@ export function PortalLayout() {
 				</div>
 
 				<nav className="portal-nav" aria-label="Your journey">
-					<p className="portal-nav__section">Your journey</p>
+					<p className="portal-nav__section">
+						Your journey · {planProgress.step} of {planProgress.total}
+					</p>
 					{CHAPTER_NAV.map((c, i) => {
 						const state = chapterState(i);
 						const on = activeChapter === i;
 						const meta = PORTAL_CHAPTERS.find((pc) => pc.id === c.ids[0]);
+						const stage = chapterStage(c);
+						// A stage the plan entered past was never owed (the client
+						// brought its result); a stage after entry is simply not
+						// bought yet — that row is the way to add it.
+						const skipped = stage != null && stageSkippedByEntry(scope, stage);
 						return state === "off" ? (
-							<NavLink key={c.numeral} to={c.to} className="portal-ch portal-ch--locked portal-ch--off" title="Not part of your plan">
-								<span className="portal-ch__m">—</span>
+							<NavLink
+								key={c.numeral}
+								to={skipped ? c.to : "/portal/package"}
+								className="portal-ch portal-ch--locked portal-ch--off"
+								title={skipped ? "Not needed — you entered after this stage" : "Not part of your plan — add it from Enrolment"}
+							>
+								<span className="portal-ch__m">{c.numeral}</span>
 								<span className="portal-ch__l">{c.label}</span>
-								<span className="portal-ch__s">not part of your plan</span>
+								<span className="portal-ch__s">
+									{skipped ? (stage === "visa" ? "not needed — visa in hand" : "not needed — offer in hand") : "not included · add →"}
+								</span>
 							</NavLink>
 						) : state === "locked" ? (
 							<span key={c.numeral} className="portal-ch portal-ch--locked" title={meta?.unlockHint ?? "Locked"} aria-disabled="true">
 								<span className="portal-ch__m">{c.numeral}</span>
 								<span className="portal-ch__l">{c.label}</span>
-								<span className="portal-ch__s">{meta?.unlockHint ? meta.unlockHint.replace(/^Unlocks /i, "") : "locked"}</span>
+								<span className="portal-ch__s">{chapterHint(c)}</span>
 							</span>
 						) : (
 							<NavLink key={c.numeral} to={c.to} className={`portal-ch portal-ch--${state}${on ? " portal-ch--on" : ""}`} title={meta?.blurb}>
@@ -264,7 +298,7 @@ export function ChapterGate({
 	chapter: PortalChapterId;
 	children: React.ReactNode;
 }) {
-	const { chapterUnlocks, journeyReady, application } = useAppState();
+	const { chapterUnlocks, journeyReady, application, booking } = useAppState();
 	const meta = PORTAL_CHAPTERS.find((c) => c.id === chapter);
 
 	if (chapterUnlocks[chapter]) {
@@ -276,13 +310,13 @@ export function ChapterGate({
 	// (they brought their own offer or visa). Say which, and point at where to
 	// add it.
 	const needed =
-		chapter === "application" || chapter === "tracking" ? "admissions"
-		: chapter === "visa" ? "visa"
-		: chapter === "travel_assistance" || chapter === "payment_execution" || chapter === "complete" ? "departure"
+		chapter === "application" || chapter === "tracking" ? ("admissions" as ServiceStage)
+		: chapter === "visa" ? ("visa" as ServiceStage)
+		: chapter === "travel_assistance" || chapter === "payment_execution" ? ("departure" as ServiceStage)
 		: null;
-	const scope = application.scopeStages ?? null;
-	if (needed && scope && !scope.includes(needed)) {
-		const before = scope.length > 0 && ["admissions", "visa", "departure"].indexOf(needed) < ["admissions", "visa", "departure"].indexOf(scope[0]);
+	const scope = application.scopeStages ?? application.plannedStages ?? (booking.assessment?.entryIntent ? intentScope(booking.assessment.entryIntent) : null);
+	if (needed && !normaliseScope(scope).includes(needed)) {
+		const before = stageSkippedByEntry(scope, needed);
 		return (
 			<div className="chapter-gate">
 				<div className="chapter-gate__seal" aria-hidden>
@@ -323,7 +357,9 @@ export function ChapterGate({
 			</div>
 			<p className="eyebrow">Stage locked</p>
 			<h1 className="page-title mt-1">{meta?.label ?? "Next stage"}</h1>
-			<p className="lead mt-2">{meta?.unlockHint ?? "Complete the previous step first."}</p>
+			<p className="lead mt-2">
+				{needed ? `Unlocks ${stageUnlockHint(scope, needed)}.` : chapter === "complete" ? `Unlocks ${planCompleteHint(scope)}.` : (meta?.unlockHint ?? "Complete the previous step first.")}
+			</p>
 			<p className="muted mt-3" style={{ maxWidth: "28rem" }}>
 				Finish the open stage, then use <strong>Next</strong> - that unlocks this page in the sidebar.
 			</p>

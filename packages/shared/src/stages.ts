@@ -422,3 +422,41 @@ export function serviceStageForJourney(journeyStage: string): ServiceStage | nul
 			return null;
 	}
 }
+
+/**
+ * What finishing each stage hands the chapter after it — the "after X" the
+ * portal rail names.
+ */
+const STAGE_EXIT_HINT: Record<ServiceStage, string> = {
+	admissions: "when you're admitted",
+	visa: "once your visa is approved",
+	departure: "once you've landed",
+};
+
+/**
+ * The line under an on-plan service chapter on the portal rail: the exit
+ * fact of the previous stage *on the plan*, or enrolment when the stage is
+ * the plan's first — a visa entrant reads "after enrolment", never "when
+ * you're admitted" for an admission they already hold.
+ */
+export function stageUnlockHint(stages: readonly string[] | null | undefined, stage: ServiceStage): string {
+	const scope = normaliseScope(stages);
+	const prior = SERVICE_STAGES.slice(0, SERVICE_STAGES.indexOf(stage)).filter((s) => scope.includes(s));
+	return prior.length ? STAGE_EXIT_HINT[prior[prior.length - 1]] : "after enrolment";
+}
+
+/** The line under Complete — the plan's own ending, not the whole journey's. */
+export function planCompleteHint(stages: readonly string[] | null | undefined): string {
+	const last = normaliseScope(stages)[normaliseScope(stages).length - 1];
+	return last === "admissions" ? "when your offer is in hand" : STAGE_EXIT_HINT[last];
+}
+
+/**
+ * True when the plan enters after this stage — the client brought its
+ * result (their offer, their visa), so it was never owed. The rail says
+ * "not needed", not "not included".
+ */
+export function stageSkippedByEntry(stages: readonly string[] | null | undefined, stage: ServiceStage): boolean {
+	const scope = normaliseScope(stages);
+	return !scope.includes(stage) && SERVICE_STAGES.indexOf(stage) < SERVICE_STAGES.indexOf(scope[0]);
+}

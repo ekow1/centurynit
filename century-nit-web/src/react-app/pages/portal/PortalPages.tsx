@@ -1545,7 +1545,7 @@ function AssessmentForm({
 		if (id === "visa") return entry === "departure";
 		return true;
 	};
-	const visibleSections = ASSESSMENT_SECTIONS.filter((s) => sectionShown(s.id));
+	const visibleSections = ASSESSMENT_SECTIONS.filter((s) => s.id !== "entry" && sectionShown(s.id));
 	function sectionProgress(id: string, fields: readonly string[]): { done: number; total: number } {
 		if (id === "documents") {
 			const total = docFields.length;
@@ -1614,11 +1614,45 @@ function AssessmentForm({
 		<>
 			<p className="eyebrow">Assessment form</p>
 			<p className="muted mt-1" style={{ fontSize: "0.9rem" }}>
-				Complete all sections. Your consultant will review this before your meeting.
+				{entry ? "Complete all sections. Your consultant will review this before your meeting." : "Start by telling us where you are on the journey — the form takes its shape from that."}
 			</p>
+
+			{/* The path comes first, on its own. The form's shape depends on it,
+			    so nothing else is shown until it is picked. */}
+			<div className="mt-3">
+			<section className="assess-section assess-section--entry">
+				<h3 className="assess-section__title"><span>Start · Where are you on the journey?</span><span className="assess-section__meta">{sectionMeta("entry", 1)}</span></h3>
+				<p className="muted" style={{ fontSize: "0.85rem", marginBottom: "0.75rem" }}>
+					Pick the point you're at. It shapes the questions below, what your consultant checks, and which parts of the service you'll be offered. The consultation fee is the same whichever you pick.
+				</p>
+				<div className="pintents">
+					{SERVICE_INTENTS.map((it) => {
+						const on = assessment.entryIntent === it;
+						const bring =
+							it === "visa" ? "You'll bring: your offer letter / CAS · passport · proof of funds"
+							: it === "departure" ? "You'll bring: your visa grant · offer letter · arrival window"
+							: "You'll bring: transcripts · certificates · a goal";
+						const what =
+							it === "admissions" ? "No offer yet. We match you to schools, prepare and lodge applications, and review your offers."
+							: it === "visa" ? "You already hold an admission. We check the offer, build the financial file, lodge the visa and coach the interview."
+							: it === "departure" ? "Flights, housing, airport pickup, pre-departure briefing and a first-week check-in."
+							: "All three stages, at the bundle price, with post-arrival instalments.";
+						return (
+							<button key={it} type="button" className={`pintent${on ? " pintent--on" : ""}`} onClick={() => onUpdate({ entryIntent: it })} aria-pressed={on}>
+								<span className="pintent__k">{it === "full" ? "Full journey" : `Enter at ${SERVICE_STAGE_LABELS[it === "admissions" ? "admissions" : it === "visa" ? "visa" : "departure"]}`}</span>
+								<span className="pintent__n">{SERVICE_INTENT_LABELS[it]}</span>
+								<span className="pintent__d">{what}</span>
+								<span className="pintent__ev">{bring}</span>
+							</button>
+						);
+					})}
+				</div>
+			</section>
+			</div>
 
 			{/* One page, top to bottom. The flow's tabs are the only tabs. The nav
 			    is a table of contents, not a second stepper. */}
+			{entry && (
 			<div className="assess-layout mt-3">
 				<nav className="assess-nav" aria-label="Assessment sections">
 					<ul>
@@ -1636,35 +1670,6 @@ function AssessmentForm({
 					</ul>
 				</nav>
 				<div className="assess-body">
-				<section id="assess-entry" className="assess-section">
-					<h3 className="assess-section__title"><span>Start · Where are you on the journey?</span><span className="assess-section__meta">{sectionMeta("entry", 1)}</span></h3>
-					<p className="muted" style={{ fontSize: "0.85rem", marginBottom: "0.75rem" }}>
-						Pick the point you're at. It shapes the questions below, what your consultant checks, and which parts of the service you'll be offered. The consultation fee is the same whichever you pick.
-					</p>
-					<div className="pintents">
-						{SERVICE_INTENTS.map((it) => {
-							const on = assessment.entryIntent === it;
-							const bring =
-								it === "visa" ? "You'll bring: your offer letter / CAS · passport · proof of funds"
-								: it === "departure" ? "You'll bring: your visa grant · offer letter · arrival window"
-								: "You'll bring: transcripts · certificates · a goal";
-							const what =
-								it === "admissions" ? "No offer yet. We match you to schools, prepare and lodge applications, and review your offers."
-								: it === "visa" ? "You already hold an admission. We check the offer, build the financial file, lodge the visa and coach the interview."
-								: it === "departure" ? "Flights, housing, airport pickup, pre-departure briefing and a first-week check-in."
-								: "All three stages, at the bundle price, with post-arrival instalments.";
-							return (
-								<button key={it} type="button" className={`pintent${on ? " pintent--on" : ""}`} onClick={() => onUpdate({ entryIntent: it })} aria-pressed={on}>
-									<span className="pintent__k">{it === "full" ? "Full journey" : `Enter at ${SERVICE_STAGE_LABELS[it === "admissions" ? "admissions" : it === "visa" ? "visa" : "departure"]}`}</span>
-									<span className="pintent__n">{SERVICE_INTENT_LABELS[it]}</span>
-									<span className="pintent__d">{what}</span>
-									<span className="pintent__ev">{bring}</span>
-								</button>
-							);
-						})}
-					</div>
-				</section>
-
 				<section id="assess-personal" className="assess-section">
 					<h3 className="assess-section__title"><span>01 · Personal</span><span className="assess-section__meta">{sectionMeta("personal", 4)}</span></h3>
 					<div className="form-grid form-grid--3">
@@ -1993,6 +1998,7 @@ function AssessmentForm({
 			</section>
 				</div>
 			</div>
+			)}
 
 			<UploadPickModal
 				open={pickDocId !== null}

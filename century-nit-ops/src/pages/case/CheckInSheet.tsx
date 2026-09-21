@@ -15,11 +15,12 @@ function today(): string {
 }
 
 /**
- * "Schedule check-in…" — a meeting on the live case. Online mints a Meet
- * link; in person carries the branch. The client is emailed, reminded, and
- * the booking lands on their Appointments page — none of it is a paid
- * consultation. The slot picker reads the same availability engine the
- * consultation flow uses.
+ * "Schedule check-in…" — a meeting on the live case. Online takes a pasted
+ * meeting link (Zoom, Teams, Meet — whatever the office uses); in person
+ * carries the branch. The client is emailed, reminded, and the booking
+ * lands on their Appointments page — none of it is a paid consultation.
+ * The slot picker reads the same availability engine the consultation
+ * flow uses.
  */
 export function CheckInSheet({
 	app,
@@ -41,6 +42,7 @@ export function CheckInSheet({
 	const [duration, setDuration] = useState(45);
 	const [hostId, setHostId] = useState(opsUser?.opsUserId ?? "");
 	const [note, setNote] = useState("");
+	const [meetingUrl, setMeetingUrl] = useState("");
 	const [date, setDate] = useState<string | null>(null);
 	const [time, setTime] = useState<string | null>(null);
 
@@ -87,6 +89,7 @@ export function CheckInSheet({
 				timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
 				notes: note.trim() || undefined,
 				employeeId: hostId || undefined,
+				meetingUrl: type === "online" && meetingUrl.trim() ? meetingUrl.trim() : undefined,
 			});
 			onDone(`Check-in booked — ${purpose} · ${fmtDay(date)} ${time}. The client has been emailed.`);
 			onClose();
@@ -119,7 +122,7 @@ export function CheckInSheet({
 					onClick={() => setType("online")}
 				>
 					<span>Online</span>
-					<span className="hsheet__hint">Google Meet — the link is minted and emailed on booking</span>
+					<span className="hsheet__hint">Paste the meeting link — Zoom, Teams, Meet — it goes in the client's email</span>
 				</div>
 				<div
 					role="radio" aria-checked={type === "in_person"}
@@ -200,6 +203,22 @@ export function CheckInSheet({
 						</div>
 					)}
 				</>
+			)}
+
+			{type === "online" && (
+				<label className="cn-filter" style={{ marginTop: "1rem" }}>
+					<span className="cn-filter__label">Meeting link — paste any (Zoom, Teams, Meet)</span>
+					<input
+						className="input"
+						type="url"
+						value={meetingUrl}
+						onChange={(e) => setMeetingUrl(e.target.value)}
+						placeholder="https://…"
+					/>
+					<span className="hsheet__hint" style={{ marginTop: "0.3rem" }}>
+						Optional — you can add it on the case later; the client is emailed the moment it's set.
+					</span>
+				</label>
 			)}
 
 			<p className="hsheet__eyebrow" style={{ marginTop: "1rem" }}>Note for the client (goes in the email)</p>

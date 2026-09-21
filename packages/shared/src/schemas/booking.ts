@@ -128,6 +128,16 @@ export const createCaseMeetingSchema = z.object({
 	notes: z.string().max(2000).optional(),
 	/** Host — defaults to the caller (the case handler). */
 	employeeId: z.string().uuid().optional(),
+	/**
+	 * Online check-ins take whatever link the office uses — Zoom, Teams,
+	 * Meet — pasted by the handler. None is minted: Google Calendar/Meet
+	 * integration is gone. Can also be set later via PATCH meeting-url.
+	 */
+	meetingUrl: z
+		.string()
+		.url()
+		.refine((v) => v.startsWith("https://"), { message: "Meeting links must be https://" })
+		.optional(),
 });
 export type CreateCaseMeeting = z.infer<typeof createCaseMeetingSchema>;
 

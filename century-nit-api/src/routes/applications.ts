@@ -895,7 +895,7 @@ applicationsRouter.openapi(
 
 /**
  * Case check-ins — a handler schedules a meeting on the live case (online
- * with an auto Meet link, or in person). Free to the client; the booking
+ * with a pasted meeting link, or in person). Free to the client; the booking
  * machinery — slots, conflict guards, emails, reminders — is reused, only
  * the consultation intake and invoice are skipped.
  */

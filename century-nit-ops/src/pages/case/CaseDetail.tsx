@@ -20,7 +20,7 @@ import { DepartureTab } from "./tabs/DepartureTab";
 import { MoneyTab } from "./tabs/MoneyTab";
 import { caseHandlerName, tasksForApplication, taskActionLabel, type PendingTask } from "../../lib/pendingTasks";
 import { CheckInSheet } from "./CheckInSheet";
-import { applicationsApi } from "century-nit-core/api";
+import { applicationsApi, bookingsApi } from "century-nit-core/api";
 import type { Booking } from "century-nit-shared";
 import { listInvoices, getApplicationActivity, type ApiInvoice } from "../../lib/api";
 import { CaseHeader, Sheet, type NextAction } from "century-nit-core/ui";
@@ -269,6 +269,10 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// Check-ins — meetings a handler books on the live case (not consultations).
 	const [checkInOpen, setCheckInOpen] = useState(false);
 	const [meetings, setMeetings] = useState<Booking[]>([]);
+	const [meetingEdit, setMeetingEdit] = useState<string | null>(null);
+	const [meetingDraft, setMeetingDraft] = useState("");
+	const refreshMeetings = () =>
+		applicationsApi.meetings(app.id).then((r) => setMeetings(r.meetings)).catch(() => {});
 	useEffect(() => {
 		if (!app.id) return;
 		applicationsApi.meetings(app.id).then((r) => setMeetings(r.meetings)).catch(() => setMeetings([]));
@@ -661,14 +665,56 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					{meetings
 						.filter((m) => m.status !== "CANCELLED" && m.status !== "NO_SHOW" && m.status !== "COMPLETED")
 						.map((m) => (
-							<div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", padding: "0.6rem 1rem", borderBottom: "1px solid var(--border-light)", fontSize: "var(--text-sm)" }}>
-								<span>
-									<strong>{m.serviceName}</strong>
-									<span className="muted"> · {m.type === "online" ? "Online" : "In person"} · {m.employeeName ?? "unassigned"}</span>
-								</span>
-								<span className="mono" style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)", whiteSpace: "nowrap" }}>
-									{new Date(m.startsAt).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: m.timezone })}
-								</span>
+							<div key={m.id} style={{ padding: "0.6rem 1rem", borderBottom: "1px solid var(--border-light)", fontSize: "var(--text-sm)" }}>
+								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem" }}>
+									<span>
+										<strong>{m.serviceName}</strong>
+										<span className="muted"> · {m.type === "online" ? "Online" : "In person"} · {m.employeeName ?? "unassigned"}</span>
+									</span>
+									<span className="mono" style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)", whiteSpace: "nowrap" }}>
+										{new Date(m.startsAt).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: m.timezone })}
+									</span>
+								</div>
+								{m.type === "online" && (
+									meetingEdit === m.id ? (
+										<div style={{ display: "flex", gap: "0.4rem", marginTop: "0.45rem" }}>
+											<input
+												className="input" type="url" value={meetingDraft} autoFocus
+												placeholder="https://… Zoom, Teams, Meet"
+												style={{ flex: 1, fontSize: "var(--text-xs)", padding: "0.35rem 0.5rem" }}
+												onChange={(e) => setMeetingDraft(e.target.value)}
+											/>
+											<button
+												type="button" className="btn btn--sm btn--primary"
+												onClick={() =>
+													void bookingsApi
+														.setMeetingUrl(m.id, meetingDraft.trim() || null)
+														.then(() => { setMeetingEdit(null); refreshMeetings(); flash("Meeting link saved — the client has been emailed."); })
+														.catch((e) => fail(e, "Could not save the link"))
+												}
+											>
+												Save
+											</button>
+											<button type="button" className="btn btn--sm btn--ghost" onClick={() => setMeetingEdit(null)}>Cancel</button>
+										</div>
+									) : (
+										<div style={{ display: "flex", gap: "0.6rem", alignItems: "center", marginTop: "0.35rem" }}>
+											{m.meetingUrl ? (
+												<a href={m.meetingUrl} target="_blank" rel="noreferrer" className="link-arrow" style={{ fontSize: "var(--text-xs)" }}>
+													Open meeting link ↗
+												</a>
+											) : (
+												<span className="muted" style={{ fontSize: "var(--text-xs)" }}>No meeting link yet</span>
+											)}
+											<button
+												type="button" className="link-arrow" style={{ fontSize: "var(--text-xs)" }}
+												onClick={() => { setMeetingDraft(m.meetingUrl ?? ""); setMeetingEdit(m.id); }}
+											>
+												{m.meetingUrl ? "Change" : "Paste link…"}
+											</button>
+										</div>
+									)
+								)}
 							</div>
 						))}
 				</div>

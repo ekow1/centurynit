@@ -1657,6 +1657,7 @@ export async function createCaseMeeting(input: {
 		timezone: string;
 		notes?: string;
 		employeeId?: string;
+		meetingUrl?: string;
 	};
 	actor: { opsUserId: string; name: string; email: string };
 }): Promise<BookingRow> {
@@ -1736,7 +1737,11 @@ export async function createCaseMeeting(input: {
 					employeeId: hostId,
 					assignedAt: new Date(),
 					assignedBy: actor.opsUserId,
-					calendarSyncStatus: data.type === "online" ? "PENDING" : "NOT_REQUIRED",
+					// Google Meet is gone — a check-in's link is pasted by the
+					// handler (provider "manual") or added later via meeting-url.
+					meetingUrl: data.meetingUrl?.trim() || null,
+					meetingProvider: data.meetingUrl ? "manual" : null,
+					calendarSyncStatus: "NOT_REQUIRED",
 					notes: data.notes ?? null,
 				})
 				.returning();
@@ -1759,10 +1764,8 @@ export async function createCaseMeeting(input: {
 		assignedBy: actor.opsUserId,
 	});
 
-	// Online check-ins get the Meet link minted at once — the email carries it.
-	if (booking.type === "online") {
-		booking = await syncCalendarForBooking(booking.id);
-	}
+	// No Meet link is minted — the handler's pasted link (or none yet) is
+	// what the confirmation email carries; adding one later re-notifies.
 	await notifyBookingAssigned(booking, host);
 
 	// The case record says it happened, and the client's bell rings.

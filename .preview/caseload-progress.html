@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ops · Caseload — % work done mock</title>
+<style>
+	:root {
+		--ink: #17161a; --paper: #f5f4f0; --card: #fff; --line: #ddd9cf; --line-lt: #eae7de;
+		--muted: #6e6a60; --amber: #b97a10; --amber-soft: #f3e8d2; --green: #2e6b34; --red: #a33b2e;
+	}
+	* { box-sizing: border-box; margin: 0; padding: 0; }
+	body { font-family: Georgia, "Times New Roman", serif; background: var(--paper); color: var(--ink); font-size: 14px; }
+	.wrap { max-width: 1180px; margin: 0 auto; padding: 1.75rem 1.5rem 4rem; }
+
+	.sect { margin-bottom: 3.5rem; }
+	.sect > .tag { font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber); }
+	.sect > h2 { font-size: 1.15rem; margin: 0.3rem 0 0.25rem; }
+	.sect > p.note { font-size: 0.78rem; color: var(--muted); max-width: 72ch; line-height: 1.55; margin-bottom: 1rem; }
+	.sect > p.note code { font-family: ui-monospace, monospace; font-size: 0.72rem; background: var(--amber-soft); padding: 0 0.3em; }
+	.frame { border: 1px solid var(--line); background: var(--card); padding: 1.1rem; }
+
+	/* ── officer strip ── */
+	.ostrip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.6rem; }
+	.ocard { border: 1px solid var(--line); background: var(--card); padding: 0.7rem 0.8rem; text-align: left; cursor: pointer; font: inherit; }
+	.ocard:hover { border-color: var(--ink); }
+	.ocard--on { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+	.ocard__top { display: flex; justify-content: space-between; align-items: baseline; }
+	.ocard__who { font-size: 0.85rem; font-weight: 600; }
+	.ocard__load { font-family: ui-monospace, monospace; font-size: 0.95rem; font-weight: 700; }
+	.ocard__load small { font-size: 0.6rem; color: var(--muted); font-weight: 400; }
+	.ocard__load--near { color: var(--amber); }
+	.ocard__load--over { color: var(--red); }
+	.ocard__meta { display: block; font-family: ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.05em; color: var(--muted); margin-top: 0.25rem; }
+	.ocard__meta .hot { color: var(--red); }
+	.strip { display: flex; height: 3px; margin-top: 0.55rem; background: var(--line-lt); }
+	.strip span { display: block; }
+	.s1 { background: #c8b98f; } .s2 { background: #a8945e; } .s3 { background: #7d6a3a; } .s4 { background: #4a3f22; }
+
+	/* NEW — the progress line on an officer card */
+	.oprog { margin-top: 0.6rem; }
+	.oprog__bar { height: 4px; background: var(--line-lt); position: relative; }
+	.oprog__fill { position: absolute; inset: 0 auto 0 0; background: var(--amber); }
+	.oprog__fill--done { background: var(--green); }
+	.oprog__lbl { display: flex; justify-content: space-between; font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-top: 0.28rem; }
+	.oprog__lbl b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+	/* ── bands + client cards ── */
+	.band { display: flex; justify-content: space-between; align-items: baseline; padding: 0.5rem 0.1rem 0.4rem; border-bottom: 2px solid var(--ink); margin-top: 1.4rem; }
+	.band__name { font-family: ui-monospace, monospace; font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase; }
+	.band__note { font-family: ui-monospace, monospace; font-size: 0.58rem; color: var(--muted); letter-spacing: 0.06em; }
+	.people { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; padding-top: 0.7rem; }
+	.client { border: 1px solid var(--line); background: var(--card); padding: 0.65rem 0.75rem; }
+	.client--stalled { border-left: 3px solid var(--red); }
+	.client__head { display: flex; justify-content: space-between; align-items: baseline; }
+	.client__name { font-size: 0.88rem; font-weight: 600; }
+	.client__ref { font-family: ui-monospace, monospace; font-size: 0.58rem; color: var(--muted); margin-left: 0.4em; font-weight: 400; }
+	.client__when { font-family: ui-monospace, monospace; font-size: 0.58rem; color: var(--muted); }
+	.client__line { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.3rem; font-family: ui-monospace, monospace; font-size: 0.6rem; color: var(--muted); letter-spacing: 0.04em; }
+	.pill { font-family: ui-monospace, monospace; font-size: 0.55rem; letter-spacing: 0.05em; padding: 0.12rem 0.45rem; border: 1px solid var(--line); color: var(--muted); }
+	.pill--strong { border-color: var(--red); color: var(--red); }
+	.client__sub { font-size: 0.72rem; color: var(--muted); margin-top: 0.3rem; }
+
+	/* NEW — per-record % done */
+	.cprog { margin-top: 0.55rem; display: flex; align-items: center; gap: 0.55rem; }
+	.cprog__bar { flex: 1; height: 4px; background: var(--line-lt); position: relative; }
+	.cprog__fill { position: absolute; inset: 0 auto 0 0; background: var(--ink); }
+	.cprog__fill--warn { background: var(--red); }
+	.cprog__n { font-family: ui-monospace, monospace; font-size: 0.62rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+	.cprog__n small { font-weight: 400; color: var(--muted); font-size: 0.55rem; }
+	.cprog__seg { position: absolute; top: -2px; width: 1px; height: 8px; background: var(--line); }
+
+	/* ── officer sheet ── */
+	.sheet { border: 1px solid var(--line); background: var(--card); max-width: 24rem; padding: 1rem 1.1rem; margin-left: auto; }
+	.dsec { font-family: ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); border-top: 1px solid var(--line-lt); padding-top: 0.7rem; margin-top: 0.9rem; }
+	.dsec:first-of-type { border-top: 0; }
+	.dkv { display: flex; justify-content: space-between; font-size: 0.8rem; padding: 0.22rem 0; }
+	.dkv__k { font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+	.mini { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.76rem; padding: 0.3rem 0; border-bottom: 1px solid var(--line-lt); }
+	.mini .mref { font-family: ui-monospace, monospace; font-size: 0.58rem; color: var(--muted); margin-right: 0.5em; }
+	.mini .mpct { font-family: ui-monospace, monospace; font-size: 0.62rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+	/* ── task queue group header ── */
+	.thead { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.1rem 0.4rem; border-bottom: 2px solid var(--ink); margin-top: 1.2rem; }
+	.trow { display: flex; align-items: center; gap: 0.7rem; padding: 0.5rem 0.1rem; border-bottom: 1px solid var(--line-lt); font-size: 0.8rem; }
+	.trow .tk { font-family: ui-monospace, monospace; font-size: 0.55rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); width: 6.5rem; }
+	.trow .box { width: 0.7rem; height: 0.7rem; border: 1.5px solid var(--ink); flex: none; }
+	.trow .box.on { background: var(--ink); }
+	.trow.done { color: var(--muted); text-decoration: line-through; }
+	.trow.done .tk { text-decoration: none; }
+
+	.callout { border: 1px solid var(--line); border-left: 3px solid var(--amber); background: var(--card); padding: 0.7rem 0.9rem; font-size: 0.78rem; color: var(--muted); line-height: 1.55; max-width: 72ch; }
+	.callout b { color: var(--ink); }
+	ul.facts { font-size: 0.78rem; color: var(--muted); line-height: 1.7; max-width: 72ch; padding-left: 1.1rem; }
+	ul.facts b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="sect">
+	<span class="tag">Proposal</span>
+	<h2>% work done — on the task queue and the caseload</h2>
+	<p class="note">Every number below is computed from data the caseload already holds. A case's % is its chapter position plus the checklist fraction of the current chapter: <code>((step − 1) + checked/(checked+open)) / total</code>. A consultation's is its status over four steps. An officer's is the mean of their open records. Nothing is estimated; a stalled record's bar simply stops moving.</p>
+</div>
+
+<!-- ── 1 · Officer strip ── -->
+<div class="sect">
+	<span class="tag">1 · Officer strip</span>
+	<h2>Load + how far through it</h2>
+	<p class="note">The card keeps <code>open/capacity</code> — that is <b>how much</b>. The new amber line is <b>how far through</b>: mean completion of everything they carry. A full card that is 80% done is a very different problem from a full card at 20%.</p>
+	<div class="frame">
+		<div class="ostrip">
+			<div class="ocard">
+				<div class="ocard__top"><span class="ocard__who">All officers</span><span class="ocard__load">41</span></div>
+				<span class="ocard__meta">everyone · <span class="hot">3 waiting on us</span> · 2 on client</span>
+				<div class="strip"><span class="s1" style="flex:9"></span><span class="s2" style="flex:14"></span><span class="s3" style="flex:11"></span><span class="s4" style="flex:7"></span></div>
+				<div class="oprog">
+					<div class="oprog__bar"><div class="oprog__fill" style="width:54%"></div></div>
+					<div class="oprog__lbl"><span>work done</span><b>54%</b></div>
+				</div>
+			</div>
+			<div class="ocard ocard--on">
+				<div class="ocard__top"><span class="ocard__who">Efua Mensah</span><span class="ocard__load">14<small>/15</small></span></div>
+				<span class="ocard__meta">11 cases · 3 consults · 2 seats · <span class="hot">1 waiting on us</span></span>
+				<div class="strip"><span class="s1" style="flex:4"></span><span class="s2" style="flex:5"></span><span class="s3" style="flex:2"></span></div>
+				<div class="oprog">
+					<div class="oprog__bar"><div class="oprog__fill" style="width:38%"></div></div>
+					<div class="oprog__lbl"><span>work done</span><b>38%</b></div>
+				</div>
+			</div>
+			<div class="ocard">
+				<div class="ocard__top"><span class="ocard__who">Yaw Owusu</span><span class="ocard__load">12<small>/15</small></span></div>
+				<span class="ocard__meta">12 cases · visa seat · 1 on client</span>
+				<div class="strip"><span class="s3" style="flex:12"></span></div>
+				<div class="oprog">
+					<div class="oprog__bar"><div class="oprog__fill" style="width:71%"></div></div>
+					<div class="oprog__lbl"><span>work done</span><b>71%</b></div>
+				</div>
+			</div>
+			<div class="ocard">
+				<div class="ocard__top"><span class="ocard__who">Selorm Adu</span><span class="ocard__load ocard__load--near">14<small>/15</small></span></div>
+				<span class="ocard__meta">9 cases · 5 consults · <span class="hot">2 waiting on us</span></span>
+				<div class="strip"><span class="s3" style="flex:2"></span><span class="s4" style="flex:9"></span></div>
+				<div class="oprog">
+					<div class="oprog__bar"><div class="oprog__fill" style="width:83%"></div></div>
+					<div class="oprog__lbl"><span>work done</span><b>83%</b></div>
+				</div>
+			</div>
+			<div class="ocard">
+				<div class="ocard__top"><span class="ocard__who">Nana Asante</span><span class="ocard__load ocard__load--over">17<small>/15</small></span></div>
+				<span class="ocard__meta">15 cases · 2 consults · coordinating 4</span>
+				<div class="strip"><span class="s1" style="flex:8"></span><span class="s2" style="flex:6"></span><span class="s3" style="flex:3"></span></div>
+				<div class="oprog">
+					<div class="oprog__bar"><div class="oprog__fill" style="width:22%"></div></div>
+					<div class="oprog__lbl"><span>work done</span><b>22%</b></div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<p class="note" style="margin-top:0.8rem">Read the pair together: <b>Nana</b> is over capacity <i>and</i> only 22% through — that is the card a manager acts on. <b>Selorm</b> is near capacity but 83% through — her load clears itself this week.</p>
+</div>
+
+<!-- ── 2 · Client cards ── -->
+<div class="sect">
+	<span class="tag">2 · Client cards</span>
+	<h2>The step dots become a bar</h2>
+	<p class="note">The card keeps its chapter label and step count; the new line underneath is the same number drawn. Chapter ticks sit on the bar so you can see where the record is inside its own plan. A stalled record's fill turns red — the bar has literally stopped.</p>
+	<div class="frame" style="padding-top:0.4rem">
+		<div class="band"><span class="band__name">III · Applications · 4</span><span class="band__note">1 waiting on us</span></div>
+		<div class="people">
+			<div class="client">
+				<div class="client__head"><span class="client__name">Ama Serwaa<span class="client__ref">CN-2481</span></span><span class="client__when">2 h ago</span></div>
+				<div class="client__line">III · Applications · Case <span style="margin-left:auto">step 3/5</span></div>
+				<div class="cprog">
+					<div class="cprog__bar">
+						<div class="cprog__fill" style="width:52%"></div>
+						<span class="cprog__seg" style="left:20%"></span><span class="cprog__seg" style="left:40%"></span><span class="cprog__seg" style="left:60%"></span><span class="cprog__seg" style="left:80%"></span>
+					</div>
+					<span class="cprog__n">52%<small> done</small></span>
+				</div>
+				<div class="client__sub">U. of Leeds · Submitted · 2 checklist items open</div>
+			</div>
+			<div class="client client--stalled">
+				<div class="client__head"><span class="client__name">Kofi Boateng<span class="client__ref">CN-2462</span></span><span class="client__when">9 d ago</span></div>
+				<div class="client__line">IV · Visa · Case <span class="pill pill--strong">Waiting on us 9d</span></div>
+				<div class="cprog">
+					<div class="cprog__bar">
+						<div class="cprog__fill cprog__fill--warn" style="width:60%"></div>
+						<span class="cprog__seg" style="left:33%"></span><span class="cprog__seg" style="left:66%"></span>
+					</div>
+					<span class="cprog__n">60%<small> done · stalled</small></span>
+				</div>
+				<div class="client__sub">U. of Toronto · Biometrics booked</div>
+			</div>
+			<div class="client">
+				<div class="client__head"><span class="client__name">Efua Nyarko<span class="client__ref">CN-2490</span></span><span class="client__when">1 d ago</span></div>
+				<div class="client__line">III · Applications · Case <span style="margin-left:auto">step 3/4</span></div>
+				<div class="cprog">
+					<div class="cprog__bar">
+						<div class="cprog__fill" style="width:68%"></div>
+						<span class="cprog__seg" style="left:25%"></span><span class="cprog__seg" style="left:50%"></span><span class="cprog__seg" style="left:75%"></span>
+					</div>
+					<span class="cprog__n">68%<small> done</small></span>
+				</div>
+				<div class="client__sub">Admissions + Visa scope · Offer in, deciding</div>
+			</div>
+		</div>
+
+		<div class="band"><span class="band__name">I · Consultation · 2</span><span class="band__note">before a case opens</span></div>
+		<div class="people">
+			<div class="client">
+				<div class="client__head"><span class="client__name">Yaw Darko<span class="client__ref">BK-1148</span></span><span class="client__when">30 min ago</span></div>
+				<div class="client__line">In Assessment · Consultation</div>
+				<div class="cprog">
+					<div class="cprog__bar">
+						<div class="cprog__fill" style="width:75%"></div>
+						<span class="cprog__seg" style="left:25%"></span><span class="cprog__seg" style="left:50%"></span><span class="cprog__seg" style="left:75%"></span>
+					</div>
+					<span class="cprog__n">75%<small> done</small></span>
+				</div>
+				<div class="client__sub">Online · Canada · Tue 10:00</div>
+			</div>
+			<div class="client">
+				<div class="client__head"><span class="client__name">Abena Fordjour<span class="client__ref">BK-1151</span></span><span class="client__when">4 h ago</span></div>
+				<div class="client__line">Confirmed · Consultation</div>
+				<div class="cprog">
+					<div class="cprog__bar">
+						<div class="cprog__fill" style="width:50%"></div>
+						<span class="cprog__seg" style="left:25%"></span><span class="cprog__seg" style="left:50%"></span><span class="cprog__seg" style="left:75%"></span>
+					</div>
+					<span class="cprog__n">50%<small> done</small></span>
+				</div>
+				<div class="client__sub">In person · Kumasi · Thu 14:00</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<!-- ── 3 · Officer sheet ── -->
+<div class="sect">
+	<span class="tag">3 · Officer record</span>
+	<h2>The sheet gets the same number, plus the per-case list</h2>
+	<div class="sheet">
+		<p style="font-size:0.85rem;font-weight:600">Efua Mensah <span style="font-family:ui-monospace,monospace;font-size:0.58rem;color:var(--muted)">CONSULTANT · ACCRA</span></p>
+		<p class="dsec">Load · 14 open</p>
+		<div class="dkv"><span class="dkv__k">Cases</span><span>11 — heaviest in III · Applications (5)</span></div>
+		<div class="dkv"><span class="dkv__k">Consultations</span><span>3 upcoming</span></div>
+		<div class="dkv"><span class="dkv__k">Stalled</span><span>1 stalled</span></div>
+		<div class="dkv"><span class="dkv__k">Work done</span><span><b>38%</b> mean across open records</span></div>
+		<div class="oprog" style="margin:0.4rem 0 0.2rem">
+			<div class="oprog__bar"><div class="oprog__fill" style="width:38%"></div></div>
+		</div>
+		<p class="dsec">Carrying · 14</p>
+		<div class="mini"><span><span class="mref">CN-2481</span><b>Ama Serwaa</b></span><span class="mpct">52%</span></div>
+		<div class="mini"><span><span class="mref">CN-2462</span><b>Kofi Boateng</b> <span style="color:var(--red);font-size:0.6rem">on us 9d</span></span><span class="mpct">60%</span></div>
+		<div class="mini"><span><span class="mref">CN-2490</span><b>Efua Nyarko</b></span><span class="mpct">68%</span></div>
+		<div class="mini"><span><span class="mref">BK-1148</span><b>Yaw Darko</b></span><span class="mpct">75%</span></div>
+	</div>
+</div>
+
+<!-- ── 4 · Task queue ── -->
+<div class="sect">
+	<span class="tag">4 · Work queue</span>
+	<h2>Task groups show done/total</h2>
+	<p class="note">The queue's groups (overdue / today / later) each carry a completion read. "Done" here means tasks cleared today — it resets daily, so it reads as momentum, not a scoreboard.</p>
+	<div class="frame" style="padding-top:0.4rem">
+		<div class="thead">
+			<span class="band__name">Today · 6 of 9 cleared</span>
+			<span class="cprog__n" style="font-size:0.7rem">67%</span>
+		</div>
+		<div class="trow done"><span class="box on"></span><span class="tk">Case</span> Review Ama Serwaa's transcript re-upload <span style="margin-left:auto" class="client__when">9:04</span></div>
+		<div class="trow done"><span class="box on"></span><span class="tk">Payment</span> Confirm deposit — CN-2481 <span style="margin-left:auto" class="client__when">9:31</span></div>
+		<div class="trow"><span class="box"></span><span class="tk">Visa</span> Lodge Kofi Boateng's biometrics letter <span style="margin-left:auto" class="pill pill--strong">overdue 2d</span></div>
+		<div class="trow"><span class="box"></span><span class="tk">Check-in</span> Prep offer-decision call — Efua Nyarko <span style="margin-left:auto" class="client__when">14:00</span></div>
+	</div>
+</div>
+
+<!-- ── rules ── -->
+<div class="sect">
+	<span class="tag">Rules the number keeps</span>
+	<div class="callout">
+		<ul class="facts" style="padding-left:1rem">
+			<li><b>Scope-aware.</b> A visa-only case tops out at 3 chapters, so its bar fills faster — the % is against the client's own plan, never the full ladder.</li>
+			<li><b>Stalled ≠ low %.</b> A case can be 60% done and stalled; the red fill flags the stall, the number stays honest.</li>
+			<li><b>Completed = 100%.</b> Done records render a full green fill in the completed band.</li>
+			<li><b>No fake precision.</b> Inside a chapter the fraction comes from real checklist items; when a case has none, the bar sits at the chapter boundary, not midway.</li>
+			<li><b>Officer % is a mean of open records.</b> It answers "how far through their load" — capacity still answers "how much load."</li>
+		</ul>
+	</div>
+</div>
+
+</div>
+</body>
+</html>

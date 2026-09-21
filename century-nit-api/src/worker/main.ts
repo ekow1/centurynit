@@ -5,6 +5,8 @@ import { documentCleanupWorker } from "./document-cleanup.js";
 import { campaignWorker } from "./campaign.js";
 import { pushWorker } from "./push.js";
 import { autopayWorker } from "./autopay.js";
+import { chatReplyEmailWorker } from "./chat-reply.js";
+import { helpdeskSweepWorker } from "./helpdesk-sweep.js";
 import {
 	connection,
 	emailQueue,
@@ -17,7 +19,10 @@ import {
 	scheduleMeetingStatusPolls,
 	scheduleDocumentCleanup,
 	scheduleAutoPaySweep,
+	scheduleHelpdeskSweep,
 	autopayQueue,
+	chatReplyEmailQueue,
+	helpdeskSweepQueue,
 } from "./queues.js";
 
 /**
@@ -49,6 +54,8 @@ const workers = [
 	{ name: "campaign", worker: campaignWorker },
 	{ name: "push", worker: pushWorker },
 	{ name: "autopay", worker: autopayWorker },
+	{ name: "chatReplyEmail", worker: chatReplyEmailWorker },
+	{ name: "helpdeskSweep", worker: helpdeskSweepWorker },
 ];
 
 console.log(
@@ -71,6 +78,9 @@ scheduleDocumentCleanup().catch((err) => console.error("[document-cleanup] sched
 
 // Schedule the daily auto-pay sweep (idempotent — attempts dedupe re-runs).
 scheduleAutoPaySweep().catch((err) => console.error("[autopay] schedule error:", err.message));
+
+// Schedule the unclaimed-request sweep (every 15min, idempotent).
+scheduleHelpdeskSweep().catch((err) => console.error("[helpdesk-sweep] schedule error:", err.message));
 
 /**
  * Graceful shutdown.
@@ -101,6 +111,8 @@ async function shutdown(signal: string) {
 			meetingStatusQueue.close(),
 			documentCleanupQueue.close(),
 			campaignQueue.close(),
+			chatReplyEmailQueue.close(),
+			helpdeskSweepQueue.close(),
 		]);
 		await connection.quit();
 		clearTimeout(timeout);

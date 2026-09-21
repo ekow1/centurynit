@@ -932,7 +932,7 @@ export async function buildTrackedLinks(campaignId: string, recipientId: string,
 	}
 	return html.replace(/href="([^"]+)"/g, (match, url: string) => {
 		const linkId = linkIdByUrl.get(url);
-		return linkId ? `href="${env.BETTER_AUTH_URL}/m/c/${linkId}/${recipientId}"` : match;
+		return linkId ? `href="${env.BETTER_AUTH_URL}/api/v1/newsletter/click/${linkId}/${recipientId}"` : match;
 	});
 }
 

@@ -36,6 +36,11 @@ const campaignSchema = z.object({
 	body: z.string(),
 	templateId: z.string().uuid().nullable(),
 	mailingListId: z.string().uuid().nullable(),
+	segmentId: z.string().uuid().nullable(),
+	preheader: z.string().nullable(),
+	fromName: z.string().nullable(),
+	replyTo: z.string().nullable(),
+	blocks: z.unknown().nullable(),
 	sentBy: z.string().nullable(),
 	sentAt: z.string().nullable(),
 	scheduledAt: z.string().nullable(),
@@ -123,6 +128,11 @@ const createCampaignBodySchema = z.object({
 	body: z.string().min(1, "Body is required"),
 	templateId: z.string().uuid().optional().nullable(),
 	mailingListId: z.string().uuid().optional().nullable(),
+	segmentId: z.string().uuid().optional().nullable(),
+	preheader: z.string().optional().nullable(),
+	fromName: z.string().optional().nullable(),
+	replyTo: z.string().optional().nullable(),
+	blocks: z.unknown().optional().nullable(),
 });
 
 const createMailingListBodySchema = z.object({
@@ -249,6 +259,11 @@ marketingRouter.openapi(
 					body: body.body,
 					templateId: body.templateId ?? null,
 					mailingListId: body.mailingListId ?? null,
+					segmentId: body.segmentId ?? null,
+					preheader: body.preheader ?? null,
+					fromName: body.fromName ?? null,
+					replyTo: body.replyTo ?? null,
+					blocks: body.blocks ?? null,
 					sentBy: staff?.opsUserId ?? null,
 				})
 				.returning();
@@ -546,6 +561,11 @@ const updateCampaignBodySchema = z.object({
 	body: z.string().min(1).optional(),
 	templateId: z.string().uuid().optional().nullable(),
 	mailingListId: z.string().uuid().optional().nullable(),
+	segmentId: z.string().uuid().optional().nullable(),
+	preheader: z.string().optional().nullable(),
+	fromName: z.string().optional().nullable(),
+	replyTo: z.string().optional().nullable(),
+	blocks: z.unknown().optional().nullable(),
 });
 
 marketingRouter.openapi(
@@ -603,6 +623,11 @@ marketingRouter.openapi(
 			if (body.body !== undefined) updateData.body = body.body;
 			if (body.templateId !== undefined) updateData.templateId = body.templateId;
 			if (body.mailingListId !== undefined) updateData.mailingListId = body.mailingListId;
+			if (body.segmentId !== undefined) updateData.segmentId = body.segmentId;
+			if (body.preheader !== undefined) updateData.preheader = body.preheader;
+			if (body.fromName !== undefined) updateData.fromName = body.fromName;
+			if (body.replyTo !== undefined) updateData.replyTo = body.replyTo;
+			if (body.blocks !== undefined) updateData.blocks = body.blocks;
 
 			const [updated] = await db
 				.update(marketingCampaigns)
@@ -696,6 +721,8 @@ const recipientSchema = z.object({
 	error: z.string().nullable(),
 	openedAt: z.string().nullable(),
 	bouncedAt: z.string().nullable(),
+	clickedAt: z.string().nullable(),
+	clickedUrl: z.string().nullable(),
 	createdAt: z.string(),
 });
 
@@ -772,6 +799,8 @@ marketingRouter.openapi(
 				error: r.error,
 				openedAt: r.openedAt?.toISOString() ?? null,
 				bouncedAt: r.bouncedAt?.toISOString() ?? null,
+				clickedAt: r.clickedAt?.toISOString() ?? null,
+				clickedUrl: r.clickedUrl,
 				createdAt: r.createdAt.toISOString(),
 			}));
 

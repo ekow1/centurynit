@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ledger — mock</title>
+<style>
+	:root {
+		--ink: #141312; --paper: #f7f5f0; --card: #fff; --line: #d9d4c9; --line-lt: #e8e4da;
+		--muted: #6f6a5f; --amber: #c8841a; --amber-soft: #f4e6cc; --green: #2e6b34; --red: #a33b2e;
+	}
+	* { box-sizing: border-box; margin: 0; padding: 0; }
+	body { font-family: Georgia, "Times New Roman", serif; background: var(--paper); color: var(--ink); }
+	.mono { font-family: "Courier New", ui-monospace, monospace; letter-spacing: 0.06em; }
+	.page { max-width: 1080px; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
+
+	.flag { border: 1px solid var(--line); background: var(--card); padding: 1rem 1.25rem; margin-bottom: 1.75rem; }
+	.flag .k { font-family: ui-monospace, monospace; font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--amber); }
+	.flag p { font-size: 0.82rem; color: var(--muted); margin-top: 0.35rem; line-height: 1.5; }
+	.flag b { color: var(--ink); }
+
+	h2.before { font-size: 0.95rem; margin: 2.5rem 0 0.75rem; }
+	h2 .mono { font-size: 0.62rem; color: var(--muted); letter-spacing: 0.14em; text-transform: uppercase; }
+
+	/* ── BEFORE: the table as it ships today ─────────────────────── */
+	table.old { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); font-size: 0.82rem; }
+	table.old th { text-align: left; font-family: ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--line); }
+	table.old td { padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--line-lt); vertical-align: top; }
+	table.old .num { text-align: right; }
+	.st { display: inline-block; font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0.12rem 0.4rem; border: 1px solid var(--line); }
+	.st--paid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+	.st--sched { color: var(--muted); }
+	.st--fail { color: var(--red); border-color: var(--red); }
+	.sub { display: block; font-family: ui-monospace, monospace; font-size: 0.62rem; color: var(--muted); }
+
+	/* ── AFTER: a statement, not a log ───────────────────────────── */
+	.ledger { border: 1px solid var(--ink); background: var(--card); }
+	.ledger__head { display: flex; justify-content: space-between; align-items: baseline; padding: 0.9rem 1.2rem; border-bottom: 2px solid var(--ink); }
+	.ledger__head b { font-size: 1rem; }
+	.ledger__head .mono { font-size: 0.6rem; color: var(--muted); letter-spacing: 0.14em; text-transform: uppercase; }
+
+	table.new { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+	table.new th { text-align: left; font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding: 0.7rem 1.2rem 0.5rem; border-bottom: 1px solid var(--line); }
+	table.new td { padding: 0.6rem 1.2rem; border-bottom: 1px solid var(--line-lt); vertical-align: baseline; }
+	table.new .r { text-align: right; font-variant-numeric: tabular-nums; }
+	.entry b { font-weight: 600; }
+	.entry .sub { margin-top: 0.15rem; }
+	.bal { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+	.kind { display: inline-block; width: 0.9em; text-align: center; margin-right: 0.35em; color: var(--muted); }
+	tr.charge td { color: var(--ink); }
+	tr.pay td { background: #fbfaf7; }
+	tr.pay .amt::before { content: "−"; color: var(--green); }
+	tr.sched td { color: var(--muted); }
+	tr.sched .amt::before { content: "+"; }
+	tr.failed td { background: #faf3f1; }
+	tr.failed .amt { color: var(--red); text-decoration: line-through; }
+	.why { color: var(--red); }
+
+	tr.divider td { padding: 0.45rem 1.2rem; background: var(--paper); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-family: ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+
+	.ledger__foot { display: flex; gap: 2rem; padding: 0.85rem 1.2rem; font-family: ui-monospace, monospace; font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; }
+	.ledger__foot b { color: var(--ink); }
+	.ledger__foot span { color: var(--muted); }
+	.ledger__foot .bal-now { margin-left: auto; color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="page">
+
+	<p class="mono" style="font-size:0.62rem; letter-spacing:0.16em; text-transform:uppercase; color:var(--muted);">MOCK · PORTAL · "YOUR PAYMENTS" REDESIGN</p>
+	<h1 style="font-size:1.6rem; margin:0.4rem 0 0.5rem;">From a log of rows to a statement.</h1>
+	<p style="font-size:0.85rem; color:var(--muted); max-width:56ch; line-height:1.55;">Same rows the API already returns — re-ordered, honest about which are money that moved and which are charges still to come.</p>
+
+	<div class="flag" style="margin-top:1.75rem;">
+		<span class="k">What's wrong today</span>
+		<p><b>1.</b> Scheduled instalments sit inside "Your payments" — they are charges, not payments, and they repeat the schedule printed two sections up. <b>2.</b> A charge and its settlement are near-identical rows — "Admissions · on acceptance" GH₵1 scheduled + GH₵2 paid reads like a billing error. <b>3.</b> <code>paystack-mobile_money</code> shown raw. <b>4.</b> The API already sends <code>balanceAfterCents</code>, <code>reference</code> and <code>failureReason</code> — none is rendered, so the table can't answer "where do I stand". <b>5.</b> The status cell crams chip + receipt + retry hint into one column.</p>
+	</div>
+
+	<h2 class="before"><span class="mono">BEFORE</span> — every row looks the same</h2>
+	<table class="old">
+		<thead><tr><th>Date</th><th>For</th><th>Method</th><th class="num">Amount</th><th>Status</th></tr></thead>
+		<tbody>
+			<tr><td class="num">Sep 21</td><td>Admissions - on acceptance<span class="sub">INV-2026-0002</span></td><td>—</td><td class="num">GH₵ 1</td><td><span class="st st--sched">scheduled</span></td></tr>
+			<tr><td class="num">Sep 21</td><td>Admissions - on acceptance<span class="sub">INV-2026-0002</span></td><td>paystack-mobile_money</td><td class="num">GH₵ 2</td><td><span class="st st--paid">paid</span> <span class="sub">receipt ↓</span></td></tr>
+			<tr><td class="num">Sep 21</td><td>University of Oxford - application fee</td><td>paystack-mobile_money</td><td class="num">GH₵ 1</td><td><span class="st st--paid">paid</span></td></tr>
+			<tr><td class="num">Sep 21</td><td>Flight ticket</td><td>paystack-mobile_money</td><td class="num">GH₵ 5,000</td><td><span class="st st--paid">paid</span></td></tr>
+			<tr><td class="num">Sep 30</td><td>Service fee - post-arrival 1 of 3</td><td>—</td><td class="num">GH₵ 1</td><td><span class="st st--sched">scheduled</span></td></tr>
+			<tr><td class="num">Oct 30</td><td>Service fee - post-arrival 2 of 3</td><td>—</td><td class="num">GH₵ 1</td><td><span class="st st--sched">scheduled</span></td></tr>
+			<tr><td class="num">Nov 30</td><td>Service fee - post-arrival 3 of 3</td><td>—</td><td class="num">GH₵ 1</td><td><span class="st st--sched">scheduled</span></td></tr>
+		</tbody>
+	</table>
+	<p class="sub" style="margin-top:0.4rem;">← the first two rows look like the same thing billed twice; the last three aren't payments at all.</p>
+
+	<h2 class="before"><span class="mono">AFTER</span> — a statement: settled first, still to come below the rule</h2>
+	<div class="ledger">
+		<div class="ledger__head">
+			<b>Your payments</b>
+			<span class="mono">settled first · then what's coming</span>
+		</div>
+		<table class="new">
+			<thead>
+				<tr><th style="width:5.5rem;">Date</th><th>Entry</th><th>Method</th><th class="r">Amount</th><th class="r">Balance</th><th style="width:6rem;">Status</th></tr>
+			</thead>
+			<tbody>
+				<tr class="pay">
+					<td class="mono" style="font-size:0.68rem;">Sep 21</td>
+					<td class="entry"><span class="kind">■</span><b>Admissions · on acceptance</b><span class="sub">INV-2026-0002 · ref PS-88420 · receipt ↓</span></td>
+					<td>MoMo</td><td class="r amt">GH₵ 2</td><td class="r bal">GH₵ 1 left</td>
+					<td><span class="st st--paid">paid</span></td>
+				</tr>
+				<tr class="pay">
+					<td class="mono" style="font-size:0.68rem;">Sep 21</td>
+					<td class="entry"><span class="kind">■</span><b>University of Oxford · application fee</b><span class="sub">INV-2026-0007 · receipt ↓</span></td>
+					<td>MoMo</td><td class="r amt">GH₵ 1</td><td class="r bal">—</td>
+					<td><span class="st st--paid">paid</span></td>
+				</tr>
+				<tr class="pay">
+					<td class="mono" style="font-size:0.68rem;">Sep 21</td>
+					<td class="entry"><span class="kind">■</span><b>Flight ticket</b><span class="sub">INV-2026-0009 · receipt ↓</span></td>
+					<td>MoMo</td><td class="r amt">GH₵ 5,000</td><td class="r bal">—</td>
+					<td><span class="st st--paid">paid</span></td>
+				</tr>
+				<tr class="failed">
+					<td class="mono" style="font-size:0.68rem;">Sep 30</td>
+					<td class="entry"><span class="kind">▪</span><b>Service fee · post-arrival 1 of 3</b><span class="sub why">card declined — insufficient funds · we retry Oct 2, or pay another way</span></td>
+					<td>Card</td><td class="r amt">GH₵ 1</td><td class="r bal">—</td>
+					<td><span class="st st--fail">declined</span></td>
+				</tr>
+
+				<tr class="divider"><td colspan="6">Still to come — nothing leaves until the date</td></tr>
+
+				<tr class="sched">
+					<td class="mono" style="font-size:0.68rem;">Oct 30</td>
+					<td class="entry"><span class="kind">▪</span>Service fee · post-arrival 2 of 3<span class="sub">INV-2026-0010</span></td>
+					<td>your choice</td><td class="r amt">GH₵ 1</td><td class="r bal"></td>
+					<td><span class="st st--sched">scheduled</span></td>
+				</tr>
+				<tr class="sched">
+					<td class="mono" style="font-size:0.68rem;">Nov 30</td>
+					<td class="entry"><span class="kind">▪</span>Service fee · post-arrival 3 of 3<span class="sub">INV-2026-0011</span></td>
+					<td>your choice</td><td class="r amt">GH₵ 1</td><td class="r bal"></td>
+					<td><span class="st st--sched">scheduled</span></td>
+				</tr>
+			</tbody>
+		</table>
+		<div class="ledger__foot">
+			<span>Paid <b>GH₵ 5,003</b></span>
+			<span>To come <b>GH₵ 3</b></span>
+			<span class="bal-now">Position · GH₵ 1 due Sep 30</span>
+		</div>
+	</div>
+
+	<div class="flag" style="margin-top:1.5rem;">
+		<span class="k">What changed</span>
+		<p><b>Split by truth, not by date</b> — settled payments sit above a ruled divider; scheduled charges below it, muted. <b>Running balance</b> — the <code>balanceAfterCents</code> the API already sends, so "Admissions GH₵2 paid → GH₵1 left" explains itself instead of looking like a double charge. <b>Declined rows tell the story</b> — the failure reason renders (<code>failureReason</code> was already on the row) with the retry date. <b>Channels humanised</b> — paystack-mobile_money → MoMo, card → Card. <b>Reference + receipt</b> move into the entry sub-line where they belong. <b>A footer states the position</b> — paid so far · still to come · what's due next.</p>
+	</div>
+
+</div>
+</body>
+</html>

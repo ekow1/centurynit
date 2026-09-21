@@ -10689,6 +10689,23 @@ a.portal-ch--on:hover {
 	transition: transform 0.15s ease;
 }
 .cchat-fab:active { transform: scale(0.94); }
+/* Amber square pulse on a fresh inbound message while closed. */
+.cchat-fab--pulse { animation: cchatPulse 1.6s ease-out 2; }
+@keyframes cchatPulse {
+	0%   { box-shadow: 0 0 0 0 var(--accent, #b45309); }
+	70%  { box-shadow: 0 0 0 10px rgba(180, 83, 9, 0); }
+	100% { box-shadow: 0 0 0 0 rgba(180, 83, 9, 0); }
+}
+/* Idle teaser — the launcher invites action even with zero messages. */
+.cchat-peek--teaser {
+	background: var(--accent, #b45309); color: #fff;
+	animation: cchatTeaserIn 0.25s ease-out;
+}
+.cchat-peek--teaser b { opacity: 0.85; }
+@keyframes cchatTeaserIn {
+	from { opacity: 0; transform: translateY(4px); }
+	to   { opacity: 1; transform: translateY(0); }
+}
 .cchat-fab__badge {
 	position: absolute; top: -7px; right: -7px; min-width: 18px; height: 18px;
 	background: var(--bad, #b91c1c); color: #fff;
@@ -10766,6 +10783,13 @@ a.portal-ch--on:hover {
 	font-family: var(--font-mono); font-size: 0.56rem;
 	color: var(--muted-foreground); letter-spacing: 0.05em;
 	white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+	display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+}
+.cchat-strip > span { overflow: hidden; text-overflow: ellipsis; }
+.cchat-strip__link {
+	background: none; border: none; padding: 0; flex-shrink: 0;
+	font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.05em;
+	color: var(--foreground); text-decoration: underline; cursor: pointer;
 }
 
 /* ── Enrolment · stages on the plan ── */

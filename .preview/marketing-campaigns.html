@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Marketing campaigns — verified audit + the redesign</title>
+<style>
+:root{--sans:"Segoe UI",system-ui,-apple-system,sans-serif;--mono:"Cascadia Code","JetBrains Mono",Consolas,monospace;--ink:#18181b;--fg-muted:#52525b;--line:#bbb;--paper:#fff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:#ececec;color:var(--ink);padding:2rem 1.25rem 5rem;line-height:1.45}
+h1.page{font-size:1.5rem;letter-spacing:-0.01em}
+.banner{font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;background:var(--ink);color:#fff;padding:.35rem .7rem;margin-bottom:.8rem}
+p.note{color:var(--fg-muted);font-size:.8rem;max-width:64rem;margin:.4rem 0 1.25rem;line-height:1.5}
+.tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;display:inline-block;padding:.3rem .6rem;border:1.5px solid var(--ink);margin:3rem 0 .5rem}
+.jump{font-family:var(--mono);font-size:.68rem;display:flex;gap:1.25rem;margin-top:.5rem;flex-wrap:wrap}
+.jump a{color:var(--ink)}
+.mock{background:var(--paper);border:1px solid var(--line);padding:1.5rem clamp(1.25rem,3vw,2.25rem) 2.5rem;max-width:72rem}
+.callout{border-left:3px solid var(--ink);background:#fff;padding:.7rem .9rem;font-size:.78rem;margin:.75rem 0 0;max-width:64rem}
+.cap{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.5rem}
+.eyebrow{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--fg-muted)}
+.mono{font-family:var(--mono)} .muted{color:var(--fg-muted)} .sm{font-size:.8rem}
+.btn{display:inline-block;background:var(--ink);color:#fff;font-size:.72rem;font-weight:700;padding:.65rem 1.2rem;text-transform:uppercase;letter-spacing:.08em;border:1.5px solid var(--ink);font-family:var(--sans);white-space:nowrap}
+.btn--ghost{background:#fff;color:var(--ink)}
+table.grid{width:100%;border-collapse:collapse;font-size:.8rem}
+table.grid th{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--fg-muted);text-align:left;padding:.5rem .6rem;border-bottom:1.5px solid var(--ink)}
+table.grid td{padding:.55rem .6rem;border-bottom:1px solid #dcdcdc;vertical-align:top}
+table.grid tr.sel td{background:#f4f4f4}
+.chip{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.08em;border:1px solid var(--ink);padding:.14rem .45rem;display:inline-block;white-space:nowrap}
+.chip--solid{background:var(--ink);color:#fff}
+.chip--ghost{color:var(--fg-muted);border-color:#ccc}
+.field{border:1.5px solid var(--ink);background:#fff;padding:.5rem .65rem;font-size:.78rem}
+.field--line{border:1px solid #ccc;font-size:.72rem;color:var(--fg-muted)}
+.pane{border:1.5px solid var(--ink);background:#fff}
+.pane__h{border-bottom:1.5px solid var(--ink);padding:.6rem .9rem;display:flex;justify-content:space-between;align-items:center}
+.stat{border:1px solid #ccc;padding:.55rem .8rem;min-width:6.5rem}
+.stat b{display:block;font-size:1.05rem;font-variant-numeric:tabular-nums}
+.stat span{font-family:var(--mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-muted)}
+.rate{font-family:var(--mono);font-size:.62rem;color:var(--fg-muted)}
+.ok::before{content:"✓ ";font-weight:700}
+.fix::before{content:"± ";font-weight:700}
+.no::before{content:"× ";font-weight:700}
+.tl{position:relative;height:64px;border:1px solid #ccc;background:repeating-linear-gradient(90deg,transparent 0 39px,#eee 39px 40px);margin-top:.4rem}
+.tl i{position:absolute;bottom:0;width:3px;background:var(--ink)}
+.seg-row{display:flex;gap:.5rem;align-items:center;padding:.45rem .6rem;border:1px solid #ccc;margin-top:.5rem;font-size:.78rem;background:#fff}
+.seg-row .fld{border:1px solid var(--ink);padding:.3rem .5rem;font-family:var(--mono);font-size:.66rem;background:#fff}
+.seg-row .x{margin-left:auto;color:var(--fg-muted);font-family:var(--mono)}
+.block{border:1.5px solid var(--ink);padding:.6rem .8rem;font-size:.78rem;background:#fff;cursor:grab}
+.block span{font-family:var(--mono);font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:var(--fg-muted);display:block;margin-bottom:.15rem}
+.cblock{border:1px solid #ccc;padding:.7rem .9rem;font-size:.8rem;background:#fff;position:relative}
+.cblock.sel{border:1.5px solid var(--ink)}
+.cblock .tagx{position:absolute;top:.3rem;right:.5rem;font-family:var(--mono);font-size:.55rem;color:var(--fg-muted)}
+.merge{font-family:var(--mono);font-size:.6rem;border:1px solid var(--ink);padding:.15rem .4rem;display:inline-block;background:#fff}
+.emailprev{border:1.5px solid var(--ink);background:#fff;max-width:26rem}
+.emailprev.m{width:15rem}
+.emailprev .hd{border-bottom:1.5px solid var(--ink);padding:.7rem .9rem;font-weight:800;letter-spacing:.02em}
+.emailprev .bd{padding:.9rem;font-size:.75rem;line-height:1.55}
+.emailprev .ft{border-top:1px solid #ccc;padding:.6rem .9rem;font-size:.62rem;color:var(--fg-muted)}
+.prehdr{font-family:var(--mono);font-size:.58rem;color:var(--fg-muted);padding:.3rem .9rem;border-bottom:1px dashed #ccc}
+.auto{border:1.5px solid var(--ink);background:#fff;padding:.7rem .9rem;min-width:13rem;flex:1}
+.auto b{font-size:.78rem;display:block}
+.auto .mono{font-size:.58rem;color:var(--fg-muted)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.two>div+div{border-left:1.5px solid var(--ink)}
+@media(max-width:900px){.two{grid-template-columns:1fr}.two>div+div{border-left:none;border-top:1.5px solid var(--ink)}}
+.cols{display:grid;grid-template-columns:13rem 1fr 16rem;gap:1rem}
+@media(max-width:1100px){.cols{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<span class="banner">Mock preview · EnterpriseCampaigns redesign</span>
+<h1 class="page">Marketing campaigns — the audit, verified, then the surfaces</h1>
+<p class="note">
+I checked every claim in the review against the code (<span class="mono">services/marketing.ts</span>, <span class="mono">routes/marketing.ts</span>, the worker, the schema, the 1,952-line page). It holds — with two corrections worth knowing before we build.
+</p>
+<div class="jump"><a href="#verdict">A · the verdict</a><a href="#queue">B · campaigns queue + report</a><a href="#segment">C · segment builder</a><a href="#contacts">C2–C3 · contacts &amp; history</a><a href="#addcontact">C4 · add contact</a><a href="#compose">D · block composer</a><a href="#templates">D2 · templates</a><a href="#newtemplate">D3 · new template</a><a href="#auto">E · automations</a><a href="#order">F · build order</a></div>
+
+<div class="tag" id="verdict">A · Verified — and two corrections</div>
+<div class="mock">
+<table class="grid">
+<tr><th style="width:12rem">Claim</th><th>Finding</th><th style="width:9rem">Verdict</th></tr>
+<tr><td>No segments — lists are address bags</td><td>Schema has <span class="mono">mailing_lists</span> + <span class="mono">mailing_list_contacts</span> only; nothing queries stage/branch/plan/invoice state.</td><td class="ok">Accurate</td></tr>
+<tr><td>"Import applicants" reads <span class="mono">leads</span></td><td><span class="mono">POST /mailing-lists/:id/import-applicants</span> selects <span class="mono">leads</span> where stage ∈ {Assessment Complete, Enrolled}. The <span class="mono">applicants</span> table is never touched; imports are one-shot copies.</td><td class="ok">Accurate</td></tr>
+<tr><td>Consent fabricated on import</td><td>Both imports insert <span class="mono">status:"confirmed", confirmedAt: now()</span>. No <span class="mono">marketing_opt_in</span> exists on applicants or leads anywhere in the schema.</td><td class="ok">Accurate</td></tr>
+<tr><td>No bounce/complaint suppression</td><td>The webhook writes <span class="mono">bouncedAt</span> + failed on the <em>recipient row</em>; the contact stays confirmed and is re-snapshotted into the next campaign.</td><td class="ok">Accurate</td></tr>
+<tr><td>Retry / worker-retry "won't double-send"</td><td><b>Worse than stated.</b> <span class="mono">runCampaignSend</span> loops <em>every</em> ledger row with no <span class="mono">status="pending"</span> filter — retry-failed, or any BullMQ attempt retry, re-emails the delivered ones. It also re-derives counters from the full ledger, so delivered rows go out twice.</td><td class="fix">Understated — it's a double-send bug</td></tr>
+<tr><td>Scheduled campaigns snapshotted at enqueue</td><td>Recipients freeze at schedule time; a contact who unsubscribes between schedule and send still gets mailed (<span class="mono">skipped</span> is declared, unused).</td><td class="fix">Also understated — stale-audience send</td></tr>
+<tr><td>3 merge fields · no preheader/from/reply-to · no click tracking · counts-only reporting · datetime-only scheduling · no automations · presets hard-coded · sms route redirects · 1,952-line page</td><td>All confirmed in code. Preset footer literally says <span class="mono">admissions@century-nit.com</span>; webhook ignores <span class="mono">email.clicked</span>.</td><td class="ok">Accurate</td></tr>
+<tr><td>"Body-only preview"</td><td>Minor correction: the preview IS the full server-rendered email (same <span class="mono">emailLayout</span> as the send). What's missing is mobile preview, the link inventory, and a per-recipient render.</td><td class="fix">Partially off</td></tr>
+</table>
+<div class="callout"><b>The one I'd fix first regardless of the redesign:</b> the missing <span class="mono">status="pending"</span> filter in <span class="mono">runCampaignSend</span>. Today, clicking "retry failed" emails your delivered recipients a second time — and BullMQ's automatic retry does the same after any worker crash mid-list.</div>
+</div>
+
+<div class="tag" id="queue">B · Campaigns queue — audience is a segment, report is rates</div>
+<div class="mock">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.9rem">
+<div>
+<p class="eyebrow">Marketing / Campaigns</p>
+<h2 style="font-size:1.15rem;margin-top:.2rem">Campaigns</h2>
+</div>
+<span class="btn">+ New campaign</span>
+</div>
+<table class="grid">
+<tr><th>Campaign</th><th>Audience</th><th>Status</th><th style="text-align:right">Sent</th><th style="text-align:right">Open</th><th style="text-align:right">Click</th><th style="text-align:right">Unsub</th><th></th></tr>
+<tr class="sel"><td><b>Visa-approved — pre-departure guide</b><br><span class="muted sm">Sep 20 · by E.Firmino</span></td><td class="sm">Segment · Visa approved, undeparted</td><td><span class="chip chip--solid">Sent</span></td><td style="text-align:right" class="mono">412</td><td style="text-align:right" class="mono">61%<br><span class="rate">251</span></td><td style="text-align:right" class="mono">19%<br><span class="rate">78</span></td><td style="text-align:right" class="mono">2</td><td class="sm"><b>Report →</b></td></tr>
+<tr><td><b>Offer received — next steps</b><br><span class="muted sm">Automation · fires per offer</span></td><td class="sm">Automation · offer_received</td><td><span class="chip chip--solid">Live</span></td><td style="text-align:right" class="mono">1,204</td><td style="text-align:right" class="mono">58%</td><td style="text-align:right" class="mono">22%</td><td style="text-align:right" class="mono">5</td><td class="sm">Report →</td></tr>
+<tr><td><b>October intake — UK applicants</b><br><span class="muted sm">Scheduled · Oct 1, 9:00 GMT</span></td><td class="sm">Segment · Applicants, UK, no offer yet</td><td><span class="chip">Scheduled</span></td><td style="text-align:right" class="mono">~230</td><td style="text-align:right" class="muted">—</td><td style="text-align:right" class="muted">—</td><td style="text-align:right" class="muted">—</td><td class="sm">Cancel</td></tr>
+<tr><td><b>Assessment no-show follow-up</b><br><span class="muted sm">Sep 18 · by E.Firmino</span></td><td class="sm">List · Newsletter subscribers</td><td><span class="chip chip--ghost">Sent</span></td><td style="text-align:right" class="mono">89</td><td style="text-align:right" class="mono">44%</td><td style="text-align:right" class="mono">7%</td><td style="text-align:right" class="mono">1</td><td class="sm">Report →</td></tr>
+<tr><td><b>Milestone reminder — September</b><br><span class="muted sm">Sep 15 · draft</span></td><td class="sm">Segment · Unpaid milestone &gt;3d</td><td><span class="chip chip--ghost">Draft</span></td><td style="text-align:right" class="muted">—</td><td style="text-align:right" class="muted">—</td><td style="text-align:right" class="muted">—</td><td style="text-align:right" class="muted">—</td><td class="sm">Edit →</td></tr>
+</table>
+<p class="cap" style="margin-top:1.1rem">What changed</p>
+<p class="sm muted">The audience column names a <b>live segment</b>, not a frozen list. Rates are on the row — open/click/unsub, not just delivered/failed. Scheduled rows show the time <em>and timezone</em>; "live" is the state for automations.</p>
+</div>
+
+<div class="tag">B2 · The report pane — rates, timeline, top links</div>
+<div class="mock">
+<div class="pane">
+<div class="pane__h"><b>Visa-approved — pre-departure guide</b><span class="chip chip--solid">Sent · Sep 20</span></div>
+<div style="padding:1rem">
+<div style="display:flex;gap:.6rem;flex-wrap:wrap">
+<div class="stat"><b>412</b><span>Delivered</span><br><span class="rate">of 418 snapshotted</span></div>
+<div class="stat"><b>61%</b><span>Opened</span><br><span class="rate">251</span></div>
+<div class="stat"><b>19%</b><span>Clicked</span><br><span class="rate">78 · 41 unique links</span></div>
+<div class="stat"><b>1.4%</b><span>Bounced</span><br><span class="rate">6 · auto-suppressed</span></div>
+<div class="stat"><b>2</b><span>Unsubscribed</span><br><span class="rate">from this campaign</span></div>
+</div>
+<div class="two" style="margin-top:1rem">
+<div style="padding-right:1rem">
+<p class="cap">Opens · first 72h</p>
+<div class="tl"><i style="left:4%;height:70%"></i><i style="left:12%;height:90%"></i><i style="left:20%;height:55%"></i><i style="left:28%;height:38%"></i><i style="left:36%;height:25%"></i><i style="left:44%;height:18%"></i><i style="left:52%;height:12%"></i><i style="left:60%;height:8%"></i><i style="left:68%;height:6%"></i><i style="left:76%;height:4%"></i><i style="left:84%;height:3%"></i><i style="left:92%;height:2%"></i></div>
+<p class="sm muted" style="margin-top:.4rem">Opens and clicks are both charted; click is the honest metric — Apple/Gmail proxy opens inflate the grey line.</p>
+</div>
+<div style="padding-left:1rem">
+<p class="cap">Top links</p>
+<table class="grid">
+<tr><td class="sm">/portal/pre-departure · checklist</td><td style="text-align:right" class="mono">44</td></tr>
+<tr><td class="sm">/portal/documents · vault</td><td style="text-align:right" class="mono">19</td></tr>
+<tr><td class="sm">/portal/appointments · book check-in</td><td style="text-align:right" class="mono">12</td></tr>
+<tr><td class="sm">unsubscribe</td><td style="text-align:right" class="mono">2</td></tr>
+</table>
+</div>
+</div>
+<p class="cap" style="margin-top:1rem">Recipients · <span class="muted">sent 409 · opened 251 · clicked 78 · bounced 6 · unsubscribed 2</span></p>
+<table class="grid">
+<tr><th>Recipient</th><th>Sent</th><th>Opened</th><th>Clicked</th><th>Status</th></tr>
+<tr><td class="sm">e.enu@… · APP-2026-0001</td><td class="sm mono">Sep 20 09:02</td><td class="sm mono">09:41</td><td class="sm mono">09:43 · checklist</td><td><span class="chip chip--solid">Clicked</span></td></tr>
+<tr><td class="sm">a.mensah@… · APP-2026-0012</td><td class="sm mono">09:02</td><td class="sm mono">11:15</td><td class="sm muted">—</td><td><span class="chip">Opened</span></td></tr>
+<tr><td class="sm">k.owusu@… · bounced</td><td class="sm mono">09:03</td><td class="sm muted">—</td><td class="sm muted">—</td><td><span class="chip chip--ghost">Suppressed</span></td></tr>
+</table>
+</div>
+</div>
+<p class="cap" style="margin-top:1rem">What changed</p>
+<p class="sm muted">Every link in a campaign is wrapped with tracking + UTM at send; <span class="mono">clicked_at</span> + <span class="mono">link_id</span> land on the recipient via the same webhook that already records opens. Bounces and complaints write the contact to the global suppression table — <em>that</em> is what "suppressed" means on the row.</p>
+</div>
+
+<div class="tag" id="segment">C · The segment builder — saved filters over the suite's own data</div>
+<div class="mock">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div><p class="eyebrow">Segments / New</p><h2 style="font-size:1.15rem;margin-top:.2rem">Build an audience</h2></div>
+<span class="chip chip--solid" style="font-size:.7rem;padding:.4rem .8rem">≈ 230 people · live</span>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-top:1rem">
+<div>
+<p class="cap">Who</p>
+<div style="display:flex;gap:.5rem;margin:.5rem 0 .9rem">
+<span class="chip chip--solid">Applicants</span><span class="chip">Leads</span><span class="chip">Newsletter list</span>
+</div>
+<p class="cap">Conditions · all must hold</p>
+<div class="seg-row"><span class="fld">country</span><span class="fld">is</span><span class="fld">United Kingdom</span><span class="x">×</span></div>
+<div class="seg-row"><span class="fld">chapter</span><span class="fld">is before</span><span class="fld">III · Applications</span><span class="x">×</span></div>
+<div class="seg-row"><span class="fld">offer</span><span class="fld">is</span><span class="fld">none yet</span><span class="x">×</span></div>
+<div class="seg-row"><span class="fld">last activity</span><span class="fld">within</span><span class="fld">90 days</span><span class="x">×</span></div>
+<div class="seg-row" style="border-style:dashed;color:var(--fg-muted)">+ add condition — stage · branch · plan · milestone status · departure window · booking no-show · tags</div>
+</div>
+<div>
+<p class="cap">Consent — read, never written</p>
+<div class="field" style="margin:.5rem 0 .9rem">
+<span class="sm">Marketing opt-in</span><br>
+<span class="mono" style="font-size:.62rem;color:var(--fg-muted)">230 matched · 196 opted in · 34 never asked</span><br>
+<span class="sm" style="font-size:.72rem">Sends to opted-in only. The 34 get a one-time "keep me posted?" prompt on their next portal visit — not the campaign.</span>
+</div>
+<p class="cap">Excluded automatically</p>
+<div class="field--line" style="padding:.5rem .65rem;margin-bottom:.9rem">
+<span class="sm">Suppression: 4 bounced · 1 complained · 3 unsubscribed — never counted in the send, shown here so the estimate is honest.</span>
+</div>
+<p class="cap">Save</p>
+<div class="field" style="display:flex;justify-content:space-between;align-items:center">
+<span class="sm">UK applicants · pre-offer</span>
+<span class="btn" style="padding:.45rem .9rem">Save segment</span>
+</div>
+<p class="sm muted" style="margin-top:.6rem">Evaluated at <b>send time</b>, not at save — a client who gets an offer tomorrow leaves the audience on their own.</p>
+</div>
+</div>
+<div class="callout"><b>This is the piece the audit ranked first and it earns it:</b> every field in the condition picker already exists — <span class="mono">applications.stage</span>, <span class="mono">applicants.branch</span>, invoice milestones, <span class="mono">leads.stage</span>. The builder is a query composer over the suite's own tables; lists stay only for genuinely external subscribers.</div>
+</div>
+
+<div class="tag" id="compose">D · The composer — blocks, not raw HTML</div>
+<div class="mock">
+<div class="cols">
+<div>
+<p class="cap">Blocks</p>
+<div style="display:grid;gap:.45rem">
+<div class="block"><span>H1</span>Heading</div>
+<div class="block"><span>¶</span>Paragraph</div>
+<div class="block"><span>→</span>Button</div>
+<div class="block"><span>▦</span>Two columns</div>
+<div class="block"><span>▭</span>Image</div>
+<div class="block"><span>—</span>Divider</div>
+<div class="block"><span>&lt;/&gt;</span>HTML (advanced)</div>
+</div>
+<p class="cap" style="margin-top:.9rem">Merge fields</p>
+<div style="display:flex;flex-wrap:wrap;gap:.3rem">
+<span class="merge">{{first_name}}</span><span class="merge">{{case_ref}}</span><span class="merge">{{stage}}</span><span class="merge">{{officer}}</span><span class="merge">{{branch}}</span><span class="merge">{{next_due}}</span><span class="merge">{{portal_link}}</span><span class="merge">{{preferences}}</span>
+</div>
+</div>
+<div>
+<p class="cap">Canvas · click a block to edit</p>
+<div class="emailprev">
+<div class="hd">CENTURY NIT</div>
+<div class="prehdr">Preheader: Your visa is approved — here's what happens before you fly…</div>
+<div class="bd">
+<div class="cblock sel"><span class="tagx">H1 · editing</span><b style="font-size:1rem">Your visa is approved, {{first_name}}.</b></div>
+<div class="cblock" style="margin-top:.5rem"><span class="tagx">¶</span>Case {{case_ref}} is now in Departure. {{officer}} holds your file in {{branch}} — three things before you fly:</div>
+<div class="cblock" style="margin-top:.5rem"><span class="tagx">¶</span>1. Finish the pre-departure checklist<br>2. Confirm your arrival window — currently {{arrival_window}}<br>3. Book your check-in call</div>
+<div class="cblock" style="margin-top:.5rem;text-align:center"><span class="tagx">→</span><span class="btn" style="pointer-events:none">Open my checklist</span></div>
+<div class="cblock" style="margin-top:.5rem"><span class="tagx">—</span><hr style="border:none;border-top:1px solid #ccc"></div>
+<div class="cblock" style="margin-top:.5rem;font-size:.68rem;color:var(--fg-muted)"><span class="tagx">¶</span>Questions? Reply to this email — it reaches your handler directly.</div>
+</div>
+<div class="ft">Century NIT · Accra — you're receiving this about case {{case_ref}} · <u>Preferences</u> · <u>Unsubscribe</u></div>
+</div>
+</div>
+<div>
+<p class="cap">Send settings</p>
+<div style="display:grid;gap:.5rem">
+<div class="field"><span class="cap" style="margin:0">From name</span><br><span class="sm">Century NIT · {{branch}} office</span></div>
+<div class="field"><span class="cap" style="margin:0">Reply-to</span><br><span class="sm">accra@centurynit… <span class="rate">(branch mailbox)</span></span></div>
+<div class="field"><span class="cap" style="margin:0">Preheader</span><br><span class="sm" style="font-size:.72rem">Your visa is approved — here's what happens before you fly…</span></div>
+<div class="field"><span class="cap" style="margin:0">Send</span><br><span class="sm">Now · or Oct 1, 9:00 <b>GMT</b></span><br><span class="rate">window: weekdays 8–20, recipient tz</span></div>
+</div>
+<p class="cap" style="margin-top:.9rem">Preview as</p>
+<div class="field"><span class="sm">Enoch Enu · e.enu@… · APP-2026-0001</span><br><span class="rate">real merge — every {{field}} resolved</span></div>
+<p class="cap" style="margin-top:.9rem">Checks</p>
+<div style="font-size:.72rem;display:grid;gap:.3rem">
+<span>✓ 4 links — all tracked, UTM stamped</span>
+<span>✓ Unsubscribe + preferences links present</span>
+<span>✓ Merge fields resolve for all 196 recipients</span>
+<span>✓ Subject 48 chars · preheader 61 chars</span>
+</div>
+<div style="display:flex;gap:.5rem;margin-top:1rem"><span class="btn">Send test</span><span class="btn btn--ghost">Desktop ⇄ Mobile</span></div>
+</div>
+</div>
+<p class="cap" style="margin-top:1.1rem">What changed</p>
+<p class="sm muted">Blocks emit the same table layout the transactional mail already uses — staff can't break the brand. "Preview as" renders a <b>real recipient's</b> merge, not the sample. The checks row is the link inventory + spam basics. HTML stays one toggle away, it just stops being the only door.</p>
+</div>
+
+<div class="tag" id="contacts">C2 · Lists &amp; contacts — one person, one record</div>
+<div class="mock">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.9rem">
+<div>
+<p class="eyebrow">Marketing / Audiences · Newsletter subscribers</p>
+<h2 style="font-size:1.15rem;margin-top:.2rem">1,847 contacts</h2>
+</div>
+<div style="display:flex;gap:.5rem">
+<span class="btn btn--ghost">Import CSV</span><span class="btn btn--ghost">Export</span><span class="btn">+ Add contact</span>
+</div>
+</div>
+<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.8rem">
+<span class="chip chip--solid">All 1,847</span><span class="chip">Opted in 1,502</span><span class="chip">Never asked 291</span><span class="chip">Unsubscribed 41</span><span class="chip">Suppressed 13</span><span class="chip chip--ghost">Duplicates 6</span>
+</div>
+<table class="grid">
+<tr><th>Contact</th><th>In the suite as</th><th>Consent</th><th>Member of</th><th>Last engagement</th><th></th></tr>
+<tr class="sel"><td class="sm"><b>Enoch Enu</b> · e.enu@…</td><td class="sm">Applicant · APP-2026-0001 · Departure</td><td><span class="chip chip--solid">Opted in</span></td><td class="sm">Newsletter · <b>Seg:</b> UK pre-departure</td><td class="sm">Clicked · pre-departure guide · Sep 20</td><td class="sm"><b>History →</b></td></tr>
+<tr><td class="sm"><b>Ama Mensah</b> · a.mensah@…</td><td class="sm">Lead · booked, no-show Sep 14</td><td><span class="chip">Never asked</span></td><td class="sm">Newsletter</td><td class="sm muted">—</td><td class="sm">History →</td></tr>
+<tr><td class="sm"><b>Kofi Owusu</b> · k.owusu@…</td><td class="sm">Applicant · APP-2025-0119 · Complete</td><td><span class="chip chip--ghost">Suppressed</span><br><span class="rate">hard bounce · Sep 20</span></td><td class="sm">Newsletter · Q3 alumni</td><td class="sm muted">—</td><td class="sm">History →</td></tr>
+<tr><td class="sm"><b>Yaa Asante</b> · y.asante@…</td><td class="sm muted">Not in suite — external</td><td><span class="chip">Unsubscribed</span><br><span class="rate">via footer · Sep 11</span></td><td class="sm muted">was: Newsletter</td><td class="sm muted">—</td><td class="sm">History →</td></tr>
+<tr><td class="sm"><b>Kwame Boateng</b> · k.boateng@… <span class="chip chip--ghost">2 rows → 1</span></td><td class="sm">Lead · assessment complete</td><td><span class="chip chip--solid">Opted in</span></td><td class="sm">Newsletter · Q3 alumni</td><td class="sm">Opened · intake reminder · Sep 19</td><td class="sm">History →</td></tr>
+</table>
+<p class="cap" style="margin-top:1.1rem">What changed</p>
+<p class="sm muted">The person is the record, the list is a membership — Kwame shows once with two memberships, not as two rows. <b>"In the suite as"</b> is the join that makes marketing real: the contact row knows the applicant's case, chapter, and officer. Consent is a column with honest states, and <b>suppressed</b> is a first-class status, not a hidden flag. The filter chips are the dedupe report and the consent breakdown in one row. CSV import maps columns and reports dupes instead of silently inserting them; export is one click.</p>
+</div>
+
+<div class="tag">C3 · The contact's history — who they are to us, what we sent them</div>
+<div class="mock">
+<div class="pane">
+<div class="pane__h">
+<div><b>Enoch Enu</b> · e.enu@…<br><span class="rate">Applicant · APP-2026-0001 · Departure · Accra · handler E.Firmino</span></div>
+<div style="text-align:right"><span class="chip chip--solid">Opted in</span><br><span class="rate">via portal preferences · Sep 3</span></div>
+</div>
+<div class="two">
+<div style="padding:1rem">
+<p class="cap">Memberships</p>
+<div style="display:grid;gap:.4rem">
+<div class="seg-row"><span class="sm">Newsletter subscribers</span><span class="x" style="font-size:.6rem">list · since Jul 2</span></div>
+<div class="seg-row"><span class="sm">UK pre-departure</span><span class="x" style="font-size:.6rem">segment · live match</span></div>
+<div class="seg-row"><span class="sm">Visa approved, undeparted</span><span class="x" style="font-size:.6rem">segment · live match</span></div>
+</div>
+<p class="cap" style="margin-top:.9rem">Engagement</p>
+<div style="display:flex;gap:.5rem">
+<div class="stat"><b>9</b><span>Received</span></div>
+<div class="stat"><b>7</b><span>Opened</span></div>
+<div class="stat"><b>4</b><span>Clicked</span></div>
+</div>
+</div>
+<div style="padding:1rem">
+<p class="cap">Campaign history</p>
+<table class="grid">
+<tr><td class="sm">Pre-departure guide</td><td class="sm mono">Sep 20</td><td class="sm">Clicked · checklist</td></tr>
+<tr><td class="sm">Visa approved — next steps</td><td class="sm mono">Sep 12</td><td class="sm">Opened ×3</td></tr>
+<tr><td class="sm">Offer received</td><td class="sm mono">Aug 28</td><td class="sm">Clicked · accept offer</td></tr>
+<tr><td class="sm">Intake reminder</td><td class="sm mono">Aug 19</td><td class="sm muted">—</td></tr>
+</table>
+</div>
+</div>
+</div>
+<p class="cap" style="margin-top:1rem">What changed</p>
+<p class="sm muted">Today a contact is an email address on a list. This is the person: which lists and live segments they're in, every campaign they received with open/click per row, and their suite identity on top — so "should we mail them about X" is answerable at a glance. Segment memberships mark themselves <b>live match</b> — they update themselves; lists are the ones you put them on.</p>
+</div>
+
+<div class="tag" id="addcontact">C4 · The "Add contact" sheet — consent is a decision, not a default</div>
+<div class="mock">
+<div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start">
+<div class="pane" style="width:21rem;flex-shrink:0">
+<div class="pane__h"><b>Add contact</b><span class="mono" style="font-size:.6rem;color:var(--fg-muted)">ESC</span></div>
+<div style="padding:1rem">
+<p class="cap">Who</p>
+<div class="field" style="margin:.4rem 0"><span class="rate">Name</span><br><span class="sm">Efua Osei</span></div>
+<div class="field"><span class="rate">Email</span><br><span class="sm">efua.osei@gmail.com</span></div>
+<div class="field--line" style="margin-top:.4rem;padding:.4rem .6rem"><span class="sm">✓ not on any list — will be created new</span></div>
+
+<p class="cap" style="margin-top:1rem">Add to</p>
+<div class="seg-row"><span class="sm">☑ Newsletter subscribers</span></div>
+<div class="seg-row"><span class="sm">☐ Q3 alumni</span></div>
+<div class="seg-row" style="border-style:dashed"><span class="sm muted">Segments can't be hand-picked — membership is computed. If Efua matches a segment's filter, she's in it automatically.</span></div>
+
+<p class="cap" style="margin-top:1rem">Consent — required</p>
+<div class="seg-row" style="border:1.5px solid var(--ink)"><span class="sm"><b>◉ Send a confirmation email</b><br><span class="muted" style="font-size:.68rem">Double opt-in — she clicks once, done. Recommended.</span></span></div>
+<div class="seg-row"><span class="sm"><b>○ They consented offline</b><br><span class="muted" style="font-size:.68rem">Walk-in, event, verbal — record who &amp; when:</span></span></div>
+<div class="field" style="margin-top:.4rem"><span class="rate">Consent note — required for offline</span><br><span class="sm" style="color:var(--fg-muted)">e.g. signed form at Kumasi fair, Sep 20 · logged by E.F.</span></div>
+<p class="sm muted" style="margin-top:.6rem;font-size:.72rem">There is no silent "confirmed" anymore — every contact's consent has a source: confirm-link click, portal preference, or this note.</p>
+
+<div style="display:flex;gap:.5rem;margin-top:1.1rem"><span class="btn">Add contact</span><span class="btn btn--ghost">Cancel</span></div>
+</div>
+</div>
+
+<div style="flex:1;min-width:20rem">
+<p class="cap">The three states this sheet produces</p>
+<table class="grid">
+<tr><th>Choice</th><th>Contact lands as</th><th>Sendable?</th></tr>
+<tr><td class="sm">Confirmation email</td><td class="sm"><span class="chip">Pending</span> until they click → <span class="chip chip--solid">Opted in</span> <span class="rate">source: confirm link</span></td><td class="sm">After the click only</td></tr>
+<tr><td class="sm">Offline consent + note</td><td class="sm"><span class="chip chip--solid">Opted in</span> <span class="rate">source: "Kumasi fair · E.F. · Sep 20"</span></td><td class="sm">Yes — auditable</td></tr>
+<tr><td class="sm">Email already exists</td><td class="sm">No new row — the existing person gains the membership you ticked; their consent state is untouched</td><td class="sm">Whatever it was</td></tr>
+</table>
+<p class="cap" style="margin-top:1rem">And the CSV door beside it</p>
+<p class="sm muted"><b>Import CSV</b> opens the same sheet widened: file → column mapping (name · email · optional tags) → a dry-run report (<i>412 new · 6 dupes merged · 3 invalid rows</i>) → then the same consent decision applied to the batch. Nothing lands confirmed by accident; the dry-run shows exactly what will happen before it does.</p>
+</div>
+</div>
+</div>
+
+<div class="tag" id="templates">D2 · Templates — cards with a real preview, presets you can fork</div>
+<div class="mock">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.9rem">
+<div><p class="eyebrow">Marketing / Templates</p><h2 style="font-size:1.15rem;margin-top:.2rem">Templates</h2></div>
+<span class="btn">+ New template</span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:.9rem">
+<div class="pane">
+<div class="emailprev" style="border:none;max-width:none"><div class="hd" style="font-size:.7rem;padding:.5rem .7rem">CENTURY NIT</div><div class="bd" style="padding:.7rem;font-size:.62rem"><b>Your visa is approved.</b><br><span class="muted">Case {{case_ref}} is now in Departure…</span></div><div class="ft" style="font-size:.5rem;padding:.4rem .7rem">Preferences · Unsubscribe</div></div>
+<div style="padding:.6rem .8rem;border-top:1.5px solid var(--ink)"><b class="sm">Visa approved — guide</b><br><span class="rate">used in 1 automation · last sent Sep 20</span><br><div style="display:flex;gap:.4rem;margin-top:.45rem"><span class="chip">Edit</span><span class="chip">Use</span><span class="chip chip--ghost">Duplicate</span></div></div>
+</div>
+<div class="pane">
+<div class="emailprev" style="border:none;max-width:none"><div class="hd" style="font-size:.7rem;padding:.5rem .7rem">CENTURY NIT</div><div class="bd" style="padding:.7rem;font-size:.62rem"><b>Offer received, {{first_name}}.</b><br><span class="muted">Three steps to accept…</span></div><div class="ft" style="font-size:.5rem;padding:.4rem .7rem">Preferences · Unsubscribe</div></div>
+<div style="padding:.6rem .8rem;border-top:1.5px solid var(--ink)"><b class="sm">Offer received</b><br><span class="rate">used in 1 automation · last sent Sep 18</span><br><div style="display:flex;gap:.4rem;margin-top:.45rem"><span class="chip">Edit</span><span class="chip">Use</span><span class="chip chip--ghost">Duplicate</span></div></div>
+</div>
+<div class="pane">
+<div class="emailprev" style="border:none;max-width:none"><div class="hd" style="font-size:.7rem;padding:.5rem .7rem">CENTURY NIT</div><div class="bd" style="padding:.7rem;font-size:.62rem"><b>October intake is open.</b><br><span class="muted">Dear {{first_name}}, applications for…</span></div><div class="ft" style="font-size:.5rem;padding:.4rem .7rem">Preferences · Unsubscribe</div></div>
+<div style="padding:.6rem .8rem;border-top:1.5px solid var(--ink)"><b class="sm">Intake announcement</b><br><span class="rate">preset · read-only — fork to customize</span><br><div style="display:flex;gap:.4rem;margin-top:.45rem"><span class="chip chip--ghost">Preset</span><span class="chip">Fork</span><span class="chip">Use</span></div></div>
+</div>
+<div class="pane">
+<div class="emailprev" style="border:none;max-width:none"><div class="hd" style="font-size:.7rem;padding:.5rem .7rem">CENTURY NIT</div><div class="bd" style="padding:.7rem;font-size:.62rem"><b>Your milestone is due.</b><br><span class="muted">Hi {{first_name}}, {{milestone}} on case…</span></div><div class="ft" style="font-size:.5rem;padding:.4rem .7rem">Preferences · Unsubscribe</div></div>
+<div style="padding:.6rem .8rem;border-top:1.5px solid var(--ink)"><b class="sm">Milestone reminder</b><br><span class="rate">custom · used in "Milestone overdue"</span><br><div style="display:flex;gap:.4rem;margin-top:.45rem"><span class="chip">Edit</span><span class="chip">Use</span><span class="chip chip--ghost">Duplicate</span></div></div>
+</div>
+</div>
+<p class="cap" style="margin-top:1.1rem">What changed</p>
+<p class="sm muted">Cards render the template as the miniature it is — the preview is the artifact, not a name in a grid. <b>"Used in"</b> names the campaign or automation and the last send, so nothing gets edited under a running automation blindly. Presets are honest: read-only system starters with <b>Fork</b> — your copy is editable, the preset stays clean and gets the fixed footer/links (no more <span class="mono">admissions@century-nit.com</span>). Shared blocks (header, CTA, footer) come from one place so a brand change doesn't mean editing nine templates.</p>
+</div>
+
+<div class="tag" id="newtemplate">D3 · "New template" — name it, pick a starting point, land in the composer</div>
+<div class="mock">
+<div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start">
+<div class="pane" style="width:24rem;flex-shrink:0">
+<div class="pane__h"><b>New template</b><span class="mono" style="font-size:.6rem;color:var(--fg-muted)">ESC</span></div>
+<div style="padding:1rem">
+<p class="cap">Name</p>
+<div class="field"><span class="sm">Departure checklist — 30 days out</span></div>
+
+<p class="cap" style="margin-top:1rem">Start from</p>
+<div style="display:grid;gap:.5rem">
+<div class="seg-row" style="border:1.5px solid var(--ink)"><span class="sm"><b>◉ Blank</b><br><span class="muted" style="font-size:.68rem">Brand header + footer already in place — you add blocks.</span></span></div>
+<div class="seg-row"><span class="sm"><b>○ Fork a preset</b><br><span class="muted" style="font-size:.68rem">Copy of a system starter — yours to edit, the preset stays clean.</span></span></div>
+<div class="seg-row"><span class="sm"><b>○ Duplicate a template</b><br><span class="muted" style="font-size:.68rem">Copy any custom template — nearest thing to "edit" for a preset too.</span></span></div>
+</div>
+
+<p class="cap" style="margin-top:1rem">Used for</p>
+<div style="display:flex;gap:.4rem"><span class="chip chip--solid">Campaigns</span><span class="chip">Automations</span><span class="chip">Both</span></div>
+<p class="sm muted" style="margin-top:.45rem;font-size:.72rem">Just a hint for the picker — an automation template still works in a one-off campaign.</p>
+
+<div style="display:flex;gap:.5rem;margin-top:1.1rem"><span class="btn">Create &amp; compose →</span><span class="btn btn--ghost">Cancel</span></div>
+</div>
+</div>
+
+<div style="flex:1;min-width:20rem">
+<p class="cap">…and it opens the same composer — template mode</p>
+<div class="emailprev" style="max-width:none">
+<div class="hd">CENTURY NIT</div>
+<div class="bd">
+<div class="cblock sel"><span class="tagx">H1 · editing</span><b style="font-size:.95rem">30 days to departure, {{first_name}}.</b></div>
+<div class="cblock" style="margin-top:.5rem"><span class="tagx">¶</span>Your flight window is {{arrival_window}}. Everything left sits on one checklist —</div>
+<div class="cblock" style="margin-top:.5rem;border-style:dashed;color:var(--fg-muted)"><span class="tagx">+</span>Drop a block — heading · paragraph · button · image · columns · divider</div>
+</div>
+<div class="ft">Century NIT · {{branch}} — case {{case_ref}} · <u>Preferences</u> · <u>Unsubscribe</u></div>
+</div>
+<p class="sm muted" style="margin-top:.6rem">Same three-pane composer as campaigns (D), minus audience and send settings — a template has none. The header and footer are <b>shared blocks</b>: fixed, branded, carrying the working preferences/unsubscribe links — not editable per template, which is exactly why the presets stop shipping dead addresses. Save stores the block tree; a later edit warns "used in Milestone overdue automation" before you touch it.</p>
+</div>
+</div>
+</div>
+
+<div class="tag" id="auto">E · Automations — the events the suite already emits</div>
+<div class="mock">
+<div style="display:flex;gap:.8rem;flex-wrap:wrap">
+<div class="auto"><span class="mono" style="font-size:.55rem">booking.no_show + 2h</span><b>No-show follow-up</b><span class="sm muted">"We missed you — rebook in one tap"</span><br><span class="chip" style="margin-top:.4rem">draft</span></div>
+<div class="auto"><span class="mono" style="font-size:.55rem">assessment.eligible + 3d, 10d</span><b>Assessed, not enrolled</b><span class="sm muted">package nudge, then consultant call offer</span><br><span class="chip chip--solid" style="margin-top:.4rem">live</span></div>
+<div class="auto"><span class="mono" style="font-size:.55rem">offer.received</span><b>Offer received</b><span class="sm muted">congrats + accept-offer steps</span><br><span class="chip chip--solid" style="margin-top:.4rem">live</span></div>
+<div class="auto"><span class="mono" style="font-size:.55rem">visa.approved</span><b>Visa approved</b><span class="sm muted">the pre-departure guide (B2 above)</span><br><span class="chip chip--solid" style="margin-top:.4rem">live</span></div>
+<div class="auto"><span class="mono" style="font-size:.55rem">departure −30d</span><b>Departure countdown</b><span class="sm muted">checklist + arrival details</span><br><span class="chip" style="margin-top:.4rem">draft</span></div>
+<div class="auto"><span class="mono" style="font-size:.55rem">milestone.overdue + 3d</span><b>Milestone overdue</b><span class="sm muted">balance + pay link — respects invoice state</span><br><span class="chip" style="margin-top:.4rem">draft</span></div>
+</div>
+<p class="sm muted" style="margin-top:.9rem">Each automation is <b>event → segment → template → delay</b>, with a per-recipient log and the same suppression rules as campaigns. The events exist — <span class="mono">emitDomain</span> already fires them for the journey; automations subscribe, they don't poll.</p>
+</div>
+
+<div class="tag" id="order">F · Build order + the fixes that ride first</div>
+<div class="mock">
+<table class="grid">
+<tr><th style="width:8rem">Step</th><th>What ships</th><th>Why first</th></tr>
+<tr><td class="mono">0 — stop the bleed</td><td><span class="mono">status="pending"</span> filter in the send loop (fixes the double-send); bounce/complaint → suppression table checked at snapshot time; <em>skipped</em> honored for contacts who unsubscribed between schedule and send.</td><td>Small, safe, and it's mailing people twice today.</td></tr>
+<tr><td class="mono">A — audience</td><td><span class="mono">marketing_opt_in</span> on applicants+leads, portal Preferences page, global suppression, segments (saved live filters), imports → segment membership.</td><td>Everything else inherits its consent and its targeting.</td></tr>
+<tr><td class="mono">C — send & measure</td><td>Pending-only worker with checkpoint resume, link wrapping + UTM, <span class="mono">clicked_at</span>, the report pane (B2), timezone-aware scheduling.</td><td>Turns "did it send" into "did it work".</td></tr>
+<tr><td class="mono">B — compose</td><td>Block editor, merge picker, preheader/from/reply-to, real-recipient preview, checks row.</td><td>Bigger UX lift; lands on infrastructure A+C provide.</td></tr>
+<tr><td class="mono">D — automations</td><td>The six starters, event subscription, per-recipient log.</td><td>Composes A+C — trivial once those exist.</td></tr>
+<tr><td class="mono">E — page split</td><td>Campaigns / Audiences / Templates / Automations tabs with URL state; compose as a sheet; the 1,952-line file broken up.</td><td>Rides along with each step's UI, not a separate push.</td></tr>
+</table>
+<div class="callout"><b>One scope question for you:</b> the audit's consent model is strict — imports can't mark anyone "confirmed" anymore, so existing imported contacts need a decision: grandfather them as opted-in (one-time migration, honest note), or treat them as "never asked" and earn the opt-in via the prompt. I'd grandfather leads and ask applicants — they have a portal to answer in. Say the word and I'll note it in the plan.</div>
+</div>
+
+</body>
+</html>

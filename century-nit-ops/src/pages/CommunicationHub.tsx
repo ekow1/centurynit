@@ -86,7 +86,7 @@ export function CommunicationHub() {
 	}, [directory]);
 
 	const canChat = roleCanAccess(opsRole as OpsRole, "chat");
-	const { conversations, loading: convsLoading, refresh: refreshConvs } = useChatConversations(canChat);
+	const { conversations, loading: convsLoading, refresh: refreshConvs } = useChatConversations(canChat, "staff");
 	const {
 		messages, hasMore, loading: msgsLoading, sending, typing,
 		load, loadMore, send, edit, delete: deleteMessage, react, forward, signalTyping, markRead,

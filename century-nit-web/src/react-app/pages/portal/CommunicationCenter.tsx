@@ -29,7 +29,20 @@ import { useAppState } from "../../context/AppState";
  * `useCommunicationChat`. AI is stateless (history replayed each turn).
  */
 
-type ActiveChannel = "support" | "officer" | "ai";
+type ActiveChannel = "ai" | "support" | "officer";
+
+/** Pane inside the window: the thread, the request list, or new-request intake. */
+type PaneView = "chat" | "requests" | "new-request";
+
+const REQUEST_CATEGORIES: { key: string; label: string }[] = [
+	{ key: "payment", label: "Payment" },
+	{ key: "documents", label: "Documents" },
+	{ key: "application", label: "Application" },
+	{ key: "visa", label: "Visa" },
+	{ key: "departure", label: "Departure" },
+	{ key: "account", label: "Account" },
+	{ key: "other", label: "Other" },
+];
 
 type AIMessage = {
 	id: string;
@@ -47,7 +60,7 @@ interface OfficerCard {
 }
 
 /** Narrow the CurrentContact union to an officer card, or null. */
-function officerCard(ctx: CommunicationContext | null): OfficerCard | null {
+function officerCard(ctx: CommunicationContext | null): (OfficerCard & { presence?: string | null; availabilityNote?: string | null }) | null {
 	const c = ctx?.current;
 	if (!c || c.kind !== "stage_officer") return null;
 	return {
@@ -55,6 +68,8 @@ function officerCard(ctx: CommunicationContext | null): OfficerCard | null {
 		role: c.contact.role ?? "",
 		branch: c.contact.branch ?? "",
 		stageLabel: c.stageLabel,
+		presence: c.contact.presence,
+		availabilityNote: c.contact.availabilityNote,
 	};
 }
 
@@ -69,9 +84,26 @@ export function CommunicationCenter() {
 		window.addEventListener("century:open-chat", openChat);
 		return () => window.removeEventListener("century:open-chat", openChat);
 	}, []);
-	const [activeChannel, setActiveChannel] = useState<ActiveChannel>("support");
+	const [activeChannel, setActiveChannel] = useState<ActiveChannel>("ai");
+	const [pane, setPane] = useState<PaneView>("chat");
 	const [context, setContext] = useState<CommunicationContext | null>(null);
 	const [error, setError] = useState<string | null>(null);
+
+	// New-request intake (inside the window — the portal has no help page).
+	const [reqCategory, setReqCategory] = useState("other");
+	const [reqSubject, setReqSubject] = useState("");
+	const [reqBody, setReqBody] = useState("");
+	const [reqSending, setReqSending] = useState(false);
+	// Files picked on the intake form — raw File objects; they stage only once
+	// the request exists (attachments bind to a conversation id).
+	const [reqFiles, setReqFiles] = useState<File[]>([]);
+	const reqFileRef = useRef<HTMLInputElement>(null);
+	// CSAT after resolve — one rating per conversation per view.
+	const [csatSent, setCsatSent] = useState<Record<string, boolean>>({});
+	// FAB pulse on inbound message while closed.
+	const [pulse, setPulse] = useState(false);
+	// Idle teaser — the launcher tells first-time visitors what it can do.
+	const [teaser, setTeaser] = useState(false);
 
 	// Journey state. Feeds the AI prompt so answers are personalised to the
 	// applicant's actual stage, next step and payment signals (not generic FAQ).
@@ -149,12 +181,34 @@ export function CommunicationCenter() {
 			if (!peekDismissed.current.has(m.id)) {
 				setPeek({ id: m.id, who: m.senderName ?? "Century NIT", text: m.content });
 			}
+			// Amber pulse for ~3s so a fresh reply is visible even with the peek dismissed.
+			setPulse(true);
+			setTimeout(() => setPulse(false), 3200);
 		}
 	}, [open, loadContext]));
 
 	useEffect(() => {
 		if (open) setPeek(null);
 	}, [open]);
+
+	// Idle teaser: with zero unread and zero messages the square FAB alone says
+	// nothing. Show the hint on first visits (max twice, then it retires) and on
+	// hover — an invitation, never a nag.
+	const TEASER_KEY = "century.chat-teaser-seen";
+	useEffect(() => {
+		if (open || peek) return;
+		try {
+			const seen = Number(localStorage.getItem(TEASER_KEY) ?? "0");
+			if (seen < 2) {
+				const t = setTimeout(() => {
+					setTeaser(true);
+					localStorage.setItem(TEASER_KEY, String(seen + 1));
+					setTimeout(() => setTeaser(false), 6000);
+				}, 2500);
+				return () => clearTimeout(t);
+			}
+		} catch { /* storage blocked — hover still works */ }
+	}, [open, peek]);
 
 	// Esc collapses the window to the launcher.
 	useEffect(() => {
@@ -183,9 +237,101 @@ export function CommunicationCenter() {
 	const officer = useMemo(() => officerCard(context), [context]);
 	const isOfficerAssigned = officer !== null;
 
+	/* Requests = the client's support threads, banded by who owes the next move.
+	   Case/stage threads are "case conversations" — they're infrastructure, not
+	   requests, but the applicant should still reach them after the stage moves on. */
+	const requestLists = useMemo(() => {
+		const convs = context?.conversations ?? [];
+		const requests = convs.filter((c) => c.type === "support" && c.audience !== "internal");
+		return {
+			waiting: requests.filter((c) => c.status === "open" && c.waitingOn === "client"),
+			open: requests.filter((c) => c.status === "open" && c.waitingOn !== "client"),
+			resolved: requests.filter((c) => c.status !== "open"),
+			caseThreads: convs.filter((c) => c.type !== "support" && c.audience !== "internal"),
+		};
+	}, [context]);
+
+	/* Open a request (or a past case thread) inside the window. */
+	const openThread = useCallback(async (convId: string, type: string) => {
+		setPane("chat");
+		setActiveChannel(type === "support" ? "support" : "officer");
+		await chat.openConversation(convId);
+	}, [chat]);
+
+	/* New-request intake — same window, one POST. */
+	const submitRequest = useCallback(async () => {
+		if (!reqSubject.trim() || !reqBody.trim() || reqSending) return;
+		setReqSending(true);
+		try {
+			const conv = await meApi.createCommunicationRequest({
+				category: reqCategory,
+				subject: reqSubject.trim(),
+				content: reqBody.trim(),
+				caseId: application.applicationId ?? undefined,
+			});
+			// Attachments come second — staging needs the conversation id that
+			// only exists after the request lands. One upload per file, then a
+			// single follow-up message binds them all.
+			if (reqFiles.length) {
+				const ids: string[] = [];
+				for (const file of reqFiles) {
+					const staged = await meApi.stageCommunicationAttachment(conv.id, {
+						fileName: file.name,
+						contentType: file.type || "application/octet-stream",
+						sizeBytes: file.size,
+					});
+					const res = await fetch(staged.uploadUrl, {
+						method: "PUT",
+						headers: { "Content-Type": file.type || "application/octet-stream", ...staged.headers },
+						body: file,
+					});
+					if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+					ids.push(staged.attachmentId);
+				}
+				if (ids.length) {
+					await meApi.sendCommunicationMessage(conv.id, "📎 Attachment", { attachmentIds: ids });
+				}
+			}
+			setReqSubject("");
+			setReqBody("");
+			setReqCategory("other");
+			setReqFiles([]);
+			void loadContext();
+			setPane("chat");
+			setActiveChannel("support");
+			await chat.openConversation(conv.id);
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Couldn't send the request");
+		} finally {
+			setReqSending(false);
+		}
+	}, [reqSubject, reqBody, reqCategory, reqFiles, reqSending, application.applicationId, chat, loadContext]);
+
+	/* CSAT on a resolved thread. */
+	const rateThread = useCallback(async (convId: string, score: 1 | 5) => {
+		try {
+			await meApi.rateCommunicationConversation(convId, { score });
+			setCsatSent((prev) => ({ ...prev, [convId]: true }));
+			void loadContext();
+		} catch { /* rating is best-effort — the resolve already landed */ }
+	}, [loadContext]);
+
+	// "Seen" receipt: a staff participant's read cursor passed the client's
+	// last own message.
+	const seenBy = useMemo(() => {
+		const conv = context?.conversations.find((c) => c.id === chat.conversationId);
+		const lastOwn = [...chat.messages].reverse().find((m) => m.senderOpsUserId == null && !m.deletedAt);
+		if (!conv || !lastOwn) return null;
+		const seen = conv.participants.find(
+			(p) => p.lastReadAt != null && new Date(p.lastReadAt) >= new Date(lastOwn.createdAt),
+		);
+		return seen?.name ?? null;
+	}, [context, chat.conversationId, chat.messages]);
+
 	/* Switch channel */
 	const handleSelectChannel = useCallback(async (channel: ActiveChannel) => {
 		setActiveChannel(channel);
+		setPane("chat");
 		setError(null);
 		setReplyTo(null);
 		setDraft("");
@@ -198,12 +344,25 @@ export function CommunicationCenter() {
 		}
 	}, [chat, context, isOfficerAssigned]);
 
-	// Initialize default support conversation on first open
+	// Initialize default support conversation on first open of the support tab
 	useEffect(() => {
-		if (open && activeChannel === "support" && !chat.conversationId) {
+		if (open && activeChannel === "support" && !chat.conversationId && pane === "chat") {
 			void handleSelectChannel("support");
 		}
-	}, [open, activeChannel, chat.conversationId, handleSelectChannel]);
+	}, [open, activeChannel, chat.conversationId, pane, handleSelectChannel]);
+
+	// Opening the launcher picks the channel that needs attention: an unread
+	// officer thread wins over support, and AI is the default when nothing
+	// is waiting — the AI answers instantly, the desk takes a while.
+	const openLauncher = useCallback(() => {
+		setOpen((prev) => {
+			if (prev) return false;
+			if (channelUnread.officer > 0) void handleSelectChannel("officer");
+			else if (channelUnread.support > 0) void handleSelectChannel("support");
+			else void handleSelectChannel("ai");
+			return true;
+		});
+	}, [channelUnread, handleSelectChannel]);
 
 	useEffect(() => {
 		const handler = (e: CustomEvent<{ channel?: ActiveChannel }>) => {
@@ -236,6 +395,7 @@ export function CommunicationCenter() {
 			void handleSelectChannel("support");
 		} else {
 			setActiveChannel("support");
+			setPane("chat");
 			void openConversation(target);
 		}
 	}, [searchParams, setSearchParams, handleSelectChannel, openConversation]);
@@ -371,6 +531,11 @@ export function CommunicationCenter() {
 
 	const officerFirstName = officer?.name.split(" ")[0] ?? "your officer";
 
+	const officerPresence =
+		officer?.presence && officer.presence !== "offline"
+			? `● ${officer.presence === "available" ? "online" : officer.presence.replace("_", " ")}`
+			: null;
+
 	const headMeta =
 		activeChannel === "support"
 			? { ini: "CS", name: "Century Support", sub: "Desk open · replies within the hour", ai: false }
@@ -378,7 +543,9 @@ export function CommunicationCenter() {
 				? {
 						ini: (officer?.name ?? "··").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase(),
 						name: officer?.name ?? "Assigned officer",
-						sub: officer ? `${officer.role || "Officer"}${officer.branch ? ` · ${officer.branch}` : ""}` : "Being assigned",
+						sub: officer
+							? `${officerPresence ? `${officerPresence} · ` : ""}${officer.availabilityNote ?? officer.role ?? "Officer"}${officer.branch ? ` · ${officer.branch}` : ""}`
+							: "Being assigned",
 						ai: false,
 					}
 				: { ini: "AI", name: "Century AI", sub: "Instant · knows your journey stage", ai: true };
@@ -388,6 +555,16 @@ export function CommunicationCenter() {
 			{/* Launcher: live badge + last-message peek. The badge is SSE-fed and
 			    works while the window is closed — that is its whole job. */}
 			<div className="cchat-launch">
+				{!open && !peek && teaser ? (
+					<button
+						type="button"
+						className="cchat-peek cchat-peek--teaser"
+						onClick={openLauncher}
+					>
+						<b>Need a hand?</b>
+						Ask the AI — instant · or message the desk
+					</button>
+				) : null}
 				{!open && peek ? (
 					<button
 						type="button"
@@ -420,11 +597,15 @@ export function CommunicationCenter() {
 				) : null}
 				<button
 					type="button"
-					className="cchat-fab"
+					className={`cchat-fab${pulse && !open ? " cchat-fab--pulse" : ""}`}
 					onClick={() => {
-						setOpen((prev) => !prev);
-						if (!open) void handleSelectChannel("support");
+						if (open) setOpen(false);
+						else openLauncher();
 					}}
+					onMouseEnter={() => {
+						if (!open && !peek && totalUnread === 0) setTeaser(true);
+					}}
+					onMouseLeave={() => setTeaser(false)}
 					aria-label={open ? "Close chat" : "Open chat"}
 				>
 					{open ? (
@@ -486,8 +667,16 @@ export function CommunicationCenter() {
 						</div>
 					</header>
 
-					{/* Channel tabs carry their own unread counts */}
+					{/* Channel tabs carry their own unread counts — AI first:
+					    instant answers, then the desk, then your officer. */}
 					<nav className="cchat-tabs" aria-label="Chat channels">
+						<button
+							type="button"
+							onClick={() => handleSelectChannel("ai")}
+							className={activeChannel === "ai" ? "on" : ""}
+						>
+							AI
+						</button>
 						<button
 							type="button"
 							onClick={() => handleSelectChannel("support")}
@@ -504,22 +693,30 @@ export function CommunicationCenter() {
 							{officer ? officer.name.split(" ")[0] : "Officer"}
 							{channelUnread.officer > 0 && <span className="u">{channelUnread.officer}</span>}
 						</button>
-						<button
-							type="button"
-							onClick={() => handleSelectChannel("ai")}
-							className={activeChannel === "ai" ? "on" : ""}
-						>
-							AI
-						</button>
 					</nav>
 
-					{/* Context strip: what this thread is for, right now */}
+					{/* Context strip: what this thread is for, right now. On support
+					    it doubles as the requests-pane toggle — the portal has no
+					    standalone help page, the list lives inside the window. */}
 					<div className="cchat-strip">
-						{activeChannel === "support"
-							? "Triage queue · your file is attached automatically"
-							: activeChannel === "officer"
-								? `${officer?.stageLabel ?? "Officer"} · direct thread`.toUpperCase()
-								: `Context: ${journeyPhase.label}${pendingAction ? ` · ${pendingAction.title}` : ""}`.toUpperCase()}
+						<span>
+							{activeChannel === "support"
+								? pane === "chat"
+									? "Triage queue · your file is attached automatically"
+									: "Your requests"
+								: activeChannel === "officer"
+									? `${officer?.stageLabel ?? "Officer"} · direct thread`.toUpperCase()
+									: `Context: ${journeyPhase.label}${pendingAction ? ` · ${pendingAction.title}` : ""}`.toUpperCase()}
+						</span>
+						{activeChannel === "support" && (
+							<button
+								type="button"
+								className="cchat-strip__link"
+								onClick={() => setPane(pane === "chat" ? "requests" : "chat")}
+							>
+								{pane === "chat" ? "All requests ▾" : "← Back"}
+							</button>
+						)}
 					</div>
 
 					{/* Error Notification */}
@@ -532,8 +729,156 @@ export function CommunicationCenter() {
 
 					{/* Body */}
 					<div style={bodyStyle}>
+						{/* Requests pane — bands by who owes the next move. */}
+						{pane === "requests" && (
+							<div style={streamContainerStyle}>
+								<div style={reqListStyle}>
+									{requestLists.waiting.length > 0 && (
+										<>
+											<p style={reqBandStyle}>WAITING ON YOU</p>
+											{requestLists.waiting.map((c) => (
+												<button key={c.id} type="button" style={reqRowStyle} onClick={() => void openThread(c.id, c.type)}>
+													<span style={reqSubjectStyle}>{c.subject ?? c.title}</span>
+													<span style={reqMetaStyle}>
+														{(c.category ?? "other").toUpperCase()} · {c.lastMessage?.senderName ?? "desk"} replied · needs your reply
+													</span>
+												</button>
+											))}
+										</>
+									)}
+									{requestLists.open.length > 0 && (
+										<>
+											<p style={reqBandStyle}>OPEN</p>
+											{requestLists.open.map((c) => (
+												<button key={c.id} type="button" style={reqRowStyle} onClick={() => void openThread(c.id, c.type)}>
+													<span style={reqSubjectStyle}>{c.subject ?? c.title}</span>
+													<span style={reqMetaStyle}>
+														{(c.category ?? "other").toUpperCase()}
+														{c.participants.find((p) => p.role === "owner") ? ` · with ${c.participants.find((p) => p.role === "owner")!.name.split(" ")[0]}` : " · desk queue"}
+													</span>
+												</button>
+											))}
+										</>
+									)}
+									{requestLists.resolved.length > 0 && (
+										<>
+											<p style={reqBandStyle}>RESOLVED</p>
+											{requestLists.resolved.map((c) => (
+												<button key={c.id} type="button" style={{ ...reqRowStyle, opacity: 0.6 }} onClick={() => void openThread(c.id, c.type)}>
+													<span style={reqSubjectStyle}>{c.subject ?? c.title}</span>
+													<span style={reqMetaStyle}>
+														{(c.category ?? "other").toUpperCase()} · resolved{c.resolvedAt ? ` ${new Date(c.resolvedAt).toLocaleDateString()}` : ""}
+													</span>
+												</button>
+											))}
+										</>
+									)}
+									{requestLists.caseThreads.length > 0 && (
+										<>
+											<p style={reqBandStyle}>CASE CONVERSATIONS</p>
+											{requestLists.caseThreads.map((c) => (
+												<button key={c.id} type="button" style={{ ...reqRowStyle, opacity: 0.75 }} onClick={() => void openThread(c.id, c.type)}>
+													<span style={reqSubjectStyle}>{c.title}</span>
+													<span style={reqMetaStyle}>{c.type.toUpperCase()} · {c.status}</span>
+												</button>
+											))}
+										</>
+									)}
+									{requestLists.waiting.length + requestLists.open.length + requestLists.resolved.length + requestLists.caseThreads.length === 0 && (
+										<p style={{ fontSize: "11px", color: "#52525b", textAlign: "center", padding: "24px 12px" }}>
+											No requests yet — start one below, or just message the desk.
+										</p>
+									)}
+								</div>
+								<button type="button" style={reqNewBtnStyle} onClick={() => setPane("new-request")}>
+									+ NEW REQUEST
+								</button>
+							</div>
+						)}
+
+						{/* New-request intake — category → subject → message. */}
+						{pane === "new-request" && (
+							<div style={streamContainerStyle}>
+								<div style={reqFormStyle}>
+									<p style={reqBandStyle}>NEW REQUEST</p>
+									<div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+										{REQUEST_CATEGORIES.map((cat) => (
+											<button
+												key={cat.key}
+												type="button"
+												style={{ ...quickChipStyle, ...(reqCategory === cat.key ? reqCatOnStyle : {}) }}
+												onClick={() => setReqCategory(cat.key)}
+											>
+												{cat.label}
+											</button>
+										))}
+									</div>
+									<input
+										type="text"
+										value={reqSubject}
+										onChange={(e) => setReqSubject(e.target.value)}
+										placeholder="Subject — what's this about?"
+										style={reqInputStyle}
+										maxLength={255}
+									/>
+									<textarea
+										value={reqBody}
+										onChange={(e) => setReqBody(e.target.value)}
+										placeholder="Tell the desk what you need…"
+										style={reqTextareaStyle}
+										rows={4}
+										maxLength={5000}
+									/>
+									<input
+										ref={reqFileRef}
+										type="file"
+										multiple
+										style={{ display: "none" }}
+										onChange={(e) => {
+											setReqFiles((prev) => [...prev, ...Array.from(e.target.files ?? [])]);
+											if (reqFileRef.current) reqFileRef.current.value = "";
+										}}
+									/>
+									{reqFiles.length > 0 && (
+										<div style={attachTrayStyle}>
+											{reqFiles.map((f, i) => (
+												<span key={`${f.name}-${i}`} style={attachChipStyle}>
+													📎 {f.name}
+													<button
+														type="button"
+														style={attachRemoveStyle}
+														onClick={() => setReqFiles((prev) => prev.filter((_, j) => j !== i))}
+													>
+														×
+													</button>
+												</span>
+											))}
+										</div>
+									)}
+									<button
+										type="button"
+										style={reqAttachBtnStyle}
+										onClick={() => reqFileRef.current?.click()}
+									>
+										+ Attach a file
+									</button>
+									<button
+										type="button"
+										style={{ ...reqNewBtnStyle, marginTop: 0, opacity: reqSubject.trim() && reqBody.trim() && !reqSending ? 1 : 0.5 }}
+										disabled={!reqSubject.trim() || !reqBody.trim() || reqSending}
+										onClick={() => void submitRequest()}
+									>
+										{reqSending ? "SENDING…" : "SEND REQUEST"}
+									</button>
+									<button type="button" style={reqAiHintStyle} onClick={() => handleSelectChannel("ai")}>
+										Try the AI first — answers instantly
+									</button>
+								</div>
+							</div>
+						)}
+
 						{/* Support + Officer channels. Shared components */}
-						{(activeChannel === "support" || activeChannel === "officer") && (
+						{pane === "chat" && (activeChannel === "support" || activeChannel === "officer") && (
 							activeChannel === "officer" && !isOfficerAssigned ? (
 								<div style={unassignedStateStyle}>
 									<div style={{ fontSize: "12px", fontWeight: 700, color: "#000000", marginBottom: "8px", letterSpacing: "0.04em" }}>
@@ -592,11 +937,28 @@ export function CommunicationCenter() {
 										}
 									/>
 
-									{/* Resolved strip. A new message reopens it */}
+									{/* Resolved strip + CSAT. A new message reopens it. */}
 									{chat.conversationStatus === "closed" && (
 										<div style={resolvedBarStyle}>
-											Resolved. Send a message to reopen
+											<span>Resolved. Send a message to reopen</span>
+											{chat.conversationId && !csatSent[chat.conversationId] ? (
+												<span style={{ display: "inline-flex", gap: "6px", marginLeft: "8px" }}>
+													<button type="button" style={csatBtnStyle} onClick={() => void rateThread(chat.conversationId!, 5)} aria-label="This solved it">
+														👍
+													</button>
+													<button type="button" style={csatBtnStyle} onClick={() => void rateThread(chat.conversationId!, 1)} aria-label="Not solved">
+														👎
+													</button>
+												</span>
+											) : csatSent[chat.conversationId ?? ""] ? (
+												<span style={{ marginLeft: "8px" }}>· rated</span>
+											) : null}
 										</div>
+									)}
+
+									{/* Seen receipt: a staff read cursor passed your last message. */}
+									{seenBy && (
+										<div style={seenStyle}>Seen by {seenBy}</div>
 									)}
 
 									{/* Staged attachments */}
@@ -634,7 +996,7 @@ export function CommunicationCenter() {
 						)}
 
 						{/* AI channel. Scripted, local-only */}
-						{activeChannel === "ai" && (
+						{pane === "chat" && activeChannel === "ai" && (
 							<div style={streamContainerStyle}>
 								<div style={messageListStyle}>
 									{aiMessages.map((m) => {
@@ -981,4 +1343,140 @@ const errorCloseStyle: CSSProperties = {
 	color: "#ffffff",
 	cursor: "pointer",
 	fontWeight: 700,
+};
+
+/* Requests pane + intake + receipts (square-corner language throughout) */
+
+const reqListStyle: CSSProperties = {
+	flex: 1,
+	overflowY: "auto",
+	padding: "10px 12px",
+	display: "flex",
+	flexDirection: "column",
+	gap: "6px",
+};
+
+const reqBandStyle: CSSProperties = {
+	fontSize: "9px",
+	fontWeight: 700,
+	fontFamily: "monospace",
+	letterSpacing: "0.08em",
+	color: "#71717a",
+	margin: "10px 0 2px",
+};
+
+const reqRowStyle: CSSProperties = {
+	display: "flex",
+	flexDirection: "column",
+	gap: "3px",
+	textAlign: "left",
+	background: "#ffffff",
+	border: "1px solid #e4e4e7",
+	borderRadius: 0,
+	padding: "9px 10px",
+	cursor: "pointer",
+};
+
+const reqSubjectStyle: CSSProperties = {
+	fontSize: "12px",
+	fontWeight: 700,
+	color: "#18181b",
+};
+
+const reqMetaStyle: CSSProperties = {
+	fontSize: "9px",
+	fontFamily: "monospace",
+	letterSpacing: "0.04em",
+	color: "#71717a",
+};
+
+const reqNewBtnStyle: CSSProperties = {
+	margin: "0 12px 12px",
+	padding: "10px",
+	background: "#18181b",
+	color: "#ffffff",
+	border: "none",
+	borderRadius: 0,
+	fontSize: "11px",
+	fontWeight: 700,
+	fontFamily: "monospace",
+	letterSpacing: "0.06em",
+	cursor: "pointer",
+};
+
+const reqFormStyle: CSSProperties = {
+	flex: 1,
+	overflowY: "auto",
+	padding: "12px",
+	display: "flex",
+	flexDirection: "column",
+	gap: "10px",
+};
+
+const reqInputStyle: CSSProperties = {
+	background: "#f4f4f5",
+	border: "1px solid #e4e4e7",
+	borderRadius: 0,
+	color: "#18181b",
+	padding: "10px 12px",
+	fontSize: "13px",
+	fontFamily: "system-ui, -apple-system, sans-serif",
+	outline: "none",
+};
+
+const reqTextareaStyle: CSSProperties = {
+	...reqInputStyle,
+	resize: "vertical",
+	minHeight: "80px",
+};
+
+const reqCatOnStyle: CSSProperties = {
+	background: "#18181b",
+	color: "#ffffff",
+	borderColor: "#18181b",
+};
+
+const reqAttachBtnStyle: CSSProperties = {
+	alignSelf: "flex-start",
+	background: "none",
+	border: "1px dashed #d4d4d8",
+	borderRadius: 0,
+	color: "#52525b",
+	fontSize: "10px",
+	fontFamily: "monospace",
+	letterSpacing: "0.04em",
+	cursor: "pointer",
+	padding: "5px 10px",
+};
+
+const reqAiHintStyle: CSSProperties = {
+	background: "none",
+	border: "none",
+	color: "#71717a",
+	fontSize: "10px",
+	fontFamily: "monospace",
+	letterSpacing: "0.04em",
+	cursor: "pointer",
+	textAlign: "center",
+	padding: "4px",
+	textDecoration: "underline",
+};
+
+const csatBtnStyle: CSSProperties = {
+	background: "#ffffff",
+	border: "1px solid #d4d4d8",
+	borderRadius: 0,
+	padding: "2px 8px",
+	cursor: "pointer",
+	fontSize: "12px",
+	lineHeight: 1.4,
+};
+
+const seenStyle: CSSProperties = {
+	fontSize: "9px",
+	fontFamily: "monospace",
+	letterSpacing: "0.04em",
+	color: "#a1a1aa",
+	textAlign: "right",
+	padding: "2px 14px 6px",
 };

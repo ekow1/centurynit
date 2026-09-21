@@ -21,6 +21,30 @@ export type ConversationRole = z.infer<typeof conversationRoleSchema>;
 export const conversationStatusSchema = z.enum(["open", "closed", "archived"]);
 export type ConversationStatus = z.infer<typeof conversationStatusSchema>;
 
+/* Request layer — a support thread is one request, not a client's history. */
+
+export const requestCategorySchema = z.enum([
+	"payment",
+	"documents",
+	"application",
+	"visa",
+	"departure",
+	"account",
+	"other",
+]);
+export type RequestCategory = z.infer<typeof requestCategorySchema>;
+
+export const requestPrioritySchema = z.enum(["normal", "high", "urgent"]);
+export type RequestPriority = z.infer<typeof requestPrioritySchema>;
+
+/** Whose move it is: the desk owes a reply, or the client does. */
+export const waitingOnSchema = z.enum(["us", "client"]);
+export type WaitingOn = z.infer<typeof waitingOnSchema>;
+
+/** client = portal-visible; internal = ops-only ticket. */
+export const conversationAudienceSchema = z.enum(["client", "internal"]);
+export type ConversationAudience = z.infer<typeof conversationAudienceSchema>;
+
 export const staffPresenceSchema = z.enum(["available", "busy", "on_leave", "offline"]);
 export type StaffPresence = z.infer<typeof staffPresenceSchema>;
 
@@ -174,6 +198,19 @@ export const chatConversationSchema = z.object({
 	/** For escalations only. */
 	escalatedByOpsUserId: z.string().uuid().nullable().optional(),
 	escalationReason: z.string().nullable().optional(),
+	/* Request layer (0110) */
+	subject: z.string().nullable().optional(),
+	category: requestCategorySchema.nullable().optional(),
+	priority: requestPrioritySchema.optional(),
+	waitingOn: waitingOnSchema.nullable().optional(),
+	audience: conversationAudienceSchema.optional(),
+	/** Set when the office logged the request on the client's behalf. */
+	raisedByOpsUserId: z.string().uuid().nullable().optional(),
+	firstResponseAt: z.string().datetime().nullable().optional(),
+	resolvedAt: z.string().datetime().nullable().optional(),
+	/** 1 = thumbs down, 5 = thumbs up. */
+	csatScore: z.number().int().nullable().optional(),
+	csatNote: z.string().nullable().optional(),
 	participants: z.array(chatParticipantSchema),
 	lastMessage: chatMessageSchema.nullable().optional(),
 	/**
@@ -244,7 +281,48 @@ export const createConversationSchema = z.object({
 	stageKey: z.string().optional(),
 	/** Optional first message to send immediately. */
 	initialMessage: z.string().min(1).max(5000).optional(),
+	/* Request layer — staff filing a request on a client's behalf, or an
+	   internal ticket. Ignored for direct/group conversations. */
+	subject: z.string().min(1).max(255).optional(),
+	category: requestCategorySchema.optional(),
+	priority: requestPrioritySchema.optional(),
+	audience: conversationAudienceSchema.optional(),
 });
+
+/** Client intake: one request = category + subject + first message. */
+export const createCustomerRequestSchema = z.object({
+	category: requestCategorySchema,
+	subject: z.string().min(1).max(255),
+	content: z.string().min(1).max(5000),
+	/** Optional case the request is about. */
+	caseId: z.string().uuid().optional(),
+});
+export type CreateCustomerRequest = z.infer<typeof createCustomerRequestSchema>;
+
+/** Post-resolve rating. */
+export const rateConversationSchema = z.object({
+	/** 1 = thumbs down, 5 = thumbs up. */
+	score: z.union([z.literal(1), z.literal(5)]),
+	note: z.string().max(1000).optional(),
+});
+export type RateConversation = z.infer<typeof rateConversationSchema>;
+
+export const cannedReplySchema = z.object({
+	id: z.string().uuid(),
+	label: z.string(),
+	body: z.string(),
+	scope: z.enum(["all", "branch", "stage"]),
+	scopeValue: z.string().nullable().optional(),
+});
+export type CannedReply = z.infer<typeof cannedReplySchema>;
+
+export const upsertCannedReplySchema = z.object({
+	label: z.string().min(1).max(120),
+	body: z.string().min(1).max(4000),
+	scope: z.enum(["all", "branch", "stage"]).optional().default("all"),
+	scopeValue: z.string().max(80).optional(),
+});
+export type UpsertCannedReply = z.infer<typeof upsertCannedReplySchema>;
 export type CreateConversation = z.infer<typeof createConversationSchema>;
 
 export const sendMessageSchema = z.object({

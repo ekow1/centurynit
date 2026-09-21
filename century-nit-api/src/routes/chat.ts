@@ -16,6 +16,10 @@ import {
 	reactToMessageSchema,
 	messageReactionSchema,
 	typingSchema,
+	requestCategorySchema,
+	requestPrioritySchema,
+	cannedReplySchema,
+	upsertCannedReplySchema,
 } from "century-nit-shared";
 import { requireAuth, requireMfa, requireAnyModule, type AuthVariables } from "../middleware/auth.js";
 import {
@@ -39,6 +43,15 @@ import {
 	stageChatAttachment,
 } from "../services/chat.js";
 import { startClientConversation } from "../services/communication.js";
+import {
+	createStaffRequest,
+	setConversationWaitingOn,
+	escalateConversation,
+	listCannedReplies,
+	createCannedReply,
+	deleteCannedReply,
+	deskStats,
+} from "../services/communication.js";
 
 const idParams = z.object({ id: z.string().uuid() });
 const messageIdParams = z.object({ messageId: z.string().uuid() });
@@ -62,6 +75,13 @@ chatRouter.openapi(
 		path: "/conversations",
 		tags: ["Chat"],
 		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
+		request: {
+			query: z.object({
+				/** staff = generic hub (DMs/groups/internal only); desk = client
+				 *  threads only (the Helpdesk queue). Unset keeps both. */
+				scope: z.enum(["staff", "desk"]).optional(),
+			}),
+		},
 		responses: {
 			200: {
 				content: { "application/json": { schema: chatConversationListSchema } },
@@ -71,7 +91,8 @@ chatRouter.openapi(
 	}),
 	async (c) => {
 		const staff = c.get("staff")!;
-		const list = await listConversations(staff.opsUserId, staff.role);
+		const { scope } = c.req.valid("query");
+		const list = await listConversations(staff.opsUserId, staff.role, scope);
 		return c.json(list);
 	},
 );
@@ -622,5 +643,194 @@ chatRouter.openapi(
 		const body = c.req.valid("json");
 		await setTyping(id, { opsUserId: staff.opsUserId, name: staff.name }, body.typing);
 		return c.body(null, 204);
+	},
+);
+
+/* ── Request layer ────────────────────────────────────────────────────── */
+
+const logRequestSchema = z.object({
+	/** File for a client (phone/walk-in intake). Omit for an internal ticket. */
+	clientUserId: z.string().uuid().optional(),
+	category: requestCategorySchema,
+	subject: z.string().min(1).max(255),
+	content: z.string().min(1).max(5000),
+	internal: z.boolean().optional().default(false),
+	assigneeOpsUserId: z.string().uuid().optional(),
+	priority: requestPrioritySchema.optional(),
+});
+
+chatRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/requests",
+		tags: ["Chat"],
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
+		request: {
+			body: { content: { "application/json": { schema: logRequestSchema } }, required: true },
+		},
+		responses: {
+			201: {
+				content: { "application/json": { schema: chatConversationSchema } },
+				description: "Request logged — client-facing or internal ticket",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const body = c.req.valid("json");
+		const conv = await createStaffRequest(staff.opsUserId, body);
+		return c.json(conv, 201);
+	},
+);
+
+chatRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/conversations/{id}/waiting-on",
+		tags: ["Chat"],
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({ waitingOn: z.enum(["us", "client"]).nullable() }),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: { 200: { description: "Waiting-on updated" } },
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const { waitingOn } = c.req.valid("json");
+		await setConversationWaitingOn(id, waitingOn);
+		return c.json({ ok: true });
+	},
+);
+
+chatRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/conversations/{id}/escalate",
+		tags: ["Chat"],
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: {
+					"application/json": { schema: z.object({ reason: z.string().min(1).max(500) }) },
+				},
+				required: true,
+			},
+		},
+		responses: { 200: { description: "Escalated to the manager queue" } },
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const { id } = c.req.valid("param");
+		const { reason } = c.req.valid("json");
+		await escalateConversation(id, staff.opsUserId, reason);
+		return c.json({ ok: true });
+	},
+);
+
+chatRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/canned-replies",
+		tags: ["Chat"],
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
+		request: {
+			query: z.object({ scope: z.string().optional() }),
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.array(cannedReplySchema) } },
+				description: "Canned replies visible to this staff member",
+			},
+		},
+	}),
+	async (c) => {
+		const { scope } = c.req.valid("query");
+		return c.json(await listCannedReplies(scope ?? null));
+	},
+);
+
+chatRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/canned-replies",
+		tags: ["Chat"],
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
+		request: {
+			body: { content: { "application/json": { schema: upsertCannedReplySchema } }, required: true },
+		},
+		responses: {
+			201: {
+				content: { "application/json": { schema: cannedReplySchema } },
+				description: "Canned reply created",
+			},
+		},
+	}),
+	async (c) => {
+		const body = c.req.valid("json");
+		const row = await createCannedReply(body);
+		return c.json(row, 201);
+	},
+);
+
+chatRouter.openapi(
+	createRoute({
+		method: "delete",
+		path: "/canned-replies/{id}",
+		tags: ["Chat"],
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
+		request: { params: idParams },
+		responses: { 204: { description: "Deleted" } },
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		await deleteCannedReply(id);
+		return c.body(null, 204);
+	},
+);
+
+const deskStatsSchema = z.object({
+	open: z.number().int(),
+	waitingOnClient: z.number().int(),
+	unclaimed: z.number().int(),
+	breaching: z.number().int(),
+	medianFirstResponseMinutes: z.number().nullable(),
+	medianResolutionHours: z.number().nullable(),
+	csatAvg: z.number().nullable(),
+	settings: z.object({
+		hoursLabel: z.string(),
+		firstResponseMinutes: z.number(),
+		resolutionHours: z.number(),
+		daysOpen: z.array(z.number()),
+		openMinutes: z.number(),
+		closeMinutes: z.number(),
+		timezone: z.string(),
+		autoAssignMinutes: z.number(),
+	}),
+});
+
+chatRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/desk/stats",
+		tags: ["Chat"],
+		middleware: [requireAuth, requireMfa, requireAnyModule("chat", "helpdesk")] as const,
+		responses: {
+			200: {
+				content: { "application/json": { schema: deskStatsSchema } },
+				description: "Helpdesk queue statistics + SLA settings",
+			},
+		},
+	}),
+	async (c) => {
+		return c.json(await deskStats());
 	},
 );

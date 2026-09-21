@@ -11,7 +11,7 @@ import { Sheet } from "century-nit-core/ui";
 import { DelegateSheet } from "./case/DelegateSheet";
 import { Toast } from "./OpsDialogs";
 import { API_PREFIX, CHAPTERS_ORDERED, chapterProgress, type ChapterKey } from "century-nit-shared";
-import { gateFor, normaliseStage } from "../lib/caseGate";
+import { CONSULTATION_STEP, casePct, consultationPct, gateFor, normaliseStage } from "../lib/caseGate";
 import { apiFetch } from "../lib/api";
 import { ScopeChip } from "../components/ScopeRoute";
 import type { PendingTask } from "../lib/pendingTasks";
@@ -68,6 +68,8 @@ type Row = {
 	stageLabel: string;
 	step: number;
 	total: number;
+	/** How far through its own plan, 0–100 — see `casePct`/`consultationPct`. */
+	pct: number;
 	sub: string;
 	/** The case's plan — the scope chip; null on consultations. */
 	scopeStages: string[] | null;
@@ -79,15 +81,6 @@ type Row = {
 	/** The case sits in its plan's last working chapter. */
 	atExit: boolean;
 	link: string;
-};
-
-const CONSULTATION_STEP: Record<string, number> = {
-	"Under Review": 1,
-	Assigned: 2,
-	Confirmed: 2,
-	"In Assessment": 3,
-	Completed: 4,
-	Cancelled: 0,
 };
 
 function relativeTime(iso: string) {
@@ -205,6 +198,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 				stageLabel: `${progress.numeral} · ${progress.label}${gate && gate.kind !== "ready" ? ` · ${gate.label}` : gate?.kind === "ready" && gate.next === "completed" ? " · ready to complete" : ""}`,
 				step: progress.step,
 				total: progress.total,
+				pct: casePct(a),
 				sub: [a.university || "No university yet", a.status, open > 0 ? `${open} checklist item${open === 1 ? "" : "s"} open` : null].filter(Boolean).join(" · "),
 				scopeStages: a.scopeStages ?? null,
 				updatedAt,
@@ -233,6 +227,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 				stageLabel: c.status,
 				step: CONSULTATION_STEP[c.status] ?? 1,
 				total: 4,
+				pct: consultationPct(c.status),
 				sub: [c.type, c.targetCountry || null, c.dateTime].filter(Boolean).join(" · "),
 				scopeStages: null,
 				updatedAt,
@@ -267,15 +262,17 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 	}, [consultations, applications, assignees]);
 
 	const officers = useMemo(() => {
-		const map = new Map<string, { id: string; name: string; cases: number; consultations: number; stalled: number; stalledUs: number; stalledClient: number; stages: number[] }>();
+		const map = new Map<string, { id: string; name: string; cases: number; consultations: number; stalled: number; stalledUs: number; stalledClient: number; stages: number[]; pctSum: number; pctN: number }>();
 		for (const r of rows) {
 			if (r.done || !r.staffId || !r.staffName) continue;
-			const o = map.get(r.staffId) ?? { id: r.staffId, name: r.staffName, cases: 0, consultations: 0, stalled: 0, stalledUs: 0, stalledClient: 0, stages: FLIGHT_CHAPTERS.map(() => 0) };
+			const o = map.get(r.staffId) ?? { id: r.staffId, name: r.staffName, cases: 0, consultations: 0, stalled: 0, stalledUs: 0, stalledClient: 0, stages: FLIGHT_CHAPTERS.map(() => 0), pctSum: 0, pctN: 0 };
 			if (r.kind === "case") {
 				o.cases++;
 				const i = FLIGHT_CHAPTERS.indexOf(r.band);
 				if (i >= 0) o.stages[i]++;
 			} else o.consultations++;
+			o.pctSum += r.pct;
+			o.pctN++;
 			if (r.stalled) {
 				o.stalled++;
 				if (r.stalledOn === "client") o.stalledClient++;
@@ -333,13 +330,20 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 		return agg;
 	}, [officers]);
 
+	/** Mean completion across every open record — the strip's "how far through". */
+	const allPct = useMemo(() => {
+		const open = rows.filter((r) => !r.done);
+		return open.length ? Math.round(open.reduce((n, r) => n + r.pct, 0) / open.length) : 0;
+	}, [rows]);
+
 	const unassigned = rows.filter((r) => !r.done && !r.staffId).length;
 	// The officer comes from the URL, so a deep link works even when their
 	// current load is zero — fall back to the staff directory, not the strip.
 	const selectedAssignee = staff !== "all" ? assignees.find((a) => a.opsUserId === staff) : undefined;
 	const selectedOfficer = selectedAssignee
-		? (officers.find((o) => o.id === staff) ?? { id: staff, name: selectedAssignee.name, cases: 0, consultations: 0, stalled: 0, stalledUs: 0, stalledClient: 0, stages: FLIGHT_CHAPTERS.map(() => 0) })
+		? (officers.find((o) => o.id === staff) ?? { id: staff, name: selectedAssignee.name, cases: 0, consultations: 0, stalled: 0, stalledUs: 0, stalledClient: 0, stages: FLIGHT_CHAPTERS.map(() => 0), pctSum: 0, pctN: 0 })
 		: null;
+	const selectedPct = selectedOfficer && selectedOfficer.pctN > 0 ? Math.round(selectedOfficer.pctSum / selectedOfficer.pctN) : null;
 	const officerRows = useMemo(
 		() => (selectedOfficer ? rows.filter((r) => r.staffId === selectedOfficer.id && !r.done).sort((a, b) => b.stalled - a.stalled || a.reference.localeCompare(b.reference)) : []),
 		[rows, selectedOfficer],
@@ -415,6 +419,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 							{counts.stalled_client > 0 ? <> · {counts.stalled_client} on client</> : ""}
 						</span>
 						<StageStrip counts={allStages} />
+						<OfficerProgress pct={allPct} />
 					</button>
 					{officers.map((o) => {
 						const on = staff === o.id;
@@ -451,6 +456,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 									</span>
 								)}
 								<StageStrip counts={o.stages} />
+								<OfficerProgress pct={o.pctN > 0 ? Math.round(o.pctSum / o.pctN) : null} />
 							</button>
 						);
 					})}
@@ -573,18 +579,22 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 														</span>
 													)}
 													{r.atExit ? (
-														<span className="ops-steps__n" title="The last working chapter on this plan">at its exit</span>
+															<span className="ops-steps__n" title="The last working chapter on this plan">at its exit</span>
 													) : (
-														<>
-															<span className="ops-steps" role="img" aria-label={`Chapter ${r.step} of ${r.total} on this plan`}>
-																{Array.from({ length: r.total }).map((_, i) => (
-																	<span key={i} className={i < r.step ? "ops-steps__on" : undefined} />
-																))}
-															</span>
-															<span className="ops-steps__n">{r.step}/{r.total}</span>
-														</>
+															<span className="ops-steps__n" title={`Chapter ${r.step} of ${r.total} on this plan`}>{r.step}/{r.total}</span>
 													)}
 												</div>
+													<div className="ops-prog">
+														<span className="ops-prog__bar" role="img" aria-label={`${r.pct}% through its plan`}>
+															<span className={`ops-prog__fill${r.stalled ? " ops-prog__fill--warn" : ""}`} style={{ width: `${r.pct}%` }} />
+															{Array.from({ length: r.total - 1 }).map((_, i) => (
+																<span key={i} className="ops-prog__seg" style={{ left: `${((i + 1) / r.total) * 100}%` }} />
+															))}
+														</span>
+														<span className="ops-prog__n">
+															{r.pct}%<small> {r.stalled ? "done · stalled" : "done"}</small>
+														</span>
+													</div>
 												<div className="ops-client__sub" title={r.sub}>
 													{r.sub}
 													{r.scopeStages ? <> <ScopeChip scopeStages={r.scopeStages} /></> : null}
@@ -647,6 +657,14 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 							<span className="ops-dkv__k">Stalled</span>
 							<span>{selectedOfficer.stalled > 0 ? <span className="portal-pill" style={{ textDecoration: "underline", textDecorationThickness: 2, fontWeight: 700 }}>{selectedOfficer.stalled} stalled</span> : "none"}</span>
 						</div>
+						{selectedPct !== null && (
+							<>
+								<div className="ops-dkv"><span className="ops-dkv__k">Work done</span><span><b>{selectedPct}%</b> mean across open records</span></div>
+								<div className="ops-prog" style={{ margin: "0.35rem 0 0.2rem" }}>
+									<span className="ops-prog__bar"><span className="ops-prog__fill" style={{ width: `${selectedPct}%` }} /></span>
+								</div>
+							</>
+						)}
 
 						<p className="ops-dsec">This week's hours</p>
 						<div className="ops-hours">
@@ -677,6 +695,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 										) : (
 											r.stageLabel
 										)}
+										<span className="ops-mini__pct">{r.pct}%</span>
 									</span>
 									<Link to={r.link} className="dash-link">open →</Link>
 								</div>
@@ -712,7 +731,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 						<div>
 							<div className="ops-dkv"><span className="ops-dkv__k">Reference</span><span>{previewRow.reference}</span></div>
 							<div className="ops-dkv"><span className="ops-dkv__k">Client</span><span>{previewRow.clientName}{previewRow.clientEmail ? ` · ${previewRow.clientEmail}` : ""}</span></div>
-							<div className="ops-dkv"><span className="ops-dkv__k">Stage</span><span>{previewRow.stageLabel} ({previewRow.step}/{previewRow.total})</span></div>
+							<div className="ops-dkv"><span className="ops-dkv__k">Stage</span><span>{previewRow.stageLabel} ({previewRow.step}/{previewRow.total}) · {previewRow.pct}% done</span></div>
 							<div className="ops-dkv"><span className="ops-dkv__k">Handler</span><span>{previewRow.staffName ?? "— open"}</span></div>
 							<div className="ops-dkv"><span className="ops-dkv__k">Branch</span><span>{previewRow.branch || "—"}</span></div>
 							{previewRow.stalled > 0 && <div className="ops-dkv"><span className="ops-dkv__k">Stalled</span><span>{previewRow.stalled} days without movement</span></div>}
@@ -775,5 +794,25 @@ export function StageStrip({ counts }: { counts: number[] }) {
 		<div className="ops-strip" aria-hidden>
 			{counts.map((c, i) => (c > 0 ? <span key={i} className={`ops-strip__seg ops-strip__seg--${i + 1}`} style={{ flex: c }} /> : null))}
 		</div>
+	);
+}
+
+/**
+ * How far through the load, not just how much of it — the mean completion of
+ * an officer's open records drawn under the stage strip. Capacity answers
+ * "how much"; this answers "how far". Null when they carry nothing.
+ */
+function OfficerProgress({ pct }: { pct: number | null }) {
+	if (pct === null) return null;
+	return (
+		<span className="ops-oprog" aria-label={`${pct}% work done across open records`}>
+			<span className="ops-prog__bar">
+				<span className="ops-prog__fill" style={{ width: `${pct}%` }} />
+			</span>
+			<span className="ops-oprog__lbl">
+				<span>work done</span>
+				<b>{pct}%</b>
+			</span>
+		</span>
 	);
 }

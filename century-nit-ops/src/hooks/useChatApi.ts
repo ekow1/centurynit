@@ -26,7 +26,7 @@ function isForbidden(e: unknown): boolean {
 
 /* ── Conversation list hook ─────────────────────────────────────────────── */
 
-export function useChatConversations(enabled = true) {
+export function useChatConversations(enabled = true, scope?: "staff" | "desk") {
 	const [conversations, setConversations] = useState<ChatConversation[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -36,7 +36,7 @@ export function useChatConversations(enabled = true) {
 	const refresh = useCallback(async () => {
 		if (forbiddenRef.current) return;
 		try {
-			const res = await listChatConversations();
+			const res = await listChatConversations(scope);
 			setConversations(Array.isArray(res?.conversations) ? res.conversations : []);
 			setError(null);
 		} catch (e: any) {
@@ -49,7 +49,7 @@ export function useChatConversations(enabled = true) {
 		} finally {
 			setLoading(false);
 		}
-	}, []);
+	}, [scope]);
 
 	// Initial load only — SSE keeps the list live after that.
 	useEffect(() => {

@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Portal float chat — redesign mock</title>
+<style>
+	:root {
+		--ink: #17161a; --paper: #f5f4f0; --card: #fff; --line: #ddd9cf; --line-lt: #eae7de;
+		--muted: #6e6a60; --amber: #b97a10; --amber-soft: #f3e8d2; --green: #2e6b34; --red: #a33b2e;
+	}
+	* { box-sizing: border-box; margin: 0; padding: 0; }
+	body { font-family: Georgia, "Times New Roman", serif; background: var(--paper); color: var(--ink); font-size: 14px; }
+	.wrap { max-width: 1240px; margin: 0 auto; padding: 1.75rem 1.5rem 4rem; }
+	.mono { font-family: ui-monospace, "Courier New", monospace; }
+	.sect { margin-bottom: 3.5rem; }
+	.sect > .tag { font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber); }
+	.sect > h2 { font-size: 1.15rem; margin: 0.3rem 0 0.25rem; }
+	.sect > p.note { font-size: 0.78rem; color: var(--muted); max-width: 72ch; line-height: 1.55; margin-bottom: 1rem; }
+	.sect > p.note code { font-family: ui-monospace, monospace; font-size: 0.72rem; background: var(--amber-soft); padding: 0 0.3em; }
+	.new { outline: 2px solid var(--amber); outline-offset: -2px; }
+	.newtag { font-family: ui-monospace, monospace; font-size: 0.52rem; letter-spacing: 0.1em; color: var(--amber); text-transform: uppercase; }
+	.row { display: flex; gap: 2rem; align-items: flex-start; flex-wrap: wrap; }
+	.cap { font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-top: 0.6rem; max-width: 16rem; line-height: 1.6; }
+	.cap b { color: var(--ink); }
+
+	/* ═══ LAUNCHER STATES ═══ */
+	.stage { background: #e8e5dc; border: 1px solid var(--line); height: 15rem; position: relative; width: 22rem; }
+	.stage .corner { position: absolute; right: 1rem; bottom: 1rem; display: flex; flex-direction: column; align-items: flex-end; gap: 0.55rem; }
+
+	.fab { width: 52px; height: 52px; border-radius: 0; background: var(--ink); color: var(--paper); display: flex; align-items: center; justify-content: center; position: relative; box-shadow: 0 6px 18px rgba(0,0,0,0.28); cursor: pointer; border: 0; transition: transform 0.15s ease; }
+	.fab:hover { transform: translateY(-2px); }
+	.fab svg { width: 20px; height: 20px; }
+	.fab__badge { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; border-radius: 0; background: var(--red); color: #fff; font-family: ui-monospace, monospace; font-size: 0.62rem; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 5px; border: 2px solid var(--paper); }
+	.fab--pulse::before { content: ""; position: absolute; inset: -6px; border: 2px solid var(--amber); animation: ping 1.6s ease-out infinite; }
+	@keyframes ping { 0% { transform: scale(0.85); opacity: 0.9; } 100% { transform: scale(1.25); opacity: 0; } }
+
+	/* The idle teaser: the launcher tells you what it is FOR. */
+	.tease { display: flex; align-items: center; gap: 0; }
+	.tease__lbl { background: var(--card); border: 1px solid var(--line); border-right: 0; padding: 0.5rem 0.7rem; font-size: 0.7rem; line-height: 1.35; text-align: left; box-shadow: 0 3px 10px rgba(0,0,0,0.08); position: relative; }
+	.tease__lbl b { display: block; font-size: 0.72rem; }
+	.tease__lbl span { color: var(--muted); font-size: 0.64rem; }
+	.tease__lbl::after { content: ""; position: absolute; right: -6px; top: 50%; margin-top: -6px; border: 6px solid transparent; border-left-color: var(--card); }
+	.tease__lbl .k { font-family: ui-monospace, monospace; font-size: 0.5rem; letter-spacing: 0.1em; color: var(--amber); text-transform: uppercase; display: block; margin-bottom: 0.1rem; }
+	.tease--nudge .tease__lbl { animation: slidein 0.35s ease; }
+	@keyframes slidein { from { transform: translateX(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+	.peek { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--amber); padding: 0.55rem 0.75rem; width: 15.5rem; font-size: 0.74rem; box-shadow: 0 4px 14px rgba(0,0,0,0.12); cursor: pointer; text-align: left; position: relative; }
+	.peek b { display: block; font-size: 0.7rem; margin-bottom: 0.1rem; }
+	.peek .who { color: var(--amber); font-family: ui-monospace, monospace; font-size: 0.55rem; letter-spacing: 0.08em; text-transform: uppercase; }
+	.peek .x { position: absolute; top: 0.4rem; right: 0.5rem; color: var(--muted); font-size: 0.7rem; }
+	.peek .dots i { display: inline-block; width: 5px; height: 5px; background: var(--muted); border-radius: 50%; margin-right: 3px; animation: bob 1.2s infinite; }
+	.peek .dots i:nth-child(2) { animation-delay: 0.15s; } .peek .dots i:nth-child(3) { animation-delay: 0.3s; }
+	@keyframes bob { 0%,60%,100% { transform: none; opacity: 0.5; } 30% { transform: translateY(-3px); opacity: 1; } }
+
+	/* ═══ WINDOW ═══ */
+	.win { width: 24rem; border: 1px solid var(--ink); background: var(--card); box-shadow: 0 18px 50px rgba(0,0,0,0.22); display: flex; flex-direction: column; }
+	.win__head { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0.85rem; border-bottom: 1px solid var(--line); }
+	.ava { width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: var(--paper); display: flex; align-items: center; justify-content: center; font-family: ui-monospace, monospace; font-size: 0.62rem; font-weight: 700; flex: none; }
+	.ava--ai { background: var(--amber); }
+	.ava--off { background: #4a3f22; }
+	.win__who p:first-child { font-size: 0.85rem; font-weight: 600; }
+	.win__who p:last-child { font-size: 0.66rem; color: var(--muted); }
+	.win__who .live { color: var(--green); }
+	.ctl { margin-left: auto; display: flex; gap: 0.15rem; }
+	.ctl span { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 0.8rem; cursor: pointer; }
+	.ctl span:hover { color: var(--ink); background: var(--line-lt); }
+
+	.tabs { display: flex; border-bottom: 1px solid var(--line); }
+	.tabs span { flex: 1; text-align: center; font-family: ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0.5rem 0; color: var(--muted); cursor: pointer; position: relative; }
+	.tabs span.on { color: var(--ink); font-weight: 700; box-shadow: inset 0 -2px 0 var(--amber); }
+	.tabs .u { display: inline-block; min-width: 15px; height: 15px; border-radius: 8px; background: var(--red); color: #fff; font-size: 0.52rem; line-height: 15px; padding: 0 4px; margin-left: 0.3rem; font-weight: 700; }
+	.tabs span .dot { position: absolute; top: 6px; right: 14px; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+
+	.strip { font-family: ui-monospace, monospace; font-size: 0.54rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding: 0.4rem 0.85rem; border-bottom: 1px solid var(--line-lt); background: #fbfaf6; }
+	.strip b { color: var(--amber); }
+
+	.msgs { padding: 0.8rem 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; min-height: 12rem; }
+	.msg { max-width: 80%; font-size: 0.78rem; line-height: 1.45; padding: 0.5rem 0.7rem; border: 1px solid var(--line); }
+	.msg.them { align-self: flex-start; background: #fbfaf6; }
+	.msg.us { align-self: flex-end; background: var(--ink); color: var(--paper); border-color: var(--ink); }
+	.msg.ai { align-self: flex-start; background: var(--amber-soft); border-color: #e0cf9f; }
+	.msg .who { font-family: ui-monospace, monospace; font-size: 0.5rem; letter-spacing: 0.08em; color: var(--muted); display: block; margin-bottom: 0.15rem; text-transform: uppercase; }
+	.msg.us .who { color: rgba(245,244,240,0.6); }
+	.sys { align-self: center; font-family: ui-monospace, monospace; font-size: 0.52rem; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; }
+	.seen { align-self: flex-end; font-family: ui-monospace, monospace; font-size: 0.52rem; color: var(--muted); }
+	.seen b { color: var(--green); }
+	.typing { align-self: flex-start; font-size: 0.72rem; color: var(--muted); font-style: italic; }
+
+	/* AI welcome */
+	.aiw { border: 1px solid #e0cf9f; background: var(--amber-soft); padding: 0.7rem 0.8rem; }
+	.aiw h5 { font-size: 0.8rem; margin-bottom: 0.25rem; }
+	.aiw p { font-size: 0.72rem; color: var(--muted); line-height: 1.45; }
+	.prompts { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.55rem; }
+	.prompts span { font-size: 0.66rem; border: 1px solid var(--amber); color: var(--amber); padding: 0.22rem 0.55rem; cursor: pointer; background: var(--card); }
+	.prompts span:hover { background: var(--amber); color: #fff; }
+	.handoff { display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--line); border-left: 3px solid var(--amber); padding: 0.45rem 0.65rem; font-size: 0.7rem; color: var(--muted); margin-top: 0.5rem; }
+	.handoff b { color: var(--ink); }
+
+	.composer { border-top: 1px solid var(--line); padding: 0.55rem 0.85rem; display: flex; gap: 0.5rem; align-items: center; }
+	.composer .in { flex: 1; border: 1px solid var(--line); background: #fbfaf6; font-size: 0.78rem; padding: 0.45rem 0.6rem; color: var(--muted); }
+	.composer .send { width: 32px; height: 32px; background: var(--ink); color: var(--paper); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+	.composer .att { color: var(--muted); cursor: pointer; font-size: 0.9rem; }
+
+	/* resolved strip */
+	.resolved { border-top: 1px solid var(--line); background: #fbfaf6; padding: 0.55rem 0.85rem; }
+	.resolved p { font-size: 0.68rem; color: var(--muted); }
+	.resolved .csat { display: flex; gap: 0.4rem; align-items: center; margin-top: 0.4rem; }
+	.resolved .csat span { border: 1px solid var(--line); padding: 0.2rem 0.6rem; font-size: 0.8rem; cursor: pointer; background: var(--card); }
+	.resolved .csat span:hover { border-color: var(--ink); }
+
+	/* ops side */
+	.ophub { width: 19rem; border: 1px solid var(--ink); background: var(--card); }
+	.ophub .hd { padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--line); font-family: ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; display: flex; justify-content: space-between; }
+	.ophub .row2 { display: flex; justify-content: space-between; padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--line-lt); font-size: 0.76rem; }
+	.ophub .row2 .sub { font-family: ui-monospace, monospace; font-size: 0.52rem; color: var(--muted); display: block; }
+	.ophub .gone { opacity: 0.4; text-decoration: line-through; }
+	.xout { font-family: ui-monospace, monospace; font-size: 0.55rem; color: var(--red); }
+	.strike-note { border: 1px dashed var(--line); padding: 0.5rem 0.8rem; font-size: 0.7rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="sect">
+	<span class="tag">Proposal</span>
+	<h2>The float chat, fixed: AI first, a launcher that actually alerts</h2>
+	<p class="note">Three decisions in one pass. <b>Portal:</b> tabs reorder to <b>AI → Support → Officer</b> (the free instant answer first, humans a tap away), and the launcher earns attention with a real alert state. <b>Requests live inside the float</b> — a list view swaps into the same window; there is no separate portal page. <b>Ops:</b> client support threads leave the staff chat bubble entirely — the standalone desk page owns them; the staff bubble is for colleagues only.</p>
+</div>
+
+<!-- ═══ 1 · LAUNCHER STATES ═══ -->
+<div class="sect">
+	<span class="tag">1 · The launcher — five states</span>
+	<h2>Square, and it always says what it's for</h2>
+	<div class="row">
+		<div>
+			<div class="stage"><div class="corner">
+				<div class="tease">
+					<span class="tease__lbl"><span class="k">Need a hand?</span><b>Ask the AI — instant</b><span>or message the desk</span></span>
+					<button class="fab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+				</div>
+			</div></div>
+			<p class="cap"><b>Idle — but never dead.</b> A square FAB with a teaser label: it surfaces every ~30s on first visits and on hover after. Even with zero messages, the launcher says what it's for.</p>
+		</div>
+		<div>
+			<div class="stage"><div class="corner">
+				<button class="fab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+			</div></div>
+			<p class="cap"><b>Idle, collapsed.</b> After the tease is seen twice it retires to the bare square — no nagging.</p>
+		</div>
+		<div>
+			<div class="stage"><div class="corner">
+				<button class="fab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="fab__badge">2</span></button>
+			</div></div>
+			<p class="cap"><b>Unread.</b> Red count on the FAB — same SSE badge as today, kept.</p>
+		</div>
+		<div>
+			<div class="stage"><div class="corner">
+				<button class="peek"><span class="who">Efua · Officer</span><b>Your offer letter is verified —</b> Leeds confirmed it this morning…<span class="x">✕</span></button>
+				<button class="fab fab--pulse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="fab__badge">1</span></button>
+			</div></div>
+			<p class="cap"><b>New reply.</b> Peek card shows who + first line (dismissable), and the FAB <b>pulses amber for ~3s</b> when the message lands. You can't miss it, but it doesn't nag.</p>
+		</div>
+		<div>
+			<div class="stage"><div class="corner">
+				<button class="peek"><span class="who">Adjoa · Support</span><span class="dots"><i></i><i></i><i></i></span> is typing…<span class="x">✕</span></button>
+				<button class="fab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="fab__badge">1</span></button>
+			</div></div>
+			<p class="cap"><b>Someone's typing.</b> Even closed, the peek shows a live "is typing…" — the desk feels staffed, not abandoned.</p>
+		</div>
+	</div>
+</div>
+
+<!-- ═══ 2 · THE WINDOW — AI FIRST ═══ -->
+<div class="sect">
+	<span class="tag">2 · The window — AI is the default tab</span>
+	<h2>Instant answer first, humans one tab away</h2>
+	<div class="row">
+		<div>
+			<div class="win">
+				<div class="win__head">
+					<span class="ava ava--ai">AI</span>
+					<div class="win__who"><p>Century AI</p><p class="live">● Instant · knows your journey stage</p></div>
+					<div class="ctl"><span>—</span><span>⤢</span><span>✕</span></div>
+				</div>
+				<nav class="tabs">
+					<span class="on">AI</span>
+					<span>Support<span class="u">1</span></span>
+					<span>Efua<span class="dot"></span></span>
+				</nav>
+				<div class="strip">Context: <b>III · Departure</b> · pre-departure fee open</div>
+				<div class="msgs">
+					<div class="aiw">
+						<h5>Hi Ama — I can answer instantly, or hand you to a human.</h5>
+						<p>I know where your file sits (Departure stage, fee open) but I can't see account details. For anything account-specific I'll pass you to Support with our chat attached.</p>
+						<div class="prompts">
+							<span>When is my fee due?</span><span>What documents are left?</span><span>What happens after approval?</span><span>Talk to a human</span>
+						</div>
+					</div>
+					<div class="msg them"><span class="who">You</span>when is my fee due</div>
+					<div class="msg ai"><span class="who">Century AI</span>Your pre-departure instalment is due after visa approval — yours shows <b>due 1 Oct</b>. You can pay by card or mobile money in the portal. For a split or extension, Support can arrange it.</div>
+					<div class="handoff new"><span>Need a person? <b>Hand this to Support</b> — they see this answer.</span><span class="mono" style="font-size:0.55rem;color:var(--amber);cursor:pointer">HAND OFF →</span></div>
+				</div>
+				<div class="composer">
+					<span class="att">📎</span>
+					<div class="in">Ask anything…</div>
+					<div class="send">↑</div>
+				</div>
+			</div>
+			<p class="cap"><b>AI tab (default).</b> Welcome card knows her stage; suggested prompts are real questions; the handoff strip is always visible, quoting the last AI reply into the Support thread.</p>
+		</div>
+
+		<div>
+			<div class="win">
+				<div class="win__head">
+					<span class="ava">CS</span>
+					<div class="win__who"><p>Century Support</p><p><span class="live">● Adjoa online</span> · desk open till 17:00 GMT</p></div>
+					<div class="ctl"><span>—</span><span>⤢</span><span>✕</span></div>
+				</div>
+				<nav class="tabs">
+					<span>AI</span>
+					<span class="on">Support<span class="u">1</span></span>
+					<span>Efua<span class="dot"></span></span>
+				</nav>
+				<div class="strip">Request: <b>split the pre-departure fee</b> · open · <span class="mono" style="color:var(--amber)">ALL REQUESTS ▾</span></div>
+				<div class="msgs">
+					<div class="sys">Request opened 40 min ago · Adjoa took it at 14 min</div>
+					<div class="msg them"><span class="who">You</span>Hi — can I split the pre-departure fee into two?</div>
+					<div class="msg us"><span class="who">Adjoa · finance</span>Yes — half settles the milestone today, the rest before documents release. Shall I adjust it?</div>
+					<div class="typing">Adjoa is typing…</div>
+					<div class="seen">Seen by Adjoa · <b>10:42</b></div>
+				</div>
+				<div class="composer">
+					<span class="att">📎</span>
+					<div class="in">Reply to Adjoa…</div>
+					<div class="send">↑</div>
+				</div>
+			</div>
+			<p class="cap"><b>Support tab.</b> Real presence in the header ("Adjoa online"), the request subject on the strip, a link out to all requests, typing indicator, and a client-visible <b>seen</b> receipt.</p>
+		</div>
+
+		<div>
+			<div class="win">
+				<div class="win__head">
+					<span class="ava ava--off">EM</span>
+					<div class="win__who"><p>Efua Mensah</p><p class="live">● Online · Consultant, Accra</p></div>
+					<div class="ctl"><span>—</span><span>⤢</span><span>✕</span></div>
+				</div>
+				<nav class="tabs">
+					<span>AI</span>
+					<span>Support<span class="u">1</span></span>
+					<span class="on">Efua<span class="dot"></span></span>
+				</nav>
+				<div class="strip">Departure stage · direct thread · <span class="mono" style="color:var(--amber)">PAST THREADS →</span></div>
+				<div class="msgs">
+					<div class="msg us"><span class="who">Efua</span>Offer letter verified — Leeds confirmed it this morning. Nothing needed from you right now.</div>
+					<div class="sys">Resolved · did this help?</div>
+					<div class="resolved new" style="border:1px solid var(--line);padding:0.5rem 0.65rem">
+						<p>Was that everything you needed?</p>
+						<div class="csat"><span>👍</span><span>👎</span><span class="mono" style="font-size:0.55rem;color:var(--muted)">reopens on reply</span></div>
+					</div>
+				</div>
+				<div class="composer">
+					<span class="att">📎</span>
+					<div class="in">Message Efua…</div>
+					<div class="send">↑</div>
+				</div>
+			</div>
+			<p class="cap"><b>Officer tab.</b> Officer's first name on the tab + green presence dot; the CSAT prompt lives at the foot of a resolved thread; "past threads" fixes stage threads vanishing when the stage moves on.</p>
+		</div>
+	</div>
+</div>
+
+<!-- ═══ 2b · REQUESTS INSIDE THE FLOAT ═══ -->
+<div class="sect">
+	<span class="tag">2b · All requests — same window, swapped pane</span>
+	<h2>The list lives in the bubble, not on a page</h2>
+	<p class="note">"All requests" swaps the message pane for the request list — same window, same chrome. Each row opens its thread back in place; "New request" opens the intake form in the same pane. Nothing navigates away from the page the client was on.</p>
+	<div class="row">
+		<div>
+			<div class="win">
+				<div class="win__head">
+					<span class="ava">CS</span>
+					<div class="win__who"><p>My requests</p><p>3 open · 5 resolved</p></div>
+					<div class="ctl"><span style="font-size:0.6rem;font-family:ui-monospace,monospace">← BACK</span><span>✕</span></div>
+				</div>
+				<nav class="tabs">
+					<span>AI</span><span class="on">Support</span><span>Efua<span class="dot"></span></span>
+				</nav>
+				<div class="msgs" style="padding:0;gap:0">
+					<div style="width:100%;font-family:ui-monospace,monospace;font-size:0.54rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);padding:0.45rem 0.85rem;border-bottom:1px solid var(--line-lt)">Waiting on you</div>
+					<div style="width:100%;padding:0.55rem 0.85rem;border-bottom:1px solid var(--line-lt)">
+						<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:0.78rem">Transcript re-upload OK?</b><span class="mono" style="font-size:0.52rem;color:var(--amber)">DOCS</span></div>
+						<p style="font-size:0.68rem;color:var(--muted);margin-top:0.1rem">Efua replied · "Yes, clear — verified"</p>
+					</div>
+					<div style="width:100%;font-family:ui-monospace,monospace;font-size:0.54rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);padding:0.45rem 0.85rem;border-bottom:1px solid var(--line-lt)">Open · we're on it</div>
+					<div style="width:100%;padding:0.55rem 0.85rem;border-bottom:1px solid var(--line-lt);background:var(--amber-soft)">
+						<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:0.78rem">Split the pre-departure fee?</b><span class="mono" style="font-size:0.52rem;color:var(--amber)">PAYMENT</span></div>
+						<p style="font-size:0.68rem;color:var(--muted);margin-top:0.1rem">Adjoa · "half settles the milestone today…"</p>
+					</div>
+					<div style="width:100%;padding:0.55rem 0.85rem;border-bottom:1px solid var(--line-lt)">
+						<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:0.78rem">Visa letter timing</b><span class="mono" style="font-size:0.52rem;color:var(--amber)">VISA</span></div>
+						<p style="font-size:0.68rem;color:var(--muted);margin-top:0.1rem">Support desk · picked up 1 h ago</p>
+					</div>
+					<div style="width:100%;font-family:ui-monospace,monospace;font-size:0.54rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);padding:0.45rem 0.85rem;border-bottom:1px solid var(--line-lt)">Resolved</div>
+					<div style="width:100%;padding:0.55rem 0.85rem;opacity:0.6">
+						<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:0.78rem">Receipt for the deposit</b><span class="mono" style="font-size:0.52rem;color:var(--green)">DONE</span></div>
+					</div>
+				</div>
+				<div class="composer" style="justify-content:space-between">
+					<span class="mono" style="font-size:0.55rem;color:var(--muted)">OR START A NEW ONE</span>
+					<span class="send" style="width:auto;padding:0 0.8rem;font-family:ui-monospace,monospace;font-size:0.55rem;letter-spacing:0.08em">+ NEW REQUEST</span>
+				</div>
+			</div>
+			<p class="cap"><b>Requests view.</b> Banded waiting-on-you / open / resolved, category tags on the right, a tap reopens the thread in place.</p>
+		</div>
+		<div>
+			<div class="win">
+				<div class="win__head">
+					<span class="ava">CS</span>
+					<div class="win__who"><p>New request</p><p>goes to the desk queue</p></div>
+					<div class="ctl"><span style="font-size:0.6rem;font-family:ui-monospace,monospace">← BACK</span><span>✕</span></div>
+				</div>
+				<div class="msgs" style="gap:0.65rem">
+					<div>
+						<span class="mono" style="font-size:0.52rem;letter-spacing:0.1em;color:var(--muted);text-transform:uppercase">What's it about?</span>
+						<div class="prompts" style="margin-top:0.35rem">
+							<span style="border-color:var(--ink);color:var(--ink);background:var(--amber-soft)">Payment</span><span style="border-color:var(--line);color:var(--muted)">Documents</span><span style="border-color:var(--line);color:var(--muted)">Visa</span><span style="border-color:var(--line);color:var(--muted)">Application</span><span style="border-color:var(--line);color:var(--muted)">Departure</span><span style="border-color:var(--line);color:var(--muted)">Other</span>
+						</div>
+					</div>
+					<div class="fin-mock" style="border-bottom:1px solid var(--line);padding:0.4rem 0.1rem;font-size:0.76rem;color:var(--muted)">Subject — one line</div>
+					<div class="fin-mock" style="border:1px solid var(--line);padding:0.5rem 0.6rem;font-size:0.76rem;color:var(--muted);min-height:3.4rem">Tell us what's happening… <span style="float:right;color:var(--line)">📎</span></div>
+					<div class="handoff" style="margin-top:0"><span>Quick question? <b>Ask the AI first</b> — it's instant.</span><span class="mono" style="font-size:0.55rem;color:var(--amber);cursor:pointer">TRY AI →</span></div>
+				</div>
+				<div class="composer" style="justify-content:flex-end"><span class="send" style="width:auto;padding:0 0.9rem;font-family:ui-monospace,monospace;font-size:0.55rem;letter-spacing:0.08em">SEND REQUEST</span></div>
+			</div>
+			<p class="cap"><b>New request.</b> Category chips → subject → message → attach — the structured intake, still inside the float. "Try AI" is offered one tap away.</p>
+		</div>
+	</div>
+</div>
+
+<!-- ═══ 3 · OPS SIDE ═══ -->
+<div class="sect">
+	<span class="tag">3 · Ops — the float is for colleagues, not clients</span>
+	<h2>Client threads leave the staff bubble</h2>
+	<p class="note">Today the ops chat hub mixes staff DMs <i>and</i> client support threads — a consultant's bubble pings for helpdesk work that belongs to the desk queue. Proposed: the float carries <b>staff-only threads</b> (DMs, groups, mentions); every client-facing thread lives on the Helpdesk page where claim/queue state exists. A slim badge still counts the desk — it links <i>to the desk</i>, not into the bubble.</p>
+	<div class="row">
+		<div>
+			<div class="ophub">
+				<div class="hd"><span>Staff chat</span><span class="mono" style="color:var(--muted)">ONLINE 6</span></div>
+				<div class="row2"><span>Efua Mensah<span class="sub">DM · "sent you the file"</span></span><span class="mono" style="font-size:0.55rem;color:var(--muted)">2m</span></div>
+				<div class="row2"><span>Finance — Accra<span class="sub">Group · 4 members</span></span><span class="mono" style="font-size:0.55rem;color:var(--muted)">1h</span></div>
+				<div class="row2 gone"><span>Support · Ama Serwaa<span class="sub">client thread</span></span><span class="xout">moved →</span></div>
+				<div class="row2 gone"><span>Support · Kofi Boateng<span class="sub">client thread</span></span><span class="xout">moved →</span></div>
+				<div class="strike-note">Client threads moved to <b>Helpdesk</b> — the desk's "unclaimed" count shows on nav, not in here.</div>
+			</div>
+			<p class="cap"><b>After.</b> The bubble answers "who's talking to <i>me</i>" — never "who's waiting on <i>the desk</i>". Desk work gets triaged where claim, bands and SLAs live.</p>
+		</div>
+		<div>
+			<div class="ophub">
+				<div class="hd"><span>Staff chat</span><span class="mono" style="color:var(--muted)">ONLINE 6</span></div>
+				<div class="row2"><span>Efua Mensah<span class="sub">DM · "sent you the file"</span></span><span class="mono" style="font-size:0.55rem;color:var(--muted)">2m</span></div>
+				<div class="row2"><span>Support · Ama Serwaa<span class="sub">"can I split the fee?"</span></span><span class="mono" style="font-size:0.55rem;color:var(--red)">!</span></div>
+				<div class="row2"><span>Support · Kofi Boateng<span class="sub">"transcript ok?"</span></span><span class="mono" style="font-size:0.55rem;color:var(--red)">!</span></div>
+				<div class="row2"><span>Finance — Accra<span class="sub">Group</span></span><span class="mono" style="font-size:0.55rem;color:var(--muted)">1h</span></div>
+			</div>
+			<p class="cap"><b>Before.</b> Every unread client thread pings every bubble — the same alert duplicated to twenty staff, answered by whoever clicks first.</p>
+		</div>
+	</div>
+</div>
+
+<!-- ═══ 4 · CHANGE LIST ═══ -->
+<div class="sect">
+	<span class="tag">4 · The change list</span>
+	<h2>What actually moves</h2>
+	<div class="frame">
+		<table style="width:100%;border-collapse:collapse;font-size:0.78rem">
+			<tr><td style="padding:0.5rem 0.9rem;border-bottom:1px solid var(--line-lt);font-family:ui-monospace,monospace;font-size:0.68rem;white-space:nowrap;vertical-align:top">portal tabs</td><td style="padding:0.5rem 0.9rem;border-bottom:1px solid var(--line-lt)">Order becomes <code>AI → Support → Officer</code>; AI is the default tab on open. Officer tab shows presence dot + real hours. Support strip's "All requests" swaps the pane for the request list <b>inside the window</b> — no standalone portal page; intake form lives in the same swapped pane. Officer strip links "Past threads →" so stage threads stop vanishing</td></tr>
+			<tr><td style="padding:0.5rem 0.9rem;border-bottom:1px solid var(--line-lt);font-family:ui-monospace,monospace;font-size:0.68rem;white-space:nowrap;vertical-align:top">portal launcher</td><td style="padding:0.5rem 0.9rem;border-bottom:1px solid var(--line-lt)">Square FAB (not round — matches the product's square corners); idle teaser label ("Ask the AI — instant · or message the desk") that surfaces ~every 30s on first visits and on hover, retires after two views; amber pulse ~3s when a message lands; peek shows "is typing…"; unread badge kept, dismiss kept</td></tr>
+			<tr><td style="padding:0.5rem 0.9rem;border-bottom:1px solid var(--line-lt);font-family:ui-monospace,monospace;font-size:0.68rem;white-space:nowrap;vertical-align:top">portal window</td><td style="padding:0.5rem 0.9rem;border-bottom:1px solid var(--line-lt)">AI welcome card + suggested prompts + always-visible handoff strip; support header shows who's online with real desk hours; "seen by · time" receipt; CSAT prompt on resolved threads</td></tr>
+			<tr><td style="padding:0.5rem 0.9rem;border-bottom:1px solid var(--line-lt);font-family:ui-monospace,monospace;font-size:0.68rem;white-space:nowrap;vertical-align:top">ops hub</td><td style="padding:0.5rem 0.9rem;border-bottom:1px solid var(--line-lt)">Client-facing threads (<code>support/case/stage/applicant</code>) filtered out of the staff chat hub — staff bubble = DMs + groups + mentions only. Nav badge on Helpdesk carries the unclaimed count instead</td></tr>
+			<tr><td style="padding:0.5rem 0.9rem;font-family:ui-monospace,monospace;font-size:0.68rem;white-space:nowrap;vertical-align:top">server</td><td style="padding:0.5rem 0.9rem">Chat-hub subscription/query drops customer-facing types for ops users (they're already excluded from <code>CLIENT_VISIBLE_TYPES</code> logic — this is the mirror). Everything else rides the request-layer migration from the desk mock</td></tr>
+		</table>
+	</div>
+</div>
+
+</div>
+</body>
+</html>

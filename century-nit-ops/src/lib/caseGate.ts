@@ -1,4 +1,4 @@
-import { JOURNEY_STAGES, VISA_STAGE_LABELS, nextStepFor, type JourneyStage } from "century-nit-shared";
+import { JOURNEY_STAGES, VISA_STAGE_LABELS, chapterProgress, nextStepFor, type JourneyStage } from "century-nit-shared";
 import type { MockApplication } from "century-nit-core/ops";
 
 /**
@@ -90,6 +90,37 @@ export function gateFor(app: MockApplication): Gate {
 		return work(`Checklist ${done} of ${required.length}`);
 	}
 	return work(reason.replace(/^cannot (advance|mark complete)[^:]*:\s*/i, ""));
+}
+
+/**
+ * How far a case is through its own plan, 0–100: the chapters already done
+ * plus the checklist fraction of the chapter it sits in. Scope-aware — a
+ * visa-only plan has fewer chapters, so its bar fills faster. A case with no
+ * checklist items sits at its chapter boundary rather than pretending midway
+ * progress, and an unfinished case never reaches 100.
+ */
+export function casePct(app: MockApplication): number {
+	const stage = normaliseStage(app.stage);
+	if (stage === "completed") return 100;
+	const p = chapterProgress(app.scopeStages ?? null, stage);
+	const items = app.checklist ?? [];
+	const frac = items.length > 0 ? items.filter((i) => i.checked).length / items.length : 0;
+	return Math.min(99, Math.round(((p.step - 1 + frac) / p.total) * 100));
+}
+
+/** A consultation's place on its own four-step ladder. */
+export const CONSULTATION_STEP: Record<string, number> = {
+	"Under Review": 1,
+	Assigned: 2,
+	Confirmed: 2,
+	"In Assessment": 3,
+	Completed: 4,
+	Cancelled: 0,
+};
+
+export function consultationPct(status: string): number {
+	if (status === "Completed" || status === "Cancelled") return 100;
+	return Math.round(((CONSULTATION_STEP[status] ?? 1) / 4) * 100);
 }
 
 export function ageDays(app: MockApplication): number {

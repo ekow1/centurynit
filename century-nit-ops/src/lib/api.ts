@@ -518,8 +518,8 @@ export type StaffDirectoryResponse = {
 
 const CHAT = `${API_PREFIX}/chat`;
 
-export function listChatConversations(): Promise<ChatConversationListResponse> {
-	return apiFetch<ChatConversationListResponse>(`${CHAT}/conversations`);
+export function listChatConversations(scope?: "staff" | "desk"): Promise<ChatConversationListResponse> {
+	return apiFetch<ChatConversationListResponse>(`${CHAT}/conversations${scope ? `?scope=${scope}` : ""}`);
 }
 
 export function createChatConversation(body: {
@@ -663,6 +663,71 @@ export function setChatConversationOwner(
 		method: "POST",
 		body: JSON.stringify({ opsUserId }),
 	});
+}
+
+/* ── Request layer ──────────────────────────────────────────────────────── */
+
+/** Log a request for a client (phone/walk-in) or an internal staff ticket. */
+export function createChatRequest(body: {
+	clientUserId?: string;
+	category: string;
+	subject: string;
+	content: string;
+	internal?: boolean;
+	assigneeOpsUserId?: string;
+	priority?: "normal" | "high" | "urgent";
+}): Promise<ChatConversation> {
+	return apiFetch<ChatConversation>(`${CHAT}/requests`, {
+		method: "POST",
+		body: JSON.stringify(body),
+	});
+}
+
+export function setChatWaitingOn(
+	conversationId: string,
+	waitingOn: "us" | "client" | null,
+): Promise<{ ok: boolean }> {
+	return apiFetch<{ ok: boolean }>(`${CHAT}/conversations/${conversationId}/waiting-on`, {
+		method: "PATCH",
+		body: JSON.stringify({ waitingOn }),
+	});
+}
+
+export function escalateChatConversation(
+	conversationId: string,
+	reason: string,
+): Promise<{ ok: boolean }> {
+	return apiFetch<{ ok: boolean }>(`${CHAT}/conversations/${conversationId}/escalate`, {
+		method: "POST",
+		body: JSON.stringify({ reason }),
+	});
+}
+
+export type CannedReply = {
+	id: string;
+	label: string;
+	body: string;
+	scope: "all" | "branch" | "stage";
+	scopeValue: string | null;
+};
+
+export function listCannedReplies(): Promise<CannedReply[]> {
+	return apiFetch<CannedReply[]>(`${CHAT}/canned-replies`);
+}
+
+export type DeskStats = {
+	open: number;
+	waitingOnClient: number;
+	unclaimed: number;
+	breaching: number;
+	medianFirstResponseMinutes: number | null;
+	medianResolutionHours: number | null;
+	csatAvg: number | null;
+	settings: { hoursLabel: string; firstResponseMinutes: number; resolutionHours: number };
+};
+
+export function getDeskStats(): Promise<DeskStats> {
+	return apiFetch<DeskStats>(`${CHAT}/desk/stats`);
 }
 
 export type ChatConversationContext = {

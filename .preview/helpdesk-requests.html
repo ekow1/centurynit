@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Helpdesk → Requests — mock</title>
+<style>
+	:root {
+		--ink: #17161a; --paper: #f5f4f0; --card: #fff; --line: #ddd9cf; --line-lt: #eae7de;
+		--muted: #6e6a60; --amber: #b97a10; --amber-soft: #f3e8d2; --green: #2e6b34; --red: #a33b2e;
+	}
+	* { box-sizing: border-box; margin: 0; padding: 0; }
+	body { font-family: Georgia, "Times New Roman", serif; background: var(--paper); color: var(--ink); font-size: 14px; }
+	.wrap { max-width: 1240px; margin: 0 auto; padding: 1.75rem 1.5rem 4rem; }
+	.mono { font-family: ui-monospace, "Courier New", monospace; }
+
+	.sect { margin-bottom: 3.5rem; }
+	.sect > .tag { font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber); }
+	.sect > h2 { font-size: 1.15rem; margin: 0.3rem 0 0.25rem; }
+	.sect > p.note { font-size: 0.78rem; color: var(--muted); max-width: 72ch; line-height: 1.55; margin-bottom: 1rem; }
+	.sect > p.note code { font-family: ui-monospace, monospace; font-size: 0.72rem; background: var(--amber-soft); padding: 0 0.3em; }
+	.frame { border: 1px solid var(--line); background: var(--card); }
+	.new { outline: 2px solid var(--amber); outline-offset: -2px; }
+	.newtag { font-family: ui-monospace, monospace; font-size: 0.52rem; letter-spacing: 0.1em; color: var(--amber); text-transform: uppercase; }
+
+	/* shared bits */
+	.pill { font-family: ui-monospace, monospace; font-size: 0.55rem; letter-spacing: 0.05em; padding: 0.12rem 0.45rem; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+	.pill--amber { border-color: var(--amber); color: var(--amber); }
+	.pill--red { border-color: var(--red); color: var(--red); }
+	.pill--green { border-color: var(--green); color: var(--green); }
+	.btn { font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.35rem 0.8rem; border: 1px solid var(--ink); background: var(--ink); color: var(--paper); cursor: pointer; }
+	.btn--ghost { background: none; color: var(--ink); border-color: var(--line); }
+	.btn--sm { padding: 0.25rem 0.55rem; font-size: 0.55rem; }
+
+	/* ═══ PORTAL HELP ═══ */
+	.portal { max-width: 46rem; }
+	.p-head { padding: 1rem 1.2rem; border-bottom: 1px solid var(--line); }
+	.p-head h3 { font-size: 1.05rem; }
+	.p-head p { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; }
+	.p-band { display: flex; justify-content: space-between; align-items: baseline; padding: 0.55rem 1.2rem 0.35rem; border-bottom: 1.5px solid var(--ink); margin-top: 0.6rem; }
+	.p-band span:first-child { font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.13em; text-transform: uppercase; font-weight: 700; }
+	.p-band span:last-child { font-family: ui-monospace, monospace; font-size: 0.56rem; color: var(--muted); letter-spacing: 0.06em; }
+	.req { display: grid; grid-template-columns: 1fr auto; gap: 0.15rem 1rem; padding: 0.7rem 1.2rem; border-bottom: 1px solid var(--line-lt); cursor: pointer; }
+	.req:hover { background: #faf8f2; }
+	.req__subj { font-size: 0.86rem; font-weight: 600; }
+	.req__subj .cat { font-family: ui-monospace, monospace; font-size: 0.55rem; color: var(--amber); font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; margin-right: 0.5em; }
+	.req__meta { font-size: 0.7rem; color: var(--muted); grid-column: 1; }
+	.req__right { grid-row: 1 / span 2; grid-column: 2; text-align: right; display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-end; justify-content: center; }
+	.req__when { font-family: ui-monospace, monospace; font-size: 0.56rem; color: var(--muted); }
+
+	.intake { padding: 1rem 1.2rem; border-top: 2px solid var(--ink); background: #fbfaf6; }
+	.intake h4 { font-size: 0.9rem; margin-bottom: 0.6rem; }
+	.frow { display: flex; gap: 0.6rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
+	.fsel { font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.06em; border: 1px solid var(--line); background: var(--card); padding: 0.4rem 0.6rem; color: var(--muted); }
+	.fsel.on { border-color: var(--ink); color: var(--ink); background: var(--amber-soft); }
+	.fin { width: 100%; border: 0; border-bottom: 1px solid var(--line); background: none; font: inherit; font-size: 0.82rem; padding: 0.35rem 0.1rem; outline: none; }
+	.ai-hint { display: flex; align-items: center; gap: 0.6rem; font-size: 0.74rem; color: var(--muted); border: 1px dashed var(--line); padding: 0.5rem 0.7rem; margin-bottom: 0.7rem; }
+	.officer-strip { display: flex; align-items: center; gap: 0.8rem; padding: 0.7rem 1.2rem; border-top: 1px solid var(--line); font-size: 0.76rem; }
+	.pres { width: 7px; height: 7px; background: var(--green); display: inline-block; }
+	.pres.off { background: var(--line); }
+
+	/* bubble mini */
+	.bubble { display: flex; gap: 0.9rem; align-items: flex-start; margin-top: 1rem; }
+	.bubble .win { width: 15rem; border: 1px solid var(--line); background: var(--card); }
+	.bubble .win .hd { padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--line); font-size: 0.72rem; display: flex; justify-content: space-between; }
+	.bubble .win .bd { padding: 0.6rem 0.7rem; font-size: 0.7rem; color: var(--muted); }
+	.bubble .arr { font-size: 0.72rem; color: var(--muted); max-width: 16rem; line-height: 1.5; padding-top: 0.3rem; }
+
+	/* ═══ OPS DESK ═══ */
+	.desk { display: grid; grid-template-columns: 300px 1fr 270px; min-height: 40rem; }
+	.qrail { border-right: 1px solid var(--line); background: #fbfaf6; }
+	.qhead { padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--line); }
+	.qhead .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
+	.chip { font-family: ui-monospace, monospace; font-size: 0.54rem; letter-spacing: 0.06em; padding: 0.2rem 0.5rem; border: 1px solid var(--line); color: var(--muted); cursor: pointer; }
+	.chip.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+	.qband { font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 0.5rem 0.9rem 0.3rem; border-bottom: 1.5px solid var(--ink); display: flex; justify-content: space-between; font-weight: 700; }
+	.qband.hot { background: var(--ink); color: var(--paper); }
+	.qband .n { font-weight: 400; }
+	.qrow { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--line-lt); cursor: pointer; }
+	.qrow:hover { background: #f5f2ea; }
+	.qrow.sel { background: var(--ink); color: var(--paper); }
+	.qrow.sel .qsub, .qrow.sel .qwhen { color: rgba(245,244,240,0.6); }
+	.qtop { display: flex; justify-content: space-between; align-items: baseline; }
+	.qsubj { font-size: 0.8rem; font-weight: 600; }
+	.qsub { font-family: ui-monospace, monospace; font-size: 0.55rem; color: var(--muted); letter-spacing: 0.04em; margin-top: 0.15rem; }
+	.qsub .cat { color: var(--amber); text-transform: uppercase; letter-spacing: 0.08em; }
+	.qwhen { font-family: ui-monospace, monospace; font-size: 0.55rem; color: var(--muted); white-space: nowrap; }
+
+	.thread { display: flex; flex-direction: column; }
+	.thead2 { padding: 0.7rem 1rem; border-bottom: 1px solid var(--line); }
+	.thead2 .subj { font-size: 0.95rem; font-weight: 600; }
+	.thead2 .meta { display: flex; gap: 0.4rem; align-items: center; margin-top: 0.4rem; flex-wrap: wrap; }
+	.tacts { margin-left: auto; display: flex; gap: 0.35rem; }
+	.msgs { flex: 1; padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.55rem; }
+	.msg { max-width: 75%; font-size: 0.8rem; line-height: 1.45; padding: 0.5rem 0.7rem; border: 1px solid var(--line); }
+	.msg.them { align-self: flex-start; background: #fbfaf6; }
+	.msg.us { align-self: flex-end; background: var(--ink); color: var(--paper); border-color: var(--ink); }
+	.msg.sys { align-self: center; border: 0; background: none; font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; padding: 0.2rem; }
+	.msg .who { font-family: ui-monospace, monospace; font-size: 0.52rem; letter-spacing: 0.08em; color: var(--muted); display: block; margin-bottom: 0.2rem; text-transform: uppercase; }
+	.msg.us .who { color: rgba(245,244,240,0.6); }
+	.composer { border-top: 1px solid var(--line); padding: 0.6rem 1rem; }
+	.composer .snip { display: flex; gap: 0.3rem; margin-bottom: 0.45rem; flex-wrap: wrap; }
+	.composer textarea { width: 100%; border: 1px solid var(--line); font: inherit; font-size: 0.8rem; padding: 0.5rem 0.6rem; resize: none; background: #fbfaf6; }
+	.composer .row { display: flex; justify-content: space-between; align-items: center; margin-top: 0.4rem; }
+	.composer .hint { font-family: ui-monospace, monospace; font-size: 0.55rem; color: var(--muted); }
+
+	.rail2 { border-left: 1px solid var(--line); background: #fbfaf6; }
+	.rsec { padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--line-lt); }
+	.rk { font-family: ui-monospace, monospace; font-size: 0.54rem; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.45rem; }
+	.rrow { display: flex; justify-content: space-between; font-size: 0.75rem; padding: 0.18rem 0; }
+	.rrow b { font-variant-numeric: tabular-nums; }
+	.ract { display: flex; flex-direction: column; gap: 0.35rem; }
+	.ract .btn { text-align: left; }
+	.tl { font-size: 0.72rem; }
+	.tl li { list-style: none; padding: 0.35rem 0; border-bottom: 1px solid var(--line-lt); display: flex; justify-content: space-between; gap: 0.5rem; }
+	.tl li span { color: var(--muted); font-family: ui-monospace, monospace; font-size: 0.55rem; white-space: nowrap; }
+
+	/* SLA / report row */
+	.rep { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); background: var(--card); }
+	.rep > div { padding: 0.8rem 1rem; border-right: 1px solid var(--line-lt); }
+	.rep > div:last-child { border-right: 0; }
+	.rep .n { font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+	.rep .k { font-family: ui-monospace, monospace; font-size: 0.55rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-top: 0.15rem; }
+	.rep .d { font-size: 0.68rem; color: var(--muted); margin-top: 0.15rem; }
+
+	/* change list */
+	.changes { border: 1px solid var(--line); background: var(--card); }
+	.changes table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+	.changes th { font-family: ui-monospace, monospace; font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 0.55rem 0.9rem; border-bottom: 1.5px solid var(--ink); }
+	.changes td { padding: 0.5rem 0.9rem; border-bottom: 1px solid var(--line-lt); vertical-align: top; }
+	.changes td:first-child { font-family: ui-monospace, monospace; font-size: 0.68rem; white-space: nowrap; }
+	.changes tr:last-child td { border-bottom: 0; }
+	.g { color: var(--green); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="sect">
+	<span class="tag">Proposal</span>
+	<h2>Helpdesk → Requests: one thread per request, a desk that knows whose move it is</h2>
+	<p class="note">Outlined elements (<span style="outline:2px solid var(--amber);padding:0 0.2em">amber frame</span>) are new. Everything else already exists. One migration adds <code>subject · category · priority · waitingOn · firstResponseAt · resolvedAt · reopenedCount · csatScore</code> to <code>conversations</code>; the portal gets a Help page; the ops queue learns to tell <i>ours</i> from <i>theirs</i>.</p>
+</div>
+
+<!-- ═══ 1 · PORTAL — REQUESTS INSIDE THE FLOAT ═══ -->
+<div class="sect">
+	<span class="tag">1 · Portal — requests inside the float chat</span>
+	<h2>My requests, not one endless thread</h2>
+	<p class="note"><b>Decision:</b> no standalone portal page — the request list and intake live <b>inside the floating chat window</b> as a swapped pane (see <code>float-chat-redesign.html</code>, section 2b). Below is the same list's content model: every request is a row with a subject, a category, an owner and a state — waiting on you, open, resolved. Case/officer threads list alongside, marked as case conversations.</p>
+	<div class="frame portal">
+		<div class="p-head">
+			<h3>Help &amp; requests</h3>
+			<p>Ask the desk anything. Each request keeps its own thread, its own status, its own answer.</p>
+		</div>
+
+		<div class="p-band"><span>Waiting on you · 1</span><span>we replied — your move</span></div>
+		<div class="req new">
+			<span class="req__subj"><span class="cat">Documents</span>Transcript re-upload — is the scan clear enough?</span>
+			<span class="req__meta">Efua Mensah · replied 2 h ago · "Yes, this one is clear — verified."</span>
+			<div class="req__right"><span class="pill pill--amber">Waiting on you</span><span class="req__when">2 h ago</span></div>
+		</div>
+
+		<div class="p-band"><span>Open · 2</span><span>we're on it</span></div>
+		<div class="req">
+			<span class="req__subj"><span class="cat">Payment</span>Can I split the pre-departure fee?</span>
+			<span class="req__meta">Support desk · Adjoa picked it up · first reply in 14 min</span>
+			<div class="req__right"><span class="pill">Open · ours</span><span class="req__when">40 min ago</span></div>
+		</div>
+		<div class="req">
+			<span class="req__subj"><span class="cat">Visa</span>CN-2481 · Visa <span style="font-weight:400;color:var(--muted)">(case thread)</span></span>
+			<span class="req__meta">Yaw Owusu · your stage officer · biometrics letter sent</span>
+			<div class="req__right"><span class="pill">Open · ours</span><span class="req__when">yesterday</span></div>
+		</div>
+
+		<div class="p-band"><span>Resolved · 3</span><span>kept for your records</span></div>
+		<div class="req" style="opacity:0.65">
+			<span class="req__subj"><span class="cat">Payment</span>Receipt for the deposit</span>
+			<span class="req__meta">Adjoa · resolved · you rated it 👍</span>
+			<div class="req__right"><span class="pill pill--green">Resolved</span><span class="req__when">12 Sep</span></div>
+		</div>
+		<div class="req" style="opacity:0.65">
+			<span class="req__subj"><span class="cat">Application</span>Which Leeds programme did we pick?</span>
+			<span class="req__meta">Efua Mensah · resolved</span>
+			<div class="req__right"><span class="pill pill--green">Resolved</span><span class="req__when">28 Aug</span></div>
+		</div>
+
+		<div class="intake new">
+			<h4>Start a request</h4>
+			<div class="frow">
+				<button class="fsel on">Payment</button><button class="fsel">Documents</button><button class="fsel">Application</button><button class="fsel">Visa</button><button class="fsel">Departure</button><button class="fsel">Account</button><button class="fsel">Other</button>
+				<button class="fsel" style="margin-left:auto">Case: CN-2481 ▾</button>
+			</div>
+			<input class="fin" placeholder="Subject — one line, e.g. &quot;Can I split the pre-departure fee?&quot;" />
+			<input class="fin" placeholder="Tell us what's happening…" style="margin-top:0.4rem" />
+			<div class="ai-hint" style="margin-top:0.7rem">
+				<b>💬 Ask AI first?</b> Instant answers about stages, documents and fees — and it hands you to a human with the transcript if it can't help. <span class="mono" style="color:var(--amber)">OPEN AI →</span>
+			</div>
+			<div style="display:flex;justify-content:space-between;align-items:center">
+				<span class="mono" style="font-size:0.55rem;color:var(--muted)">ATTACH A FILE · OPTIONAL</span>
+				<button class="btn">Send request</button>
+			</div>
+		</div>
+
+		<div class="officer-strip new">
+			<span class="pres"></span>
+			<span><b>Your officer:</b> Efua Mensah · Consultant, Accra</span>
+			<span style="margin-left:auto" class="mono" style="font-size:0.56rem;color:var(--muted)">DESK OPEN MON–FRI 8:00–17:00 GMT · REPLIES ~1 H IN HOURS</span>
+		</div>
+	</div>
+
+	<div class="bubble">
+		<div class="win">
+			<div class="hd"><b>Support</b><span class="mono" style="font-size:0.52rem;color:var(--muted)">ALL REQUESTS →</span></div>
+			<div class="bd">The bubble stays — but now it opens the <b>latest</b> thread and links out to the full list.</div>
+		</div>
+		<p class="arr">Out of hours, the first message gets an auto line: <i>"Our desk is open Mon–Fri 8–17 GMT — we'll reply by 09:00 tomorrow."</i> On resolve, the client sees <i>"Did this solve it? 👍 / 👎"</i> — that writes <code>csatScore</code>.</p>
+	</div>
+</div>
+
+<!-- ═══ 2 · OPS DESK ═══ -->
+<div class="sect">
+	<span class="tag">2 · Ops — the desk</span>
+	<h2>Banded by whose move it is</h2>
+	<p class="note">The queue stops being one flat list. <b>Breaching</b> is computed from first-response and resolution targets; <b>waiting on client</b> finally exists as a state, so a thread we answered stops inflating "awaiting". Category and priority are chips, not guesses.</p>
+	<div class="frame" style="padding:0">
+		<div class="desk">
+			<!-- queue -->
+			<div class="qrail">
+				<div class="qhead">
+					<div style="display:flex;justify-content:space-between;align-items:center">
+						<span class="mono" style="font-size:0.6rem;letter-spacing:0.12em;text-transform:uppercase">Desk queue · 18</span>
+						<button class="btn btn--ghost btn--sm new">+ Log request</button>
+					</div>
+					<div class="chips">
+						<span class="chip on">All</span><span class="chip">Unclaimed 4</span><span class="chip">Mine 6</span>
+					</div>
+					<div class="chips">
+						<span class="chip">Payment 5</span><span class="chip">Documents 4</span><span class="chip">Visa 3</span><span class="chip">Application 3</span><span class="chip">Other 3</span>
+					</div>
+				</div>
+				<div class="qband hot new"><span>Breaching</span><span class="n">2</span></div>
+				<div class="qrow">
+					<div class="qtop"><span class="qsubj">Can't pay — MoMo keeps failing</span><span class="qwhen">26 h</span></div>
+					<div class="qsub"><span class="cat">Payment</span> · Abena F. · unclaimed · <b>past first-response target</b></div>
+				</div>
+				<div class="qrow">
+					<div class="qtop"><span class="qsubj">Visa letter hasn't arrived</span><span class="qwhen">31 h</span></div>
+					<div class="qsub"><span class="cat">Visa</span> · Yaw D. · Adjoa · <b>past resolution target</b></div>
+				</div>
+				<div class="qband new"><span>Waiting on us</span><span class="n">6</span></div>
+				<div class="qrow sel">
+					<div class="qtop"><span class="qsubj">Can I split the pre-departure fee?</span><span class="qwhen">40 m</span></div>
+					<div class="qsub"><span class="cat">Payment</span> · Ama S. · CN-2481 · you</div>
+				</div>
+				<div class="qrow">
+					<div class="qtop"><span class="qsubj">Transcript re-upload OK?</span><span class="qwhen">2 h</span></div>
+					<div class="qsub"><span class="cat">Documents</span> · Kofi B. · Efua</div>
+				</div>
+				<div class="qband new"><span>Waiting on client</span><span class="n">7</span></div>
+				<div class="qrow" style="opacity:0.75">
+					<div class="qtop"><span class="qsubj">Receipt for the deposit</span><span class="qwhen">3 d</span></div>
+					<div class="qsub"><span class="cat">Payment</span> · Efua N. · Adjoa · <span style="text-decoration:underline">nudge</span></div>
+				</div>
+				<div class="qband"><span>Resolved</span><span class="n">3 today</span></div>
+			</div>
+
+			<!-- thread -->
+			<div class="thread">
+				<div class="thead2 new">
+					<div style="display:flex;align-items:baseline;gap:0.6rem">
+						<span class="subj">Can I split the pre-departure fee?</span>
+						<span class="tacts">
+							<button class="btn btn--ghost btn--sm">Waiting on client</button>
+							<button class="btn btn--ghost btn--sm">Escalate…</button>
+							<button class="btn btn--sm">Resolve</button>
+						</span>
+					</div>
+					<div class="meta">
+						<span class="pill pill--amber">Payment</span>
+						<span class="pill">Normal</span>
+						<span class="pill">Open · ours</span>
+						<span class="mono" style="font-size:0.55rem;color:var(--muted)">AMA S. · CN-2481 · FIRST REPLY 14 MIN · OPENED 40 MIN AGO</span>
+					</div>
+				</div>
+				<div class="msgs">
+					<div class="msg them"><span class="who">Ama · client</span>Hi — the pre-departure invoice just landed. Can I split it into two? Half now, half after I sort my flight money.</div>
+					<div class="msg us"><span class="who">Adjoa · finance</span>Hi Ama — looking at your plan now. One moment.</div>
+					<div class="msg sys">auto-claimed by Adjoa · 14 min after opening</div>
+					<div class="msg us"><span class="who">Adjoa · finance</span>Yes — I can split it 50/50. Half settles the milestone today; the second half is due before your travel documents release. Want me to adjust it?</div>
+				</div>
+				<div class="composer new">
+					<div class="snip">
+						<span class="mono" style="font-size:0.55rem;color:var(--muted);align-self:center">/ CANNED —</span>
+						<span class="chip">Acknowledge</span><span class="chip">Payment received</span><span class="chip">Split approved</span><span class="chip">Request documents</span>
+					</div>
+					<textarea rows="2" placeholder="Reply to Ama… (type / for canned replies — {{client.firstName}} fills itself)"></textarea>
+					<div class="row"><span class="hint">INTERNAL NOTE: SHIFT+ENTER</span><button class="btn btn--sm">Send</button></div>
+				</div>
+			</div>
+
+			<!-- rail -->
+			<div class="rail2">
+				<div class="rsec">
+					<div class="rk">Client</div>
+					<div class="rrow"><span>Ama Serwaa</span><b>CN-2481</b></div>
+					<div class="rrow"><span>Accra · client since Mar</span><span></span></div>
+				</div>
+				<div class="rsec new">
+					<div class="rk">Next step on her case — act from here</div>
+					<div class="rrow"><span>Pre-departure fee</span><b>GH₵ 4,200 due</b></div>
+					<div class="ract" style="margin-top:0.45rem">
+						<button class="btn btn--ghost btn--sm">Send payment link</button>
+						<button class="btn btn--ghost btn--sm">Re-send invoice PDF</button>
+						<button class="btn btn--ghost btn--sm">Request a document</button>
+						<button class="btn btn--ghost btn--sm">Book a check-in</button>
+						<button class="btn btn--ghost btn--sm">Open case →</button>
+					</div>
+				</div>
+				<div class="rsec">
+					<div class="rk">Journey</div>
+					<div class="rrow"><span>Stage</span><b>III · Departure</b></div>
+					<div class="rrow"><span>Officer</span><b>Selorm Adu</b></div>
+					<div class="rrow"><span>Progress</span><b>78%</b></div>
+				</div>
+				<div class="rsec new">
+					<div class="rk">Every thread with Ama</div>
+					<ul class="tl">
+						<li>Split the pre-departure fee <span>open</span></li>
+						<li>Receipt for the deposit <span>resolved</span></li>
+						<li>Which Leeds programme <span>resolved</span></li>
+						<li>Enquiry — Mar intake <span>lead · Feb</span></li>
+					</ul>
+				</div>
+				<div class="rsec">
+					<div class="rk">Money</div>
+					<div class="rrow"><span>Outstanding</span><b>GH₵ 12,400</b></div>
+					<div class="rrow"><span>Next instalment</span><b>1 Oct</b></div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<!-- ═══ 2.5 · STAFF-RAISED REQUESTS ═══ -->
+<div class="sect">
+	<span class="tag">2b · Raised by the office</span>
+	<h2>Staff can file a request too — for the client, or internally</h2>
+	<p class="note">Two directions, one model. <b>For a client:</b> a phone call or walk-in becomes a tracked request — same queue, same states, visible on the client's portal list marked "logged by the office", and the client is emailed. <b>Internal:</b> agent → IT / finance / manager when work needs an owner and a state — <code>audience: internal</code> keeps it out of the client queue and off the portal entirely. Casual staff asks stay in staff chat; this is for tracked work.</p>
+	<div class="frame" style="padding:0;max-width:30rem;margin-left:auto">
+		<div class="qhead" style="border-bottom:1px solid var(--line)">
+			<div style="display:flex;justify-content:space-between;align-items:center">
+				<span class="mono" style="font-size:0.62rem;letter-spacing:0.12em;text-transform:uppercase;font-weight:700">Log a request</span>
+				<span class="newtag">new sheet</span>
+			</div>
+		</div>
+		<div style="padding:0.9rem 1rem">
+			<div class="rk" style="margin-bottom:0.4rem">On behalf of</div>
+			<div class="frow">
+				<button class="fsel on">A client — Ama Serwaa · CN-2481</button>
+				<button class="fsel">Internal — IT / finance / manager</button>
+			</div>
+			<div class="rk" style="margin:0.6rem 0 0.4rem">Category</div>
+			<div class="frow">
+				<button class="fsel">Payment</button><button class="fsel on">Documents</button><button class="fsel">Visa</button><button class="fsel">Application</button><button class="fsel">Departure</button><button class="fsel">Account</button><button class="fsel">Other</button>
+			</div>
+			<input class="fin" placeholder="Subject — e.g. &quot;Client called: passport expires in 5 months&quot;" style="margin-top:0.5rem" />
+			<input class="fin" placeholder="What the client said / what needs doing…" style="margin-top:0.45rem" />
+			<div class="frow" style="margin-top:0.7rem;align-items:center">
+				<button class="fsel">Priority: Normal ▾</button>
+				<button class="fsel">Assign to: me ▾</button>
+				<span class="mono" style="font-size:0.54rem;color:var(--muted);margin-left:auto">CLIENT GETS AN EMAIL + PORTAL ROW</span>
+			</div>
+			<div style="display:flex;justify-content:flex-end;margin-top:0.8rem"><button class="btn">Log request</button></div>
+		</div>
+	</div>
+	<p class="note" style="margin-top:0.8rem">On the client's list a staff-logged request reads: <i>"Passport expiry — logged by Adjoa at the desk, 2 h ago · Open · ours."</i> An internal request never leaves ops — it bands into the same desk queue under an <b>Internal</b> category, visible to the internal team only.</p>
+</div>
+
+<!-- ═══ 3 · REPORTING STRIP ═══ -->
+<div class="sect">
+	<span class="tag">3 · Reporting — on the desk, and in Finance reports</span>
+	<div class="rep">
+		<div><div class="n">14 min</div><div class="k">Median first reply</div><div class="d">target 60 — inside</div></div>
+		<div><div class="n">6.2 h</div><div class="k">Median resolution</div><div class="d">target 24 h</div></div>
+		<div><div class="n">2</div><div class="k">Breaching now</div><div class="d" style="color:var(--red)">1 first-response · 1 resolution</div></div>
+		<div><div class="n">91%</div><div class="k">CSAT · 30 days</div><div class="d">23 ratings · "payment" weakest</div></div>
+	</div>
+</div>
+
+<!-- ═══ 4 · CHANGE LIST ═══ -->
+<div class="sect">
+	<span class="tag">4 · The change list</span>
+	<h2>One migration, two surfaces</h2>
+	<div class="changes">
+		<table>
+			<tr><th>Where</th><th>Change</th></tr>
+			<tr><td>schema</td><td><code>conversations</code> gains <code>subject · category · priority · waitingOn · audience (client/internal) · raisedByOpsUserId · firstResponseAt · resolvedAt · reopenedCount · csatScore · csatNote</code>; new <code>canned_replies</code> table (label, body with variables, scope all/branch/stage); settings <code>HELPDESK_HOURS · HELPDESK_FIRST_RESPONSE_MINUTES · HELPDESK_RESOLUTION_HOURS</code></td></tr>
+			<tr><td>routing</td><td><code>findOrCreateConversation</code> for <code>support</code> reuses only an <b>open</b> thread of the same category — one thread per request. Staff-filed requests create directly (client-facing) or with <code>audience: internal</code> (ops-only). Case/stage threads unchanged</td></tr>
+			<tr><td>api</td><td>New: <code>POST /me/communication/requests</code> (subject+category intake), <code>POST /ops/…/requests</code> (staff intake: client or internal), <code>POST …/:id/resolve</code> + <code>/csat</code>, <code>waiting-on</code> toggle, <code>/escalate</code>, <code>/nudge</code>, canned-replies CRUD, desk stats endpoint. Staff reply enqueues an email when the client is offline (5-min coalesce); a staff-filed client request emails the client</td></tr>
+			<tr><td>portal</td><td>Request list + intake render <b>inside the float window</b> (pane swap — open / waiting on you / resolved bands, officer strip with real hours, CSAT prompt on resolve). No standalone page. Staff-filed requests appear marked "logged by the office". Bubble stays the launcher</td></tr>
+			<tr><td>ops</td><td>Queue bands Breaching / Waiting on us / Waiting on client / Resolved; category + priority chips; "+ Log request" sheet (client-facing or internal); thread header (subject, waiting toggle, Escalate, Resolve); actionable rail (pay link, resend invoice, request doc, book check-in); canned replies with <code>/</code> + variables; auto-claim on first reply; round-robin unclaimed after 15 min; client timeline incl. the lead enquiry; desk stats</td></tr>
+			<tr><td>later</td><td>Inbound email on <code>emailInboxToken</code> (already minted), WhatsApp inbound, transcript export, merge threads</td></tr>
+		</table>
+	</div>
+</div>
+
+</div>
+</body>
+</html>

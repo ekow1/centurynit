@@ -12,6 +12,8 @@ import {
 	staffDirectoryDetailedSchema,
 	updatePresenceSchema,
 	sendContextMessageSchema,
+	createCustomerRequestSchema,
+	rateConversationSchema,
 } from "century-nit-shared";
 import { requireAuth, requireMfa, requireModule, type AuthVariables, requireCapability } from "../middleware/auth.js";
 import {
@@ -26,6 +28,8 @@ import {
 	heartbeat,
 	assignStageOfficer,
 	listStageAssignments,
+	createCustomerRequest,
+	rateConversation,
 } from "../services/communication.js";
 import { stageCustomerAttachment } from "../services/chat.js";
 
@@ -258,6 +262,62 @@ meCommunicationRouter.openapi(
  * All staff endpoints require MFA + the `chat` module. Stage-assignment
  * writes additionally require a manager/coordinator/super_admin role.
  * ══════════════════════════════════════════════════════════════════════════ */
+/* POST /me/communication/requests — the portal intake: one request =
+ * category + subject + first message. Reuses the client's OPEN same-category
+ * support thread, so "Can't pay" in March and "Visa question" in July are two
+ * requests, not one scroll. */
+meCommunicationRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/requests",
+		tags: ["Communication"],
+		middleware: [requireAuth] as const,
+		request: {
+			body: {
+				content: { "application/json": { schema: createCustomerRequestSchema } },
+				required: true,
+			},
+		},
+		responses: {
+			201: {
+				content: { "application/json": { schema: chatConversationSchema } },
+				description: "Request created — returns the conversation to open",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user")!;
+		const body = c.req.valid("json");
+		const conv = await createCustomerRequest(user, body);
+		return c.json(conv, 201);
+	},
+);
+
+/* POST /me/communication/conversations/{id}/rate — post-resolve CSAT. */
+meCommunicationRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/conversations/{id}/rate",
+		tags: ["Communication"],
+		middleware: [requireAuth] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: rateConversationSchema } },
+				required: true,
+			},
+		},
+		responses: { 200: { description: "Rating recorded" } },
+	}),
+	async (c) => {
+		const user = c.get("user")!;
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		await rateConversation(user, id, body.score, body.note);
+		return c.json({ ok: true });
+	},
+);
+
 export const communicationRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 /* GET /communication/staff-directory — directory with presence + load. */

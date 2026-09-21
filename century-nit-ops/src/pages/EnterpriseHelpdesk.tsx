@@ -21,6 +21,13 @@ import {
 	getChatConversationContext,
 	stageChatAttachment,
 	uploadStagedAttachment,
+	createChatRequest,
+	setChatWaitingOn,
+	escalateChatConversation,
+	listCannedReplies,
+	getDeskStats,
+	type CannedReply,
+	type DeskStats,
 	type ChatConversationContext,
 	type ClientUser,
 } from "../lib/api";
@@ -53,16 +60,18 @@ const TYPE_LABELS: Record<string, string> = {
 	entity: "Conversation",
 };
 
-type Filter = "all" | "awaiting" | "unclaimed" | "mine";
+type Filter = "all" | "awaiting" | "waiting" | "unclaimed" | "mine" | "breaching";
 type TypeFacet = "" | "support" | "case" | "stage" | "applicant";
 type SortMode = "recent" | "waiting";
 
-const FILTERS: Filter[] = ["all", "awaiting", "unclaimed", "mine"];
+const FILTERS: Filter[] = ["all", "awaiting", "waiting", "unclaimed", "mine", "breaching"];
 const FILTER_LABELS: Record<Filter, string> = {
 	all: "All",
 	awaiting: "Awaiting reply",
+	waiting: "Waiting on client",
 	unclaimed: "Unclaimed",
 	mine: "Mine",
+	breaching: "Breaching",
 };
 const TYPE_FACETS: { id: TypeFacet; label: string }[] = [
 	{ id: "", label: "Any type" },
@@ -88,6 +97,16 @@ const SNIPPETS: { id: string; label: string; body: string }[] = [
  */
 const awaitingReply = (c: ChatConversation) => c.awaitingReply ?? Boolean(c.lastMessage?.senderUserId);
 const isClosed = (c: ChatConversation) => c.status === "closed" || c.status === "archived";
+/** Open + not waiting on us = the ball is with the client. */
+const waitingOnClient = (c: ChatConversation) =>
+	!isClosed(c) && (c.waitingOn === "client" || (!awaitingReply(c) && c.lastMessage != null));
+/** Past first-response or resolution target — settings from the desk stats. */
+const isBreaching = (c: ChatConversation, s: DeskStats | null, now: number) => {
+	if (isClosed(c) || !s) return false;
+	const ageMin = (now - new Date(c.createdAt).getTime()) / 60000;
+	const resAgeH = (now - new Date(c.lastMessageAt ?? c.updatedAt).getTime()) / 3600000;
+	return (c.firstResponseAt == null && ageMin > s.settings.firstResponseMinutes) || resAgeH > s.settings.resolutionHours;
+};
 
 /** The owner participant, when one has claimed/been assigned the thread. */
 function ownerOf(c: ChatConversation): { opsUserId: string; name: string } | null {
@@ -111,6 +130,8 @@ function clientName(c: ChatConversation): string {
 /** "Support · APP-2026-0142", "Stage · Consultation" - the thread's subject without opening it. */
 function kickerOf(c: ChatConversation): string {
 	const type = TYPE_LABELS[c.type] ?? c.type;
+	// Requests carry a subject — show it; the category tags along.
+	if (c.subject) return `${c.category ? `${c.category.toUpperCase()} · ` : ""}${c.subject}`;
 	if (c.type === "case" || c.type === "stage") return `${type} · ${c.title}`;
 	if (c.linkedEntityType) return `${type} · ${c.linkedEntityType}`;
 	return type;
@@ -143,7 +164,7 @@ export function EnterpriseHelpdesk() {
 	// record pane; narrows the queue to that account's threads.
 	const clientFilter = searchParams.get("client") || null;
 
-	const { conversations, loading: convsLoading, error: convsError, forbidden: convsForbidden, refresh: refreshConvs } = useChatConversations(canChat);
+	const { conversations, loading: convsLoading, error: convsError, forbidden: convsForbidden, refresh: refreshConvs } = useChatConversations(canChat, "desk");
 	const directory = useStaffDirectory();
 	const { applications } = useCases();
 	const { create, creating } = useCreateConversation();
@@ -155,6 +176,11 @@ export function EnterpriseHelpdesk() {
 	const [sortMode, setSortMode] = useUrlParam<SortMode>("sort", { allowed: ["recent", "waiting"], fallback: "recent" });
 	// ?new=1 opens the start-a-thread sheet; ?client= pre-fills its picker.
 	const [newOpen, setNewOpen] = useUrlParam<"" | "1">("new", { allowed: ["", "1"], fallback: "" });
+	// ?log=1 opens the Log-request sheet — staff intake for phone/walk-in
+	// requests and internal tickets.
+	const [logOpen, setLogOpen] = useUrlParam<"" | "1">("log", { allowed: ["", "1"], fallback: "" });
+	const [desk, setDesk] = useState<DeskStats | null>(null);
+	const [snippets, setSnippets] = useState<CannedReply[]>([]);
 	const [showClosed, setShowClosed] = useState(false);
 	const [drawerOpen, setDrawerOpen] = useState(false);
 	const [search, setSearch] = useState("");
@@ -188,6 +214,16 @@ export function EnterpriseHelpdesk() {
 		signalTyping,
 		markRead,
 	} = useChatMessages(activeConvId);
+
+	// Desk stats refresh alongside the queue; canned replies load once.
+	useEffect(() => {
+		if (!canChat) return;
+		getDeskStats().then(setDesk).catch(() => {});
+	}, [canChat, conversations]);
+	useEffect(() => {
+		if (!canChat) return;
+		listCannedReplies().then((r) => { if (r.length) setSnippets(r); }).catch(() => {});
+	}, [canChat]);
 
 	/* ── Client-facing queue ── */
 	const queue = useMemo(() => {
@@ -224,16 +260,21 @@ export function EnterpriseHelpdesk() {
 		return {
 			all: open.length,
 			awaiting: open.filter(awaitingReply).length,
+			waiting: open.filter(waitingOnClient).length,
 			unclaimed: open.filter(isUnclaimed).length,
 			mine: open.filter(isMine).length,
+			breaching: open.filter((c) => isBreaching(c, desk, now)).length,
 		};
-	}, [queue, isMine, isUnclaimed]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- `now` is this render's clock
+	}, [queue, isMine, isUnclaimed, desk]);
 
 	const filtered = useMemo(() => {
 		let list = queue;
 		if (filter === "awaiting") list = list.filter(awaitingReply);
+		else if (filter === "waiting") list = list.filter(waitingOnClient);
 		else if (filter === "mine") list = list.filter(isMine);
 		else if (filter === "unclaimed") list = list.filter(isUnclaimed);
+		else if (filter === "breaching") list = list.filter((c) => isBreaching(c, desk, now));
 		if (typeFacet) list = list.filter((c) => c.type === typeFacet);
 		if (unreadOnly === "1") list = list.filter((c) => (c.unreadCount || 0) > 0);
 		if (search.trim()) {
@@ -251,20 +292,26 @@ export function EnterpriseHelpdesk() {
 		}
 		return list;
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- `now` is this render's clock
-	}, [queue, filter, typeFacet, unreadOnly, sortMode, search, isMine, isUnclaimed]);
+	}, [queue, filter, typeFacet, unreadOnly, sortMode, search, isMine, isUnclaimed, desk]);
 
-	/** Bands by who owes the next word: waiting on you (longest first), in conversation, resolved (folded). */
+	/** Bands by who owes the next word: breaching SLA, waiting on us (longest
+	    first), waiting on the client, resolved (folded). */
 	const bands = useMemo(() => {
-		const waiting = filtered.filter((c) => !isClosed(c) && awaitingReply(c)).sort((a, b) => waitingHours(b, now) - waitingHours(a, now));
-		const talking = filtered.filter((c) => !isClosed(c) && !awaitingReply(c));
+		const breaching = filtered.filter((c) => isBreaching(c, desk, now)).sort((a, b) => waitingHours(b, now) - waitingHours(a, now));
+		const breachingIds = new Set(breaching.map((c) => c.id));
+		const waiting = filtered.filter((c) => !isClosed(c) && !breachingIds.has(c.id) && awaitingReply(c)).sort((a, b) => waitingHours(b, now) - waitingHours(a, now));
+		const waitingClient = filtered.filter((c) => !isClosed(c) && !breachingIds.has(c.id) && !awaitingReply(c) && waitingOnClient(c));
+		const talking = filtered.filter((c) => !isClosed(c) && !breachingIds.has(c.id) && !awaitingReply(c) && !waitingOnClient(c));
 		const closed = filtered.filter(isClosed);
 		return [
+			{ id: "breaching", label: "Breaching", note: "past first-response or resolution target", rows: breaching },
 			{ id: "waiting", label: "Awaiting reply", note: "longest wait first", rows: waiting },
+			{ id: "waiting_client", label: "Waiting on client", note: "ball is with them", rows: waitingClient },
 			{ id: "talking", label: "In conversation", note: "you replied last", rows: talking },
 			{ id: "closed", label: "Resolved", note: showClosed ? "hide" : "show ▸", rows: closed },
 		].filter((b) => b.rows.length > 0);
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- `now` is this render's clock
-	}, [filtered, showClosed]);
+	}, [filtered, showClosed, desk]);
 
 	const activeConv = conversations.find((c) => c.id === activeConvId) ?? null;
 	const activeInQueue = activeConv && CLIENT_TYPES.has(activeConv.type);
@@ -403,6 +450,45 @@ export function EnterpriseHelpdesk() {
 		[activeConvId, refreshConvs],
 	);
 
+	// Canned replies — managed rows when the desk has created any, the
+	// built-in five otherwise. {{client.firstName}} fills at insert time.
+	const activeSnippetList = useMemo(() => {
+		const src = snippets.length ? snippets : SNIPPETS;
+		const first = activeConv ? clientName(activeConv).split(" ")[0] : "";
+		return src.map((s) => ({
+			id: s.id,
+			label: s.label,
+			body: first ? s.body.replace(/\{\{\s*client\.firstName\s*\}\}/g, first) : s.body,
+		}));
+	}, [snippets, activeConv]);
+
+	/* ── Waiting-on + escalation ── */
+	const toggleWaiting = useCallback(async () => {
+		if (!activeConvId || !activeConv) return;
+		setStatusBusy(true);
+		try {
+			await setChatWaitingOn(activeConvId, activeConv.waitingOn === "client" ? "us" : "client");
+			await refreshConvs();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Failed to update waiting state");
+		} finally {
+			setStatusBusy(false);
+		}
+	}, [activeConvId, activeConv, refreshConvs]);
+
+	const doEscalate = useCallback(async (reason: string) => {
+		if (!activeConvId || !reason.trim()) return;
+		setStatusBusy(true);
+		try {
+			await escalateChatConversation(activeConvId, reason.trim());
+			await refreshConvs();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Failed to escalate");
+		} finally {
+			setStatusBusy(false);
+		}
+	}, [activeConvId, refreshConvs]);
+
 	/* ── Attachments: stage → upload → bind on send ── */
 	const handleAttach = useCallback(() => {
 		fileInputRef.current?.click();
@@ -483,9 +569,14 @@ export function EnterpriseHelpdesk() {
 					<p className="lead mt-1">Every client conversation, the ones waiting on you first.</p>
 				</div>
 				{canChat && (
-					<button type="button" className="btn btn--primary" onClick={() => setNewOpen("1")}>
-						+ New conversation
-					</button>
+					<div style={{ display: "flex", gap: "0.5rem" }}>
+						<button type="button" className="btn btn--ghost" onClick={() => setLogOpen("1")}>
+							+ Log request
+						</button>
+						<button type="button" className="btn btn--primary" onClick={() => setNewOpen("1")}>
+							+ New conversation
+						</button>
+					</div>
 				)}
 			</div>
 
@@ -522,6 +613,22 @@ export function EnterpriseHelpdesk() {
 						<span>
 							<strong>{stats.longest > 0 ? waitLabel(stats.longest) : "-"}</strong> <span className="dash-day__date">longest wait</span>
 						</span>
+						{desk && desk.breaching > 0 && (
+							<span style={{ color: "var(--warn, #b45309)" }}>
+								<strong>{desk.breaching}</strong> <span className="dash-day__date">breaching</span>
+							</span>
+						)}
+						{desk?.medianFirstResponseMinutes != null && (
+							<span>
+								<strong>{desk.medianFirstResponseMinutes < 60 ? `${desk.medianFirstResponseMinutes}m` : `${Math.round(desk.medianFirstResponseMinutes / 60)}h`}</strong>{" "}
+								<span className="dash-day__date">median first reply</span>
+							</span>
+						)}
+						{desk?.csatAvg != null && (
+							<span>
+								<strong>{desk.csatAvg}/5</strong> <span className="dash-day__date">CSAT</span>
+							</span>
+						)}
 						<span className="dash-day__sep" aria-hidden>
 							|
 						</span>
@@ -756,6 +863,7 @@ export function EnterpriseHelpdesk() {
 										uploading={uploading}
 										showSnippets={showSnippets}
 										showReassign={showReassign}
+										snippetList={activeSnippetList}
 										directory={directory}
 										owner={activeOwner}
 										isOwner={activeOwner?.opsUserId === opsUser?.opsUserId}
@@ -774,6 +882,8 @@ export function EnterpriseHelpdesk() {
 										onAttach={handleAttach}
 										onRemoveFile={(id) => setPendingFiles((prev) => prev.filter((f) => f.attachmentId !== id))}
 										onResolve={() => void setStatus("closed")}
+										onToggleWaiting={() => void toggleWaiting()}
+										onEscalate={(reason) => void doEscalate(reason)}
 										onReopen={() => void setStatus("open")}
 										onReassign={(id) => void assignOwner(id)}
 										onClaim={() => opsUser && void assignOwner(opsUser.opsUserId)}
@@ -835,6 +945,25 @@ export function EnterpriseHelpdesk() {
 					void refreshConvs();
 				}}
 			/>
+			)}
+
+			{logOpen === "1" && (
+				<LogRequestSheet
+					open
+					directory={directory}
+					onClose={() => setLogOpen(null)}
+					onSubmit={async (body) => {
+						const conv = await createChatRequest(body);
+						setLogOpen(null);
+						setSearchParams((prev) => {
+							const p = new URLSearchParams(prev);
+							p.delete("log");
+							if (!body.internal) p.set("id", conv.id);
+							return p;
+						}, { replace: true });
+						void refreshConvs();
+					}}
+				/>
 			)}
 		</div>
 	);
@@ -943,6 +1072,7 @@ interface ConversationThreadProps {
 	uploading: boolean;
 	showSnippets: boolean;
 	showReassign: boolean;
+	snippetList: { id: string; label: string; body: string }[];
 	directory: { opsUserId: string; name: string; role: string }[];
 	owner: { opsUserId: string; name: string } | null;
 	isOwner: boolean;
@@ -969,6 +1099,8 @@ interface ConversationThreadProps {
 	onReopen: () => void;
 	onReassign: (opsUserId: string | null) => void;
 	onClaim: () => void;
+	onToggleWaiting: () => void;
+	onEscalate: (reason: string) => void;
 	onLoadMore: () => void;
 	onBack: () => void;
 	onReact: (messageId: string, emoji: string) => void;
@@ -990,6 +1122,7 @@ function ConversationThread({
 	uploading,
 	showSnippets,
 	showReassign,
+	snippetList,
 	directory,
 	owner,
 	isOwner,
@@ -1011,6 +1144,8 @@ function ConversationThread({
 	onReopen,
 	onReassign,
 	onClaim,
+	onToggleWaiting,
+	onEscalate,
 	onLoadMore,
 	onBack,
 	onReact,
@@ -1036,6 +1171,9 @@ function ConversationThread({
 		onQuoteClick,
 		onReact: (message: ChatMessage, emoji: string) => onReact(message.id, emoji),
 	}), [bubbleCallbacks, onQuoteClick, onReact]);
+
+	const [escalateOpen, setEscalateOpen] = useState(false);
+	const [escalateReason, setEscalateReason] = useState("");
 
 	return (
 		<div style={streamContainerStyle}>
@@ -1103,6 +1241,53 @@ function ConversationThread({
 									{s.name} <span className="muted mono" style={{ fontSize: 10 }}>{s.role.toUpperCase()}</span>
 								</button>
 							))}
+						</div>
+					)}
+				</div>
+				{/* Whose move + escalation */}
+				{!closed && (
+					<button
+						type="button"
+						className="btn btn--ghost btn--sm"
+						onClick={onToggleWaiting}
+						disabled={statusBusy}
+						title="Flip whose move it is — the queue bands on this"
+					>
+						{conversation.waitingOn === "client" ? "⌛ client" : "⌛ us"}
+					</button>
+				)}
+				<div style={{ position: "relative" }}>
+					<button
+						type="button"
+						className="btn btn--ghost btn--sm"
+						onClick={() => setEscalateOpen((v) => !v)}
+						disabled={statusBusy}
+						title="Send to the manager queue"
+					>
+						Escalate
+					</button>
+					{escalateOpen && (
+						<div className="hd-pop" style={{ minWidth: "16rem", padding: "0.6rem" }}>
+							<input
+								className="cn-search"
+								style={{ width: "100%", marginTop: 0, marginBottom: "0.5rem" }}
+								placeholder="Why escalate? (one line)"
+								value={escalateReason}
+								onChange={(e) => setEscalateReason(e.target.value)}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" && escalateReason.trim()) onEscalate(escalateReason);
+								}}
+								autoFocus
+							/>
+							<button
+								type="button"
+								className="btn btn--primary btn--sm"
+								style={{ width: "100%" }}
+								disabled={!escalateReason.trim() || statusBusy}
+								onClick={() => onEscalate(escalateReason)}
+							>
+								Escalate to managers
+							</button>
 						</div>
 					)}
 				</div>
@@ -1187,7 +1372,7 @@ function ConversationThread({
 			</div>
 			{showSnippets && (
 				<div className="hd-snips">
-					{SNIPPETS.map((s) => (
+					{snippetList.map((s) => (
 						<button key={s.id} type="button" className="hd-snips__row" onClick={() => onSnippet(s.body)}>
 							<strong>{s.label}</strong>
 							<span className="muted">{s.body.slice(0, 72)}…</span>
@@ -1540,3 +1725,247 @@ const stagePillMiniStyle: CSSProperties = {
 	borderRadius: "0px",
 	flexShrink: 0,
 };
+
+/* ── Log-request sheet — staff intake for phone/walk-in requests and
+    internal tickets. Same object the portal intake produces. ───────────── */
+
+const REQUEST_CATEGORIES: { key: string; label: string }[] = [
+	{ key: "payment", label: "Payment" },
+	{ key: "documents", label: "Documents" },
+	{ key: "application", label: "Application" },
+	{ key: "visa", label: "Visa" },
+	{ key: "departure", label: "Departure" },
+	{ key: "account", label: "Account" },
+	{ key: "other", label: "Other" },
+];
+
+function LogRequestSheet({
+	open,
+	directory,
+	onClose,
+	onSubmit,
+}: {
+	open: boolean;
+	directory: { opsUserId: string; name: string; role: string }[];
+	onClose: () => void;
+	onSubmit: (body: {
+		clientUserId?: string;
+		category: string;
+		subject: string;
+		content: string;
+		internal?: boolean;
+		assigneeOpsUserId?: string;
+		priority?: "normal" | "high" | "urgent";
+	}) => Promise<void>;
+}) {
+	const [internal, setInternal] = useState(false);
+	const [clients, setClients] = useState<ClientUser[]>([]);
+	const [clientQuery, setClientQuery] = useState("");
+	const [client, setClient] = useState<ClientUser | null>(null);
+	const [category, setCategory] = useState("other");
+	const [subject, setSubject] = useState("");
+	const [note, setNote] = useState("");
+	const [priority, setPriority] = useState<"normal" | "high" | "urgent">("normal");
+	const [assignee, setAssignee] = useState("");
+	const [sheetError, setSheetError] = useState<string | null>(null);
+	const [busy, setBusy] = useState(false);
+
+	useEffect(() => {
+		let on = true;
+		listClientUsers()
+			.then((res) => { if (on) setClients(Array.isArray(res?.clients) ? res.clients : []); })
+			.catch(() => {});
+		return () => { on = false; };
+	}, []);
+
+	const clientMatches = useMemo(() => {
+		const q = clientQuery.trim().toLowerCase();
+		return (q
+			? clients.filter((c) => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q))
+			: clients
+		).slice(0, 6);
+	}, [clients, clientQuery]);
+
+	const submit = () => {
+		if (!internal && !client) { setSheetError("Pick the client this request is for"); return; }
+		if (!subject.trim() || !note.trim()) { setSheetError("Subject and a first note are required"); return; }
+		setSheetError(null);
+		setBusy(true);
+		void onSubmit({
+			clientUserId: internal ? undefined : client!.id,
+			category,
+			subject: subject.trim(),
+			content: note.trim(),
+			internal,
+			assigneeOpsUserId: assignee || undefined,
+			priority,
+		}).catch((err) => {
+			setBusy(false);
+			setSheetError(err instanceof Error ? err.message : "Could not log the request");
+		});
+	};
+
+	return (
+		<Sheet open={open} onClose={onClose} title="Log a request">
+			<div style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
+				{/* On behalf of: a client, or internal (ops-only ticket). */}
+				<div>
+					<p className="mono muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+						On behalf of
+					</p>
+					<div style={{ display: "flex", gap: "0.4rem" }}>
+						<button
+							type="button"
+							className="ops-pill"
+							onClick={() => setInternal(false)}
+							style={{
+								cursor: "pointer", marginLeft: 0, border: "1px solid var(--border)",
+								background: !internal ? "var(--foreground)" : "transparent",
+								color: !internal ? "var(--background)" : "var(--foreground)",
+							}}
+						>
+							A client
+						</button>
+						<button
+							type="button"
+							className="ops-pill"
+							onClick={() => setInternal(true)}
+							style={{
+								cursor: "pointer", marginLeft: 0, border: "1px solid var(--border)",
+								background: internal ? "var(--foreground)" : "transparent",
+								color: internal ? "var(--background)" : "var(--foreground)",
+							}}
+						>
+							Internal (IT / finance / manager)
+						</button>
+					</div>
+				</div>
+
+				{!internal && (
+					<div>
+						<p className="mono muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+							Client
+						</p>
+						{client ? (
+							<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", border: "1px solid var(--border)", padding: "0.45rem 0.6rem" }}>
+								<strong style={{ fontSize: "0.8rem" }}>{client.name}</strong>
+								<span className="muted mono" style={{ fontSize: "0.65rem" }}>{client.email}</span>
+								<button type="button" className="dash-link" style={{ marginLeft: "auto" }} onClick={() => setClient(null)}>
+									change
+								</button>
+							</div>
+						) : (
+							<>
+								<input
+									className="cn-search"
+									style={{ width: "100%", marginTop: 0 }}
+									placeholder="Search clients by name or email…"
+									value={clientQuery}
+									onChange={(e) => setClientQuery(e.target.value)}
+									aria-label="Search clients"
+								/>
+								<div style={{ border: "1px solid var(--border)", borderTop: 0 }}>
+									{clientMatches.map((c) => (
+										<button
+											key={c.id}
+											type="button"
+											onClick={() => { setClient(c); setClientQuery(""); }}
+											style={{
+												display: "block", width: "100%", textAlign: "left",
+												background: "none", border: "none", borderBottom: "1px solid var(--border)",
+												padding: "0.45rem 0.6rem", cursor: "pointer",
+											}}
+										>
+											<strong style={{ fontSize: "0.8rem" }}>{c.name}</strong>{" "}
+											<span className="muted mono" style={{ fontSize: "0.65rem" }}>{c.email}</span>
+										</button>
+									))}
+								</div>
+							</>
+						)}
+					</div>
+				)}
+
+				<div>
+					<p className="mono muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+						Category
+					</p>
+					<div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+						{REQUEST_CATEGORIES.map((cat) => (
+							<button
+								key={cat.key}
+								type="button"
+								className="ops-pill"
+								onClick={() => setCategory(cat.key)}
+								style={{
+									cursor: "pointer", marginLeft: 0, border: "1px solid var(--border)",
+									background: category === cat.key ? "var(--foreground)" : "transparent",
+									color: category === cat.key ? "var(--background)" : "var(--foreground)",
+								}}
+							>
+								{cat.label}
+							</button>
+						))}
+					</div>
+				</div>
+
+				<div>
+					<p className="mono muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+						Subject
+					</p>
+					<input
+						className="cn-search"
+						style={{ width: "100%", marginTop: 0 }}
+						placeholder={internal ? "What needs doing?" : "What did the client ask for?"}
+						value={subject}
+						onChange={(e) => setSubject(e.target.value)}
+						maxLength={255}
+					/>
+				</div>
+
+				<div>
+					<p className="mono muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+						{internal ? "Details" : "First note — what they said"}
+					</p>
+					<textarea
+						className="cn-search"
+						style={{ width: "100%", marginTop: 0, minHeight: "5rem", resize: "vertical" }}
+						value={note}
+						onChange={(e) => setNote(e.target.value)}
+						maxLength={5000}
+					/>
+				</div>
+
+				<div style={{ display: "flex", gap: "0.8rem" }}>
+					<div style={{ flex: 1 }}>
+						<p className="mono muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+							Priority
+						</p>
+						<select className="cn-select" style={{ width: "100%" }} value={priority} onChange={(e) => setPriority(e.target.value as typeof priority)}>
+							<option value="normal">Normal</option>
+							<option value="high">High</option>
+							<option value="urgent">Urgent</option>
+						</select>
+					</div>
+					<div style={{ flex: 1 }}>
+						<p className="mono muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+							Assign to
+						</p>
+						<select className="cn-select" style={{ width: "100%" }} value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+							<option value="">Queue (unclaimed)</option>
+							{directory.map((s) => (
+								<option key={s.opsUserId} value={s.opsUserId}>{s.name}</option>
+							))}
+						</select>
+					</div>
+				</div>
+
+				{sheetError && <p className="muted" style={{ color: "var(--error, #b00)", margin: 0 }}>{sheetError}</p>}
+
+				<button type="button" className="btn btn--primary" disabled={busy} onClick={submit}>
+					{busy ? "Logging…" : internal ? "Log internal ticket" : "Log request — appears on the client's portal"}
+				</button>
+			</div>
+		</Sheet>
+	);
+}

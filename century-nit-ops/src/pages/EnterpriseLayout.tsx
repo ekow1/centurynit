@@ -247,7 +247,7 @@ function useShellSignals() {
 	const { opsUser, opsRole, canAssignWork, canSeeAllBranches } = useOpsAuth();
 	const queue = useWorkQueue();
 	const canChat = roleCanAccess(opsRole as never, "chat");
-	const { conversations } = useChatConversations(canChat);
+	const { conversations } = useChatConversations(canChat, "staff");
 	const [pendingDocs, setPendingDocs] = useState(0);
 	useEffect(() => {
 		let alive = true;

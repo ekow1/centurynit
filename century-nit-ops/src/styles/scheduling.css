@@ -1054,6 +1054,114 @@ div.hsheet__row:hover {
 	white-space: nowrap;
 }
 
+/* ── % work done — one thin bar wherever progress is drawn.
+   Chapter ticks sit on the track so a record's place inside its own plan
+   reads at a glance; a stalled fill marks the bar that stopped moving. */
+.ops-prog {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	margin-top: 0.55rem;
+}
+
+.ops-prog__bar {
+	position: relative;
+	flex: 1;
+	height: 4px;
+	background: var(--border-light);
+	display: block;
+	min-width: 3rem;
+}
+
+.ops-prog__fill {
+	position: absolute;
+	inset: 0 auto 0 0;
+	background: var(--foreground);
+	display: block;
+}
+
+.ops-prog__fill--warn {
+	background: var(--warn, #92400e);
+}
+
+.ops-prog__seg {
+	position: absolute;
+	top: -2px;
+	width: 1px;
+	height: 8px;
+	background: var(--border-light);
+	display: block;
+}
+
+.ops-prog__n {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.ops-prog__n small {
+	font-weight: 400;
+	font-size: 0.55rem;
+	color: var(--muted-foreground);
+}
+
+/* The officer-card variant: bar over a labelled readout. */
+.ops-oprog {
+	display: block;
+	margin-top: 0.6rem;
+}
+
+.ops-oprog .ops-prog__bar {
+	width: 100%;
+}
+
+.ops-oprog__lbl {
+	display: flex;
+	justify-content: space-between;
+	font-family: var(--font-mono);
+	font-size: 0.55rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	margin-top: 0.28rem;
+}
+
+.ops-oprog__lbl b {
+	color: inherit;
+	font-variant-numeric: tabular-nums;
+}
+
+/* The task-row variant: a short fixed bar beside the number. */
+.tprog {
+	display: flex;
+	align-items: center;
+	gap: 0.45rem;
+	margin-top: 0.3rem;
+}
+
+.tprog .ops-prog__bar {
+	flex: none;
+	width: 5rem;
+}
+
+.tprog__n {
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	color: var(--muted-foreground);
+	font-variant-numeric: tabular-nums;
+}
+
+/* The officer sheet's carrying list: the same number, right-aligned. */
+.ops-mini__pct {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	margin-left: 0.5em;
+}
+
 .ops-client__sub {
 	font-size: var(--text-xs);
 	color: var(--muted-foreground);

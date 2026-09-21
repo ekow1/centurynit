@@ -25,6 +25,7 @@ import {
 	whenLabel,
 	type PendingTask,
 } from "../lib/pendingTasks";
+import { casePct, consultationPct } from "../lib/caseGate";
 
 /**
  * "Pending tasks" — the unified triage surface.
@@ -475,6 +476,14 @@ export function PendingTaskRows({
 										const selected = selectedId === t.id;
 										const canAssign = isAssignable(t);
 										const open = isOpen(t);
+										/* How far the record behind the task is through its own plan —
+										   cases and consultations only; invoices and leads have none. */
+										const pct =
+											t.kind === "application" || t.kind === "visa"
+												? casePct(t.record)
+												: t.kind === "consultation"
+													? consultationPct(t.record.status)
+													: null;
 										return (
 											<div
 												key={t.id}
@@ -503,6 +512,12 @@ export function PendingTaskRows({
 														{t.subtitle}
 														{t.kind === "booking" ? ` · ${t.record.clientEmail}` : ""}
 													</p>
+													{pct !== null && (
+														<span className="tprog">
+															<span className="ops-prog__bar"><span className="ops-prog__fill" style={{ width: `${pct}%` }} /></span>
+															<span className="tprog__n">{pct}%</span>
+														</span>
+													)}
 												</div>
 												<span className="twhen">{taskWhen(t, now)}</span>
 												<span className={`town${open ? " town--none" : ""}`}>

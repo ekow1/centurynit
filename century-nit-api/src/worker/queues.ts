@@ -92,6 +92,8 @@ export const meetingStatusQueue = new Queue("meetingStatus", { connection });
 export const documentCleanupQueue = new Queue("documentCleanup", { connection });
 export const campaignQueue = new Queue("campaign", { connection });
 export const autopayQueue = new Queue("autopay", { connection });
+export const chatReplyEmailQueue = new Queue("chatReplyEmail", { connection });
+export const helpdeskSweepQueue = new Queue("helpdeskSweep", { connection });
 
 /* ── Email ───────────────────────────────────────────────────────────────── */
 
@@ -104,6 +106,31 @@ export const autopayQueue = new Queue("autopay", { connection });
  */
 export async function queueEmail(message: QueuedEmail): Promise<void> {
 	await addEmailJob(message);
+}
+
+/* ── Client reply emails ────────────────────────────────────────────────── */
+
+/**
+ * Staff replied to a client-facing thread → after `delayMs` the worker checks
+ * whether the client has seen it (read cursor moved past the message, or the
+ * client answered). Only then is an email queued — an online client gets the
+ * SSE echo + in-app bell, never a redundant email.
+ */
+export type ChatReplyCheckJob = { conversationId: string; messageId: string };
+
+export async function queueChatReplyCheck(
+	job: ChatReplyCheckJob,
+	delayMs = 5 * 60_000,
+): Promise<void> {
+	try {
+		await chatReplyEmailQueue.add("check", job, {
+			...RETRY,
+			jobId: `chat-reply:${job.messageId}`,
+			delay: delayMs,
+		});
+	} catch (err) {
+		if (!isDuplicateJobId(err)) throw err;
+	}
 }
 
 export async function queueEmails(messages: QueuedEmail[]): Promise<void> {
@@ -216,6 +243,19 @@ export async function scheduleAutoPaySweep(): Promise<void> {
 		"sweep",
 		{},
 		{ repeat: { every: 24 * 60 * 60 * 1000 }, jobId: undefined },
+	);
+}
+
+/**
+ * The unclaimed-request sweep — hands orphaned client-facing threads to the
+ * least-loaded available customer-service agent. Runs every 15 minutes;
+ * BullMQ dedupes repeatables by key so every worker boot stays one timer.
+ */
+export async function scheduleHelpdeskSweep(): Promise<void> {
+	await helpdeskSweepQueue.add(
+		"sweep",
+		{},
+		{ repeat: { every: 15 * 60 * 1000 }, jobId: undefined },
 	);
 }
 

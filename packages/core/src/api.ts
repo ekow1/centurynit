@@ -1746,6 +1746,31 @@ export const meApi = {
 	markCommunicationRead(conversationId: string): Promise<{ ok: boolean }> {
 		return request(`${API_PREFIX}/me/communication/conversations/${conversationId}/read`, { method: "POST" });
 	},
+
+	/* Request layer — one request = category + subject + first message. */
+
+	createCommunicationRequest(body: {
+		category: string;
+		subject: string;
+		content: string;
+		caseId?: string;
+	}): Promise<ApiChatConversation> {
+		return request(`${API_PREFIX}/me/communication/requests`, {
+			method: "POST",
+			...json(body),
+		});
+	},
+
+	/** Post-resolve CSAT rating. */
+	rateCommunicationConversation(
+		conversationId: string,
+		body: { score: 1 | 5; note?: string },
+	): Promise<{ ok: boolean }> {
+		return request(`${API_PREFIX}/me/communication/conversations/${conversationId}/rate`, {
+			method: "POST",
+			...json(body),
+		});
+	},
 };
 
 export type {

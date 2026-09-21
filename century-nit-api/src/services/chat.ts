@@ -27,7 +27,7 @@ import {
 	users,
 } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
-import { queueEmail } from "../worker/queues.js";
+import { queueChatReplyCheck, queueEmail } from "../worker/queues.js";
 import type { QueuedEmail } from "./notifications.js";
 import { renderBookingEmail } from "../lib/email-templates.js";
 import { env } from "../env.js";
@@ -235,6 +235,17 @@ function serializeConversation(
 		awaitingReply: Boolean(lastPublicMsg?.senderUserId),
 		unreadCount: unread,
 		lastMessageAt: row.lastMessageAt?.toISOString() ?? null,
+		subject: row.subject,
+		category: row.category as ChatConversation["category"],
+		priority: row.priority as ChatConversation["priority"],
+		waitingOn: row.waitingOn as ChatConversation["waitingOn"],
+		audience: row.audience as ChatConversation["audience"],
+		raisedByOpsUserId: row.raisedByOpsUserId,
+		firstResponseAt: row.firstResponseAt?.toISOString() ?? null,
+		resolvedAt: row.resolvedAt?.toISOString() ?? null,
+		csatScore: row.csatScore,
+		csatNote: row.csatNote,
+		stageKey: row.stageKey,
 		createdAt: row.createdAt.toISOString(),
 		updatedAt: row.updatedAt.toISOString(),
 	};
@@ -249,6 +260,10 @@ function serializeMessage(row: typeof messages.$inferSelect): ChatMessage {
 export async function listConversations(
 	opsUserId: string,
 	staffRole?: string,
+	/** "staff" = the generic chat hub (no client-facing threads); "desk" =
+	 *  client-bound threads only (the Helpdesk queue). Default keeps the old
+	 *  combined list for callers that haven't chosen a surface. */
+	scope?: "staff" | "desk",
 ): Promise<ChatConversationList> {
 	const membership = db
 		.select({ conversationId: conversationParticipants.conversationId })
@@ -386,9 +401,22 @@ export async function listConversations(
 		lastPublicMsgMap.set(msg.conversationId, msg);
 	}
 
-	const list = rows.map((r) =>
+	let list = rows.map((r) =>
 		serializeConversation(r.conversations, participantsMap, unreadMap, lastMsgMap, opsUserId, lastPublicMsgMap),
 	);
+
+	// Surface scoping: the staff chat hub is DMs/groups/internal only —
+	// client-facing threads live on the Helpdesk page where claim/queue/SLA
+	// exist. Internal-audience requests never reach a client read anyway.
+	if (scope === "staff") {
+		list = list.filter(
+			(c) => !CLIENT_VISIBLE_TYPES.has(c.type) || c.audience === "internal",
+		);
+	} else if (scope === "desk") {
+		list = list.filter(
+			(c) => CLIENT_VISIBLE_TYPES.has(c.type) && c.audience !== "internal",
+		);
+	}
 
 	return { conversations: list, total: list.length };
 }
@@ -760,6 +788,17 @@ async function sendMessageInternal(
 		.from(conversations)
 		.where(eq(conversations.id, conversationId))
 		.limit(1);
+	if (convRow && CLIENT_FACING_TYPES.has(convRow.type) && visibility === "public") {
+		// Request-layer bookkeeping: a public staff reply flips waiting-on to
+		// the client and stamps the first response once.
+		await db
+			.update(conversations)
+			.set({
+				waitingOn: "client",
+				firstResponseAt: sql`COALESCE(${conversations.firstResponseAt}, ${created.createdAt})`,
+			})
+			.where(eq(conversations.id, conversationId));
+	}
 	if (convRow && CLIENT_FACING_TYPES.has(convRow.type)) {
 		const [owner] = await db
 			.select({ opsUserId: conversationParticipants.opsUserId })
@@ -854,6 +893,9 @@ async function sendMessageInternal(
 					// ?chat=<id> and opens on it (there is no /portal/support page).
 					link: `/portal/home?chat=${conversationId}`,
 				});
+				// Email mirror of notifyOfflineParticipants for clients: a delayed
+				// check emails only if the client still hasn't seen the reply.
+				await queueChatReplyCheck({ conversationId, messageId: created.id });
 				return;
 			}
 
@@ -1715,6 +1757,8 @@ export async function setConversationStatus(
 		.set({
 			status,
 			closedAt: closing ? new Date() : null,
+			resolvedAt: status === "closed" ? new Date() : null,
+			waitingOn: closing ? null : "us",
 			updatedAt: new Date(),
 		})
 		.where(eq(conversations.id, conversationId));

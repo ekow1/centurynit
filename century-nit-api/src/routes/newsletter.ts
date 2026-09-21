@@ -4,10 +4,11 @@ import { z } from "zod";
 import { and, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "../db/index.js";
-import { mailingLists, mailingListContacts, leads } from "../db/schema.js";
+import { mailingLists, mailingListContacts, leads, marketingOptins } from "../db/schema.js";
 import { queueEmail } from "../worker/queues.js";
 import { env } from "../env.js";
 import { newsletterSubscribeRateLimit } from "../middleware/rate-limit.js";
+import { recordLinkClick, recordOptIn, removeOptIn, suppressEmail, unsubKeyFor, unsuppressEmail } from "../services/marketing.js";
 
 function escapeHtml(value: string): string {
 	return value
@@ -222,21 +223,33 @@ newsletterRouter.openapi(
 				status: "confirmed",
 				confirmedAt: new Date(),
 				unsubscribedAt: null,
+				consentSource: "confirm_link",
 			})
 			.where(eq(mailingListContacts.id, row.id));
+
+		// The double opt-in is the consent record — every list this address
+		// sits on reads it from here.
+		await recordOptIn(row.email, "confirm_link");
+		await unsuppressEmail(row.email);
 
 		return c.json({ ok: true, status: "confirmed" } as const);
 	},
 );
 
-/* ── GET /api/v1/newsletter/unsubscribe?token=... ──────────────────────── */
+/* ── GET /api/v1/newsletter/unsubscribe?token=… | ?email=…&key=… ──────── */
 
 newsletterRouter.openapi(
 	createRoute({
 		method: "get",
 		path: "/unsubscribe",
 		tags: ["Newsletter"],
-		request: { query: z.object({ token: z.string().uuid() }) },
+		request: {
+			query: z.object({
+				token: z.string().uuid().optional(),
+				email: z.string().email().optional(),
+				key: z.string().optional(),
+			}),
+		},
 		responses: {
 			200: {
 				content: {
@@ -252,35 +265,143 @@ newsletterRouter.openapi(
 		},
 	}),
 	async (c) => {
-		const { token } = c.req.valid("query");
+		const { token, email, key } = c.req.valid("query");
 
-		// Unsubscribe by confirm_token (the credential included in campaign
-		// emails). We don't expose the contact id publicly.
-		const [row] = await db
-			.select()
-			.from(mailingListContacts)
-			.where(eq(mailingListContacts.confirmToken, token))
-			.limit(1);
-
-		if (!row) {
+		// Two credentials: the per-contact confirm_token from list emails, or
+		// email + HMAC key for people who aren't list contacts (segments).
+		let address: string | null = null;
+		if (token) {
+			const [row] = await db
+				.select({ email: mailingListContacts.email })
+				.from(mailingListContacts)
+				.where(eq(mailingListContacts.confirmToken, token))
+				.limit(1);
+			address = row?.email ?? null;
+		} else if (email && key && key === unsubKeyFor(email)) {
+			address = email;
+		}
+		if (!address) {
 			return c.json({ ok: false, status: "not_found" } as const);
 		}
 
-		if (row.status === "unsubscribed") {
-			return c.json({ ok: true, status: "already_unsubscribed" } as const);
-		}
-
-		await db
+		const norm = address.trim().toLowerCase();
+		const rows = await db
 			.update(mailingListContacts)
-			.set({
-				status: "unsubscribed",
-				unsubscribedAt: new Date(),
-			})
-			.where(eq(mailingListContacts.id, row.id));
+			.set({ status: "unsubscribed", unsubscribedAt: new Date() })
+			.where(sql`lower(${mailingListContacts.email}) = ${norm}`)
+			.returning({ id: mailingListContacts.id, status: mailingListContacts.status });
 
-		return c.json({ ok: true, status: "unsubscribed" } as const);
+		// Suppression is global — every list and segment stops mailing this
+		// address, not just the one the link came from.
+		await suppressEmail(norm, "unsubscribed");
+		await removeOptIn(norm);
+
+		return c.json({ ok: true, status: rows.some((r) => r.status !== "unsubscribed") ? "unsubscribed" : "already_unsubscribed" } as const);
 	},
 );
+
+/* ── GET /api/v1/newsletter/preferences?email=…&key=… ─────────────────── */
+/* The person-level consent read: opted-in state + which lists they're on. */
+
+newsletterRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/preferences",
+		tags: ["Newsletter"],
+		request: { query: z.object({ email: z.string().email(), key: z.string() }) },
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							email: z.string(),
+							optedIn: z.boolean(),
+							source: z.string().nullable(),
+							lists: z.array(z.object({ name: z.string(), status: z.string() })),
+						}),
+					},
+				},
+				description: "Email preferences for the address",
+			},
+		},
+	}),
+	async (c) => {
+		const { email, key } = c.req.valid("query");
+		if (key !== unsubKeyFor(email)) {
+			return c.json({ email, optedIn: false, source: null, lists: [] }, 200);
+		}
+		const norm = email.trim().toLowerCase();
+		const [optin] = await db.select().from(marketingOptins).where(eq(marketingOptins.email, norm)).limit(1);
+		const lists = await db
+			.select({ name: mailingLists.name, status: mailingListContacts.status })
+			.from(mailingListContacts)
+			.innerJoin(mailingLists, eq(mailingListContacts.mailingListId, mailingLists.id))
+			.where(sql`lower(${mailingListContacts.email}) = ${norm}`);
+		return c.json({ email: norm, optedIn: Boolean(optin), source: optin?.source ?? null, lists }, 200);
+	},
+);
+
+/* ── PUT /api/v1/newsletter/preferences ────────────────────────────────── */
+/* Re-opt-in from the preferences page — unsubscribe goes through            */
+/* /unsubscribe; this only turns consent back on.                            */
+
+newsletterRouter.openapi(
+	createRoute({
+		method: "put",
+		path: "/preferences",
+		tags: ["Newsletter"],
+		request: {
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							email: z.string().email(),
+							key: z.string(),
+							optedIn: z.boolean(),
+						}),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.object({ ok: z.boolean() }) } },
+				description: "Preference saved",
+			},
+		},
+	}),
+	async (c) => {
+		const { email, key, optedIn } = c.req.valid("json");
+		if (key !== unsubKeyFor(email)) return c.json({ ok: false }, 200);
+		const norm = email.trim().toLowerCase();
+		if (optedIn) {
+			await recordOptIn(norm, "portal");
+			await unsuppressEmail(norm);
+			await db
+				.update(mailingListContacts)
+				.set({ status: "confirmed", confirmedAt: new Date(), unsubscribedAt: null })
+				.where(sql`lower(${mailingListContacts.email}) = ${norm}`);
+		} else {
+			await suppressEmail(norm, "unsubscribed");
+			await removeOptIn(norm);
+			await db
+				.update(mailingListContacts)
+				.set({ status: "unsubscribed", unsubscribedAt: new Date() })
+				.where(sql`lower(${mailingListContacts.email}) = ${norm}`);
+		}
+		return c.json({ ok: true }, 200);
+	},
+);
+
+/* ── GET /api/v1/newsletter/click/:linkId/:recipientId ─────────────────── */
+/* Tracked-link redirect — counts the click, then 302s to the real URL.      */
+
+newsletterRouter.get("/click/:linkId/:recipientId", async (c) => {
+	const url = await recordLinkClick(c.req.param("linkId"), c.req.param("recipientId"));
+	if (!url) return c.notFound();
+	return c.redirect(url, 302);
+});
 
 /* ── helpers ────────────────────────────────────────────────────────────── */
 

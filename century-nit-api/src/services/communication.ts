@@ -14,7 +14,7 @@
  * See the design doc for the full routing and permission model.
  */
 
-import { and, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, like, lte, ne, notExists, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type {
 	ChatConversation,
@@ -33,6 +33,8 @@ import { db } from "../db/index.js";
 import {
 	applicants,
 	applications,
+	authSettings,
+	cannedReplies,
 	communicationEvents,
 	conversationParticipants,
 	conversations,
@@ -333,6 +335,16 @@ async function serializeConversation(
 			})),
 		lastMessage: lastMsg ? serializeMessageRow(lastMsg) : null,
 		unreadCount: unread,
+		subject: row.subject,
+		category: row.category as ChatConversation["category"],
+		priority: row.priority as ChatConversation["priority"],
+		waitingOn: row.waitingOn as ChatConversation["waitingOn"],
+		audience: row.audience as ChatConversation["audience"],
+		raisedByOpsUserId: row.raisedByOpsUserId,
+		firstResponseAt: row.firstResponseAt?.toISOString() ?? null,
+		resolvedAt: row.resolvedAt?.toISOString() ?? null,
+		csatScore: row.csatScore,
+		csatNote: viewer.opsUserId ? row.csatNote : null,
 		createdAt: row.createdAt.toISOString(),
 		updatedAt: row.updatedAt.toISOString(),
 	};
@@ -356,6 +368,14 @@ export interface FindOrCreateInput {
 	title: string;
 	/** Initial participant staff IDs (besides the creator). */
 	participantOpsUserIds?: string[];
+	/* Request layer — for `support`: reuses only an OPEN thread of the same
+	   category (one request per thread); everything else keeps the old match. */
+	subject?: string | null;
+	category?: string | null;
+	priority?: string;
+	/** "internal" keeps the thread off every client read. */
+	audience?: string;
+	raisedByOpsUserId?: string | null;
 }
 
 /**
@@ -388,6 +408,14 @@ export async function findOrCreateConversation(
 					: isNull(conversations.linkedEntityId),
 				stageKey ? eq(conversations.stageKey, stageKey) : isNull(conversations.stageKey),
 				input.userId ? eq(conversations.userId, input.userId) : sql`true`,
+				// Request threads reuse only an OPEN thread of the same category —
+				// a payment question in March and a visa question in July are two
+				// requests, not one endless scroll. Uncategorized callers keep the
+				// old one-thread-per-client behaviour.
+				input.type === "support" ? eq(conversations.status, "open") : sql`true`,
+				input.type === "support" && input.category !== undefined
+					? (input.category ? eq(conversations.category, input.category) : isNull(conversations.category))
+					: sql`true`,
 			),
 		)
 		.limit(1);
@@ -412,6 +440,13 @@ export async function findOrCreateConversation(
 			stageKey,
 			emailInboxToken: randomUUID(),
 			status: "open",
+			subject: input.subject ?? null,
+			category: input.category ?? null,
+			priority: input.priority ?? "normal",
+			audience: input.audience === "internal" ? "internal" : "client",
+			raisedByOpsUserId: input.raisedByOpsUserId ?? null,
+			// A new request owes the desk a reply until staff answer.
+			waitingOn: input.type === "support" ? "us" : null,
 		})
 		.returning();
 
@@ -1015,7 +1050,11 @@ export async function sendCustomerMessage(
 	if (conv?.status === "closed") {
 		await db
 			.update(conversations)
-			.set({ status: "open", closedAt: null })
+			.set({
+				status: "open",
+				closedAt: null,
+				reopenedCount: sql`${conversations.reopenedCount} + 1`,
+			})
 			.where(eq(conversations.id, conversationId));
 		await appendSystemMessage(
 			conversationId,
@@ -1046,7 +1085,7 @@ export async function sendCustomerMessage(
 
 	await db
 		.update(conversations)
-		.set({ updatedAt: new Date(), lastMessageAt: new Date() })
+		.set({ updatedAt: new Date(), lastMessageAt: new Date(), waitingOn: "us" })
 		.where(eq(conversations.id, conversationId));
 
 	// Bind pre-staged uploads - scoped to this customer's unbound rows so one
@@ -1160,6 +1199,9 @@ export async function sendCustomerMessage(
 		}
 	})().catch(() => {});
 
+	// Out-of-hours courtesy line — self-guarding, one per 20h per thread.
+	void maybeAutoHoursLine(conversationId);
+
 	return { ...serializeMessage(created), deliveryStatus: "sent" };
 }
 
@@ -1187,13 +1229,13 @@ export async function appendSystemMessage(
 	conversationId: string,
 	content: string,
 	metadata?: Record<string, unknown>,
-): Promise<void> {
-	await db.insert(messages).values({
+) {
+	const [row] = await db.insert(messages).values({
 		conversationId,
 		senderName: "System",
 		content,
 		messageType: "system",
-	});
+	}).returning();
 	await db
 		.update(conversations)
 		.set({ updatedAt: new Date(), lastMessageAt: new Date() })
@@ -1203,6 +1245,7 @@ export async function appendSystemMessage(
 		conversationId,
 		metadata: { content, ...metadata },
 	});
+	return row;
 }
 
 /* ── Stage assignment + reassignment (§8, §12) ───────────────────────────── */
@@ -1607,3 +1650,519 @@ export async function getStaffDirectoryDetailed(): Promise<StaffDirectoryDetaile
 	return { staff: out };
 }
 
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Request layer. A support thread is ONE request: category + subject +
+ * waiting-on state + resolution + CSAT. Both intakes (portal form and the
+ * ops "log request" sheet) produce the same row, so a phone call and a
+ * portal submission land in the same queue.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/** Portal intake. Reuses the client's OPEN same-category support thread. */
+export async function createCustomerRequest(
+	user: SessionUser,
+	input: { category: string; subject: string; content: string; caseId?: string },
+): Promise<ChatConversation> {
+	const conv = await findOrCreateConversation({
+		type: "support",
+		userId: user.id,
+		createdByOpsUserId: null,
+		linkedEntityType: input.caseId ? "application" : null,
+		linkedEntityId: input.caseId ?? null,
+		category: input.category,
+		subject: input.subject,
+		title: input.subject,
+	});
+	if (!conv.created) {
+		// Reused the open thread — keep the latest subject fresh.
+		await db
+			.update(conversations)
+			.set({ subject: input.subject })
+			.where(and(eq(conversations.id, conv.id), isNull(conversations.subject)));
+	}
+	await sendCustomerMessage(conv.id, user, input.content);
+	const [row] = await db.select().from(conversations).where(eq(conversations.id, conv.id)).limit(1);
+	return serializeConversation(row, { userId: user.id });
+}
+
+/** Ops intake: file a request FOR a client, or an internal staff ticket. */
+export async function createStaffRequest(
+	opsUserId: string,
+	input: {
+		clientUserId?: string | null;
+		category: string;
+		subject: string;
+		content: string;
+		internal?: boolean;
+		assigneeOpsUserId?: string | null;
+		priority?: string;
+	},
+): Promise<ChatConversation> {
+	const [creator] = await db
+		.select({ userId: opsUsers.userId, name: opsUsers.name, email: opsUsers.email })
+		.from(opsUsers)
+		.where(eq(opsUsers.id, opsUserId))
+		.limit(1);
+	const conv = await findOrCreateConversation({
+		type: input.internal ? "internal" : "support",
+		userId: input.internal ? undefined : (input.clientUserId ?? undefined),
+		createdByOpsUserId: opsUserId,
+		category: input.category,
+		subject: input.subject,
+		title: input.subject,
+		priority: input.priority ?? "normal",
+		audience: input.internal ? "internal" : "client",
+		raisedByOpsUserId: opsUserId,
+		participantOpsUserIds: input.assigneeOpsUserId ? [input.assigneeOpsUserId] : [],
+	});
+	if (input.content.trim()) {
+		await sendMessage(
+			conv.id,
+			{ id: opsUserId, name: creator?.name ?? "Staff", email: creator?.email ?? "" },
+			{ content: input.content },
+		);
+	}
+	// A request filed by the office already has its first response.
+	if (conv.created) {
+		await db
+			.update(conversations)
+			.set({ firstResponseAt: new Date() })
+			.where(eq(conversations.id, conv.id));
+	}
+	const [row] = await db.select().from(conversations).where(eq(conversations.id, conv.id)).limit(1);
+	return serializeConversation(row, { opsUserId });
+}
+
+export async function setConversationWaitingOn(
+	conversationId: string,
+	waitingOn: "us" | "client" | null,
+): Promise<void> {
+	await db
+		.update(conversations)
+		.set({ waitingOn, updatedAt: new Date() })
+		.where(eq(conversations.id, conversationId));
+	publishChatEvent(conversationId, { type: "chat.conversation.updated", conversationId });
+	publishChatEventToClient(conversationId, { type: "chat.conversation.updated", conversationId });
+}
+
+export async function escalateConversation(
+	conversationId: string,
+	opsUserId: string,
+	reason: string,
+): Promise<void> {
+	await db
+		.update(conversations)
+		.set({
+			escalatedByOpsUserId: opsUserId,
+			escalationReason: reason,
+			priority: "urgent",
+			waitingOn: "us",
+			updatedAt: new Date(),
+		})
+		.where(eq(conversations.id, conversationId));
+	await appendSystemMessage(conversationId, `Escalated — ${reason}`);
+	publishChatEvent(conversationId, { type: "chat.conversation.updated", conversationId });
+	// Managers own escalations.
+	const mgrs = await getManagerAndCoordinatorUserIds();
+	await notifyMany(
+		mgrs.map(({ userId }) => ({
+			recipientUserId: userId!,
+			type: "chat.escalation",
+			title: "Conversation escalated",
+			body: reason,
+			link: `/helpdesk?id=${conversationId}`,
+		})),
+	);
+}
+
+/** CSAT after resolve. Client-owned conversations only. */
+export async function rateConversation(
+	user: SessionUser,
+	conversationId: string,
+	score: number,
+	note?: string,
+): Promise<void> {
+	const [conv] = await db
+		.select({ userId: conversations.userId, status: conversations.status })
+		.from(conversations)
+		.where(eq(conversations.id, conversationId))
+		.limit(1);
+	if (!conv || conv.userId !== user.id)
+		throw new HttpError(404, "CONVERSATION_NOT_FOUND", "Conversation not found");
+	await db
+		.update(conversations)
+		.set({ csatScore: score, csatNote: note ?? null })
+		.where(eq(conversations.id, conversationId));
+	publishChatEvent(conversationId, { type: "chat.conversation.updated", conversationId });
+}
+
+/* ── Canned replies ─────────────────────────────────────────────────────── */
+
+export async function listCannedReplies(scopeValue?: string | null) {
+	const rows = await db.select().from(cannedReplies).orderBy(cannedReplies.label);
+	return rows
+		.filter(
+			(r) =>
+				r.scope === "all" ||
+				(scopeValue != null && r.scopeValue === scopeValue),
+		)
+		.map(serializeCannedReply);
+}
+
+function serializeCannedReply(r: typeof cannedReplies.$inferSelect) {
+	return {
+		id: r.id,
+		label: r.label,
+		body: r.body,
+		scope: r.scope as "all" | "branch" | "stage",
+		scopeValue: r.scopeValue,
+	};
+}
+
+export async function createCannedReply(input: {
+	label: string;
+	body: string;
+	scope?: string;
+	scopeValue?: string;
+}) {
+	const [row] = await db
+		.insert(cannedReplies)
+		.values({
+			label: input.label,
+			body: input.body,
+			scope: input.scope ?? "all",
+			scopeValue: input.scopeValue ?? null,
+		})
+		.returning();
+	return serializeCannedReply(row);
+}
+
+export async function deleteCannedReply(id: string): Promise<void> {
+	await db.delete(cannedReplies).where(eq(cannedReplies.id, id));
+}
+
+/* ── Desk settings + stats ──────────────────────────────────────────────── */
+
+export interface HelpdeskSettings {
+	hoursLabel: string;
+	firstResponseMinutes: number;
+	resolutionHours: number;
+	/** Structured hours for the out-of-hours auto line. daysOpen: 0=Sun…6=Sat. */
+	daysOpen: number[];
+	openMinutes: number;
+	closeMinutes: number;
+	timezone: string;
+	/** Minutes an unclaimed client request may sit before the sweep assigns it. */
+	autoAssignMinutes: number;
+}
+
+const DEFAULT_HELPDESK: HelpdeskSettings = {
+	hoursLabel: "Mon–Fri 08:00–17:00 GMT",
+	firstResponseMinutes: 60,
+	resolutionHours: 24,
+	daysOpen: [1, 2, 3, 4, 5],
+	openMinutes: 8 * 60,
+	closeMinutes: 17 * 60,
+	timezone: "Africa/Accra",
+	autoAssignMinutes: 15,
+};
+
+export async function getHelpdeskSettings(): Promise<HelpdeskSettings> {
+	const [row] = await db
+		.select({ value: authSettings.value })
+		.from(authSettings)
+		.where(eq(authSettings.key, "helpdesk"))
+		.limit(1);
+	const v = (row?.value ?? {}) as Partial<HelpdeskSettings>;
+	return { ...DEFAULT_HELPDESK, ...v };
+}
+
+/** Local wall-clock in the desk's timezone — the honest "are we open" check. */
+export function isDeskOpen(settings: HelpdeskSettings, at = new Date()): boolean {
+	try {
+		const parts = new Intl.DateTimeFormat("en-US", {
+			timeZone: settings.timezone,
+			weekday: "short",
+			hour: "numeric",
+			minute: "numeric",
+			hour12: false,
+		}).formatToParts(at);
+		const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+		const dayIdx = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(get("weekday"));
+		const minutes = Number(get("hour")) * 60 + Number(get("minute"));
+		return (
+			settings.daysOpen.includes(dayIdx) &&
+			minutes >= settings.openMinutes &&
+			minutes < settings.closeMinutes
+		);
+	} catch {
+		// A bad timezone in settings must fail OPEN — never tell a client the
+		// desk is closed because of a config typo.
+		return true;
+	}
+}
+
+const AUTO_HOURS_MARKER = "desk is open";
+
+/**
+ * Out-of-hours auto line. When a client writes while the desk is closed we
+ * say when we'll be back instead of leaving the send on read-nothing.
+ * Throttled to one per 20h per thread so a late-night back-and-forth isn't
+ * spammed, and fully self-guarding — a failure here never blocks the send.
+ */
+export async function maybeAutoHoursLine(conversationId: string): Promise<void> {
+	try {
+		const [conv] = await db
+			.select({ audience: conversations.audience })
+			.from(conversations)
+			.where(eq(conversations.id, conversationId))
+			.limit(1);
+		if (conv?.audience !== "client") return;
+		const settings = await getHelpdeskSettings();
+		if (isDeskOpen(settings)) return;
+		const since = new Date(Date.now() - 20 * 60 * 60 * 1000);
+		const [recent] = await db
+			.select({ id: messages.id })
+			.from(messages)
+			.where(
+				and(
+					eq(messages.conversationId, conversationId),
+					eq(messages.messageType, "system"),
+					like(messages.content, `%${AUTO_HOURS_MARKER}%`),
+					gte(messages.createdAt, since),
+				),
+			)
+			.limit(1);
+		if (recent) return;
+		const row = await appendSystemMessage(
+			conversationId,
+			`Our ${AUTO_HOURS_MARKER} ${settings.hoursLabel} — we'll reply first thing when we open.`,
+			{ auto: "out_of_hours" },
+		);
+		const payload = { type: "chat.message", conversationId, message: serializeMessage(row) };
+		publishChatEvent(conversationId, payload);
+		publishChatEventToClient(conversationId, payload);
+	} catch {
+		// The auto line is a courtesy — never let it break a real send.
+	}
+}
+
+function median(nums: number[]): number | null {
+	if (!nums.length) return null;
+	const s = [...nums].sort((a, b) => a - b);
+	const mid = Math.floor(s.length / 2);
+	return s.length % 2 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2);
+}
+
+export async function deskStats(): Promise<{
+	open: number;
+	waitingOnClient: number;
+	unclaimed: number;
+	breaching: number;
+	medianFirstResponseMinutes: number | null;
+	medianResolutionHours: number | null;
+	csatAvg: number | null;
+	settings: HelpdeskSettings;
+}> {
+	const settings = await getHelpdeskSettings();
+	const rows = await db
+		.select()
+		.from(conversations)
+		.where(
+			and(
+				inArray(conversations.type, ["support", "case", "stage", "applicant"]),
+				eq(conversations.audience, "client"),
+				ne(conversations.status, "archived"),
+			),
+		);
+
+	const now = Date.now();
+	const firstRespMs: number[] = [];
+	const resolMs: number[] = [];
+	const csat: number[] = [];
+	let open = 0;
+	let waitingClient = 0;
+	let breaching = 0;
+
+	for (const r of rows) {
+		if (r.status === "open") {
+			open++;
+			if (r.waitingOn === "client") waitingClient++;
+			const ageMin = (now - r.createdAt.getTime()) / 60000;
+			const resAgeH =
+				(now - (r.lastMessageAt?.getTime() ?? r.createdAt.getTime())) / 3600000;
+			if (
+				(r.firstResponseAt == null && ageMin > settings.firstResponseMinutes) ||
+				resAgeH > settings.resolutionHours
+			) {
+				breaching++;
+			}
+		}
+		if (r.firstResponseAt) {
+			firstRespMs.push(r.firstResponseAt.getTime() - r.createdAt.getTime());
+		}
+		if (r.resolvedAt) {
+			resolMs.push(r.resolvedAt.getTime() - r.createdAt.getTime());
+		}
+		if (r.csatScore) csat.push(r.csatScore);
+	}
+
+	// unclaimed = open, no owner participant
+	const owners = await db
+		.select({ conversationId: conversationParticipants.conversationId })
+		.from(conversationParticipants)
+		.where(eq(conversationParticipants.role, "owner"));
+	const owned = new Set(owners.map((o) => o.conversationId));
+	const unclaimed = rows.filter((r) => r.status === "open" && !owned.has(r.id)).length;
+
+	return {
+		open,
+		waitingOnClient: waitingClient,
+		unclaimed,
+		breaching,
+		medianFirstResponseMinutes: firstRespMs.length
+			? Math.round(median(firstRespMs)! / 60000)
+			: null,
+		medianResolutionHours: resolMs.length
+			? Math.round((median(resolMs)! / 3600000) * 10) / 10
+			: null,
+		csatAvg: csat.length
+			? Math.round((csat.reduce((a, b) => a + b, 0) / csat.length) * 10) / 10
+			: null,
+		settings,
+	};
+}
+
+/**
+ * The unclaimed-request sweep (BullMQ, every 15min). Open client-facing
+ * threads with NO owner and older than the grace period get handed to the
+ * least-loaded available customer-service agent. "Available" is the same
+ * presence rule the desk reads: status available + heartbeat < 15min. When
+ * nobody is available the request stays unclaimed — the next sweep retries,
+ * and the desk's Unclaimed band still shows it either way.
+ */
+export async function runHelpdeskSweep(): Promise<{ assigned: number }> {
+	const settings = await getHelpdeskSettings();
+	const cutoff = new Date(Date.now() - settings.autoAssignMinutes * 60_000);
+
+	// Open, client-facing, past the grace period, with no owner participant.
+	const orphans = await db
+		.select({ id: conversations.id })
+		.from(conversations)
+		.where(
+			and(
+				eq(conversations.status, "open"),
+				eq(conversations.audience, "client"),
+				inArray(conversations.type, [...CUSTOMER_VISIBLE_TYPES]),
+				lte(conversations.createdAt, cutoff),
+				notExists(
+					db
+						.select({ one: sql`1` })
+						.from(conversationParticipants)
+						.where(
+							and(
+								eq(conversationParticipants.conversationId, conversations.id),
+								eq(conversationParticipants.role, "owner"),
+							),
+						),
+				),
+			),
+		)
+		.limit(50);
+	if (!orphans.length) return { assigned: 0 };
+
+	// Available customer-service agents — presence heartbeat within 15min.
+	const agents = await db
+		.select({ id: opsUsers.id, name: opsUsers.name, userId: opsUsers.userId })
+		.from(opsUsers)
+		.innerJoin(staffPresence, eq(staffPresence.opsUserId, opsUsers.id))
+		.where(
+			and(
+				eq(opsUsers.active, true),
+				eq(opsUsers.role, "customer_service"),
+				eq(staffPresence.status, "available"),
+				gte(staffPresence.lastSeenAt, new Date(Date.now() - 15 * 60_000)),
+			),
+		);
+	if (!agents.length) return { assigned: 0 };
+
+	// Least-loaded wins each round — an even spread, not a strict rotation,
+	// so a drowning agent doesn't keep taking tickets.
+	const load = new Map<string, number>(agents.map((a) => [a.id, 0]));
+	const owned = await db
+		.select({
+			opsUserId: conversationParticipants.opsUserId,
+			n: sql<number>`count(*)::int`,
+		})
+		.from(conversationParticipants)
+		.innerJoin(conversations, eq(conversations.id, conversationParticipants.conversationId))
+		.where(
+			and(
+				eq(conversationParticipants.role, "owner"),
+				eq(conversations.status, "open"),
+				eq(conversations.audience, "client"),
+				inArray(conversationParticipants.opsUserId, agents.map((a) => a.id)),
+			),
+		)
+		.groupBy(conversationParticipants.opsUserId);
+	for (const r of owned) if (r.opsUserId) load.set(r.opsUserId, r.n);
+
+	let assigned = 0;
+	for (const conv of orphans) {
+		const pick = agents.reduce((a, b) =>
+			(load.get(b.id) ?? 0) < (load.get(a.id) ?? 0) ? b : a,
+		);
+		// Promote an existing membership or join them in as owner — the
+		// COALESCE'd unique index can't be upserted, so select-then-write.
+		const [existing] = await db
+			.select({ conversationId: conversationParticipants.conversationId })
+			.from(conversationParticipants)
+			.where(
+				and(
+					eq(conversationParticipants.conversationId, conv.id),
+					eq(conversationParticipants.opsUserId, pick.id),
+				),
+			)
+			.limit(1);
+		if (existing) {
+			await db
+				.update(conversationParticipants)
+				.set({ role: "owner" })
+				.where(
+					and(
+						eq(conversationParticipants.conversationId, conv.id),
+						eq(conversationParticipants.opsUserId, pick.id),
+					),
+				);
+		} else {
+			await db
+				.insert(conversationParticipants)
+				.values({ conversationId: conv.id, opsUserId: pick.id, role: "owner" });
+		}
+		await appendSystemMessage(
+			conv.id,
+			`Auto-assigned to ${pick.name} — the desk picked up your request.`,
+			{ auto: "round_robin", opsUserId: pick.id },
+		);
+		publishChatEvent(conv.id, {
+			type: "chat.conversation.updated",
+			conversationId: conv.id,
+		});
+		publishChatEventToClient(conv.id, {
+			type: "chat.conversation.updated",
+			conversationId: conv.id,
+		});
+		if (pick.userId) {
+			notify({
+				recipientUserId: pick.userId,
+				type: "chat.assigned",
+				title: "Request auto-assigned to you",
+				body: "An unclaimed client request was routed to your queue.",
+				link: `/helpdesk?id=${conv.id}`,
+			}).catch(() => {});
+		}
+		load.set(pick.id, (load.get(pick.id) ?? 0) + 1);
+		assigned++;
+	}
+	return { assigned };
+}

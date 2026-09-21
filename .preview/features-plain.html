@@ -1,0 +1,210 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+	@page { size: A4; margin: 16mm 15mm 16mm; }
+	:root { --ink: #17161a; --paper: #faf9f6; --muted: #6e6a60; --amber: #b97a10; --line: #d9d4c9; --line-lt: #eae7de; }
+	* { box-sizing: border-box; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+	body { font-family: Georgia, "Times New Roman", serif; color: var(--ink); font-size: 10.5pt; line-height: 1.6; max-width: 700px; margin: 0 auto; }
+
+	h1 { font-size: 26pt; line-height: 1.15; margin: 0 0 6pt; padding-top: 16pt; border-top: 4px solid var(--ink); page-break-before: always; }
+	h2 { font-size: 15pt; margin: 20pt 0 6pt; padding-top: 10pt; border-top: 1.5px solid var(--ink); page-break-after: avoid; }
+	h3 { font-size: 11.5pt; margin: 14pt 0 4pt; page-break-after: avoid; }
+	.hsub { font-family: "Courier New", ui-monospace, monospace; font-size: 8pt; letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber); margin: 20pt 0 2pt; page-break-after: avoid; }
+	.hsub + h2 { margin-top: 0; padding-top: 0; border-top: 0; }
+	h1 + p em, h1 ~ p:first-of-type em { color: var(--muted); }
+
+	p { margin: 0 0 8pt; }
+	strong { font-weight: 700; }
+	code { font-family: "Courier New", ui-monospace, monospace; font-size: 9pt; background: #f3f1ea; padding: 0 3pt; }
+
+	ul, ol { margin: 0 0 10pt; padding: 0; list-style: none; }
+	li { margin-bottom: 4pt; padding-left: 14pt; position: relative; }
+	li::before { content: ""; position: absolute; left: 0; top: 0.6em; width: 6pt; height: 6pt; background: var(--ink); }
+	ol { counter-reset: oli; }
+	ol li::before { content: counter(oli); counter-increment: oli; background: none; font-family: "Courier New", ui-monospace, monospace; font-size: 9pt; top: 0.1em; }
+
+	blockquote { margin: 12pt 0; padding: 10pt 14pt; border-left: 4px solid var(--amber); background: #faf7f0; font-size: 10pt; }
+	hr { border: 0; border-top: 1px solid var(--line); margin: 18pt 0; }
+
+	table { width: 100%; border-collapse: collapse; margin: 8pt 0 14pt; font-size: 9.5pt; }
+	th { font-family: "Courier New", ui-monospace, monospace; font-size: 7.5pt; letter-spacing: 0.1em; text-transform: uppercase; text-align: left; color: var(--muted); border-top: 1.5px solid var(--ink); border-bottom: 1px solid var(--line); padding: 5pt 8pt 5pt 0; }
+	td { padding: 5pt 8pt 5pt 0; border-bottom: 1px solid var(--line-lt); vertical-align: top; }
+	tr { page-break-inside: avoid; }
+	a { color: var(--ink); text-decoration: none; }
+
+	.cover { height: 252mm; background: var(--ink); color: var(--paper); display: flex; flex-direction: column; justify-content: space-between; padding: 22mm 18mm 16mm; page-break-after: always; }
+	.cover__brand { font-family: "Courier New", ui-monospace, monospace; font-size: 10pt; letter-spacing: 0.34em; color: var(--amber); margin: 0; }
+	.cover__title { font-size: 38pt; line-height: 1.08; margin: 0 0 16pt; color: var(--paper); border: 0; padding: 0; page-break-before: avoid; }
+	.cover__sub { font-size: 11.5pt; line-height: 1.6; color: #b8b4a8; font-style: italic; max-width: 36em; margin: 0 0 26pt; }
+	.cover__meta { font-family: "Courier New", ui-monospace, monospace; font-size: 8.5pt; letter-spacing: 0.14em; text-transform: uppercase; color: #8a867b; margin: 0; border-top: 1px solid #3a382f; padding-top: 10pt; }
+
+	.toc { page-break-after: always; }
+	.toc__kick { margin-top: 0; }
+	.toc__row { display: block; padding: 5pt 0; border-bottom: 1px solid var(--line-lt); font-size: 10.5pt; }
+	.toc__row--l1 { font-weight: 700; margin-top: 12pt; border-bottom: 1.5px solid var(--ink); font-family: "Courier New", ui-monospace, monospace; font-size: 9pt; letter-spacing: 0.1em; text-transform: uppercase; }
+	.toc__row--l2 { padding-left: 14pt; }
+
+</style></head><body>
+	<section class="cover">
+		<p class="cover__brand">CENTURY NIT</p>
+		<div>
+			<h1 class="cover__title">Century NIT: The Platform, End to End</h1>
+			<p class="cover__sub">Part one is the story: what happens from the first website visit to</p>
+			<p class="cover__meta">Feature overview · 21 September 2026</p>
+		</div>
+	</section>
+	<section class="toc">
+		<p class="hsub toc__kick">Contents</p>
+		<a class="toc__row toc__row--l1" href="#s0"><span>Part one · Ama's file, start to finish</span></a><a class="toc__row toc__row--l2" href="#s1"><span>Sunday night · Ama finds the site</span></a><a class="toc__row toc__row--l2" href="#s2"><span>Monday, 9:14 · She buys a seat, not a promise</span></a><a class="toc__row toc__row--l2" href="#s3"><span>Tuesday, 10:00 · The call inside the page</span></a><a class="toc__row toc__row--l2" href="#s4"><span>That evening · Her plan arrives</span></a><a class="toc__row toc__row--l2" href="#s5"><span>Wednesday · Two hands on the money</span></a><a class="toc__row toc__row--l2" href="#s6"><span>The documents week</span></a><a class="toc__row toc__row--l2" href="#s7"><span>Weeks three to six · The admissions stage</span></a><a class="toc__row toc__row--l2" href="#s8"><span>The visa file</span></a><a class="toc__row toc__row--l2" href="#s9"><span>Getting on the plane</span></a><a class="toc__row toc__row--l2" href="#s10"><span>After she lands</span></a><a class="toc__row toc__row--l2" href="#s11"><span>Meanwhile, Kofi</span></a><a class="toc__row toc__row--l1" href="#s12"><span>Part two · The surfaces and their actions</span></a><a class="toc__row toc__row--l2" href="#s13"><span>Signing in and your account</span></a><a class="toc__row toc__row--l2" href="#s14"><span>The client portal, page by page</span></a><a class="toc__row toc__row--l2" href="#s15"><span>The ops console, page by page</span></a><a class="toc__row toc__row--l2" href="#s16"><span>Conversations, notifications, and calendars</span></a><a class="toc__row toc__row--l2" href="#s17"><span>Who is allowed through which door</span></a><a class="toc__row toc__row--l2" href="#s18"><span>Why nothing ever needs a refresh</span></a><a class="toc__row toc__row--l2" href="#s19"><span>The promises, in plain words</span></a><a class="toc__row toc__row--l2" href="#s20"><span>A few tech words, translated</span></a>
+	</section><p>*Part one is the story: what happens from the first website visit to arrival abroad. Part two is the map: every surface, and every action that can be performed on it. A companion to <code>FEATURES.md</code>, the technical version.*</p>
+<p class="hsub">Part one</p><h1 id="s0">Ama's file, start to finish</h1>
+<p>*A true-to-life walk through the system. Ama is a client buying the full journey. Behind her is the office: Nana the coordinator, Efua her consultant, Adjoa at the finance desk, Yaw the visa officer, Selorm the travel officer, and Kwame the manager. Every beat below is a real feature; part two lists them all.*</p>
+<p class="hsub">Sunday night</p><h2 id="s1">Ama finds the site</h2>
+<p>Ama wants a master's in the UK. On the website she browses destinations, searches the university catalogue, reads a scholarship page, and halfway down the homepage finds the journey drawn as a route: a consultation, then Admissions, Visa, Departure. She clicks "visa only" on the picker just to see, and the route redraws itself: Admissions fades, a note says it is skipped for clients who already hold an offer, the document list reshapes. She asks the chat widget a question and the AI assistant answers (it cannot see anyone's account and says so). She drops her email in the newsletter box, which will only count once she clicks the confirm link it sends. Then she books the consultation.</p>
+<p class="hsub">Monday, 9:14</p><h2 id="s2">She buys a seat, not a promise</h2>
+<p>On the booking page Ama picks online, picks her branch, and picks Tuesday at 10:00. Days with no free slots are greyed out because the calendar is built from real staff working hours. She pays the consultation fee by mobile money through Paystack, and a confirmation email arrives with her portal login.</p>
+<p>At the same minute, in the ops console, her booking lands on Nana's work queue marked unassigned. Nana assigns it to Efua; the system already knows Efua is free, because a slot cannot be sold twice or outside someone's hours.</p>
+<p class="hsub">Tuesday, 10:00</p><h2 id="s3">The call inside the page</h2>
+<p>Ama opens her portal and presses Join. The video call runs inside the page in the built-in room, each person on their own token, no app to install. (Had she needed to move it, she would have requested a new slot and Nana would approve it against live availability. Had she booked in person, her email would simply carry the branch address. Had she not shown up, the office could issue a credit and she would rebook once for free.)</p>
+<p>After the call Efua writes the assessment: eligible. Then she makes the decision that shapes everything, the scope: Ama is buying the full journey. The booking becomes a case.</p>
+<p class="hsub">That evening</p><h2 id="s4">Her plan arrives</h2>
+<p>Ama's portal now shows her own route: Stage 0 done, three stages ahead. Before anything binds she picks her package, sees a quotation of exactly what the stages cost under it, and chooses how she will pay: "full payment" or "instalments." She picks instalments: a deposit now, a pre-departure amount after her visa, the rest after she lands on a schedule she will pick then. She accepts the quotation, and her consent card for the first stage follows. The office can propose stages and re-invite her if she goes quiet, but only her yes moves the plan, and each stage asks her consent before it begins.</p>
+<p class="hsub">Wednesday</p><h2 id="s5">Two hands on the money</h2>
+<p>Efua drafts Ama's service-fee invoice from the plan she accepted: the full-journey bundle on instalments, with the discount shown next to what the stages would cost one by one. Adjoa at the finance desk approves and issues it, because every invoice is touched by two people. Ama accepts it in the portal and pays the deposit by mobile money, confirms the OTP on her phone, and the moment Paystack phones the server the milestone settles and the next stage unlocks by itself.</p>
+<p>Her payments page already reads like a bank statement: the paid deposit above the divider, the scheduled charges below, each line with a running balance, a channel, a reference, and a receipt to print.</p>
+<h2 id="s6">The documents week</h2>
+<p>The vault asks for what her scope needs: passport, transcripts, certificates. She uploads them straight to storage. One comes back rejected with the reason written underneath: "blurry, please rescan." She fixes it. When Efua needs something specific, she requests it by name and it appears in the vault as a requested item. Both sides preview files inside the page, PDFs and images with zoom and rotate, never a bare download.</p>
+<p class="hsub">Weeks three to six</p><h2 id="s7">The admissions stage</h2>
+<p>Ama fills her intake sections, chooses five schools, and locks the list. The office raises the universities' own application fees as a separate invoice, pass-through money that never counts as Century's revenue; she pays it the same way, and only then do the submissions go out. She watches each line move: preparing, submitted, decision. When Leeds admits her, an offer card appears and she accepts it, a fact on the case the visa stage will build on.</p>
+<p>Midway, Efua books a check-in on the live case: purpose "offer decision call," online, thirty minutes, a note that lands in Ama's email. Ama gets the email and a portal notification, sees it on Appointments next to her old consultation labelled Check-in, and joins from there. It is free, part of the plan, and it is written into the case history.</p>
+<h2 id="s8">The visa file</h2>
+<p>The offer is in hand, and on the full journey no new fee gates this stage: her deposit already covers it. Yaw, the visa officer, takes the seat and opens the file; the case header now shows the whole team. Ama signs the visa consent card and answers the visa intake questions. The embassy's own costs come to her as a visa invoice, pass-through like the application fees; she pays it and the work proceeds. She follows the tracker: opened, biometrics, decision. Weeks later the decision reads approved. (Had it been refused, the page would lay out the reapplication path rather than dead-ending at a red cross.)</p>
+<h2 id="s9">Getting on the plane</h2>
+<p>The case stops at the border until Kwame formally hands it to Selorm, the travel officer; no case crosses a stage unowned. Ama signs the departure consent, pays the pre-departure milestone, and chooses "Book with us." Selorm takes the request, raises a ticket invoice with the flight details, and once Ama pays it the booking lands on the file with its confirmation code.</p>
+<p>The departure page runs four parts: your flight, your papers, before you fly, finish. Ama uploads proof per checklist item; Selorm waives one with a written reason. The officer also records the arrival side: when to report to the school, orientation, accommodation, emergency contacts. Paying the milestone released her travel papers; when the checklist clears, the vault releases the final set of official documents: admission letter, visa papers, e-ticket.</p>
+<h2 id="s10">After she lands</h2>
+<p>For the balance still owed, Ama proposes an eight-month plan. Adjoa sets the start date and approves it; the instalments compute with the interest spelled out and the schedule locks. Ama switches on auto-pay. Mobile money cannot be saved for recurring debits, so she adds a bank card, which is saved with her consent and charged on each due date. If a charge ever declines, it retries, emails her, warns her in the portal, and escalates to the office; nothing fails silently.</p>
+<p>She flies. The case completes. The instalments keep running quietly as aftercare, and the whole file, every payment, meeting, document, and handoff, stays readable forever.</p>
+<h2 id="s11">Meanwhile, Kofi</h2>
+<p>Kofi already holds an offer from a university in Toronto, so his consultation ends with scope set to visa only. His file opens directly at Stage II. His route shows Admissions struck through with "not on this plan." He is never asked for an admissions document, never invoiced for admissions work; his whole service fee is one line due on acceptance, because his entry stage is the visa file itself, and the embassy's costs still come to him as their own pass-through invoice. Same rails, different stops: the system draws each client their own map.</p>
+<p class="hsub">Part two</p><h1 id="s12">The surfaces and their actions</h1>
+<h2 id="s13">Signing in and your account</h2>
+<p>One sign-in system for everyone.</p>
+<p><strong>A client can:</strong></p>
+<ul><li>Sign in with email or phone (numbers are normalised so a local and an</li></ul>
+<p>  international format cannot become two accounts)</p>
+<ul><li>Verify their email, reset a password, change email through a</li></ul>
+<p>  request-then-confirm flow</p>
+<ul><li>Enrol a second factor (authenticator app or email code) from the portal</li><li>Upload a profile photo, review sessions, delete their own account</li></ul>
+<p><strong>A staff member can:</strong></p>
+<ul><li>Sign in with email or Google</li><li>Enrol a second factor, which is required before they can work</li></ul>
+<p>Nobody creates a staff account. The first admin is seeded from a secret server token, everyone else arrives by invitation, and you can only invite someone to a role below your own.</p>
+<p><strong>An admin can:</strong></p>
+<ul><li>Preview exactly what an invitation says before sending, resend or</li></ul>
+<p>  revoke it</p>
+<ul><li>List every live session and revoke any of them</li><li>Set a staff account inactive, blocking sign-in without deleting the</li></ul>
+<p>  record</p>
+<ul><li>Ban or reinstate a client, revoke a client's sessions</li><li>Read sign-in statistics</li></ul>
+<p>Nobody can modify their own role, and sensitive actions can demand a step-up: a fresh second-factor check at the moment of the action, not just at sign-in.</p>
+<h2 id="s14">The client portal, page by page</h2>
+<p><strong>Home</strong>: the whole situation in one glance:</p>
+<ul><li>Case reference and the single action waiting on the client, or</li></ul>
+<p>  "nothing waiting on you, the file is moving"</p>
+<ul><li>Next appointment, position on the route, what unlocks next</li><li>Schools, invoices due, money paid versus due now</li><li>The people on the case</li></ul>
+<p><strong>Updates</strong>: a feed of progress notes the office posts:</p>
+<ul><li>Grouped as "new since your last visit"</li><li>Author names on each update, repeats collapsed</li></ul>
+<p><strong>Journey pages</strong> (Consultation, Enrolment, Applications, Visa, Departure, Complete): the stage-by-stage workspace:</p>
+<ul><li>Consent cards and intake forms per stage</li><li>School selection and locking, offer acceptance</li><li>The visa tracker and the refusal guidance</li><li>The departure page described in the story</li><li>The completion state</li></ul>
+<p><strong>Documents</strong>: the vault:</p>
+<ul><li>Upload, preview in the built-in viewer, download, remove</li><li>Read rejection reasons and answer requests</li></ul>
+<p><strong>Payments:</strong></p>
+<ul><li>The statement ledger and invoices with PDF download</li><li>Pay online by card or by mobile money with OTP</li><li>Pick the payment plan, propose the post-arrival schedule</li><li>Switch auto-pay on or off, print receipts, read decline reasons</li></ul>
+<p><strong>Appointments:</strong></p>
+<ul><li>Every consultation and check-in with its purpose and type</li><li>Join the room, request a move, cancel</li><li>See the branch address for in-person meetings</li></ul>
+<p><strong>Messages</strong>: threads with the team tied to the case and stage:</p>
+<ul><li>Typing indicators, read receipts, reactions</li><li>Attachments, forwarding, edit and delete</li><li>Helpdesk requests run on the same threads</li></ul>
+<p><strong>Profile:</strong></p>
+<ul><li>The intake sections: identity, passport, education, employment,</li></ul>
+<p>  English test, preferences, funding and sponsor</p>
+<ul><li>Account settings including MFA and photo</li></ul>
+<h2 id="s15">The ops console, page by page</h2>
+<p><strong>Workspace</strong>: the morning page:</p>
+<ul><li>Work the auto-filled queue: unassigned consultations, ownerless cases,</li></ul>
+<p>  invoices to raise, documents to review, reschedule requests, payments   needing a hand</p>
+<ul><li>Create tasks by hand for anything the system did not raise</li><li>Assign work right from the row; keep the current item in the "now" pane</li><li>Caseload view: who carries what, what is unowned, what went quiet</li><li>Dashboard above it: the office's totals and trends</li></ul>
+<p><strong>Cases</strong>: the fleet view, list or board:</p>
+<ul><li>Filter by stage, status, mine or everyone; sort; search</li><li>Each row and card carries the scope route, next action, gate, owner,</li></ul>
+<p>  quiet days</p>
+<ul><li>Drag a card forward only when the case's own facts allow it</li></ul>
+<p><strong>Case detail</strong>: the whole file on tabs (overview, consultation, enrolment, applications, visa, departure, billing, documents):</p>
+<ul><li>Book a check-in, comment, propose the next stage</li><li>Claim the case, refer it, hand it off or defer the handoff</li><li>Release a seat, grant or revoke coordination</li><li>Complete the case early with a written reason</li><li>Review documents inline, request documents by name</li><li>Work the billing tab: invoices, payments, plans, ledger</li><li>Read the "client sees" hint that mirrors the portal</li></ul>
+<p><strong>Consultations</strong>: the Stage 0 desk:</p>
+<ul><li>Duty roster and workload view</li><li>Assign or confirm a booking; delegate it (reclaim or send back to</li></ul>
+<p>  confirmed); refer it; issue a rebook credit</p>
+<ul><li>Generate the meeting room or paste a link; resend the link email</li><li>Run the call; record verdict, intake, and scope</li><li>Request documents; comment; mark no-shows</li><li>Approve or decline the client's reschedule requests</li></ul>
+<p><strong>Documents</strong>: the review desk:</p>
+<ul><li>Search by client, file, or case; filter by status and category</li><li>Verify, or reject with a required reason the client will read</li><li>Preview inline in the built-in viewer</li></ul>
+<p><strong>Clients, Leads, Applicants</strong>: the people directories:</p>
+<ul><li>Read each client's scope; look up context; revoke sessions; suspend or</li></ul>
+<p>  reinstate accounts</p>
+<ul><li>Work leads through the pipeline with logged touches and an event</li></ul>
+<p>  timeline</p>
+<ul><li>Delegate and release case coordination on applicants</li></ul>
+<p><strong>Appointments and Live meetings:</strong></p>
+<ul><li>The week's bookings with urgent states first: live now, unassigned,</li></ul>
+<p>  no-show, needs a consultant</p>
+<ul><li>Filter per consultant; watch rooms in progress</li></ul>
+<p><strong>Invoices:</strong></p>
+<ul><li>Draft, issue, void with a reason, credit, raise custom bills</li><li>Record a payment line by line: cash, bank wire, cheque, POS terminal,</li></ul>
+<p>  bank transfer, card, mobile money, direct debit, each with a reference</p>
+<ul><li>Preview pass-through invoices before they go out</li></ul>
+<p>**Client ledger, Payments, Fee schedule, Packages, Payment plans, Finance reports:**</p>
+<ul><li>The statement view of every client's money</li><li>Every payment attempt with channel, gateway fee, net to Century, and</li></ul>
+<p>  unmatched flags; produce the official receipt</p>
+<ul><li>Edit stage and milestone prices; define the service bundles</li><li>Approve or decline post-arrival proposals</li><li>Report per period: billed, collected, outstanding, collection rate,</li></ul>
+<p>  by branch, by charge type, by package, gateway fees, and the milestones   the daily sweep had to catch</p>
+<p><strong>Catalogue</strong> (Universities, Programmes, Packages, Departure checklist, Lookups):</p>
+<ul><li>Create, edit, delete destinations, universities, programs,</li></ul>
+<p>  scholarships, all feeding the website and the cases</p>
+<ul><li>Edit per-destination departure checklist templates</li><li>Manage the lookup values that fill form dropdowns</li></ul>
+<p><strong>Marketing:</strong></p>
+<ul><li>Build mailing lists; import leads or applicants; confirm or</li></ul>
+<p>  unsubscribe contacts</p>
+<ul><li>Write email templates</li><li>Run campaigns by email or SMS: draft, preview, test-send, send, cancel</li></ul>
+<p>  mid-flight, retry the failures</p>
+<ul><li>Analytics: revenue, conversion, scope mix, pipeline</li></ul>
+<p><strong>Communication</strong> (Helpdesk, staff chat, Inbox):</p>
+<ul><li>Claim client conversations from a queue ordered by longest wait:</li></ul>
+<p>  awaiting reply, unclaimed, unread</p>
+<ul><li>Answer with the client's context beside the thread: member since,</li></ul>
+<p>  journey, money, next appointment</p>
+<ul><li>Direct-message colleagues with presence (online, on leave, offline)</li></ul>
+<p>  and a staff directory</p>
+<ul><li>Read the typed inbox: assignments, cases, bookings, documents,</li></ul>
+<p>  payments</p>
+<p><strong>Scheduling and My availability:</strong></p>
+<ul><li>Admins set branch working hours and slot rules</li><li>Each staff member manages their own hours and exceptions</li><li>One engine powers every slot picker on both sides</li></ul>
+<p><strong>Administration:</strong></p>
+<ul><li>Manage staff and roles through the dynamic permission matrix</li><li>Grant or revoke case coordination per staff member</li><li>Run invitations with preview, resend, and expiry</li><li>Configure branches, authentication, site and UI, notifications,</li></ul>
+<p>  payments, system config</p>
+<ul><li>Read the notification delivery log and the two append-only audit views</li><li>Check storage health; connect the company Google Calendar</li><li>Jump anywhere with the command palette</li></ul>
+<h2 id="s16">Conversations, notifications, and calendars</h2>
+<p>Chat on both sides is a real messenger: instant send, typing, read receipts, reactions, attachments, forwarding, edit and delete. Case threads route to the stage's seat, so a visa question reaches the visa officer. Helpdesk conversations run on the same threads with a claim queue. Staff chat adds presence and mentions.</p>
+<p>Notifications reach the right person through the in-app bell, email, and push. Every meaningful event notifies: booking confirmed, payment received, verdict recorded, document verified, check-in scheduled. The mail provider reports delivery back, so a bounced email is visible, and admin keeps a delivery log of every message by recipient and template.</p>
+<p>Calendars sync both ways: anyone can subscribe to a feed that drops appointments into their own calendar app, staff can connect a personal Google Calendar, and the office can connect a shared company calendar through Google's consent screen. SMS exists too: it delivers phone verification codes and carries SMS campaigns.</p>
+<h2 id="s17">Who is allowed through which door</h2>
+<p>Roles are not hardcoded: the permission matrix builds custom roles and toggles modules and actions per role, ordered by rank. A consultant sees their own clients; a coordinator sees the queues; finance sees the money; IT sees settings but deliberately not case files. Staff are also scoped to a branch, so views filter to their office. The menu hides what a role cannot use and the server refuses it anyway. Row-level security in the database refuses the wrong person's data before the application even runs. Self-assignment by managers and admins, step-up checks, inactive accounts, and the invite-only model are all recorded in the audit trail.</p>
+<h2 id="s18">Why nothing ever needs a refresh</h2>
+<p>One database, and the client's position is derived from facts (bookings, payments, offers, documents), never stored as a hand-ticked label, so portal and console cannot disagree. Each signed-in user holds a private live stream; staff streams also carry the office broadcast channel. Any event (payment cleared, check-in booked, document verified, message sent) publishes and pushes to open pages: boards update, chats update, bells ring, next actions change, all without a reload. A heartbeat detects dead connections, and if the stream fails the pages fall back to quiet polling.</p>
+<p>Behind it: Paystack webhooks confirm money (with a reconciliation sweep for anything missed), Resend webhooks confirm email delivery, a queue sends mail without duplicating, scheduled jobs run the auto-pay sweep and reminders, files upload on one-time tickets, and the audit log is append-only.</p>
+<h2 id="s19">The promises, in plain words</h2>
+<p>One record: the portal and the console read the same data, so nothing is ever out of sync.</p>
+<p>Scope is the plan: the client sees only the stages they bought; a skipped stage is not missing work.</p>
+<p>Facts move the journey: position comes from payments, offers, and bookings, not from boxes ticked early.</p>
+<p>The client consents: big moves need the client's own yes. The office proposes; the client decides.</p>
+<p>Money opens doors: stages unlock when payments actually clear.</p>
+<p>Two kinds of money, never mixed: the service fee is Century's; external costs are collected and passed on, and reports keep them apart.</p>
+<p>Two hands on money: one person drafts an invoice, another issues it; voids and credits stay on the record forever.</p>
+<p>No orphans: a case cannot cross into a stage without a named owner in that seat.</p>
+<p>Everything is remembered: assignments, invoices, bookings, comments, and waivers are append-only, never silently overwritten.</p>
+<h2 id="s20">A few tech words, translated</h2>
+<table><thead><tr><th>You might hear</th><th>What it actually means</th></tr></thead><tbody><tr><td>The API</td><td>The one brain, the server both apps talk to</td></tr><tr><td>Derived journey</td><td>The client's position is calculated from facts, not stored as a guess</td></tr><tr><td>Scope</td><td>Which stages a client's plan covers: Admissions, Visa, Departure</td></tr><tr><td>Stage 0</td><td>The paid consultation, the only door into a case</td></tr><tr><td>Check-in</td><td>A free meeting a handler books on a live case, not a paid consultation</td></tr><tr><td>Service fee</td><td>Century's own fee for the stages a client bought</td></tr><tr><td>Pass-through invoice</td><td>Money collected for someone else: university fees, embassy costs, the airfare</td></tr><tr><td>Proforma</td><td>A draft invoice, a quote, not yet payable</td></tr><tr><td>Milestone</td><td>A payment tied to a point in the journey, like deposit or pre-departure</td></tr><tr><td>Auto-pay</td><td>Charging a saved card on each due date, with the client's consent</td></tr><tr><td>MoMo OTP</td><td>Paying by mobile money: enter the number, confirm with the code on your phone</td></tr><tr><td>MFA, 2FA</td><td>A second proof of identity, an app code or an email code</td></tr><tr><td>Step-up</td><td>A fresh second-factor check demanded at a sensitive action, not just at login</td></tr><tr><td>Webhook</td><td>Paystack or Resend phoning our server to say "it happened"</td></tr><tr><td>Presigned upload</td><td>Files go straight to storage with a one-time ticket</td></tr><tr><td>Signed link</td><td>A short-lived private URL that lets a document preview in the page</td></tr><tr><td>LiveKit</td><td>The video-call engine, so meetings happen inside our own page</td></tr><tr><td>Turnstile</td><td>The invisible bot check on public forms</td></tr><tr><td>SSE, the stream</td><td>The live channel that pushes updates to open pages without a refresh</td></tr><tr><td>Heartbeat</td><td>The stream's keep-alive pulse, so a dead connection is noticed</td></tr><tr><td>BullMQ, the sweep</td><td>The scheduled jobs, including the daily auto-pay and reconciliation runs</td></tr><tr><td>Append-only</td><td>A log you can add to but never edit; the audit trail cannot be rewritten</td></tr><tr><td>RLS</td><td>The database itself refusing to show the wrong person's data</td></tr></tbody></table>
+<p>*Companion to <code>FEATURES.md</code> (the technical version). Both describe the same system; this one leaves out the wiring.*</p></body></html>

@@ -12,12 +12,13 @@ import { HttpError } from "../middleware/error.js";
  * download paths; the portal's lock is the presentation of this refusal.
  */
 
-type HoldRow = { paymentPlanId: string | null; agencyStageIndex: number; agencySettled: boolean; departureDetails: unknown };
+type HoldRow = { paymentPlanId: string | null; agencyStageIndex: number; agencySettled: boolean; preDepartureFeePaid: boolean; departureDetails: unknown };
 
 const HOLD_COLUMNS = {
 	paymentPlanId: applications.paymentPlanId,
 	agencyStageIndex: applications.agencyStageIndex,
 	agencySettled: applications.agencySettled,
+	preDepartureFeePaid: applications.preDepartureFeePaid,
 	departureDetails: applications.departureDetails,
 };
 

@@ -87,6 +87,8 @@ export type JourneySignals = {
 	/** Number of agency milestones paid. */
 	agencyStageIndex: number;
 	agencySettled: boolean;
+	/** The ledger's pre-departure milestone answer, plan-aware; absent falls back to the position rule. */
+	preDepartureFeePaid?: boolean | null;
 	/** The pre-departure checklist exists and every item is ticked. */
 	preDepartureDone: boolean;
 	/** `applications.stage`, when an application exists. */

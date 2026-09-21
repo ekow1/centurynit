@@ -1194,6 +1194,8 @@ export const applications = pgTable(
 		postArrivalInterestPct: integer("post_arrival_interest_pct"),
 		agencyStageIndex: integer("agency_stage_index").notNull().default(0),
 		agencySettled: boolean("agency_settled").notNull().default(false),
+		/** Every pre-arrival line of the live agency invoice is covered — the plan-aware pre-departure milestone. Cached by the ledger trigger. */
+		preDepartureFeePaid: boolean("pre_departure_fee_paid").notNull().default(false),
 		/**
 		 * Where a mid-plan completion stopped — the reached service stage, for
 		 * "completed · ended at Applications". Null on a full-plan finish.

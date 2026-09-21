@@ -146,6 +146,10 @@ describe("canAdvanceToStage (shared adjacency + sub-step guard)", () => {
 		expect(preDepartureFeePaid({ paymentPlanId: "installment", agencyStageIndex: 2 })).toBe(true);
 		expect(preDepartureFeePaid({ paymentPlanId: "installment", agencyStageIndex: 1 })).toBe(false);
 		expect(preDepartureFeePaid({ paymentPlanId: null })).toBe(false);
+		// The ledger's plan-aware answer wins over the position rule: on a
+		// stage-lined plan index 2 is the second Admissions line, not the milestone.
+		expect(preDepartureFeePaid({ paymentPlanId: "installment", agencyStageIndex: 2, preDepartureFeePaid: false })).toBe(false);
+		expect(preDepartureFeePaid({ paymentPlanId: "installment", agencyStageIndex: 1, preDepartureFeePaid: true })).toBe(true);
 	});
 });
 

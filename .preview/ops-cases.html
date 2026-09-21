@@ -1,153 +1,316 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ops — Cases list, redesigned</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ops · Cases — mock</title>
 <style>
-:root{--bg:#fff;--fg:#0a0a0a;--muted:#f5f5f5;--muted-fg:#52525b;--b:#0a0a0a;--bl:#d4d4d8;
-  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--serif:Georgia,serif;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
-*{box-sizing:border-box;margin:0}
-body{font-family:var(--sans);background:#e8e8e8;color:var(--fg);font-size:.875rem}
-.page{max-width:1240px;margin:0 auto;padding:2rem 1.5rem 4rem}
-.eyebrow{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-fg)}
-h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
-.lead{color:var(--muted-fg);font-size:.85rem}
-.note{font-size:.72rem;color:var(--muted-fg);border-left:3px solid var(--fg);padding:.6rem .9rem;margin:1.5rem 0;line-height:1.6;background:#fff}
-.frame{background:var(--bg);border:1px solid var(--bl);margin-top:1.25rem;padding:1.25rem}
-.hdr{display:flex;justify-content:space-between;align-items:flex-end;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem}
-.btn{border:1px solid var(--b);background:var(--bg);padding:.4rem .85rem;font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;cursor:pointer}
-.btn--primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
-.btn--sm{padding:.28rem .6rem;font-size:.62rem}
-.band{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1.5px solid var(--b);margin-bottom:1rem}
-.band>div{padding:.7rem 1rem;border-right:1px solid var(--bl)}
-.band>div:last-child{border-right:0}
-.band .n{font-family:var(--mono);font-weight:800;font-size:1.1rem}
-.band .k{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-fg)}
-.band>div.inv{background:var(--fg);color:var(--bg)}.band>div.inv .k{color:#bbb}
-.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem}
-.pill{border:1px solid var(--b);padding:.28rem .7rem;font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.05em;background:var(--bg);cursor:pointer}
-.pill.on{background:var(--fg);color:var(--bg)}
-.pill .c{opacity:.6;margin-left:.35rem}
-.pill.dim{color:var(--muted-fg);border-color:var(--bl)}
-.search{width:100%;border:1px solid var(--bl);padding:.5rem .75rem;font:inherit;font-size:.8rem;margin-bottom:.6rem}
-.split{display:flex;gap:1rem;align-items:flex-start}
-.list{flex:0 0 38%;min-width:20rem;border:1px solid var(--bl);background:var(--bg)}
-.detail{flex:1;min-width:0;border:1px solid var(--bl);background:var(--bg);padding:1.25rem}
-.row{border-bottom:1px solid var(--bl);padding:.7rem 1rem;cursor:pointer;display:flex;justify-content:space-between;gap:.75rem}
-.row:hover{background:var(--muted)}
-.row.on{border-left:4px solid var(--fg);background:var(--muted)}
-.row .ref{font-family:var(--mono);font-size:.62rem;color:var(--muted-fg)}
-.row .name{font-weight:650;font-size:.85rem}
-.row .sub{font-size:.72rem;color:var(--muted-fg);margin-top:.15rem}
-.row .meta{font-size:.68rem;margin-top:.3rem;display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
-.spill{display:inline-block;border:1px solid var(--b);padding:.1rem .45rem;font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.06em}
-.spill--solid{background:var(--fg);color:var(--bg)}
-.spill--hollow{color:var(--muted-fg);border-color:var(--bl)}
-.spill--act{text-decoration:underline;text-decoration-thickness:2px;font-weight:700}
-.jlink{font-family:var(--mono);font-size:.62rem;text-decoration:underline;text-underline-offset:2px;color:var(--fg);background:none;border:0;cursor:pointer}
-.todo{font-weight:700}
-.empty{border:1px dashed var(--bl);padding:2.5rem;text-align:center;color:var(--muted-fg);font-size:.8rem}
+	:root {
+		--ink: #17161a; --paper: #f5f4f0; --card: #fff; --line: #ddd9cf; --line-lt: #eae7de;
+		--muted: #6e6a60; --amber: #b97a10; --amber-soft: #f3e8d2; --green: #2e6b34; --red: #a33b2e;
+	}
+	* { box-sizing: border-box; margin: 0; padding: 0; }
+	body { font-family: Georgia, "Times New Roman", serif; background: var(--paper); color: var(--ink); font-size: 14px; }
+	.mono { font-family: ui-monospace, "Courier New", monospace; letter-spacing: 0.05em; }
+	.wrap { max-width: 1280px; margin: 0 auto; padding: 1.75rem 1.5rem 4rem; }
+
+	.sect { margin-bottom: 3.5rem; }
+	.sect > .tag { font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber); }
+	.sect > h2 { font-size: 1.15rem; margin: 0.3rem 0 0.25rem; }
+	.sect > p.note { font-size: 0.78rem; color: var(--muted); max-width: 68ch; line-height: 1.5; margin-bottom: 1rem; }
+	.frame { border: 1px solid var(--line); background: var(--card); }
+
+	/* ── chrome ── */
+	.chrome { display: flex; justify-content: space-between; align-items: baseline; padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--line); }
+	.chrome h3 { font-size: 0.95rem; }
+	.chrome .sw { display: flex; gap: 0.35rem; }
+	.sw button { font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0.28rem 0.7rem; border: 1px solid var(--line); background: none; cursor: pointer; color: var(--muted); }
+	.sw button.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+	/* ── the one toolbar ── */
+	.bar { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 1.1rem; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+	.bar .q { flex: 1 1 12rem; border: 0; border-bottom: 1px solid var(--line); background: none; font: inherit; font-size: 0.82rem; padding: 0.3rem 0.1rem; outline: none; }
+	.seg { display: flex; border: 1px solid var(--line); }
+	.seg button { font-family: ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.08em; padding: 0.34rem 0.6rem; border: 0; border-right: 1px solid var(--line-lt); background: none; cursor: pointer; color: var(--muted); white-space: nowrap; }
+	.seg button:last-child { border-right: 0; }
+	.seg button.on { background: var(--ink); color: var(--paper); }
+	.seg button i { font-style: normal; opacity: 0.55; margin-left: 0.3em; }
+	.sel { font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.08em; border: 1px solid var(--line); background: var(--card); padding: 0.32rem 0.5rem; color: var(--muted); }
+	.bar .count { font-family: ui-monospace, monospace; font-size: 0.6rem; color: var(--muted); letter-spacing: 0.08em; margin-left: auto; }
+
+	/* ── list view ── */
+	.split { display: grid; grid-template-columns: 300px 1fr; min-height: 34rem; }
+	.rail { border-right: 1px solid var(--line); background: #fbfaf6; }
+	.rail .rsec { padding: 0.8rem 1rem 0.9rem; border-bottom: 1px solid var(--line-lt); }
+	.rail .rk { font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.5rem; }
+	.rail .rrow { display: flex; justify-content: space-between; font-size: 0.78rem; padding: 0.2rem 0; }
+	.rail .rrow b { font-variant-numeric: tabular-nums; }
+	.rail .rrow.hot b, .rail .rrow.hot span { color: var(--red); }
+
+	.rows { }
+	.crow { display: grid; grid-template-columns: 1fr auto; gap: 0.4rem 1rem; padding: 0.7rem 1.1rem; border-bottom: 1px solid var(--line-lt); cursor: pointer; align-items: baseline; }
+	.crow:hover { background: #faf8f2; }
+	.crow.sel { background: var(--ink); color: var(--paper); }
+	.crow.sel .muted2, .crow.sel .mono { color: rgba(245,244,240,0.6); }
+	.crow .nm { font-size: 0.92rem; font-weight: 600; }
+	.crow .nm .ref { font-family: ui-monospace, monospace; font-size: 0.6rem; color: var(--muted); font-weight: 400; margin-right: 0.5em; letter-spacing: 0.06em; }
+	.crow.sel .nm .ref { color: rgba(245,244,240,0.55); }
+	.crow .act { font-size: 0.76rem; color: var(--muted); grid-column: 1; }
+	.crow .act b { color: var(--amber); font-weight: 600; }
+	.crow .right { grid-row: 1 / span 2; grid-column: 2; text-align: right; display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-end; justify-content: center; }
+	.crow .right .mono { font-size: 0.58rem; color: var(--muted); letter-spacing: 0.08em; }
+	.route { display: inline-flex; align-items: center; gap: 0.28em; }
+	.route i { width: 0.42em; height: 0.42em; display: inline-block; }
+	.route i.on { background: var(--ink); }
+	.route i.off { border: 1px solid var(--line); }
+	.route i.am { background: var(--amber); }
+	.crow.sel .route i.on { background: var(--paper); }
+	.chip { display: inline-block; font-family: ui-monospace, monospace; font-size: 0.54rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0.12rem 0.4rem; border: 1px solid var(--line); color: var(--muted); }
+	.chip.hot { border-color: var(--amber); color: var(--amber); }
+	.chip.solid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+	/* ── board view ── */
+	.board { display: grid; grid-template-columns: repeat(4, 1fr); }
+	.bcol { border-right: 1px solid var(--line); min-height: 30rem; display: flex; flex-direction: column; }
+	.bcol:last-child { border-right: 0; }
+	.bcol__h { padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; }
+	.bcol__h b { font-size: 0.8rem; }
+	.bcol__h .mono { font-size: 0.58rem; color: var(--muted); }
+	.bcol__h .sub { display: block; font-family: ui-monospace, monospace; font-size: 0.54rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 0.2rem; }
+	.bcard { margin: 0.55rem 0.6rem; border: 1px solid var(--line); background: var(--card); padding: 0.6rem 0.7rem; cursor: grab; }
+	.bcard:hover { border-color: var(--ink); }
+	.bcard .nm { font-size: 0.82rem; font-weight: 600; display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+	.bcard .hold { font-size: 0.7rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.4; }
+	.bcard .hold b { color: var(--amber); font-weight: 600; }
+	.bcard .ft { display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; }
+	.bcard .ft .mono { font-size: 0.56rem; color: var(--muted); }
+	.bcol .more { margin: auto 0.6rem 0.6rem; font-family: ui-monospace, monospace; font-size: 0.56rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; text-align: center; padding: 0.4rem; border: 1px dashed var(--line); }
+
+	/* ── detail panel ── */
+	.detail { }
+	.dh { padding: 1.1rem 1.3rem 0.9rem; border-bottom: 2px solid var(--ink); }
+	.dh .top { display: flex; justify-content: space-between; align-items: baseline; }
+	.dh h4 { font-size: 1.2rem; }
+	.dh .ref { font-family: ui-monospace, monospace; font-size: 0.6rem; color: var(--muted); letter-spacing: 0.1em; }
+	.dh .meta { display: flex; gap: 1.4rem; margin-top: 0.55rem; font-size: 0.76rem; color: var(--muted); flex-wrap: wrap; }
+	.dh .meta b { color: var(--ink); font-weight: 600; }
+	.dh .acts { display: flex; gap: 0.4rem; margin-top: 0.8rem; flex-wrap: wrap; }
+	.btn { font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0.4rem 0.8rem; border: 1px solid var(--ink); background: var(--ink); color: var(--paper); cursor: pointer; }
+	.btn.ghost { background: none; color: var(--ink); border-color: var(--line); }
+
+	.droute { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
+	.droute .stg { padding: 0.7rem 1.3rem; border-right: 1px solid var(--line-lt); }
+	.droute .stg:last-child { border-right: 0; }
+	.droute .stg .t { font-size: 0.72rem; font-weight: 600; }
+	.droute .stg .s { font-family: ui-monospace, monospace; font-size: 0.54rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-top: 0.15rem; }
+	.droute .stg.now { background: var(--amber-soft); }
+	.droute .stg.now .s { color: var(--amber); }
+	.droute .stg.skip { opacity: 0.45; }
+	.droute .stg.skip .t { text-decoration: line-through; }
+
+	.dgrid { display: grid; grid-template-columns: 1fr 300px; }
+	.dmain { padding: 0.9rem 1.3rem; border-right: 1px solid var(--line); }
+	.dmain .blk { margin-bottom: 1.1rem; }
+	.dmain .bk { font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem; }
+	.todo { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 0.45rem 0; border-bottom: 1px solid var(--line-lt); font-size: 0.8rem; }
+	.todo:last-child { border-bottom: 0; }
+	.todo b { font-weight: 600; }
+	.todo .mono { font-size: 0.56rem; color: var(--muted); }
+
+	.dside { padding: 0.9rem 1rem; background: #fbfaf6; }
+	.dside .kv { display: flex; justify-content: space-between; font-size: 0.74rem; padding: 0.28rem 0; border-bottom: 1px solid var(--line-lt); }
+	.dside .kv span { color: var(--muted); }
+	.dside .kv b { font-variant-numeric: tabular-nums; }
+	.dside .bk { font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin: 0.8rem 0 0.3rem; }
+	.dside .bk:first-child { margin-top: 0; }
+
+	/* mini ledger in detail — 4 cols, not 8 */
+	.mledger { width: 100%; border-collapse: collapse; font-size: 0.74rem; margin-top: 0.2rem; }
+	.mledger th { font-family: ui-monospace, monospace; font-size: 0.52rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 0.35rem 0; border-bottom: 1px solid var(--line); }
+	.mledger td { padding: 0.4rem 0; border-bottom: 1px solid var(--line-lt); vertical-align: baseline; }
+	.mledger .r { text-align: right; font-variant-numeric: tabular-nums; }
+	.mledger .sub { font-family: ui-monospace, monospace; font-size: 0.58rem; color: var(--muted); display: block; }
+	.mledger tr.s td { color: var(--muted); }
 </style>
 </head>
 <body>
-<div class="page">
-  <p class="eyebrow">Ops · cases</p>
-  <h1>Cases — the list earns its frame</h1>
-  <p class="lead">Same scaffold (list left, detail right), same rows — but the scope banner becomes a count band, chapter filters stop being two different controls in list vs board, and "to do" stops hiding at the end of a meta line.</p>
+<div class="wrap">
 
-  <div class="frame">
-    <div class="hdr">
-      <div>
-        <h1 style="font-size:1.3rem">Cases</h1>
-        <p class="lead">Every client's journey — one list, by chapter.</p>
-      </div>
-      <div style="display:flex;gap:.5rem">
-        <span class="pill on">List</span><span class="pill">Board</span>
-        <button class="btn btn--primary btn--sm">+ Add school application</button>
-      </div>
-    </div>
+	<p class="mono" style="font-size:0.62rem; letter-spacing:0.16em; text-transform:uppercase; color:var(--muted);">MOCK · OPS · CASES — LIST, BOARD, DETAIL</p>
+	<h1 style="font-size:1.55rem; margin:0.4rem 0 0.4rem;">Same data, half the ink.</h1>
+	<p style="font-size:0.85rem; color:var(--muted); max-width:64ch; line-height:1.55;">Today: three stacked pill-groups, a rail repeating the chips' counts, rows carrying ten elements each, and the detail panel inlining an 8-column ledger. Below: one toolbar, a rail that only holds what the chips can't say, rows reduced to name + next action, and a detail that summarises instead of dumping.</p>
 
-    <!-- the scope banner becomes the count band -->
-    <div class="band">
-      <div><p class="n">14</p><p class="k">In view · of 38 in scope</p></div>
-      <div><p class="n">III</p><p class="k">Chapter · Applications</p></div>
-      <div><p class="n">9</p><p class="k">With work waiting</p></div>
-      <div class="inv"><p class="n">3</p><p class="k">Need an owner</p></div>
-      <div><p class="n">⌄</p><p class="k">My cases · off</p></div>
-    </div>
+	<!-- ══ LIST ══ -->
+	<div class="sect">
+		<span class="tag">1 · List view</span>
+		<h2>One toolbar. Rows that answer one question.</h2>
+		<p class="note">Stage chips collapse into a segmented control (it is the same FilterGroup, just compact). "Owner" becomes a Mine toggle; status moves into the select — it was always a pick-one. The rail drops "By stage" (the chips already counted it) and keeps only attention signals. Each row: name + ref, the single next action in amber, scope route + stage + age on the right. Status pills, branch, coordinator, "+N more" — gone; they live in the detail.</p>
+		<div class="frame">
+			<div class="chrome"><h3>Cases</h3><div class="sw"><button class="on">List</button><button>Board</button></div></div>
+			<div class="bar">
+				<input class="q" placeholder="Search case, client, university…" />
+				<div class="seg">
+					<button class="on">All<i>14</i></button><button>I · Enrol<i>3</i></button><button>II · Apply<i>4</i></button><button>III · Visa<i>5</i></button><button>IV · Depart<i>1</i></button><button>Done<i>1</i></button>
+				</div>
+				<div class="seg"><button>Mine</button><button class="on">Everyone</button></div>
+				<select class="sel"><option>All statuses ▾</option><option>Needs handler (2)</option><option>Action required (3)</option></select>
+				<select class="sel"><option>Last activity ▾</option></select>
+				<span class="count">14 cases · 2 need a handler</span>
+			</div>
+			<div class="split">
+				<div class="rail">
+					<div class="rsec">
+						<p class="rk">Needs you</p>
+						<div class="rrow hot"><span>Needs handler</span><b>2</b></div>
+						<div class="rrow"><span>Stalled 7d+</span><b>1</b></div>
+						<div class="rrow"><span>Awaiting client</span><b>3</b></div>
+					</div>
+					<div class="rsec">
+						<p class="rk">Money</p>
+						<div class="rrow"><span>Due this week</span><b>GH₵ 4,250</b></div>
+						<div class="rrow"><span>Overdue</span><b class="mono" style="color:var(--red)">1</b></div>
+					</div>
+					<div class="rsec"><p class="rk">Scope</p>
+						<div class="rrow"><span>Accra HQ</span><b>9</b></div>
+						<div class="rrow"><span>Kumasi</span><b>5</b></div>
+					</div>
+				</div>
+				<div class="rows">
+					<div class="crow sel">
+						<p class="nm"><span class="ref">APP-2026-0001</span>Enoch Enu</p>
+						<p class="right"><span class="route"><i class="am"></i><i class="on"></i><i class="on"></i><i class="on"></i></span><span class="mono">III · Visa · 2d</span></p>
+						<p class="act"><b>Pay your pre-departure fee milestone</b> — University of Oxford · MSc Computer Science</p>
+					</div>
+					<div class="crow">
+						<p class="nm"><span class="ref">APP-2026-0004</span>Ama Serwaa</p>
+						<p class="right"><span class="route"><i class="am"></i><i class="on"></i><i class="off"></i><i class="off"></i></span><span class="mono">I · Enrol · 1d</span></p>
+						<p class="act"><b>13 documents not uploaded yet</b> — KNUST · BSc Nursing</p>
+					</div>
+					<div class="crow">
+						<p class="nm"><span class="ref">APP-2026-0007</span>Kwame Owusu <span class="chip hot">needs handler</span></p>
+						<p class="right"><span class="route"><i class="am"></i><i class="on"></i><i class="on"></i><i class="off"></i></span><span class="mono">II · Apply · 9d</span></p>
+						<p class="act"><b>Assign a visa officer</b> — Leeds Beckett · MBA</p>
+					</div>
+					<div class="crow">
+						<p class="nm"><span class="ref">APP-2026-0009</span>Efua Mensah</p>
+						<p class="right"><span class="route"><i class="am"></i><i class="off"></i><i class="on"></i><i class="off"></i></span><span class="mono">III · Visa · visa only · 3d</span></p>
+						<p class="act"><b>Biometrics letter due Friday</b> — external offer · UK visa file</p>
+					</div>
+					<div class="crow">
+						<p class="nm"><span class="ref">APP-2026-0011</span>Yaw Darko</p>
+						<p class="right"><span class="route"><i class="am"></i><i class="on"></i><i class="on"></i><i class="on"></i></span><span class="mono">II · Apply · 6h</span></p>
+						<p class="act"><b>Offer decision call booked Tue 10:00</b> — Toronto · BEng</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
 
-    <!-- chapter pills now match the board's — counted, monochrome -->
-    <div class="pills">
-      <span class="pill">All <span class="c">38</span></span>
-      <span class="pill">II Enrolment <span class="c">6</span></span>
-      <span class="pill on">III Applications <span class="c">14</span></span>
-      <span class="pill">IV Visa <span class="c">11</span></span>
-      <span class="pill">V Departure <span class="c">5</span></span>
-      <span class="pill dim">VI Complete <span class="c">2</span></span>
-      <span style="margin-left:auto"></span>
-      <span class="pill">Status · any</span>
-    </div>
+	<!-- ══ BOARD ══ -->
+	<div class="sect">
+		<span class="tag">2 · Board view</span>
+		<h2>Columns say the stage; cards say what holds them.</h2>
+		<p class="note">One card = name, the thing holding it (amber), mini-route + age. The gate paragraph, the assign chip and the three-line meta collapse into the card's single "hold" line — the rest is one click away in the detail. Column headers carry the count and a shape hint (ready / waiting / stalled).</p>
+		<div class="frame">
+			<div class="chrome"><h3>Cases</h3><div class="sw"><button>List</button><button class="on">Board</button></div></div>
+			<div class="bar">
+				<input class="q" placeholder="Search…" />
+				<div class="seg"><button class="on">All<i>14</i></button><button>I<i>3</i></button><button>II<i>4</i></button><button>III<i>5</i></button><button>IV<i>1</i></button><button>Done<i>1</i></button></div>
+				<span class="count">ready 6 · waiting 6 · stalled 2</span>
+			</div>
+			<div class="board">
+				<div class="bcol">
+					<div class="bcol__h"><b>I · Enrolment</b><span class="mono">3</span><span class="sub">2 waiting on client</span></div>
+					<div class="bcard"><p class="nm">Ama Serwaa <span class="route"><i class="am"></i><i class="on"></i><i class="off"></i><i class="off"></i></span></p><p class="hold"><b>13 documents not uploaded</b></p><p class="ft"><span class="mono">KNUST · 1d</span><span class="mono">D. Osei</span></p></div>
+					<div class="bcard"><p class="nm">Kofi Boateng <span class="route"><i class="am"></i><i class="on"></i><i class="off"></i><i class="off"></i></span></p><p class="hold">Deposit invoice unpaid · <b>GH₵ 2,400 due</b></p><p class="ft"><span class="mono">Legon · 4d</span><span class="mono">unassigned</span></p></div>
+					<div class="bcard"><p class="nm">Adjoa Frimpong <span class="route"><i class="am"></i><i class="on"></i><i class="off"></i><i class="off"></i></span></p><p class="hold">Ready — <b>verify intake answers</b></p><p class="ft"><span class="mono">UCC · 6h</span><span class="mono">A. Sarpong</span></p></div>
+					<div class="more">+ drop target</div>
+				</div>
+				<div class="bcol">
+					<div class="bcol__h"><b>II · Applications</b><span class="mono">4</span><span class="sub">1 stalled 9d</span></div>
+					<div class="bcard"><p class="nm">Yaw Darko <span class="route"><i class="am"></i><i class="on"></i><i class="on"></i><i class="on"></i></span></p><p class="hold"><b>Offer decision call</b> · Tue 10:00</p><p class="ft"><span class="mono">Toronto · 6h</span><span class="mono">A. Sarpong</span></p></div>
+					<div class="bcard"><p class="nm">Kwame Owusu <span class="route"><i class="am"></i><i class="on"></i><i class="on"></i><i class="off"></i></span></p><p class="hold"><b>No visa officer</b> — assign one</p><p class="ft"><span class="mono">Leeds · 9d</span><span class="mono" style="color:var(--red)">stalled</span></p></div>
+					<div class="bcard"><p class="nm">Abena Nyarko <span class="route"><i class="am"></i><i class="on"></i><i class="on"></i><i class="off"></i></span></p><p class="hold">2 of 3 schools submitted — <b>awaiting Oxford</b></p><p class="ft"><span class="mono">3 unis · 2d</span><span class="mono">D. Osei</span></p></div>
+					<div class="more">+ 1 more</div>
+				</div>
+				<div class="bcol">
+					<div class="bcol__h"><b>III · Visa</b><span class="mono">5</span><span class="sub">1 awaiting biometrics</span></div>
+					<div class="bcard"><p class="nm">Enoch Enu <span class="route"><i class="am"></i><i class="on"></i><i class="on"></i><i class="on"></i></span></p><p class="hold"><b>Pre-departure fee due</b> · GH₵ 1</p><p class="ft"><span class="mono">Oxford · 2d</span><span class="mono">A. Sarpong</span></p></div>
+					<div class="bcard"><p class="nm">Efua Mensah <span class="route"><i class="am"></i><i class="off"></i><i class="on"></i><i class="off"></i></span></p><p class="hold">Biometrics letter · <b>due Friday</b></p><p class="ft"><span class="mono">visa only · 3d</span><span class="mono">K. Asante</span></p></div>
+					<div class="more">+ 3 more</div>
+				</div>
+				<div class="bcol" style="opacity:0.75">
+					<div class="bcol__h"><b>IV · Departure → Done</b><span class="mono">2</span><span class="sub">1 departed</span></div>
+					<div class="bcard"><p class="nm">Nana Adu <span class="route"><i class="am"></i><i class="on"></i><i class="on"></i><i class="on"></i></span></p><p class="hold">Flight Sep 28 — <b>checklist 4 of 6</b></p><p class="ft"><span class="mono">Manchester · 1d</span><span class="mono">D. Osei</span></p></div>
+					<div class="bcard" style="opacity:0.6"><p class="nm">Selasi K. <span class="route"><i class="am"></i><i class="on"></i><i class="on"></i><i class="on"></i></span></p><p class="hold">Departed Aug 30 ✓</p><p class="ft"><span class="mono">Done</span><span class="mono">—</span></p></div>
+				</div>
+			</div>
+		</div>
+	</div>
 
-    <div class="split">
-      <div class="list">
-        <input class="search" placeholder="Search case ID, client, university…" style="border:none;border-bottom:1px solid var(--bl);margin:0">
-        <div class="row on">
-          <div>
-            <span class="ref">APP-2026-0041</span> <span class="spill spill--solid">Under review</span>
-            <p class="name">Kwame Mensah</p>
-            <p class="sub">Leeds Beckett · BA (Hons) Business Mgmt</p>
-            <p class="meta"><span>A. Osei</span> · <span>3 schools submitted</span> · <span class="todo">2 to do</span></p>
-          </div>
-          <span>→</span>
-        </div>
-        <div class="row">
-          <div>
-            <span class="ref">APP-2026-0038</span> <span class="spill">Under review</span>
-            <p class="name">Ama Serwaa</p>
-            <p class="sub">Portsmouth · MSc International Business</p>
-            <p class="meta"><span>A. Osei</span> · <span>Invoice INV-2026-0184 issued</span></p>
-          </div>
-          <span>→</span>
-        </div>
-        <div class="row">
-          <div>
-            <span class="ref">APP-2026-0035</span> <span class="spill spill--act">Action required</span>
-            <p class="name">Yaw Boateng</p>
-            <p class="sub">Coventry · MSc Global Business</p>
-            <p class="meta"><span class="spill spill--act">Needs owner</span> · <span class="jlink">Assign →</span></p>
-          </div>
-          <span>→</span>
-        </div>
-        <div class="row">
-          <div>
-            <span class="ref">APP-2026-0029</span> <span class="spill">Under review</span>
-            <p class="name">Efua Asante</p>
-            <p class="sub">Greenwich · BA Accounting</p>
-            <p class="meta"><span>D. Larkai</span> · <span>Offer in — awaiting decision</span></p>
-          </div>
-          <span>→</span>
-        </div>
-        <div class="row">
-          <div>
-            <span class="ref">APP-2026-0022</span> <span class="spill spill--hollow">Accepted</span>
-            <p class="name">Kofi Owusu</p>
-            <p class="sub">Hertfordshire · MSc Data Science</p>
-            <p class="meta"><span>A. Osei</span> · <span>All 3 decisions in</span></p>
-          </div>
-          <span>→</span>
-        </div>
-      </div>
+	<!-- ══ DETAIL ══ -->
+	<div class="sect">
+		<span class="tag">3 · Case detail — the expand</span>
+		<h2>A summary, not a database dump.</h2>
+		<p class="note">The ledger shrinks to four columns (entry / amount / balance / status) — channel, reference and recorded-by move into the entry's sub-line and the full invoice lives one click away in Billing. The header carries identity + the route; the main column is "what to do next"; the side rail is facts. Nothing is deleted — it's ranked.</p>
+		<div class="frame detail">
+			<div class="dh">
+				<div class="top"><h4>Enoch Enu</h4><span class="ref">APP-2026-0001 · ACCRA HQ</span></div>
+				<div class="meta"><span><b>University of Oxford</b> · MSc Computer Science</span><span>Full journey</span><span>Handler <b>Ama Sarpong</b></span><span>spdexdev95@gmail.com</span></div>
+				<div class="acts">
+					<button class="btn">Pay milestone →</button>
+					<button class="btn ghost">Check-in…</button>
+					<button class="btn ghost">Team</button>
+					<button class="btn ghost">History · 4</button>
+				</div>
+			</div>
+			<div class="droute">
+				<div class="stg"><p class="t">0 · Consultation</p><p class="s">done Sep 12</p></div>
+				<div class="stg"><p class="t">I · Admissions</p><p class="s">offer accepted</p></div>
+				<div class="stg now"><p class="t">II · Visa</p><p class="s">approved — now</p></div>
+				<div class="stg"><p class="t">III · Departure</p><p class="s">opens at milestone</p></div>
+			</div>
+			<div class="dgrid">
+				<div class="dmain">
+					<div class="blk">
+						<p class="bk">Next on this case</p>
+						<div class="todo"><span><b>Pay the pre-departure milestone</b> — releases travel documents</span><span class="mono">GH₵ 1 · client</span></div>
+						<div class="todo"><span><b>Book the flight</b> — departure officer holds it</span><span class="mono">ops</span></div>
+						<div class="todo"><span>Post-arrival plan — 3 instalments, first due Sep 30</span><span class="mono">auto-pay on</span></div>
+					</div>
+					<div class="blk">
+						<p class="bk">Money — settled first</p>
+						<table class="mledger">
+							<thead><tr><th>Entry</th><th class="r">Amount</th><th class="r">Balance</th><th>Status</th></tr></thead>
+							<tbody>
+								<tr><td>Admissions · on acceptance<span class="sub">MoMo · INV-2026-0002 · Sep 21</span></td><td class="r">GH₵ 2</td><td class="r">GH₵ 1</td><td><span class="chip solid">paid</span></td></tr>
+								<tr><td>Flight ticket<span class="sub">MoMo · INV-2026-0009 · Sep 21</span></td><td class="r">GH₵ 5,000</td><td class="r">—</td><td><span class="chip solid">paid</span></td></tr>
+								<tr class="s"><td>Post-arrival 1 of 3<span class="sub">INV-2026-0010 · Sep 30</span></td><td class="r">GH₵ 1</td><td class="r"></td><td><span class="chip">scheduled</span></td></tr>
+								<tr class="s"><td>Post-arrival 2 of 3<span class="sub">Oct 30</span></td><td class="r">GH₵ 1</td><td class="r"></td><td><span class="chip">scheduled</span></td></tr>
+							</tbody>
+						</table>
+						<p class="mono" style="font-size:0.56rem; color:var(--muted); margin-top:0.5rem; letter-spacing:0.1em;">PAID GH₵ 5,002 · TO COME GH₵ 3 · <a href="#" style="color:var(--amber)">OPEN IN BILLING →</a></p>
+					</div>
+				</div>
+				<div class="dside">
+					<p class="bk">Case</p>
+					<div class="kv"><span>Stage</span><b>III · Visa</b></div>
+					<div class="kv"><span>Client sees</span><b>Departure · fees</b></div>
+					<div class="kv"><span>Docs</span><b>13 pending</b></div>
+					<div class="kv"><span>Quiet</span><b>2d</b></div>
+					<p class="bk">Position</p>
+					<div class="kv"><span>Due now</span><b>GH₵ 1</b></div>
+					<div class="kv"><span>Paid</span><b>GH₵ 5,002</b></div>
+					<div class="kv"><span>To come</span><b>GH₵ 3</b></div>
+					<p class="bk">Upcoming</p>
+					<div class="kv"><span>Check-in</span><b>Tue 10:00</b></div>
+				</div>
+			</div>
+		</div>
+	</div>
 
-      <div class="detail">
-        <div class="empty">← The case detail — see <strong>ops-case-detail.html</strong></div>
-      </div>
-    </div>
-  </div>
+	<p class="note" style="max-width:70ch;">Net effect: the page chrome loses ~40 lines of pill UI, every row drops from ~10 elements to 4, board cards go from a paragraph to a sentence, and the detail swaps an 8-column ledger for a ranked summary. All data preserved — just ranked.</p>
 
-  <p class="note">
-    <strong>WHAT CHANGES.</strong> (1) The inline-styled scope banner — inverted for managers, grey for officers — becomes one <strong>count band</strong>: in-view count, current chapter, work-waiting count, the inverted needs-an-owner cell, and the "My cases" toggle as a band cell instead of a floating button. (2) The chapter filter is a <code>&lt;select&gt;</code> in list view but counted pills in board view — it becomes the <strong>board's counted pills everywhere</strong>, so the same control does the same thing in both views and the old /visa /travel redirects still land right. (3) Rows tighten: status pill joins the ref line, "n to do" is bold (it's why you're here), "Needs owner" becomes the underlined action pill + Assign link. (4) Board view unchanged — same filters now, same columns.
-  </p>
 </div>
 </body>
 </html>

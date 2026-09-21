@@ -159,6 +159,8 @@ describe("stage-priced plans", () => {
 		const [opened] = await db.select().from(applications).where(eq(applications.id, appId));
 		expect(opened.depositPaid).toBe(true);
 		expect(opened.stage).toBe("visa_processing");
+		// The Departure line (due on visa approval) is still open: the papers stay held.
+		expect(opened.preDepartureFeePaid).toBe(false);
 
 		// Documents: the offer letter is the entry evidence; no transcripts asked for.
 		// Each item knows its stage, so an invoice gate reads only its own stage's
@@ -303,6 +305,9 @@ describe("stage-priced plans", () => {
 		({ row, lines } = await agencyInvoice(appId));
 		const paidSoFar = 35_000;
 		await recordPayment({ invoiceId: row.id, amountCents: row.subtotalCents - paidSoFar, method: "card", actor: ACTOR });
+		// Every pre-arrival line covered: the plan-aware milestone (not "index >= 2") releases the papers.
+		const [paidAhead] = await db.select().from(applications).where(eq(applications.id, appId));
+		expect(paidAhead.preDepartureFeePaid).toBe(true);
 		await setApplicationPackage({ id: appId, packageCode: "non_scholarship", degreeLevel: "Master's", stages: ["admissions", "visa"] });
 		const afterRefund = await db.select().from(invoiceEvents).where(eq(invoiceEvents.invoiceId, row.id));
 		expect(afterRefund.some((e) => e.action === "refund_due")).toBe(true);

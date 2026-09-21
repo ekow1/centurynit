@@ -65,7 +65,7 @@ function TravelAssistanceInner() {
 		return () => {
 			alive = false;
 		};
-	}, [application.agencyStageIndex, application.agencySettledAt, application.departureDetails?.releaseOverrideAt]);
+	}, [application.agencyStageIndex, application.preDepartureFeePaid, application.agencySettledAt, application.departureDetails?.releaseOverrideAt]);
 	const flightAt = application.travelAssistance?.booking?.departAt ?? application.travelAssistance?.flight?.departAt ?? null;
 	const flyDays = daysUntil(flightAt);
 	const hasFacts = Boolean(dd.reportBy || dd.orientationAt || dd.briefingAt || dd.pickupBy || dd.accommodationAddress || dd.emergencyContactName);

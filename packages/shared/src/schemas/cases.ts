@@ -62,7 +62,14 @@ export function preDepartureFeePaid(checks: {
 	paymentPlanId?: string | null;
 	agencyStageIndex?: number;
 	agencySettled?: boolean;
+	/**
+	 * The ledger's own answer — every pre-arrival line covered — cached on
+	 * the application. Plan-aware, so a stage-lined invoice is read right;
+	 * the position rule below is the legacy fallback for readers without it.
+	 */
+	preDepartureFeePaid?: boolean | null;
 }): boolean {
+	if (typeof checks.preDepartureFeePaid === "boolean") return checks.preDepartureFeePaid;
 	if (!checks.paymentPlanId) return false;
 	if (checks.paymentPlanId === "installment") return (checks.agencyStageIndex ?? 0) >= 2;
 	return Boolean(checks.agencySettled);
@@ -70,7 +77,7 @@ export function preDepartureFeePaid(checks: {
 
 /** Why the fee milestone still holds things up, or null. */
 export function feeMilestoneBlockReason(
-	checks: { paymentPlanId?: string | null; agencyStageIndex?: number; agencySettled?: boolean },
+	checks: { paymentPlanId?: string | null; agencyStageIndex?: number; agencySettled?: boolean; preDepartureFeePaid?: boolean | null },
 	prefix: string,
 ): string | null {
 	if (!checks.paymentPlanId) return `${prefix}: no payment plan has been chosen.`;
@@ -93,6 +100,7 @@ export function documentsReleased(checks: {
 	paymentPlanId?: string | null;
 	agencyStageIndex?: number;
 	agencySettled?: boolean;
+	preDepartureFeePaid?: boolean | null;
 	departureDetails?: { releaseOverrideAt?: string | null } | null;
 }): boolean {
 	if (checks.departureDetails?.releaseOverrideAt) return true;
@@ -104,6 +112,7 @@ export function documentReleaseHoldReason(checks: {
 	paymentPlanId?: string | null;
 	agencyStageIndex?: number;
 	agencySettled?: boolean;
+	preDepartureFeePaid?: boolean | null;
 	departureDetails?: { releaseOverrideAt?: string | null } | null;
 }): string | null {
 	if (documentsReleased(checks)) return null;
@@ -217,6 +226,7 @@ export function canAdvanceToStage(
 		visaStage?: string;
 		agencyStageIndex?: number;
 		agencySettled?: boolean;
+		preDepartureFeePaid?: boolean | null;
 		depositPaid?: boolean;
 		appFeePaid?: boolean;
 		preDepartureTasks?: { required?: boolean; done: boolean; waivedReason?: string | null }[];
@@ -933,6 +943,8 @@ export const applicationSchema = z.object({
 	packageId: z.string().uuid().nullable(),
 	packageSelectedAt: z.string().datetime().nullable(),
 	agencyStageIndex: z.number().int(),
+	/** The plan-aware pre-departure milestone, from the ledger. Optional so older readers parse. */
+	preDepartureFeePaid: z.boolean().optional(),
 	agencySettled: z.boolean(),
 	depositPaid: z.boolean(),
 	appFeePaid: z.boolean(),

@@ -15,7 +15,9 @@ import {
 	SCHOOL_OUTCOME_LABELS,
 	SCHOOL_TRACK_STAGES,
 	SCHOOL_TRACK_STATUS_LABELS,
+	JOURNEY_STAGES,
 	schoolDecisionNote,
+	type JourneyStage,
 	type SchoolApplication,
 	type SchoolFileKind,
 	type SchoolOutcome,
@@ -644,9 +646,13 @@ export function ApplicationsTab({
 	const uncoveredSchools = appInvoice && !invoicePaid && appInvoice.status !== "void" ? Math.max(0, total - appInvoice.lines.length) : 0;
 	const paidOn = invoicePaid && appInvoice?.payments?.length ? fmtDate(appInvoice.payments[appInvoice.payments.length - 1]?.at) : null;
 
-	// The one sentence that says what moves this chapter.
+	// The one sentence that says what moves this chapter — or, once the case
+	// has moved past it, what closed it. A chapter behind the case never
+	// says "next".
+	const chapterPassed = JOURNEY_STAGES.indexOf(app.stage as JourneyStage) > JOURNEY_STAGES.indexOf("offer_letter_review");
 	const next = (() => {
-		if (acceptedSchool) return `Client accepted ${acceptedSchool.universityName ?? "an offer"} — Visa can open.`;
+		if (acceptedSchool) return chapterPassed ? `Client accepted ${acceptedSchool.universityName ?? "an offer"} — the case has moved on.` : `Client accepted ${acceptedSchool.universityName ?? "an offer"} — Visa can open.`;
+		if (chapterPassed) return "Closed without an accepted offer here — the case has moved on.";
 		if (total === 0) return "No schools yet — add them here or the client picks them in the portal.";
 		if (!feePaid) return "Application fee not paid — submissions start once it is paid.";
 		if (preparing > 0) return `${preparing} to submit.`;
@@ -708,7 +714,7 @@ export function ApplicationsTab({
 				</p>
 			</div>
 			<p className="text-sm mb-3">
-				<span className="muted">Next · </span>
+				<span className="muted">{chapterPassed ? "Done · " : "Next · "}</span>
 				{next}
 			</p>
 

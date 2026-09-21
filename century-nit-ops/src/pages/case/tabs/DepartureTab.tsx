@@ -4,14 +4,15 @@ import { useOpsAuth } from "../../OpsAuthContext";
 import type { MockApplication } from "century-nit-core/ops";
 import type { ApiInvoice } from "../../../lib/api";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PreDepartureTask } from "century-nit-core/ops";
-import { documentsReleased, type TravelAssistanceRequest } from "century-nit-shared";
+import { documentsApi } from "century-nit-core/api";
+import { documentsReleased, isTravelResolved, type TravelAssistanceRequest } from "century-nit-shared";
 import { formatMoney } from "century-nit-core/ui";
 import type { Flash, Fail, TabId } from "./types";
 import { Sheet } from "century-nit-core/ui";
 import type { DepartureDetails } from "century-nit-shared";
-import { TravelCard } from "../TravelCard";
+import { TravelCard, flightLine } from "../TravelCard";
 
 function fmtDate(iso: string | null | undefined): string | null {
 	if (!iso) return null;
@@ -78,7 +79,7 @@ export function DepartureTab({
 	const { setPreDepartureTask, setDepartureDetails, setReleaseOverride, refresh } = useCases();
 	const { hasPermission } = useOpsAuth();
 	const dd: DepartureDetails = app.departureDetails ?? {};
-	const released = documentsReleased({ paymentPlanId: app.paymentPlanId, agencyStageIndex: app.agencyStageIndex, agencySettled: app.agencySettled, departureDetails: dd });
+	const released = documentsReleased({ paymentPlanId: app.paymentPlanId, agencyStageIndex: app.agencyStageIndex, agencySettled: app.agencySettled, preDepartureFeePaid: app.preDepartureFeePaid, departureDetails: dd });
 	const [releasing, setReleasing] = useState(false);
 	const [releaseReason, setReleaseReason] = useState("");
 	async function release() {
@@ -94,18 +95,32 @@ export function DepartureTab({
 			setBusy(null);
 		}
 	}
-	// The pre-departure milestone as the ledger carries it: the second line of
-	// the live agency invoice (the balance on a full plan), covered or not.
+	// The pre-departure milestone as the ledger carries it, plan-aware: every
+	// line that falls due before arrival must be covered. The line to name is
+	// the one due on visa approval (the balance on a full plan, the Departure
+	// stage on a stage-lined one); post-arrival lines never gate.
 	const agencyInv = caseInvoices.filter((i) => i.type === "agency" && i.status !== "void").sort((x, y) => (x.createdAt < y.createdAt ? 1 : -1))[0] ?? null;
 	const milestone = (() => {
-		if (!agencyInv || agencyInv.lines.length < 2) return null;
-		const line = agencyInv.lines[1];
-		const cum = agencyInv.lines[0].amountCents + line.amountCents;
-		const paid = agencyInv.paidCents >= cum;
+		if (!agencyInv || agencyInv.lines.length === 0) return null;
+		const preArrival = agencyInv.lines.filter((l) => l.dueOn !== "arrival" && l.dueOn !== "scheduled");
+		if (preArrival.length === 0) return null;
+		const line = preArrival.find((l) => l.dueOn === "visa_approved") ?? preArrival[preArrival.length - 1];
+		const cum = preArrival.reduce((sum, l) => sum + l.amountCents, 0);
+		const paid = typeof app.preDepartureFeePaid === "boolean" ? app.preDepartureFeePaid : agencyInv.paidCents >= cum;
 		const issued = new Date(agencyInv.createdAt);
 		const ageDays = paid ? null : Math.max(0, Math.floor((new Date().getTime() - issued.getTime()) / 86_400_000));
 		const lastPayment = [...(agencyInv.payments ?? [])].sort((x, y) => (x.at < y.at ? 1 : -1))[0];
-		return { label: line.label.replace(/^Service fee · /, "").replace(/^\w/, (ch) => ch.toUpperCase()), amountCents: line.amountCents, invoiceNumber: agencyInv.invoiceNumber, issuedAt: agencyInv.createdAt, paid, paidAt: paid ? (lastPayment?.at ?? null) : null, ageDays };
+		return {
+			label: line.label.replace(/^Service fee · /, "").replace(/^\w/, (ch) => ch.toUpperCase()),
+			dueLabel: line.dueOn === "visa_approved" ? "due on visa approval" : line.dueOn === "acceptance" ? "due on acceptance" : line.dueOn === "offer" ? "due on the offer" : line.dueOn === "visa_open" ? "due when the visa opens" : "due before departure",
+			amountCents: line.amountCents,
+			remainingCents: Math.max(0, cum - agencyInv.paidCents),
+			invoiceNumber: agencyInv.invoiceNumber,
+			issuedAt: agencyInv.createdAt,
+			paid,
+			paidAt: paid ? (lastPayment?.at ?? null) : null,
+			ageDays,
+		};
 	})();
 	const acceptedSchool = (app.schoolApplications ?? []).find((sa) => sa.id === app.acceptedSchoolId) ?? (app.schoolApplications ?? []).find((sa) => sa.outcome === "Admitted") ?? null;
 	const flightAt = selectedTa?.booking?.departAt ?? selectedTa?.flight?.departAt ?? null;
@@ -160,12 +175,60 @@ export function DepartureTab({
 	// Century's deliverables gate completion; the client's items are reminders.
 	const deliverables = tasks.filter((t) => t.owner === "century");
 	const clientTasks = tasks.filter((t) => t.owner !== "century");
-	const closedCount = deliverables.filter((t) => t.done || Boolean(t.waivedReason)).length;
+	const openDeliverables = deliverables.filter((t) => !t.done && !t.waivedReason);
+	const doneDeliverables = deliverables.filter((t) => t.done || Boolean(t.waivedReason));
 	const canTick = canWork && app.stage === "travel_assistance";
 	const [busy, setBusy] = useState<string | null>(null);
 	const [waiving, setWaiving] = useState<string | null>(null);
 	const [waiveReason, setWaiveReason] = useState("");
 	const [clientOpen, setClientOpen] = useState(false);
+	const [doneOpen, setDoneOpen] = useState(false);
+	// The flight, once booked, folds to one line; the steps open on demand.
+	const [flightOpen, setFlightOpen] = useState(false);
+	const flightRef = useRef<HTMLDivElement>(null);
+	const booked = selectedTa?.status === "booked";
+	const travelResolved = selectedTa ? isTravelResolved(selectedTa.status) : false;
+
+	// What is actually in the vault — the one truth for "on file". The
+	// checklist on the case carries the client's own uploads; the agency's
+	// artifacts (visa receipt, e-ticket) live only in the vault.
+	const [vault, setVault] = useState<Record<string, string> | null>(null);
+	useEffect(() => {
+		const owner = app.applicantUserId;
+		if (!owner) return;
+		let alive = true;
+		documentsApi
+			.list({ ownerUserId: owner })
+			.then((res) => {
+				if (!alive) return;
+				const best: Record<string, string> = {};
+				const rank: Record<string, number> = { VERIFIED: 3, UPLOADED: 2, REJECTED: 1, PENDING_UPLOAD: 0 };
+				for (const d of res.documents) {
+					if ((rank[d.status] ?? 0) > (rank[best[d.documentType] ?? ""] ?? -1)) best[d.documentType] = d.status;
+				}
+				setVault(best);
+			})
+			.catch(() => {
+				if (alive) setVault(null);
+			});
+		return () => {
+			alive = false;
+		};
+	}, [app.applicantUserId, app.updatedAt, selectedTa?.status]);
+	const onFile = (type: string): boolean => {
+		const st = vault?.[type] ?? (app.documentChecklist ?? []).find((d) => d.id === type)?.status ?? null;
+		return st === "UPLOADED" || st === "VERIFIED";
+	};
+	const letterOnFile = Boolean(acceptedSchool?.offerLetterStorageKey) || onFile("admission_letter");
+	const visaPapersOnFile = onFile("visa_grant") || onFile("visa_receipt");
+	const eTicketOnFile = onFile("flight_receipt");
+	// One truth per paper: released only when the milestone is paid *and* it is on file.
+	const paperState = (present: boolean): { label: string; on: boolean } =>
+		released && present ? { label: dd.releaseOverrideAt ? "released early" : "released", on: true }
+		: released ? { label: "needs upload", on: false }
+		: present ? { label: "held · milestone unpaid", on: false }
+		: { label: "not on file yet", on: false };
+
 	async function unwaive(task: PreDepartureTask) {
 		setBusy(task.id);
 		try {
@@ -202,58 +265,208 @@ export function DepartureTab({
 			setBusy(null);
 		}
 	}
+	function showFlight() {
+		setFlightOpen(true);
+		requestAnimationFrame(() => flightRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+	}
+
+	/** How a deliverable closes, and the one control that moves it. */
+	function deliverableRow(task: PreDepartureTask): { how: string; action: React.ReactNode; byFact: boolean } {
+		const waived = !task.done && Boolean(task.waivedReason);
+		const isBusy = busy === task.id;
+		const doneAt = fmtDate(task.doneAt);
+		const byFact = task.id === "pd-flights" || task.id === "pd-briefing" || Boolean(task.evidence);
+		if (task.id === "pd-flights") {
+			return {
+				byFact,
+				how: task.done
+					? `closed by the booking${selectedTa?.booking?.confirmationCode ? ` · ${selectedTa.booking.confirmationCode}` : ""}${task.doneBy === "client" ? " · booked by the client" : ""}${doneAt ? ` · ${doneAt}` : ""}`
+					: "closes when the booking is recorded",
+				action: !task.done && !waived ? <button type="button" className="btn btn--sm btn--ghost" onClick={showFlight}>Flight ↓</button> : null,
+			};
+		}
+		if (task.id === "pd-briefing") {
+			return {
+				byFact,
+				how: task.done ? `recorded${dd.briefingAt ? ` · ${fmtDateTime(dd.briefingAt)}` : doneAt ? ` · ${doneAt}` : ""}` : "closes when the briefing is recorded — arrival, the first week, who to call",
+				action: !task.done && !waived && canWork ? <button type="button" className="btn btn--sm btn--primary" onClick={openFacts}>Record briefing…</button> : null,
+			};
+		}
+		if (task.evidence) {
+			return {
+				byFact,
+				how: task.done
+					? `closed by the vault${task.doneBy ? ` · verified by ${task.doneBy}` : ""}${doneAt ? ` · ${doneAt}` : ""}`
+					: task.proofStatus === "UPLOADED"
+						? "uploaded — verify it on the Documents tab to close this"
+						: task.proofStatus === "REJECTED"
+							? "the upload was rejected — the client re-uploads in the portal"
+							: "closes when the document is in the vault and verified",
+				action: !task.done && !waived ? <button type="button" className="btn btn--sm btn--ghost" onClick={() => setTab("documents")}>Documents →</button> : null,
+			};
+		}
+		return {
+			byFact,
+			how: task.done ? `done${task.doneBy ? ` by ${task.doneBy}` : ""}${doneAt ? ` · ${doneAt}` : ""}` : (task.detail ?? "closed by the officer"),
+			action: canTick && !waived ? (
+				<button type="button" className="btn btn--sm btn--ghost" disabled={isBusy} onClick={() => void toggle(task)}>
+					{task.done ? "Reopen" : "Mark done"}
+				</button>
+			) : null,
+		};
+	}
+
+	// What this chapter still needs, in the order it needs it — the same
+	// items the gate reads, so the first one here is the Next up top.
+	type OpenItem = { key: string; title: string; how: string; action: React.ReactNode; task?: PreDepartureTask };
+	const openItems: OpenItem[] = [];
+	if (travelOpen && selectedTa && !travelResolved) {
+		openItems.push({
+			key: "flight",
+			title: selectedTa.decision ? "Get the flight booked" : "Waiting for the client's flight decision",
+			how: selectedTa.decision ? "quote, issue, the client pays, then record the booking — the steps are below" : "they choose on their Departure page: Century books, they book their own, or hold",
+			action: <button type="button" className="btn btn--sm btn--ghost" onClick={showFlight}>Flight ↓</button>,
+		});
+	}
+	for (const task of openDeliverables) {
+		if (task.id === "pd-flights" && openItems.some((o) => o.key === "flight")) continue;
+		const r = deliverableRow(task);
+		openItems.push({ key: task.id, title: task.label, how: task.required === false ? `${r.how} · optional` : r.how, action: r.action, task });
+	}
+	if (booked && !eTicketOnFile) {
+		openItems.push({
+			key: "eticket",
+			title: "File the e-ticket",
+			how: `${selectedTa?.booking?.confirmationCode ? `${selectedTa.booking.confirmationCode} · ` : ""}the ticket is handed over with the papers`,
+			action: <button type="button" className="btn btn--sm btn--ghost" onClick={showFlight}>Upload ↓</button>,
+		});
+	}
+	if (milestone && !milestone.paid && !released) {
+		openItems.push({
+			key: "milestone",
+			title: "Pre-departure milestone unpaid — the papers are held",
+			how: `${milestone.invoiceNumber} · ${fmtGhs(milestone.remainingCents)} to go · the client pays in the portal; record a transfer from Billing`,
+			action: <button type="button" className="btn btn--sm btn--ghost" onClick={() => setTab("payments")}>Billing →</button>,
+		});
+	}
+
+	const flyLine =
+		flyDays !== null ? (flyDays > 0 ? `flies in ${flyDays} day${flyDays === 1 ? "" : "s"}` : flyDays === 0 ? "flies today" : `flew ${-flyDays} day${flyDays === -1 ? "" : "s"} ago`) : null;
+	const factsRecorded = Boolean(dd.reportBy || dd.orientationAt || dd.accommodationAddress || dd.emergencyContactName || dd.arrivedAt);
+
 	return (
 		<>
-			{/* Flight — status, the flight, the one next action. Departure is
-			    the last chapter; completion is recorded from the Billing tab or
-			    by the client. */}
-			<div className="card">
-				<p className="eyebrow mb-2">Flight</p>
-				{selectedTa ? (
-					<TravelCard
-						ta={selectedTa}
-						invoice={caseInvoices.find((i) => i.type === "travel") ?? null}
-						canWork={canWork}
-						canIssueInvoices={canIssueInvoices}
-						canUploadArtifacts={hasPermission("documents")}
-						ownerUserId={app.applicantUserId}
-						onChanged={() => {
-							void refresh();
-							onInvoicesChanged();
-						}}
-						onOpenBilling={() => setTab("payments")}
-					/>
-				) : (
-					<p className="muted text-sm">
-						{app.visaStage === "complete"
-							? "Waiting for the applicant to decide how they want to book their flight."
-							: "Opens once the visa is complete."}
-					</p>
-				)}
-				{selectedTa?.decision && (
-					<p className="muted mt-2 text-xs">
-						Decided {new Date(selectedTa.updatedAt).toLocaleDateString()} · {selectedTa.decision === "yes" ? "asked us to book" : selectedTa.decision === "hold" ? "on hold" : "booking their own"}
-						{selectedTa.applicantNote ? ` · "${selectedTa.applicantNote}"` : ""}
-					</p>
-				)}
-			</div>
+			{/* Open — what the chapter still needs, first. Done work is folded. */}
+			{travelOpen && (
+				<div className="card">
+					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }} className="mb-2">
+						<p className="eyebrow" style={{ margin: 0 }}>Open · {openItems.length}</p>
+						<p className="text-xs mono muted" style={{ margin: 0, display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+							{flyLine && <span style={{ color: "var(--foreground)", fontWeight: 700 }}>{flyLine}</span>}
+							{reportDays !== null && (
+								<span style={reportDays < 0 && !dd.arrivedAt ? { color: "var(--foreground)", fontWeight: 700 } : undefined}>
+									{reportDays >= 0 ? `report by ${fmtDate(dd.reportBy)}` : `report-by passed ${-reportDays} day${reportDays === -1 ? "" : "s"} ago`}
+								</span>
+							)}
+							<span>
+								<b style={{ color: "var(--foreground)" }}>{doneDeliverables.length} of {deliverables.length}</b> deliverables closed
+							</span>
+						</p>
+					</div>
+					{openItems.length === 0 ? (
+						<p className="muted text-sm" style={{ padding: "0.25rem 0" }}>
+							Nothing open in this chapter — {app.stage === "completed" ? "the case is closed." : "completion is offered in the Next band above."}
+						</p>
+					) : (
+						<div className="cn-dl">
+							{openItems.map((item, i) => {
+								const task = item.task;
+								return (
+									<div key={item.key} className="cn-dl__r">
+										<span className="cn-dl__m" aria-hidden>{i + 1}</span>
+										<span className="cn-dl__t">
+											{item.title}
+											<small>{item.how}</small>
+										</span>
+										<span className="cn-dl__a">
+											{task && waiving === task.id ? (
+												<>
+													<input className="input input--sm" value={waiveReason} onChange={(e) => setWaiveReason(e.target.value)} placeholder="Why it will not happen" style={{ minWidth: "14rem" }} autoFocus />
+													<button type="button" className="btn btn--sm btn--primary" disabled={busy === task.id || !waiveReason.trim()} onClick={() => void waive(task)}>
+														{busy === task.id ? "Saving…" : "Waive"}
+													</button>
+													<button type="button" className="btn btn--sm btn--ghost" onClick={() => { setWaiving(null); setWaiveReason(""); }}>Cancel</button>
+												</>
+											) : (
+												<>
+													{item.action}
+													{task && canTick && task.required !== false && deliverableRow(task).byFact && (
+														<button type="button" className="plnk plnk--dim" onClick={() => { setWaiving(task.id); setWaiveReason(""); }}>waive…</button>
+													)}
+												</>
+											)}
+										</span>
+									</div>
+								);
+							})}
+						</div>
+					)}
+					{doneDeliverables.length > 0 && (
+						<div className="cn-fold mt-3">
+							<div className="cn-fold__h">
+								<span>
+									<b>Done · {doneDeliverables.length}</b>
+									<span className="text-xs mono muted" style={{ marginLeft: "0.6rem" }}>closed by their facts, not by a tick</span>
+								</span>
+								<button type="button" className="plnk plnk--dim" onClick={() => setDoneOpen((v) => !v)}>
+									{doneOpen ? "hide" : "show"}
+								</button>
+							</div>
+							{doneOpen && (
+								<div className="cn-fold__b">
+									<div className="cn-dl" style={{ borderTop: 0 }}>
+										{doneDeliverables.map((task) => {
+											const waived = !task.done && Boolean(task.waivedReason);
+											const r = deliverableRow(task);
+											return (
+												<div key={task.id} className={`cn-dl__r cn-dl__r--${waived ? "waived" : "done"}`}>
+													<span className="cn-dl__m" aria-hidden>{task.done ? "✓" : "–"}</span>
+													<span className="cn-dl__t">
+														{task.label}
+														<small>{waived ? `waived — ${task.waivedReason}` : r.how}</small>
+													</span>
+													<span className="cn-dl__a">
+														{task.done ? r.action : null}
+														{waived && canTick && (
+															<button type="button" className="plnk plnk--dim" disabled={busy === task.id} onClick={() => void unwaive(task)}>undo</button>
+														)}
+													</span>
+												</div>
+											);
+										})}
+									</div>
+								</div>
+							)}
+						</div>
+					)}
+				</div>
+			)}
 
-			{/* Papers before they fly — what the pre-departure milestone holds:
-			    the letter, the visa documents, the e-ticket handover. The
-			    milestone invoice sits above them; a manager can release early. */}
+			{/* Papers before they fly — released only when the milestone is paid
+			    and the paper is on file. The milestone row names the actual line. */}
 			<div className="card">
 				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }} className="mb-2">
 					<p className="eyebrow" style={{ margin: 0 }}>Papers before they fly</p>
 					<span className="text-xs mono muted">
-						{released ? (dd.releaseOverrideAt ? "released early" : "released") : `held until the ${milestone?.label ? `service fee · ${milestone.label.toLowerCase()}` : "service-fee instalment"} is paid`}
+						{released ? (dd.releaseOverrideAt ? "released early" : "released — the client can download what is on file") : "held until the pre-departure milestone is paid"}
 					</span>
 				</div>
 				{milestone ? (
 					<div className={`cn-paper-ms${milestone.paid ? " cn-paper-ms--done" : ""}`}>
 						<div>
-							<b>Service fee · {milestone.label} · {fmtGhs(milestone.amountCents)}</b>
+							<b>Pre-departure milestone · {milestone.label} · {milestone.paid ? fmtGhs(milestone.amountCents) : `${fmtGhs(milestone.remainingCents)} to go`}</b>
 							<small>
-								{milestone.invoiceNumber} · {milestone.paid ? `paid${milestone.paidAt ? ` ${fmtDate(milestone.paidAt)}` : ""} · released the papers` : `issued ${fmtDate(milestone.issuedAt) ?? "—"} · unpaid${milestone.ageDays != null ? ` · ${milestone.ageDays} day${milestone.ageDays === 1 ? "" : "s"}` : ""}`}
+								{milestone.invoiceNumber} · {milestone.dueLabel} · {milestone.paid ? `paid${milestone.paidAt ? ` ${fmtDate(milestone.paidAt)}` : ""}` : `issued ${fmtDate(milestone.issuedAt) ?? "—"} · unpaid${milestone.ageDays != null ? ` · ${milestone.ageDays} day${milestone.ageDays === 1 ? "" : "s"}` : ""}`}
 							</small>
 						</div>
 						{!milestone.paid && (
@@ -269,20 +482,21 @@ export function DepartureTab({
 				)}
 				<div className="cn-papers">
 					{[
-						{ label: "Admission letter", sub: acceptedSchool ? `${acceptedSchool.universityName ?? "University"}${acceptedSchool.offerLetterStorageKey ? " · on file" : " · not uploaded yet"}` : "no accepted offer yet" },
-						{ label: "Visa documents", sub: "visa grant · visa receipt — uploaded on the Visa tab" },
-						{ label: "E-ticket", sub: selectedTa?.status === "booked" ? `${selectedTa.booking?.confirmationCode ? `${selectedTa.booking.confirmationCode} · ` : ""}booked` : "lands here once the ticket is paid and booked" },
-					].map((p) => (
-						<div key={p.label} className="cn-papers__r">
-							<div>
-								{p.label}
-								<small>{p.sub}</small>
+						{ label: "Admission letter", sub: acceptedSchool ? `${acceptedSchool.universityName ?? "University"}${letterOnFile ? " · on file" : " · not in the vault"}` : "no accepted offer yet", present: letterOnFile },
+						{ label: "Visa documents", sub: `visa grant · visa receipt${visaPapersOnFile ? " · filed on the Visa tab" : " — uploaded on the Visa tab"}`, present: visaPapersOnFile },
+						{ label: "E-ticket", sub: booked ? `${selectedTa?.booking?.confirmationCode ? `${selectedTa.booking.confirmationCode} · ` : ""}${eTicketOnFile ? "on file" : "booked · not filed yet"}` : "lands here once the ticket is paid and booked", present: eTicketOnFile },
+					].map((p) => {
+						const st = paperState(p.present);
+						return (
+							<div key={p.label} className="cn-papers__r">
+								<div>
+									{p.label}
+									<small>{p.sub}</small>
+								</div>
+								<span className={`cn-papers__st${st.on ? " cn-papers__st--on" : ""}`}>{st.label}</span>
 							</div>
-							<span className={`cn-papers__st${released ? " cn-papers__st--on" : ""}`}>
-								{released ? (dd.releaseOverrideAt ? "released early" : "released") : "held"}
-							</span>
-						</div>
-					))}
+						);
+					})}
 				</div>
 				{released && dd.releaseOverrideAt && (
 					<p className="text-sm mt-2">
@@ -320,146 +534,122 @@ export function DepartureTab({
 				)}
 			</div>
 
-			{/* Before they fly — Century's deliverables closed by their facts, the
-			    arrival facts under them, the client's own list folded. Waive
-			    only what will not happen, with the reason on the record. */}
+			{/* Flight — the steps in full while it is being worked; one line once
+			    it is resolved, the steps behind a disclosure. */}
+			<div className="card" ref={flightRef}>
+				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }} className="mb-2">
+					<p className="eyebrow" style={{ margin: 0 }}>Flight{travelResolved ? " · done ✓" : ""}</p>
+					{travelResolved && (
+						<button type="button" className="plnk plnk--dim" onClick={() => setFlightOpen((v) => !v)} aria-expanded={flightOpen}>
+							{flightOpen ? "hide steps" : "steps ▸"}
+						</button>
+					)}
+				</div>
+				{selectedTa ? (
+					<>
+						{travelResolved && (
+							<p className="text-sm" style={{ margin: flightOpen ? "0 0 0.75rem" : 0 }}>
+								<b>
+									{booked
+										? `${flightLine(selectedTa.booking ?? selectedTa.flight)}${selectedTa.booking?.confirmationCode ? ` · PNR ${selectedTa.booking.confirmationCode}` : ""}`
+										: selectedTa.status === "declined"
+											? "Booking their own flight"
+											: "On hold — they can resume from the portal"}
+								</b>
+								<span className="muted" style={{ display: "block", fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
+									{selectedTa.decision === "yes" ? "asked us to book" : selectedTa.decision === "no" ? "booking their own" : selectedTa.decision === "hold" ? "on hold" : "decided"}
+									{fmtDate(selectedTa.updatedAt) ? ` · ${fmtDate(selectedTa.updatedAt)}` : ""}
+									{booked && caseInvoices.find((i) => i.type === "travel") ? ` · ticket ${fmtGhs(caseInvoices.find((i) => i.type === "travel")!.subtotalCents)} · ${caseInvoices.find((i) => i.type === "travel")!.invoiceNumber}` : ""}
+									{selectedTa.applicantNote ? ` · "${selectedTa.applicantNote}"` : ""}
+								</span>
+							</p>
+						)}
+						{(!travelResolved || flightOpen) && (
+							<TravelCard
+								ta={selectedTa}
+								invoice={caseInvoices.find((i) => i.type === "travel") ?? null}
+								canWork={canWork}
+								canIssueInvoices={canIssueInvoices}
+								canUploadArtifacts={hasPermission("documents")}
+								ownerUserId={app.applicantUserId}
+								onChanged={() => {
+									void refresh();
+									onInvoicesChanged();
+								}}
+								onOpenBilling={() => setTab("payments")}
+							/>
+						)}
+					</>
+				) : (
+					<p className="muted text-sm">
+						{app.visaStage === "complete"
+							? "Waiting for the applicant to decide how they want to book their flight."
+							: "Opens once the visa is complete."}
+					</p>
+				)}
+			</div>
+
+			{/* Arrival — one list: Century's items and the client's, each tagged. */}
 			{travelOpen && (
 				<div className="card">
-					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }} className="mb-2">
-						<p className="eyebrow" style={{ margin: 0 }}>Before they fly</p>
-						<p className="text-xs mono muted" style={{ margin: 0, display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-							{flyDays !== null && <span style={{ color: "var(--foreground)", fontWeight: 700 }}>{flyDays > 0 ? `flies in ${flyDays} day${flyDays === 1 ? "" : "s"}` : flyDays === 0 ? "flies today" : `flew ${-flyDays} day${flyDays === -1 ? "" : "s"} ago`}</span>}
-							{reportDays !== null && (
-								<span style={reportDays < 0 && !dd.arrivedAt ? { color: "var(--foreground)", fontWeight: 700 } : undefined}>
-									{reportDays >= 0 ? `report by ${fmtDate(dd.reportBy)}` : `report-by passed ${-reportDays} day${reportDays === -1 ? "" : "s"} ago`}
-								</span>
-							)}
-							<span>
-								<b style={{ color: "var(--foreground)" }}>{closedCount} of {deliverables.length}</b> deliverables closed
-							</span>
-						</p>
-					</div>
-					<p className="muted text-xs" style={{ margin: "0 0 0.5rem" }}>
-						Century's deliverables close by their facts — the booking, the briefing, the copies in the vault — not by a tick.
-					</p>
+					<p className="eyebrow mb-2">Arrival · once they land</p>
 					<div className="cn-dl">
-						{deliverables.map((task) => {
-							const waived = !task.done && Boolean(task.waivedReason);
-							const state = task.done ? "done" : waived ? "waived" : "open";
-							const isBusy = busy === task.id;
-							const doneAt = fmtDate(task.doneAt);
-							const byFact = task.id === "pd-flights" || task.id === "pd-briefing" || Boolean(task.evidence);
-							let how: string;
-							let action: React.ReactNode = null;
-							if (task.id === "pd-flights") {
-								how = task.done
-									? `closed by the booking${selectedTa?.booking?.confirmationCode ? ` · ${selectedTa.booking.confirmationCode}` : ""}${task.doneBy === "client" ? " · booked by the client" : ""}${doneAt ? ` · ${doneAt}` : ""}`
-									: "closes when the booking is recorded — milestone 5 above";
-								action = !task.done && !waived ? <span className="text-xs mono muted">milestone 5</span> : null;
-							} else if (task.id === "pd-briefing") {
-								how = task.done ? `recorded${dd.briefingAt ? ` · ${fmtDateTime(dd.briefingAt)}` : doneAt ? ` · ${doneAt}` : ""}` : "closes when the briefing is recorded — arrival, the first week, who to call";
-								action = !task.done && !waived && canWork ? <button type="button" className="btn btn--sm btn--secondary" onClick={openFacts}>Record briefing…</button> : null;
-							} else if (task.evidence) {
-								how = task.done
-									? `closed by the vault${task.doneBy ? ` · verified by ${task.doneBy}` : ""}${doneAt ? ` · ${doneAt}` : ""}`
-									: task.proofStatus === "UPLOADED"
-										? "uploaded — verify it on the Documents tab to close this"
-										: task.proofStatus === "REJECTED"
-											? "the upload was rejected — the client re-uploads in the portal"
-											: "closes when the document is in the vault and verified";
-								action = !task.done && !waived ? <button type="button" className="btn btn--sm btn--ghost" onClick={() => setTab("documents")}>Documents →</button> : null;
-							} else {
-								how = task.done ? `done${task.doneBy ? ` by ${task.doneBy}` : ""}${doneAt ? ` · ${doneAt}` : ""}` : (task.detail ?? "closed by the officer");
-								action = canTick && !waived ? (
-									<button type="button" className="btn btn--sm btn--ghost" disabled={isBusy} onClick={() => void toggle(task)}>
-										{task.done ? "Reopen" : "Mark done"}
+						<div className="cn-dl__r">
+							<span className="cn-dl__m" aria-hidden style={{ width: "auto", padding: "0 0.3rem", fontSize: "0.55rem", letterSpacing: "0.06em" }}>us</span>
+							<span className="cn-dl__t">
+								Arrival facts
+								<small>{factsRecorded ? "the client sees these on their pre-departure page" : "report-to-school by · orientation · accommodation · emergency contact"}</small>
+							</span>
+							<span className="cn-dl__a">
+								{canWork && (
+									<button type="button" className="btn btn--sm btn--ghost" onClick={openFacts}>
+										{factsRecorded ? "Edit…" : "Record…"}
 									</button>
-								) : null;
-							}
-							return (
-								<div key={task.id} className={`cn-dl__r cn-dl__r--${state}`}>
-									<span className="cn-dl__m" aria-hidden>
-										{task.done ? "✓" : waived ? "–" : ""}
-									</span>
-									<span className="cn-dl__t">
-										{task.label}
-										<small>{waived ? `waived — ${task.waivedReason}` : how}</small>
-									</span>
-									<span className="cn-dl__a">
-										{waiving === task.id ? (
-											<>
-												<input className="input input--sm" value={waiveReason} onChange={(e) => setWaiveReason(e.target.value)} placeholder="Why it will not happen" style={{ minWidth: "14rem" }} autoFocus />
-												<button type="button" className="btn btn--sm btn--primary" disabled={isBusy || !waiveReason.trim()} onClick={() => void waive(task)}>
-													{isBusy ? "Saving…" : "Waive"}
-												</button>
-												<button type="button" className="btn btn--sm btn--ghost" onClick={() => { setWaiving(null); setWaiveReason(""); }}>Cancel</button>
-											</>
-										) : (
-											<>
-												{action}
-												{waived && canTick && (
-													<button type="button" className="plnk plnk--dim" disabled={isBusy} onClick={() => void unwaive(task)}>undo</button>
-												)}
-												{!task.done && !waived && canTick && task.required !== false && byFact && (
-													<button type="button" className="plnk plnk--dim" onClick={() => { setWaiving(task.id); setWaiveReason(""); }}>waive…</button>
-												)}
-											</>
+								)}
+							</span>
+						</div>
+						{factsRecorded && (
+							<div className="cn-facts" style={{ padding: "0.5rem 0 0.6rem", borderBottom: "1px solid var(--border-light)" }}>
+								<div><p className="muted text-xs">Report to the school by</p><p className="text-sm">{fmtDate(dd.reportBy) ?? <span className="muted">—</span>}</p></div>
+								<div><p className="muted text-xs">Orientation</p><p className="text-sm">{fmtDate(dd.orientationAt) ?? <span className="muted">—</span>}</p></div>
+								<div><p className="muted text-xs">Accommodation</p><p className="text-sm">{dd.accommodationAddress ? `${dd.accommodationAddress}${dd.accommodationMoveInAt ? ` · from ${fmtDate(dd.accommodationMoveInAt)}` : ""}` : <span className="muted">—</span>}</p></div>
+								<div><p className="muted text-xs">Emergency contact abroad</p><p className="text-sm">{dd.emergencyContactName ? `${dd.emergencyContactName}${dd.emergencyContactRelation ? ` (${dd.emergencyContactRelation})` : ""}${dd.emergencyContactPhone ? ` · ${dd.emergencyContactPhone}` : ""}` : <span className="muted">—</span>}</p></div>
+								<div><p className="muted text-xs">Arrived</p><p className="text-sm">{fmtDate(dd.arrivedAt) ?? <span className="muted">—</span>}</p></div>
+							</div>
+						)}
+						{clientTasks.length > 0 && (
+							<div className="cn-dl__r">
+								<span className="cn-dl__m" aria-hidden style={{ width: "auto", padding: "0 0.3rem", fontSize: "0.55rem", letterSpacing: "0.06em", borderStyle: "dashed" }}>client</span>
+								<span className="cn-dl__t">
+									Their own list · {clientTasks.filter((t) => t.done).length} of {clientTasks.length}
+									<small>reminders ticked in the portal — never a gate</small>
+								</span>
+								<span className="cn-dl__a">
+									<button type="button" className="plnk plnk--dim" onClick={() => setClientOpen((v) => !v)}>
+										{clientOpen ? "hide" : "show"}
+									</button>
+								</span>
+							</div>
+						)}
+						{clientOpen && (
+							<div className="cn-fold__b" style={{ paddingTop: "0.4rem" }}>
+								{clientTasks.map((task) => (
+									<div key={task.id} className={`cn-fold__it${task.done ? " cn-fold__it--on" : ""}`}>
+										<span className="cn-fold__bx" aria-hidden />
+										<span>
+											{task.label}
+											{task.done && fmtDate(task.doneAt) ? <span className="muted"> · {fmtDate(task.doneAt)}</span> : null}
+										</span>
+										{canTick && (
+											<button type="button" className="plnk plnk--dim" disabled={busy === task.id} onClick={() => void toggle(task)} title={task.done ? "Reopen" : "Mark on their word"}>
+												{task.done ? "reopen" : "mark…"}
+											</button>
 										)}
-									</span>
-								</div>
-							);
-						})}
-						{deliverables.length === 0 && <p className="muted text-sm" style={{ padding: "0.5rem 0" }}>No deliverables are seeded on this case yet.</p>}
-					</div>
-
-					<div className="cn-facts mt-3">
-						<div><p className="muted text-xs">Report to the school by</p><p className="text-sm">{fmtDate(dd.reportBy) ?? <span className="muted">—</span>}</p></div>
-						<div><p className="muted text-xs">Orientation</p><p className="text-sm">{fmtDate(dd.orientationAt) ?? <span className="muted">—</span>}</p></div>
-						<div><p className="muted text-xs">Accommodation</p><p className="text-sm">{dd.accommodationAddress ? `${dd.accommodationAddress}${dd.accommodationMoveInAt ? ` · from ${fmtDate(dd.accommodationMoveInAt)}` : ""}` : <span className="muted">—</span>}</p></div>
-						<div><p className="muted text-xs">Emergency contact abroad</p><p className="text-sm">{dd.emergencyContactName ? `${dd.emergencyContactName}${dd.emergencyContactRelation ? ` (${dd.emergencyContactRelation})` : ""}${dd.emergencyContactPhone ? ` · ${dd.emergencyContactPhone}` : ""}` : <span className="muted">—</span>}</p></div>
-						<div><p className="muted text-xs">Arrived</p><p className="text-sm">{fmtDate(dd.arrivedAt) ?? <span className="muted">—</span>}</p></div>
-						{canWork && (
-							<div style={{ alignSelf: "end" }}>
-								<button type="button" className="btn btn--sm btn--ghost" onClick={openFacts}>
-									{Object.keys(dd).length ? "Edit arrival facts" : "Record arrival facts"}
-								</button>
+									</div>
+								))}
 							</div>
 						)}
 					</div>
-
-					{clientTasks.length > 0 && (
-						<div className="cn-fold mt-3">
-							<div className="cn-fold__h">
-								<span>
-									<b>The client's own list</b>
-									<span className="text-xs mono muted" style={{ marginLeft: "0.6rem" }}>
-										{clientTasks.filter((t) => t.done).length} of {clientTasks.length} ticked in the portal · reminders, never a gate
-									</span>
-								</span>
-								<button type="button" className="plnk plnk--dim" onClick={() => setClientOpen((v) => !v)}>
-									{clientOpen ? "hide" : "show"}
-								</button>
-							</div>
-							{clientOpen && (
-								<div className="cn-fold__b">
-									{clientTasks.map((task) => (
-										<div key={task.id} className={`cn-fold__it${task.done ? " cn-fold__it--on" : ""}`}>
-											<span className="cn-fold__bx" aria-hidden />
-											<span>
-												{task.label}
-												{task.done && fmtDate(task.doneAt) ? <span className="muted"> · {fmtDate(task.doneAt)}</span> : null}
-											</span>
-											{canTick && (
-												<button type="button" className="plnk plnk--dim" disabled={busy === task.id} onClick={() => void toggle(task)} title={task.done ? "Reopen" : "Mark on their word"}>
-													{task.done ? "reopen" : "mark…"}
-												</button>
-											)}
-										</div>
-									))}
-								</div>
-							)}
-						</div>
-					)}
 				</div>
 			)}
 

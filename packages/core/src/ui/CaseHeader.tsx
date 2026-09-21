@@ -20,6 +20,9 @@ export function CaseHeader({
 	contact,
 	extra,
 	actions,
+	chips,
+	summary,
+	team,
 	children,
 }: {
 	name: string;
@@ -45,9 +48,45 @@ export function CaseHeader({
 	extra?: { label: string; value: React.ReactNode }[];
 	/** Top-right slot. Case-level buttons (History, links) that are not stage work. */
 	actions?: React.ReactNode;
+	/**
+	 * The compact header: a row of chips under the name (chapter, plan,
+	 * status…) instead of the label/value grid. When set, `stage`,
+	 * `portalStage`, `stageHandlers` and `extra` are not rendered — the
+	 * caller folds those facts into `chips`, `summary` and `team`.
+	 */
+	chips?: React.ReactNode;
+	/** One line of facts (branch · country · programme…), compact mode. */
+	summary?: React.ReactNode;
+	/** Who is on the case, compact mode — the handler by name with its control, the seats folded. */
+	team?: React.ReactNode;
 	/** Below the facts. A stage-specific body. */
 	children?: React.ReactNode;
 }) {
+	if (chips) {
+		return (
+			<div className="cn-case cn-case--compact">
+				<div className="cn-case__top">
+					<h2 className="cn-case__name">{name}</h2>
+					{reference && <span className="cn-case__ref">{reference}</span>}
+					{actions && <div className="cn-case__actions">{actions}</div>}
+				</div>
+				<div className="cn-case__chips">{chips}</div>
+				{(summary || team) && (
+					<div className="cn-case__line">
+						{summary && <span className="cn-case__summary">{summary}</span>}
+						{team && <span className="cn-case__team">{team}</span>}
+					</div>
+				)}
+				{(contact?.email || contact?.phone) && (
+					<div className="cn-case__contact">
+						{contact.email && <a href={`mailto:${contact.email}`}>{contact.email}</a>}
+						{contact.phone && <a href={`tel:${contact.phone}`}>{contact.phone}</a>}
+					</div>
+				)}
+				{children}
+			</div>
+		);
+	}
 	return (
 		<div className="cn-case">
 			<div className="cn-case__top">

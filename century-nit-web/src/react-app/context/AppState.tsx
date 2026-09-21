@@ -299,6 +299,8 @@ export type ApplicationData = {
 	agencyPaid: number;
 	agencyDepositPaid: boolean;
 	agencyStageIndex: number;
+	/** The server's plan-aware pre-departure milestone; null until the case has loaded. */
+	preDepartureFeePaid: boolean | null;
 	agencySettledAt: string | null;
 	/** Post-arrival recurring schedule (installment plan only) */
 	postArrivalSchedule: string | null;
@@ -630,6 +632,7 @@ const defaultApplication: ApplicationData = {
 	agencyPaid: 0,
 	agencyDepositPaid: false,
 	agencyStageIndex: 0,
+	preDepartureFeePaid: null,
 	agencySettledAt: null,
 	postArrivalSchedule: null,
 	postArrivalPaymentIndex: 0,
@@ -921,6 +924,10 @@ export function isAgencySettled(app: ApplicationData) {
  * papers. The post-arrival remainder is aftercare and never gates anything.
  */
 export function hasSettledPlan(app: ApplicationData) {
+	// The ledger's answer, plan-aware (a stage-lined plan has no "second
+	// milestone" — every pre-arrival line counts). The position rule is the
+	// fallback until the case has loaded.
+	if (typeof app.preDepartureFeePaid === "boolean") return app.preDepartureFeePaid;
 	if (!hasPaymentPlan(app)) return false;
 	return app.paymentPlanId === "full" ? isAgencySettled(app) : app.agencyStageIndex >= 2;
 }
@@ -1896,6 +1903,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				agencyPaid: 0,
 				agencyDepositPaid: false,
 				agencyStageIndex: 0,
+				preDepartureFeePaid: null,
 				agencySettledAt: null,
 				travelInvoicePaid: false,
 				postArrivalSchedule: null,
@@ -2568,6 +2576,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					// The server's stage index is truth for instalment plans; the
 					// invoice overlay in applyAgencyInvoice refines it after.
 					agencyStageIndex: Math.max(a.agencyStageIndex ?? 0, prev.agencyStageIndex),
+					preDepartureFeePaid: typeof a.preDepartureFeePaid === "boolean" ? a.preDepartureFeePaid : prev.preDepartureFeePaid,
 					travelInvoicePaid: a.travelInvoicePaid ?? prev.travelInvoicePaid,
 					applicationConsent: (a as any).applicationConsent ?? prev.applicationConsent,
 					visaConsent: (a as any).visaConsent ?? prev.visaConsent,

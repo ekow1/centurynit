@@ -750,6 +750,13 @@
                   "when": 1790400500000,
                   "tag": "0108_case_meetings",
                   "breakpoints": true
+            },
+            {
+                  "idx": 109,
+                  "version": "7",
+                  "when": 1790500000000,
+                  "tag": "0109_pre_departure_paid",
+                  "breakpoints": true
             }
       ]
 }

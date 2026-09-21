@@ -48,8 +48,12 @@ import {
 	normaliseScope,
 	scopeLabel,
 	entryStage,
+	chapterProgress,
 	SERVICE_STAGE_LABELS,
 	STAGE_INTAKE,
+	STAGE_OWNER_LABELS,
+	PACKAGE_CODE_LABELS,
+	type PackageCode,
 	type ServiceStage,
 	PORTAL_STAGE_LABELS,
 } from "century-nit-shared";
@@ -338,9 +342,15 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		{ id: "payments", label: "Billing", locked: false },
 		{ id: "documents", label: "Documents", locked: false },
 	];
-	// The plan, for the header: scope · entry · track.
+	// The plan, for the header chip: scope · track (as a label, never the
+	// code). The entry stage shows only when the plan skips Admissions.
+	const trackLabel = scope?.includes("admissions")
+		? app.fundingTrack && app.fundingTrack !== "undecided"
+			? (PACKAGE_CODE_LABELS[app.fundingTrack as PackageCode] ?? app.fundingTrack)
+			: "track not chosen"
+		: null;
 	const planLine = scope
-		? `${scopeLabel(scope)} · entered at ${SERVICE_STAGE_LABELS[entryStage(scope)]} · ${scope.includes("admissions") ? (app.fundingTrack && app.fundingTrack !== "undecided" ? app.fundingTrack : "track not chosen") : "no track"}`
+		? [scopeLabel(scope), entryStage(scope) !== "admissions" ? `entered at ${SERVICE_STAGE_LABELS[entryStage(scope)]}` : null, trackLabel].filter(Boolean).join(" · ")
 		: app.plannedStages
 			? `Recommended: ${scopeLabel(app.plannedStages)} · not accepted yet`
 			: null;
@@ -349,6 +359,12 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// started) falls back to the chapter the case is actually in.
 	const stageTab = currentTabFor(app);
 	const current = !isLocked(tab) ? tab : !isLocked(stageTab) ? stageTab : "overview";
+	// The chapter the case is in, from the coarse stage — the spine's ■ and
+	// the header chip. Never a utility tab: a case paying its pre-departure
+	// milestone is still in Departure, not "Billing".
+	const chapter = chapterProgress(app.scopeStages ?? null, app.stage);
+	const CHAPTER_TAB: Record<string, TabId> = { consultation: "consultation", enrolment: "enrolment", applications: "application", visa: "visa", departure: "travel", complete: "travel" };
+	const chapterTab: TabId = CHAPTER_TAB[chapter.key] ?? stageTab;
 
 	// What this case is waiting on from us — the same tasks the dashboard
 	// lists for it, plus the three gates that only exist here (handoff,
@@ -451,16 +467,13 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		canAssignWork ||
 		app.assignedStaffEmail === opsUser?.email ||
 		(app.stageHandlers ?? []).some((h) => h.stage === app.stage && h.opsUserEmail === opsUser?.email);
-	// Why the next stage is out of reach — a state, not a task. The band shows
-	// it only when there is nothing to do; when there is, the task explains it.
-	const blockedBy =
-		nextStage && advanceBlock && mayAdvance && app.proceedStatus === "accepted" && !pendingHandoff
-			? `${nextStage === "completed" ? "The case cannot close yet" : `${JOURNEY_STAGE_LABELS[nextStage]} is not open yet`} — ${advanceBlock}`
-			: null;
 	// What the case waits on when there is nothing to do — in ops words, from
-	// the same rule as the button, never the portal's step label.
+	// the same rule as the button, never the portal's step label. A blocked
+	// step the reader may act on is a task below, not a wait.
 	const waitingOn =
-		step.kind === "done" ? "Closed." : step.kind === "blocked" ? `Waiting on ${step.to === "completed" ? "completion" : JOURNEY_STAGE_LABELS[step.to]} — ${step.reason}` : null;
+		step.kind === "done" ? "Closed." : step.kind === "blocked" && !mayAdvance ? `Waiting on ${step.to === "completed" ? "completion" : JOURNEY_STAGE_LABELS[step.to]} — ${step.reason}` : null;
+	// Where the plan ends — completing there is the plan's own exit, never "early".
+	const planExit = normaliseScope(app.scopeStages ?? null).slice(-1)[0];
 	// The stage the plan stops short of — the thing to sell. Shown beside
 	// whatever the case can do at its exit, never instead of it.
 	// The office proposes; the client asks; the office records. Proposing
@@ -513,14 +526,29 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		nextActions.push({
 			id: "offer",
 			title: `The plan stops before ${SERVICE_STAGE_LABELS[step.offer]}`,
-			detail: `${JOURNEY_STAGE_LABELS[coarseStage]} is the last chapter on the plan. The client can add the next stage from the portal, or you can record it here.`,
+			detail: `${JOURNEY_STAGE_LABELS[coarseStage]} is the last chapter on the plan — ${step.reason}. The client can add the next stage from the portal, or you can record it here.`,
 			action: offerAction,
+		});
+	} else if (step.kind === "blocked" && nextStage && mayAdvance && app.proceedStatus === "accepted" && !pendingHandoff && !caseClosed) {
+		// Blocked: the blocking item is the Next, with the way to it. It never
+		// sits beside a "complete" button — the same rule decides both.
+		nextActions.push({
+			id: "blocked",
+			title: nextStage === "completed" ? "Before the case can close" : `Before ${JOURNEY_STAGE_LABELS[nextStage]} opens`,
+			detail: step.reason.replace(/^\w/, (ch) => ch.toUpperCase()).replace(/\.?$/, "."),
+			tone: "blocked",
+			action:
+				current !== chapterTab && !isLocked(chapterTab) ? (
+					<button type="button" className="btn btn--sm btn--ghost" onClick={() => setTab(chapterTab)}>
+						Go to {chapter.label} →
+					</button>
+				) : undefined,
 		});
 	}
 	// Completing before the plan's exit is the same action with one more
 	// question: the note of what was agreed. It never sits beside a second
 	// "complete" button — when the plan's own exit is reached, that one shows.
-	if (!caseClosed && !stopRequested && reachedStopStage && mayAdvance && step.kind !== "complete" && step.kind !== "done" && !nextActions.some((a) => a.id === "advance")) {
+	if (!caseClosed && !stopRequested && reachedStopStage && reachedStopStage !== planExit && mayAdvance && step.kind !== "complete" && step.kind !== "done" && !nextActions.some((a) => a.id === "advance")) {
 		nextActions.push({
 			id: "complete-early",
 			title: `Complete the case at ${SERVICE_STAGE_LABELS[reachedStopStage]}`,
@@ -607,7 +635,27 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		app.assignedStaffEmail === opsUser?.email ||
 		(app.stageHandlers ?? []).some((h) => h.stage === app.stage && h.opsUserEmail === opsUser?.email);
 	const noteCount = (app.comments ?? []).length;
-
+	// Where the case stands — the status chip and its facts, read from what
+	// happened (consent, a hold, a close), never set by hand.
+	const state = caseState(app, caseClosed);
+	// The seats other than the handler's own, by id — a handler who also
+	// holds the visa seat is one person, not two rows.
+	const otherSeats = (app.stageHandlers ?? []).filter((h) => h.opsUserId !== app.assignedStaffId);
+	const seatsAllHandler = (app.stageHandlers ?? []).length > 0 && otherSeats.length === 0;
+	const acceptedSchoolName =
+		((app.schoolApplications ?? []).find((sa) => sa.id === app.acceptedSchoolId) ?? (app.schoolApplications ?? []).find((sa) => sa.outcome === "Admitted"))?.universityName ?? null;
+	// Departure on one line: when they fly, and how many of Century's
+	// deliverables are still open.
+	const flightAt = selectedTa?.booking?.departAt ?? selectedTa?.flight?.departAt ?? null;
+	const flyDays = flightAt ? Math.ceil((new Date(flightAt).getTime() - Date.now()) / 86_400_000) : null;
+	const openDeliverables = (app.preDepartureTasks ?? []).filter((t) => t.owner === "century" && !t.done && !t.waivedReason).length;
+	const travelNote =
+		[
+			flyDays == null ? (selectedTa?.status === "booked" ? "booked" : null) : flyDays > 0 ? `flies in ${flyDays} day${flyDays === 1 ? "" : "s"}` : flyDays === 0 ? "flies today" : "flew",
+			stageIdx(app.stage) >= stageIdx("travel_assistance") && app.stage !== "completed" && openDeliverables > 0 ? `${openDeliverables} open` : null,
+		]
+			.filter(Boolean)
+			.join(" · ") || null;
 
 	return (
 		<div className="cn-detail">
@@ -616,18 +664,52 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			<CaseHeader
 				name={app.applicantName}
 				reference={app.appId}
-				branch={branchName(app.branch)}
-				stage={app.stage}
-				// Ops closed the case — the pill says so even when the client's
-				// own signals still owe a step (a fee settled off-platform).
-				portalStage={app.stage === "completed" ? "completed" : (app.journey?.portalStage ?? null)}
-				handlerName={caseHandlerName(app) || null}
-				handlerAction={
-					canAssignWork ? (
-						<button type="button" className="btn btn--sm btn--ghost" onClick={() => setAssignOpen(true)}>
-							Handler…
-						</button>
-					) : undefined
+				// Two lines, not ten rows: the chapter (■ where the case is), the
+				// plan as a label, the status, and what the client sees as an
+				// aside — then one line of facts and the team on the right.
+				chips={
+					<>
+						<span className="cn-pill cn-pill--chapter" title="The chapter the case is in">
+							{app.stage === "completed" ? "✓ VI · Complete" : `■ ${chapter.numeral} · ${chapter.label}`}
+						</span>
+						{planLine && (
+							<span className="cn-pill cn-pill--plan" title="The client's plan">
+								{planLine}
+							</span>
+						)}
+						<span className={`cn-state__pill cn-state__pill--${state.pill.tone}`}>{state.pill.label}</span>
+						{app.journey?.portalStage && app.stage !== "completed" && (
+							<span>
+								client sees <i>{PORTAL_STAGE_LABELS[app.journey.portalStage] ?? app.journey.portalStage}</i>
+							</span>
+						)}
+					</>
+				}
+				summary={[branchName(app.branch), app.country, app.program, acceptedSchoolName, ...state.facts].filter(Boolean).join(" · ")}
+				team={
+					<>
+						<span>
+							<b>{caseHandlerName(app) || "Unassigned"}</b>
+							<span className="muted"> · handler{seatsAllHandler ? " · all chapters" : ""}</span>
+							{canAssignWork && (
+								<button type="button" className="plnk" style={{ marginLeft: "0.4rem" }} onClick={() => setAssignOpen(true)}>
+									change
+								</button>
+							)}
+						</span>
+						{otherSeats.map((h) => (
+							<span key={`${h.stage}-${h.opsUserId}`}>
+								<span className="muted">{STAGE_OWNER_LABELS[h.stage] ?? JOURNEY_STAGE_LABELS[h.stage as JourneyStage] ?? h.stage} </span>
+								<b>{h.opsUserName}</b>
+							</span>
+						))}
+						{app.journeyCoordinatorName && (
+							<span>
+								<span className="muted">journey </span>
+								<b>→ {app.journeyCoordinatorName}</b>
+							</span>
+						)}
+					</>
 				}
 				actions={
 					<>
@@ -644,21 +726,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 						</button>
 					</>
 				}
-				stageHandlers={[
-					...(app.stageHandlers ?? [])
-						.filter((h) => h.opsUserName !== app.assignedStaff)
-						.map((h) => ({ stage: h.stage, name: h.opsUserName })),
-					// Who steers the journey — read-only here; delegation lives in the Workspace.
-					...(app.journeyCoordinatorName ? [{ stage: "Journey", name: `→ ${app.journeyCoordinatorName}` }] : []),
-				]}
 				contact={{ email: app.email, phone: app.phone }}
-				extra={[
-					// Each fact once, labelled: the plan as a chip, the client's step as what it is.
-					...(planLine ? [{ label: "Plan", value: planLine }] : []),
-					...(app.journey?.portalStage && app.stage !== "completed" ? [{ label: "Client sees", value: PORTAL_STAGE_LABELS[app.journey.portalStage] ?? app.journey.portalStage }] : []),
-					{ label: "Country", value: app.country || "—" },
-					{ label: "Programme", value: app.program || "—" },
-				]}
 			/>
 
 			{/* Meetings on the case — check-ins booked here, upcoming first. */}
@@ -726,9 +794,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				</div>
 			)}
 
-			<CaseStateLine app={app} closed={caseClosed} />
-
-			<CaseTodo items={nextActions} waitingOn={waitingOn} blockedBy={blockedBy} />
+			<CaseTodo items={nextActions} waitingOn={waitingOn} />
 
 			<ApplicationAssignSheet app={app} open={assignOpen} onClose={() => setAssignOpen(false)} onDone={flash} />
 
@@ -852,15 +918,19 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					const st = c.id === "application" ? "admissions" : c.id === "visa" ? "visa" : c.id === "travel" ? "departure" : null;
 					const planned = !scope && app.plannedStages ? normaliseScope(app.plannedStages) : null;
 					const offer = Boolean(t.off && step.kind !== "done" && step.offer && st === step.offer);
+					// One fact per chapter — the same notes the caseload card carries.
 					const note =
 						t.off ? (offer ? "not on the plan · offer this" : st === "admissions" ? "not on the plan · offer brought" : "not on the plan")
 						: planned && st && planned.includes(st) ? "recommended"
 						: c.id === "enrolment" ? (scope ? `${scopeLabel(scope)}${app.depositPaid ? " · paid" : ""}` : planned ? `recommended: ${scopeLabel(planned)}` : null)
+						: c.id === "application" ? (acceptedSchoolName ? `${acceptedSchoolName} admitted` : hasAdmitted ? "admitted" : null)
+						: c.id === "visa" ? (app.visaOutcome === "approved" ? "approved" : app.visaOutcome === "refused" ? "refused" : null)
+						: c.id === "travel" ? travelNote
 						: null;
 					return { id: c.id as TabId, numeral: c.numeral, label: t.label, locked: t.locked, hint: t.hint, off: t.off, rec: Boolean(planned && st && planned.includes(st)), offer, note };
 				})}
 				current={current}
-				nowId={stageTab}
+				nowId={chapterTab}
 				done={app.stage === "completed"}
 				onChange={setTab}
 				overview={{ id: "overview", label: "Overview" }}
@@ -962,9 +1032,10 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 
 /**
  * Where the case stands, read from what happened — the client's consent,
- * the deposit, a hold, a close — so nobody has to set it by hand.
+ * the deposit, a hold, a close — so nobody has to set it by hand. The pill
+ * goes in the header's chip row; the facts join its summary line.
  */
-function CaseStateLine({ app, closed }: { app: MockApplication; closed: boolean }) {
+function caseState(app: MockApplication, closed: boolean): { pill: { label: string; tone: "ink" | "hollow" | "line" }; facts: string[] } {
 	const day = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : null);
 	const opened = day(app.submittedDate);
 	const from = app.consultationNumber ? ` from consultation ${app.consultationNumber}` : "";
@@ -991,15 +1062,5 @@ function CaseStateLine({ app, closed }: { app: MockApplication; closed: boolean 
 		facts.push(`client confirmed${day(app.proceededAt) ? ` ${day(app.proceededAt)}` : ""}`);
 	}
 	if (opened) facts.push(`opened ${opened}${from}`);
-	return (
-		<div className="cn-state">
-			<span className={`cn-state__pill cn-state__pill--${pill.tone}`}>{pill.label}</span>
-			{facts.map((f, i) => (
-				<span key={f} className="cn-state__fact">
-					{i > 0 && <span className="cn-state__sep" aria-hidden>·</span>}
-					{f}
-				</span>
-			))}
-		</div>
-	);
+	return { pill, facts };
 }

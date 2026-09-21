@@ -325,6 +325,8 @@ export interface MockApplication {
 	agencyStageIndex?: number;
 	/** Agency settlement fully completed */
 	agencySettled?: boolean;
+	/** The ledger's plan-aware pre-departure milestone: every pre-arrival line covered. */
+	preDepartureFeePaid?: boolean;
 	/** Pre-departure checklist tasks */
 	preDepartureTasks?: PreDepartureTask[];
 	/** Consent gate: "invited" (awaiting applicant), "accepted", "declined", "paused" */
@@ -454,6 +456,8 @@ export interface MockApplicant {
 	agencyStageIndex?: number;
 	/** Agency settlement fully completed */
 	agencySettled?: boolean;
+	/** The ledger's plan-aware pre-departure milestone: every pre-arrival line covered. */
+	preDepartureFeePaid?: boolean;
 	/** Pre-departure checklist tasks */
 	preDepartureTasks?: PreDepartureTask[];
 	/** Number of target schools tracking */

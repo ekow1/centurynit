@@ -1147,9 +1147,13 @@ meRouter.openapi(
 		const { id } = c.req.valid("param");
 		const { row, serialized } = await payableInvoiceFor(user.id, id);
 		const origin = c.req.header("origin") || env.FRONTEND_URL;
+		// One milestone at a time, on every route that charges an invoice: the
+		// first line the payments have not covered — never the whole balance.
+		// A one-line invoice's next milestone is its balance.
+		const amountCents = Math.min(nextChargeCents(serialized.lines, serialized.paidCents) || serialized.balanceCents, serialized.balanceCents);
 		const checkout = await createPaystackCheckout({
 			email: user.email,
-			amountCents: serialized.balanceCents,
+			amountCents,
 			invoiceId: row.id,
 			// Paystack appends `reference` + `trxref` to this URL on return; the
 			// portal's /portal/pay route reads them and calls the verify endpoint.
@@ -1260,14 +1264,16 @@ meRouter.openapi(
 		const { id } = c.req.valid("param");
 		const body = c.req.valid("json");
 		const { row, serialized } = await payableInvoiceFor(user.id, id);
+		// Same rule as the card checkout: the next milestone, never the balance.
+		const amountCents = Math.min(nextChargeCents(serialized.lines, serialized.paidCents) || serialized.balanceCents, serialized.balanceCents);
 		const charge = await chargeMoMo({
 			email: user.email,
-			amountCents: serialized.balanceCents,
+			amountCents,
 			phone: body.phone,
 			provider: body.provider,
 			invoiceId: row.id,
 		});
-		return c.json({ ...charge, amountCents: serialized.balanceCents });
+		return c.json({ ...charge, amountCents });
 	},
 );
 

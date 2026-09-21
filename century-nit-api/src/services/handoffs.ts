@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import {
 	JOURNEY_STAGES,
 	JOURNEY_STAGE_LABELS,
@@ -1051,7 +1051,7 @@ export async function getCaseTeam(applicationId: string): Promise<CaseTeam> {
 		? await db
 				.select({ opsUserId: staffPresence.opsUserId, status: staffPresence.status, lastSeenAt: staffPresence.lastSeenAt })
 				.from(staffPresence)
-				.where(sql`${staffPresence.opsUserId} = ANY(${[...ids]}::uuid[])`)
+				.where(inArray(staffPresence.opsUserId, [...ids]))
 		: [];
 	const presenceBy = new Map(
 		presenceRows.map((r) => {
@@ -1135,7 +1135,7 @@ export async function getCaseTeam(applicationId: string): Promise<CaseTeam> {
 		? await db
 				.select({ id: opsUsers.id, name: opsUsers.name })
 				.from(opsUsers)
-				.where(sql`${opsUsers.id} = ANY(${endedByIds}::uuid[])`)
+				.where(inArray(opsUsers.id, endedByIds))
 		: [];
 	const endedByName = new Map(endedByRows.map((r) => [r.id, r.name]));
 

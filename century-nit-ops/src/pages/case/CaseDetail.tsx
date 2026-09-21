@@ -20,6 +20,7 @@ import { DepartureTab } from "./tabs/DepartureTab";
 import { MoneyTab } from "./tabs/MoneyTab";
 import { caseHandlerName, tasksForApplication, taskActionLabel, type PendingTask } from "../../lib/pendingTasks";
 import { CheckInSheet } from "./CheckInSheet";
+import { useJoinMeeting } from "./ConsultationCall";
 import { applicationsApi, bookingsApi } from "century-nit-core/api";
 import type { Booking } from "century-nit-shared";
 import { listInvoices, getApplicationActivity, type ApiInvoice } from "../../lib/api";
@@ -271,6 +272,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const [meetings, setMeetings] = useState<Booking[]>([]);
 	const [meetingEdit, setMeetingEdit] = useState<string | null>(null);
 	const [meetingDraft, setMeetingDraft] = useState("");
+	const { join: joinMeeting, overlay: meetingOverlay } = useJoinMeeting();
 	const refreshMeetings = () =>
 		applicationsApi.meetings(app.id).then((r) => setMeetings(r.meetings)).catch(() => {});
 	useEffect(() => {
@@ -699,7 +701,11 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 										</div>
 									) : (
 										<div style={{ display: "flex", gap: "0.6rem", alignItems: "center", marginTop: "0.35rem" }}>
-											{m.meetingUrl ? (
+											{m.meetingProvider === "livekit" || m.meetingProvider === "daily" ? (
+												<button type="button" className="link-arrow" style={{ fontSize: "var(--text-xs)" }} onClick={() => void joinMeeting(m.id, `Check-in · ${m.serviceName}`)}>
+													Join — in-app call
+												</button>
+											) : m.meetingUrl ? (
 												<a href={m.meetingUrl} target="_blank" rel="noreferrer" className="link-arrow" style={{ fontSize: "var(--text-xs)" }}>
 													Open meeting link ↗
 												</a>
@@ -725,6 +731,8 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			<CaseTodo items={nextActions} waitingOn={waitingOn} blockedBy={blockedBy} />
 
 			<ApplicationAssignSheet app={app} open={assignOpen} onClose={() => setAssignOpen(false)} onDone={flash} />
+
+			{meetingOverlay}
 
 			<CheckInSheet
 				app={app}

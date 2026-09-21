@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ops · schedule a check-in on a case</title>
+<style>
+:root{--fg:#18181b;--muted:#f5f5f5;--mfg:#52525b;--border:#18181b;--bl:#d4d4d8;--thin:1px solid var(--border);--amber:#b45309;--mono:ui-monospace,"Cascadia Code",Menlo,monospace;--display:"Fraunces",Georgia,serif;--sans:"Inter",system-ui,sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);color:var(--fg);background:#fafafa;font-size:14px;line-height:1.5}
+.wrap{max-width:74rem;margin:0 auto;padding:2.5rem 1.5rem 4rem}
+h1{font-family:var(--display);font-size:2rem;font-weight:600;letter-spacing:-.02em}
+.k{font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.14em;color:var(--mfg)}
+h2{font-family:var(--display);font-size:1.4rem;font-weight:600;margin:2.6rem 0 .35rem}
+.sub{color:var(--mfg);font-size:.87rem;max-width:46rem;margin-bottom:1.2rem}
+.grid{display:grid;grid-template-columns:1.15fr .85fr;gap:1.5rem;align-items:start}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+
+/* case context strip */
+.ctx{border:var(--thin);background:#fff;padding:.9rem 1.2rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem;margin-bottom:1.2rem}
+.ctx b{font-family:var(--display);font-size:1.1rem}
+.chip{font-family:var(--mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.08em;border:1px solid var(--bl);padding:.18rem .5rem;color:var(--mfg)}
+
+/* the sheet */
+.sheet{border:var(--thin);background:#fff}
+.sheet__h{padding:.9rem 1.2rem;border-bottom:var(--thin);display:flex;justify-content:space-between;align-items:baseline}
+.sheet__h b{font-family:var(--display);font-size:1.15rem}
+.sheet__b{padding:1.1rem 1.2rem}
+.f{margin-bottom:1.05rem}
+.f>label{display:block;font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.12em;color:var(--mfg);margin-bottom:.4rem}
+.inp,select.inp,textarea.inp{width:100%;border:var(--thin);padding:.55rem .7rem;font:inherit;font-size:.85rem;background:#fff}
+.seg{display:flex;border:var(--thin)}
+.seg button{flex:1;padding:.6rem .4rem;background:#fff;border:0;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;cursor:pointer;border-right:1px solid var(--bl)}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--fg);color:#fff}
+.seg button .sub{display:block;font-size:.52rem;letter-spacing:.04em;text-transform:none;color:var(--mfg);margin-top:.15rem}
+.seg button.on .sub{color:#d4d4d8}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:.3rem}
+.day{border:1px solid var(--bl);padding:.4rem .2rem;text-align:center;font-family:var(--mono);font-size:.6rem;cursor:pointer;background:#fff}
+.day .d{display:block;font-size:.85rem;font-weight:700}
+.day .o{display:block;color:var(--mfg);font-size:.5rem}
+.day.off{opacity:.32;cursor:default}
+.day.on{background:var(--fg);color:#fff;border-color:var(--fg)}
+.day.on .o{color:#d4d4d8}
+.slots{display:flex;flex-wrap:wrap;gap:.35rem}
+.slot{border:1px solid var(--bl);padding:.35rem .6rem;font-family:var(--mono);font-size:.68rem;cursor:pointer;background:#fff}
+.slot.off{opacity:.32;text-decoration:line-through;cursor:default}
+.slot.on{background:var(--fg);color:#fff;border-color:var(--fg)}
+.note{font-size:.75rem;color:var(--mfg);border-left:2px solid var(--amber);padding:.3rem .6rem;margin-top:.4rem}
+.sheet__f{border-top:var(--thin);padding:.85rem 1.2rem;display:flex;justify-content:space-between;align-items:center;gap:.8rem;flex-wrap:wrap}
+.btn{border:var(--thin);background:#fff;padding:.55rem 1.1rem;font:inherit;font-size:.8rem;cursor:pointer}
+.btn--pri{background:var(--fg);color:#fff}
+
+/* email card */
+.mail{border:var(--thin);background:#fff}
+.mail__h{padding:.7rem 1.1rem;border-bottom:1px solid var(--bl);font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.12em;color:var(--mfg);display:flex;justify-content:space-between}
+.mail__b{padding:1.2rem 1.3rem}
+.mail__sub{font-family:var(--display);font-size:1.15rem;font-weight:600;margin-bottom:.7rem}
+.mail p{font-size:.85rem;margin-bottom:.6rem}
+.mail .meta{border:1px solid var(--bl);padding:.7rem .9rem;font-family:var(--mono);font-size:.68rem;margin:.8rem 0;line-height:1.9}
+.mail .meta b{color:var(--amber)}
+.mail .cta{display:inline-block;border:var(--thin);background:var(--fg);color:#fff;padding:.55rem 1.2rem;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;margin-top:.3rem}
+
+/* meetings block on the case */
+.meet{border:var(--thin);background:#fff;margin-top:1.4rem}
+.meet__h{padding:.7rem 1.1rem;border-bottom:1px solid var(--bl);display:flex;justify-content:space-between;font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.12em;color:var(--mfg)}
+.mrow{display:flex;justify-content:space-between;align-items:center;padding:.75rem 1.1rem;border-bottom:1px solid var(--bl);gap:.8rem}
+.mrow:last-child{border-bottom:0}
+.mrow .w{font-family:var(--mono);font-size:.62rem;min-width:5.5rem}
+.mrow .w b{display:block;font-size:.85rem;color:var(--fg)}
+.mrow .t{flex:1;font-size:.82rem}
+.mrow .t small{display:block;color:var(--mfg);font-size:.7rem}
+.pill{font-family:var(--mono);font-size:.52rem;text-transform:uppercase;letter-spacing:.08em;border:1px solid currentColor;padding:.15rem .45rem}
+.pill.live{color:#15803d}.pill.soon{color:var(--amber)}
+.flash{background:var(--fg);color:#fff;padding:.7rem 1.1rem;font-size:.8rem;margin-bottom:1rem;display:none}
+.flash.show{display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<p class="k">Ops · case check-ins — mock</p>
+	<h1>"Schedule check-in" — on the case, both ways, email out</h1>
+	<p class="sub" style="margin-top:.5rem">One sheet on the active case. The handler picks online or in-person, a slot from the same availability engine consultations use, and the client gets an email + a portal appointment. No fee — it's inside the plan.</p>
+
+	<div class="ctx">
+		<div><span class="k">Case CN-2024-118 · Stage II · Visa</span><br><b>Daniel Agyei</b> <span class="muted">— visa only</span></div>
+		<div style="display:flex;gap:.5rem;align-items:center">
+			<span class="chip">handler: Ama Serwaa</span>
+			<span class="chip" style="border-color:var(--fg);color:var(--fg)">Schedule check-in…</span>
+		</div>
+	</div>
+
+	<div class="flash" id="flash">✓ Check-in booked for <b id="flashWhen">Tue 23 Sep · 10:00</b> — the client has been emailed and it sits on their portal.</div>
+
+	<div class="grid">
+		<!-- ═══ THE SHEET ═══ -->
+		<div class="sheet">
+			<div class="sheet__h"><b>Check-in with Daniel</b><span class="k">free · part of the plan</span></div>
+			<div class="sheet__b">
+				<div class="f">
+					<label>Purpose</label>
+					<select class="inp" id="purpose">
+						<option>Visa mock interview</option>
+						<option>Offer decision call</option>
+						<option>Document review</option>
+						<option>Pre-departure briefing</option>
+						<option>General check-in</option>
+					</select>
+				</div>
+				<div class="f">
+					<label>How</label>
+					<div class="seg">
+						<button type="button" id="tOnline" class="on" onclick="setType('online')">Online<span class="sub">Built-in room — or paste a link</span></button>
+						<button type="button" id="tPerson" onclick="setType('person')">In person<span class="sub">at a branch office</span></button>
+					</div>
+					<div class="f" id="linkRow" style="margin-top:.6rem;margin-bottom:0">
+						<label>Meeting link — optional</label>
+						<input class="inp" type="url" id="linkInp" placeholder="https://… Zoom, Teams, Meet" value="" oninput="syncLink()">
+						<p class="note" id="typeNote">Blank → the built-in call room opens in the portal on Join. Paste a Zoom/Teams/Meet link to meet elsewhere — it rides the email and the portal either way. You can also set or change it on the case later.</p>
+					</div>
+				</div>
+				<div class="f" id="branchRow" style="display:none">
+					<label>Branch</label>
+					<select class="inp">
+						<option>Accra HQ — Airport Residential</option>
+						<option>Kumasi</option>
+						<option>Takoradi</option>
+					</select>
+				</div>
+				<div class="f">
+					<label>Day — only days with a free slot light up</label>
+					<div class="days" id="days"></div>
+				</div>
+				<div class="f">
+					<label>Time · GMT · 45 min</label>
+					<div class="slots" id="slots"></div>
+				</div>
+				<div class="f">
+					<label>Who hosts</label>
+					<select class="inp">
+						<option>Ama Serwaa — case handler (you)</option>
+						<option>Kofi Mensah — visa seat</option>
+						<option>Unassigned — first free officer</option>
+					</select>
+				</div>
+				<div class="f">
+					<label>Note for the client — goes in the email (optional)</label>
+					<textarea class="inp" rows="2" placeholder="e.g. Bring your bank statements — we'll check the sponsor evidence together."></textarea>
+				</div>
+			</div>
+			<div class="sheet__f">
+				<span class="k" id="summary">Online · Tue 23 Sep · 10:00 GMT · Ama S.</span>
+				<button class="btn btn--pri" onclick="book()">Book check-in →</button>
+			</div>
+		</div>
+
+		<!-- ═══ THE EMAIL ═══ -->
+		<div>
+			<div class="mail">
+				<div class="mail__h"><span>Email — sent on booking</span><span>to: daniel@…</span></div>
+				<div class="mail__b">
+					<p class="k">Century NIT · case CN-2024-118</p>
+					<p class="mail__sub" id="mailSub">Your visa mock interview is booked</p>
+					<p>Hi Daniel — your handler <b>Ama Serwaa</b> has scheduled a check-in on your file.</p>
+					<div class="meta" id="mailMeta">
+						<b>Tue 23 Sep · 10:00 GMT</b> · 45 min<br>
+						Online · <span id="mailLink">built-in call room — Join opens it in your portal</span><br>
+						Purpose: <span id="mailPurpose">Visa mock interview</span>
+					</div>
+					<p id="mailFoot">Join from the button below or from your portal — the link is already on your Appointments page. Can't make it? Request a move there — it's free.</p>
+					<span class="cta" id="mailCta">Join the meeting →</span>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<h2>And it lands on the case — Meetings</h2>
+	<p class="sub">A new block on the case overview: every check-in on file, upcoming first, with join for the host. The client's Appointments page shows the same rows — labelled "Check-in · Stage II", no fee.</p>
+
+	<div class="meet">
+		<div class="meet__h"><span>Meetings on this case</span><span>+ schedule check-in</span></div>
+		<div class="mrow">
+			<span class="w"><b>23 SEP</b>Tue</span>
+			<span class="t"><b>Visa mock interview</b> — online · Ama Serwaa<small>Meeting link emailed — pasted by the handler · Open meeting link ↗ · Change</small></span>
+			<span class="pill soon">in 2 days</span>
+		</div>
+		<div class="mrow">
+			<span class="w"><b>09 SEP</b>Tue</span>
+			<span class="t"><b>Document review</b> — in person · Accra HQ<small>Held · outcome note on the case</small></span>
+			<span class="pill" style="color:var(--mfg)">done</span>
+		</div>
+		<div class="mrow">
+			<span class="w"><b>28 AUG</b>Thu</span>
+			<span class="t"><b>Stage 0 · Consultation</b> — online · Ama Serwaa<small>The intake that opened the file</small></span>
+			<span class="pill" style="color:var(--mfg)">done</span>
+		</div>
+	</div>
+
+	<h2>What the client sees — Portal · Appointments</h2>
+	<p class="sub">Check-ins land on the same Appointments page as consultations — labelled <b>Check-in ·</b>, never priced. Three states: link pasted (Join lights up), link still to come, and in person.</p>
+
+	<!-- portal chrome -->
+	<div style="border:var(--thin);background:#fff">
+		<div style="padding:1rem 1.2rem;border-bottom:var(--thin)">
+			<p class="k">Portal · Enoch Enu</p>
+			<p style="font-family:var(--display);font-size:1.35rem;font-weight:600">Appointments</p>
+			<p style="font-size:.8rem;color:var(--mfg)">Every booking on your file — consultations and check-ins together.</p>
+		</div>
+
+		<!-- next appointment hero -->
+		<div style="margin:1.1rem 1.2rem;border:1.5px solid var(--fg);padding:1rem 1.2rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
+			<div>
+				<p class="k">Your next appointment</p>
+				<p style="font-family:var(--display);font-size:1.15rem;font-weight:600">Check-in · Visa mock interview</p>
+				<p style="font-size:.8rem;color:var(--mfg)">Tuesday 23 September · 10:00 GMT · 45 min · Online · with Ama Serwaa</p>
+				<p style="font-size:.72rem;color:var(--mfg);margin-top:.25rem">"Bring your bank statements — we'll check the sponsor evidence together."</p>
+			</div>
+			<div style="display:flex;gap:.6rem;align-items:center">
+				<span class="btn btn--pri" style="font-family:var(--mono);font-size:.62rem;letter-spacing:.1em">Join the meeting →</span>
+				<span class="k" style="color:var(--mfg)">Move · Cancel</span>
+			</div>
+		</div>
+
+		<!-- the book -->
+		<table style="width:100%;border-collapse:collapse;font-size:.82rem">
+			<thead>
+				<tr style="border-bottom:var(--thin);text-align:left">
+					<th class="k" style="padding:.5rem 1.2rem">When</th>
+					<th class="k" style="padding:.5rem .4rem">What</th>
+					<th class="k" style="padding:.5rem .4rem">With</th>
+					<th class="k" style="padding:.5rem .4rem">Status</th>
+					<th class="k" style="padding:.5rem 1.2rem;text-align:right">&nbsp;</th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr style="border-bottom:1px solid var(--bl)">
+					<td style="padding:.75rem 1.2rem;font-family:var(--mono);font-weight:700">23 SEP<span style="display:block;font-weight:400;font-size:.62rem;color:var(--mfg)">Tue</span></td>
+					<td style="padding:.75rem .4rem"><b>Check-in · Visa mock interview</b><br><span style="font-size:.72rem;color:var(--mfg)">10:00 AM · 45 min · Online</span></td>
+					<td style="padding:.75rem .4rem;font-family:var(--mono);font-size:.68rem">AMA SERWAA</td>
+					<td style="padding:.75rem .4rem"><span class="pill" style="border-color:var(--fg);color:var(--fg)">Confirmed</span></td>
+					<td style="padding:.75rem 1.2rem;text-align:right;font-family:var(--mono);font-size:.68rem;white-space:nowrap"><b style="border-bottom:1.5px solid var(--fg)">Join</b> · Move · Cancel</td>
+				</tr>
+				<tr style="border-bottom:1px solid var(--bl)">
+					<td style="padding:.75rem 1.2rem;font-family:var(--mono);font-weight:700">30 SEP<span style="display:block;font-weight:400;font-size:.62rem;color:var(--mfg)">Tue</span></td>
+					<td style="padding:.75rem .4rem"><b>Check-in · Document review</b><br><span style="font-size:.72rem;color:var(--mfg)">2:30 PM · 30 min · Online</span><br><span style="font-size:.72rem;color:var(--mfg);font-style:italic">Meeting link is being prepared and will be emailed to you.</span></td>
+					<td style="padding:.75rem .4rem;font-family:var(--mono);font-size:.68rem">KOFI MENSAH</td>
+					<td style="padding:.75rem .4rem"><span class="pill" style="border-color:var(--fg);color:var(--fg)">Confirmed</span></td>
+					<td style="padding:.75rem 1.2rem;text-align:right;font-family:var(--mono);font-size:.68rem;white-space:nowrap">Move · Cancel</td>
+				</tr>
+				<tr style="border-bottom:1px solid var(--bl)">
+					<td style="padding:.75rem 1.2rem;font-family:var(--mono);font-weight:700">07 OCT<span style="display:block;font-weight:400;font-size:.62rem;color:var(--mfg)">Tue</span></td>
+					<td style="padding:.75rem .4rem"><b>Check-in · Pre-departure briefing</b><br><span style="font-size:.72rem;color:var(--mfg)">11:00 AM · 60 min · In person · Accra HQ</span></td>
+					<td style="padding:.75rem .4rem;font-family:var(--mono);font-size:.68rem">AMA SERWAA</td>
+					<td style="padding:.75rem .4rem"><span class="pill" style="border-color:var(--fg);color:var(--fg)">Confirmed</span></td>
+					<td style="padding:.75rem 1.2rem;text-align:right;font-family:var(--mono);font-size:.68rem;white-space:nowrap">Move · Cancel</td>
+				</tr>
+				<tr style="opacity:.45">
+					<td style="padding:.75rem 1.2rem;font-family:var(--mono);font-weight:700">28 AUG<span style="display:block;font-weight:400;font-size:.62rem;color:var(--mfg)">Thu</span></td>
+					<td style="padding:.75rem .4rem"><b>Initial consultation</b><br><span style="font-size:.72rem;color:var(--mfg)">9:00 AM · 45 min · Online</span></td>
+					<td style="padding:.75rem .4rem;font-family:var(--mono);font-size:.68rem">AMA SERWAA</td>
+					<td style="padding:.75rem .4rem"><span class="pill" style="color:var(--mfg)">Completed</span></td>
+					<td style="padding:.75rem 1.2rem"></td>
+				</tr>
+			</tbody>
+		</table>
+		<p style="padding:.7rem 1.2rem;border-top:var(--thin);font-size:.72rem;color:var(--mfg)">Check-ins are part of your plan — there's nothing to pay. Move is free; the slot holds until your team confirms.</p>
+	</div>
+</div>
+
+<script>
+const DAYS=["Mon 22","Tue 23","Wed 24","Thu 25","Fri 26","Mon 29","Tue 30"];
+const OPEN=[3,5,2,0,4,1,3];
+const SLOTS=[["09:00",1],["10:00",1],["11:30",1],["13:00",0],["14:30",1],["16:00",0]];
+let type="online", day="Tue 23", slot="10:00";
+const daysEl=document.getElementById("days"), slotsEl=document.getElementById("slots");
+DAYS.forEach((d,i)=>{const e=document.createElement("div");e.className="day"+(OPEN[i]===0?" off":"")+(d===day?" on":"");
+e.innerHTML=`<span class="d">${d.split(" ")[1]}</span>${d.split(" ")[0]}<span class="o">${OPEN[i]?OPEN[i]+" open":"closed"}</span>`;
+if(OPEN[i]>0)e.onclick=()=>{day=d;document.querySelectorAll(".day").forEach(x=>x.classList.remove("on"));e.classList.add("on");sync()};daysEl.appendChild(e);});
+SLOTS.forEach(([t,ok])=>{const e=document.createElement("button");e.type="button";e.className="slot"+(ok?"":" off")+(t===slot?" on":"");
+e.textContent=t;if(ok)e.onclick=()=>{slot=t;document.querySelectorAll(".slot").forEach(x=>x.classList.remove("on"));e.classList.add("on");sync()};slotsEl.appendChild(e);});
+function setType(t){type=t;
+document.getElementById("tOnline").className=t==="online"?"on":"";
+document.getElementById("tPerson").className=t==="person"?"on":"";
+document.getElementById("branchRow").style.display=t==="person"?"":"none";
+document.getElementById("linkRow").style.display=t==="online"?"":"none";
+document.getElementById("mailLink").textContent=t==="online"?linkText():"Accra HQ — Airport Residential Area";
+document.getElementById("mailFoot").textContent=t==="online"
+?"Join from the button below or from your portal — it's on your Appointments page. Can't make it? Request a move there — it's free."
+:"Come to the branch at your time — reception will point you to your handler. Can't make it? Request a move from your portal — it's free.";
+document.getElementById("mailCta").textContent=t==="online"?"Join the meeting →":"Get directions →";
+sync();}
+function linkText(){const v=document.getElementById("linkInp").value.trim();
+try{return v?new URL(v).host+new URL(v).pathname:"built-in call room — Join opens it in your portal";}catch{return v||"built-in call room — Join opens it in your portal";}}
+function syncLink(){if(type!=="online")return;
+document.getElementById("mailLink").textContent=linkText();
+document.getElementById("mailFoot").textContent="Join from the button below or from your portal — it's on your Appointments page. Can't make it? Request a move there — it's free.";}
+document.getElementById("purpose").onchange=e=>{document.getElementById("mailPurpose").textContent=e.target.value;
+document.getElementById("mailSub").textContent="Your "+e.target.value.charAt(0).toLowerCase()+e.target.value.slice(1)+" is booked";};
+function sync(){const how=type==="online"?"Online":"In person · Accra HQ";
+document.getElementById("summary").textContent=`${how} · ${day} Sep · ${slot} GMT · Ama S.`;}
+function book(){const f=document.getElementById("flash");
+f.querySelector("#flashWhen").textContent=`${day} Sep · ${slot}`;
+f.classList.add("show");window.scrollTo({top:0,behavior:"smooth"});}
+sync();
+</script>
+</body>
+</html>

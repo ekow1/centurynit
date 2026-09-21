@@ -129,9 +129,9 @@ export const createCaseMeetingSchema = z.object({
 	/** Host — defaults to the caller (the case handler). */
 	employeeId: z.string().uuid().optional(),
 	/**
-	 * Online check-ins take whatever link the office uses — Zoom, Teams,
-	 * Meet — pasted by the handler. None is minted: Google Calendar/Meet
-	 * integration is gone. Can also be set later via PATCH meeting-url.
+	 * Optional override for online check-ins: paste a Zoom/Teams/Meet link
+	 * and it becomes the room (provider "manual"). Blank opens the built-in
+	 * LiveKit call room instead — the portal's Join button connects to it.
 	 */
 	meetingUrl: z
 		.string()

@@ -15,12 +15,12 @@ function today(): string {
 }
 
 /**
- * "Schedule check-in…" — a meeting on the live case. Online takes a pasted
- * meeting link (Zoom, Teams, Meet — whatever the office uses); in person
- * carries the branch. The client is emailed, reminded, and the booking
- * lands on their Appointments page — none of it is a paid consultation.
- * The slot picker reads the same availability engine the consultation
- * flow uses.
+ * "Schedule check-in…" — a meeting on the live case. Online opens the
+ * built-in call room (LiveKit) unless the handler pastes a link — Zoom,
+ * Teams, Meet — which becomes the room instead. In person carries the
+ * branch. The client is emailed, reminded, and the booking lands on their
+ * Appointments page — none of it is a paid consultation. The slot picker
+ * reads the same availability engine the consultation flow uses.
  */
 export function CheckInSheet({
 	app,
@@ -122,7 +122,7 @@ export function CheckInSheet({
 					onClick={() => setType("online")}
 				>
 					<span>Online</span>
-					<span className="hsheet__hint">Paste the meeting link — Zoom, Teams, Meet — it goes in the client's email</span>
+					<span className="hsheet__hint">Built-in call room — or paste a Zoom/Teams/Meet link to use that instead</span>
 				</div>
 				<div
 					role="radio" aria-checked={type === "in_person"}
@@ -207,16 +207,16 @@ export function CheckInSheet({
 
 			{type === "online" && (
 				<label className="cn-filter" style={{ marginTop: "1rem" }}>
-					<span className="cn-filter__label">Meeting link — paste any (Zoom, Teams, Meet)</span>
+					<span className="cn-filter__label">Meeting link — optional</span>
 					<input
 						className="input"
 						type="url"
 						value={meetingUrl}
 						onChange={(e) => setMeetingUrl(e.target.value)}
-						placeholder="https://…"
+						placeholder="https://… Zoom, Teams, Meet"
 					/>
 					<span className="hsheet__hint" style={{ marginTop: "0.3rem" }}>
-						Optional — you can add it on the case later; the client is emailed the moment it's set.
+						Leave blank for the built-in call room — the client's Join button opens it in the portal. Paste one to meet elsewhere; you can also set or change it on the case later.
 					</span>
 				</label>
 			)}

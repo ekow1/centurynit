@@ -1737,11 +1737,12 @@ export async function createCaseMeeting(input: {
 					employeeId: hostId,
 					assignedAt: new Date(),
 					assignedBy: actor.opsUserId,
-					// Google Meet is gone — a check-in's link is pasted by the
-					// handler (provider "manual") or added later via meeting-url.
+					// A pasted link wins — provider "manual", no room minted.
+					// Blank falls through to syncCalendarForBooking, which opens
+					// the in-app LiveKit room the Join button connects to.
 					meetingUrl: data.meetingUrl?.trim() || null,
 					meetingProvider: data.meetingUrl ? "manual" : null,
-					calendarSyncStatus: "NOT_REQUIRED",
+					calendarSyncStatus: data.type === "online" && !data.meetingUrl ? "PENDING" : "NOT_REQUIRED",
 					notes: data.notes ?? null,
 				})
 				.returning();
@@ -1764,8 +1765,10 @@ export async function createCaseMeeting(input: {
 		assignedBy: actor.opsUserId,
 	});
 
-	// No Meet link is minted — the handler's pasted link (or none yet) is
-	// what the confirmation email carries; adding one later re-notifies.
+	// No link pasted → the in-app room (LiveKit) is minted the usual way.
+	if (booking.type === "online" && !booking.meetingUrl) {
+		booking = await syncCalendarForBooking(booking.id);
+	}
 	await notifyBookingAssigned(booking, host);
 
 	// The case record says it happened, and the client's bell rings.

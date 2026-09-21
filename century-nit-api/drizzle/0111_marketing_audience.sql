@@ -139,6 +139,18 @@ FROM "campaign_recipients"
 WHERE "bounced_at" IS NOT NULL
 ON CONFLICT ("email") DO NOTHING;--> statement-breakpoint
 
+-- The six starter automations, seeded as drafts — staff review the copy and
+-- flip them live. Event keys match services/automationHooks.ts.
+INSERT INTO "marketing_automations" ("name", "event", "subject", "body", "delay_minutes", "status") VALUES
+('No-show follow-up', 'booking.no_show', 'We missed you — let''s rebook', '<p>Hi {{first_name}},</p><p>We had you down for a consultation but didn''t get to meet. If the timing was off, reply to this email or rebook from your portal — we''d still like to help.</p>', 120, 'draft'),
+('Assessed, not enrolled — day 3', 'assessment.completed', 'Your assessment is ready — what happens next', '<p>Hi {{first_name}},</p><p>Your eligibility assessment is done. The next step is enrolment: pick your service package in the portal and we''ll assign your handler.</p><p><a href="{{portal_link}}">Open your portal</a></p>', 4320, 'draft'),
+('Assessed, not enrolled — day 10', 'assessment.completed', 'Still thinking it over?', '<p>Hi {{first_name}},</p><p>Your assessment result is still waiting in your portal. Intakes fill on a schedule — if you have questions before enrolling, just reply.</p>', 14400, 'draft'),
+('Offer received', 'offer.received', 'An offer has landed — {{case_ref}}', '<p>Hi {{first_name}},</p><p>Good news — an offer is in on your case. Sign in to review it and accept the school you want; visa work starts right after.</p><p><a href="{{portal_link}}">Review your offer</a></p>', 0, 'draft'),
+('Visa approved — pre-departure guide', 'visa.approved', 'Visa approved — your pre-departure checklist', '<p>Hi {{first_name}},</p><p>Your visa is approved. Before {{arrival_window}} we''ll walk you through documents, funds, and arrival — your checklist is live in the portal.</p><p><a href="{{portal_link}}">Open the checklist</a></p>', 60, 'draft'),
+('Departure −30 days', 'departure.minus_30', '30 days to departure — final checks', '<p>Hi {{first_name}},</p><p>You report by {{arrival_window}} — about a month out. Now is the time for flights, accommodation and the pre-departure briefing.</p><p><a href="{{portal_link}}">See what''s left</a></p>', 0, 'draft'),
+('Milestone overdue — day 3', 'invoice.overdue', 'A payment on your case is overdue', '<p>Hi {{first_name}},</p><p>{{next_due}} is now past due on case {{case_ref}}. Settling it keeps your {{stage}} work moving — pay it from your portal.</p><p><a href="{{portal_link}}">Pay now</a></p>', 0, 'draft')
+ON CONFLICT DO NOTHING;--> statement-breakpoint
+
 -- The suite's RLS sweep: every public table carries row-level security.
 ALTER TABLE "marketing_optins" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "marketing_optins" FORCE ROW LEVEL SECURITY;--> statement-breakpoint

@@ -273,6 +273,12 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// The standard documents were collected at consultation; nothing is
 	// invoiced while any is still unverified (the API refuses too).
 	const outstandingDocs = (app.documentChecklist ?? []).filter((d) => d.status !== "VERIFIED").map((d) => d.name);
+	// What the *application invoice* waits on: the Admissions set and the entry
+	// evidence — never a later stage's documents (a full-journey client's
+	// visa grant is on the vault list but cannot exist before the visa).
+	const outstandingForApplications = (app.documentChecklist ?? [])
+		.filter((d) => d.status !== "VERIFIED" && (d.stage === "admissions" || d.stage === "entry" || d.stage == null))
+		.map((d) => d.name);
 	// The Billing view's count — invoices on this case still carrying a balance.
 	const dueInvoices = allInvoices.filter((i) => i.applicationId === app.id && (i.status === "issued" || i.status === "partial" || i.status === "overdue")).length;
 	// Why a control is off, in the words the server would use to refuse it.
@@ -762,7 +768,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					appInvoiceLoading={appInvoiceLoading}
 					canIssueInvoices={canIssueInvoices}
 					canWork={canWork}
-					outstandingDocs={outstandingDocs}
+					outstandingDocs={outstandingForApplications}
 					setTab={setTab}
 					onInvoiceChanged={(updated) => {
 						setAppInvoice(updated);

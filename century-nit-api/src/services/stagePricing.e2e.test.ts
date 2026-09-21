@@ -161,11 +161,18 @@ describe("stage-priced plans", () => {
 		expect(opened.stage).toBe("visa_processing");
 
 		// Documents: the offer letter is the entry evidence; no transcripts asked for.
-		const { documentChecklistForApplication } = await import("./documentChecklist.js");
-		const ids = (await documentChecklistForApplication(appId)).map((d) => d.id);
+		// Each item knows its stage, so an invoice gate reads only its own stage's
+		// documents — the visa invoice never waits on the departure set.
+		const { documentChecklistForApplication, outstandingForStage } = await import("./documentChecklist.js");
+		const checklist = await documentChecklistForApplication(appId);
+		const ids = checklist.map((d) => d.id);
 		expect(ids[0]).toBe("admission_letter");
+		expect(checklist[0].stage).toBe("entry");
 		expect(ids).toContain("visa_grant");
+		expect(checklist.find((d) => d.id === "visa_grant")?.stage).toBe("departure");
 		expect(ids).not.toContain("transcript");
+		expect(outstandingForStage(checklist, "visa")).not.toContain("Visa grant / vignette");
+		expect(outstandingForStage(checklist, "visa").length).toBeGreaterThan(0);
 
 	});
 

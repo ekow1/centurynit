@@ -167,7 +167,7 @@ import {
 
 import { HttpError, validationHook } from "../middleware/error.js";
 
-import { documentChecklistForApplication, outstandingDocuments } from "../services/documentChecklist.js";
+import { outstandingForStage, documentChecklistForApplication } from "../services/documentChecklist.js";
 import {
 	requireAuth,
 	requireMfa,
@@ -521,7 +521,7 @@ applicationsRouter.openapi(
 async function ensureApplicationProforma(id: string, raisedBy: { opsUserId?: string | null; name: string; email?: string | null }): Promise<typeof schema.invoices.$inferSelect | null> {
 	// Documents first: they were collected at consultation so applications
 	// never wait on paperwork. Nothing is invoiced while any is outstanding.
-	const outstanding = outstandingDocuments(await documentChecklistForApplication(id));
+	const outstanding = outstandingForStage(await documentChecklistForApplication(id), "admissions");
 	if (outstanding.length > 0) {
 		throw new HttpError(
 			409,
@@ -676,7 +676,7 @@ applicationsRouter.openapi(
 		const { id } = c.req.valid("param");
 		await assertApplicationAccess(c, id);
 		const [lines, checklist] = await Promise.all([applicationFeeLinesFor(id), documentChecklistForApplication(id)]);
-		return c.json({ lines: lines.map((l) => ({ ...l, schoolApplicationId: l.schoolApplicationId ?? null })), outstandingDocuments: outstandingDocuments(checklist) });
+		return c.json({ lines: lines.map((l) => ({ ...l, schoolApplicationId: l.schoolApplicationId ?? null })), outstandingDocuments: outstandingForStage(checklist, "admissions") });
 	},
 );
 
@@ -790,7 +790,7 @@ async function raiseApplicationProformaWithLines(
 	body: z.infer<typeof raiseLinesSchema>,
 	raisedBy: { opsUserId?: string | null; name: string; email?: string | null },
 ): Promise<typeof schema.invoices.$inferSelect> {
-	const outstanding = outstandingDocuments(await documentChecklistForApplication(id));
+	const outstanding = outstandingForStage(await documentChecklistForApplication(id), "admissions");
 	if (outstanding.length > 0) {
 		throw new HttpError(409, "DOCUMENTS_OUTSTANDING", `Verify the client's documents before invoicing applications. Outstanding: ${outstanding.join(", ")}.`);
 	}

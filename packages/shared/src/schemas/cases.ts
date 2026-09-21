@@ -683,6 +683,12 @@ export const documentChecklistItemSchema = z.object({
 	hint: z.string(),
 	status: z.enum(["PENDING_UPLOAD", "UPLOADED", "VERIFIED", "REJECTED"]),
 	documentId: z.string().uuid().nullable(),
+	/**
+	 * Which stage asks for it: `entry` (the evidence the client brought),
+	 * `admissions`, `visa` or `departure`. The vault shows the union; a
+	 * stage's invoice gate reads only its own. Optional so older readers parse.
+	 */
+	stage: z.enum(["entry", "admissions", "visa", "departure"]).optional(),
 });
 export type DocumentChecklistItem = z.infer<typeof documentChecklistItemSchema>;
 

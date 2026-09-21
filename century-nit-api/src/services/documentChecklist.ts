@@ -23,16 +23,34 @@ export async function requiredDocumentIdsFor(input: {
 	/** Where the client said they were at booking — before any recommendation. */
 	entryIntent?: string | null;
 }): Promise<string[]> {
+	return (await requiredDocumentsByStage(input)).map((d) => d.id);
+}
+
+export type StagedDocumentId = { id: string; stage: "entry" | "admissions" | "visa" | "departure" };
+
+/**
+ * The same union, with the stage each document belongs to. The first stage
+ * to ask for a document owns it — the offer letter a visa entrant brought is
+ * `entry`, not `visa`.
+ */
+export async function requiredDocumentsByStage(input: {
+	applicationPackageId?: string | null;
+	recommendedPackage?: string | null;
+	scopeStages?: readonly string[] | null;
+	recStages?: readonly string[] | null;
+	entryIntent?: string | null;
+}): Promise<StagedDocumentId[]> {
 	const scope = plannedStagesFor(input);
 	const entry = scope[0];
 	const admissionsIds = scope.includes("admissions") ? await admissionsDocumentIdsFor(input) : [];
-	const ids = [
-		...ENTRY_EVIDENCE_IDS[entry],
-		...admissionsIds,
-		...(scope.includes("visa") ? STAGE_DOCUMENT_IDS.visa : []),
-		...(scope.includes("departure") ? STAGE_DOCUMENT_IDS.departure : []),
+	const staged: StagedDocumentId[] = [
+		...ENTRY_EVIDENCE_IDS[entry].map((id) => ({ id, stage: "entry" as const })),
+		...admissionsIds.map((id) => ({ id, stage: "admissions" as const })),
+		...(scope.includes("visa") ? STAGE_DOCUMENT_IDS.visa.map((id) => ({ id, stage: "visa" as const })) : []),
+		...(scope.includes("departure") ? STAGE_DOCUMENT_IDS.departure.map((id) => ({ id, stage: "departure" as const })) : []),
 	];
-	return [...new Set(ids)];
+	const seen = new Set<string>();
+	return staged.filter((d) => (seen.has(d.id) ? false : (seen.add(d.id), true)));
 }
 
 /**
@@ -86,8 +104,19 @@ export async function documentChecklistFor(input: {
 	recStages?: readonly string[] | null;
 	entryIntent?: string | null;
 }): Promise<DocumentChecklistItem[]> {
-	const ids = await requiredDocumentIdsFor(input);
-	return checklistForIds(input.ownerUserId, ids);
+	const staged = await requiredDocumentsByStage(input);
+	const items = await checklistForIds(input.ownerUserId, staged.map((d) => d.id));
+	const stageOf = new Map(staged.map((d) => [d.id, d.stage]));
+	return items.map((i) => ({ ...i, stage: stageOf.get(i.id) }));
+}
+
+/**
+ * What an *invoice* may wait on: a stage's own documents plus the entry
+ * evidence, never a later stage's. The application invoice does not wait
+ * for a visa grant; the visa invoice does not wait for accommodation proof.
+ */
+export function outstandingForStage(list: DocumentChecklistItem[], stage: "admissions" | "visa" | "departure"): string[] {
+	return list.filter((d) => d.status !== "VERIFIED" && (d.stage === stage || d.stage === "entry" || d.stage == null)).map((d) => d.name);
 }
 
 /** The visa-stage set against the client's uploads — the visa officer's working list. */

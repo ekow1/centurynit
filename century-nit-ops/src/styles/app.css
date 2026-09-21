@@ -6458,6 +6458,13 @@ input[type="time"].input {
 .ledger .st--man { color: #5b21b6; } .ledger .st--man::before { background: #5b21b6; }
 .ledger tr.failed-row td { background: rgba(185, 28, 28, 0.04); }
 .ledger .sub { display: block; font-size: 0.62rem; color: var(--muted-foreground); font-weight: 400; }
+/* The ledger as a statement: settled money above the rule, scheduled
+   charges below it — muted, they are due rather than paid. */
+.ledger .ledger__divide { padding: 0.35rem 0.6rem; background: var(--muted);
+	border-top: 1.5px solid var(--border); border-bottom: 1.5px solid var(--border);
+	font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.12em;
+	text-transform: uppercase; color: var(--muted-foreground); }
+.ledger tr.ledger__sched td { color: var(--muted-foreground); }
 
 /* ═══ Lead pane — touch log, follow-ups, lost reason ═══ */
 .cn-timeline { list-style: none; padding: 0; margin: 0.4rem 0 0; }

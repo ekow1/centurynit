@@ -1,5 +1,6 @@
 import { useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { useOpsAuth } from "../OpsAuthContext";
+import { ageDays, gateFor, normaliseStage, signalsOf, type Gate } from "../../lib/caseGate";
 import { useCases } from "../../hooks/useCases";
 import type { MockApplication } from "century-nit-core/ops";
 import {
@@ -7,7 +8,6 @@ import {
 	JOURNEY_STAGES,
 	JOURNEY_STAGE_LABELS,
 	STAGE_CHAPTER,
-	VISA_STAGE_LABELS,
 	canAdvanceToStage,
 	type ChapterId,
 	type JourneyStage,
@@ -30,23 +30,24 @@ import { ScopeChip } from "../../components/ScopeRoute";
  */
 
 const STALLED_AFTER_DAYS = 7;
-const IN_FLIGHT = JOURNEY_STAGES.filter((s) => s !== "completed");
+// payment_execution was folded into travel_assistance (0079): never a column.
+const IN_FLIGHT = JOURNEY_STAGES.filter((s) => s !== "completed" && s !== "payment_execution");
 const CHAPTER_STAGES: Record<ChapterId, JourneyStage[]> = CHAPTERS.reduce(
-	(acc, c) => ({ ...acc, [c.id]: JOURNEY_STAGES.filter((s) => STAGE_CHAPTER[s] === c.id) }),
+	(acc, c) => ({ ...acc, [c.id]: JOURNEY_STAGES.filter((s) => STAGE_CHAPTER[s] === c.id && s !== "payment_execution") }),
 	{} as Record<ChapterId, JourneyStage[]>,
 );
 
 /**
- * The rail speaks the journey's stages, not the old chapters — the coarse
- * columns group under the service stage they belong to (a visa-only file's
- * "Applications" columns are never where it should end up; scope is on the
- * card). Stage 0 has no column: a case only exists once the consultation
- * opened the file, so the amber dot on each card's mini-route marks it done.
+ * The rail speaks the chapters — the one numbering (I–VI) the case detail,
+ * the caseload and the list filters use. A column is a journey stage; a
+ * chapter spans its columns. A visa-only file sits in IV with III struck on
+ * its card; the plan is on the card, never on the rail.
  */
 const STAGE_RAIL: { id: string; no: string; label: string; stages: JourneyStage[] }[] = [
-	{ id: "admissions", no: "I", label: "Admissions", stages: ["document_verification", "school_submission", "offer_letter_review"] },
-	{ id: "visa", no: "II", label: "Visa", stages: ["visa_processing"] },
-	{ id: "departure", no: "III", label: "Departure & arrival", stages: ["travel_assistance", "payment_execution"] },
+	{ id: "enrolment", no: "II", label: "Enrolment", stages: ["document_verification"] },
+	{ id: "applications", no: "III", label: "Applications", stages: ["school_submission", "offer_letter_review"] },
+	{ id: "visa", no: "IV", label: "Visa", stages: ["visa_processing"] },
+	{ id: "departure", no: "V", label: "Departure", stages: ["travel_assistance"] },
 ];
 
 export type BoardOrder = "age" | "recent" | "name";
@@ -57,81 +58,6 @@ export const BOARD_ORDERS: { id: BoardOrder; label: string }[] = [
 ];
 
 /** Legacy payment_execution rows live in Departure; anything else unrecognised lands in the first column. */
-function normaliseStage(stage: string): JourneyStage {
-	const match = JOURNEY_STAGES.find((s) => s === (stage === "payment_execution" ? "travel_assistance" : stage));
-	return match ?? JOURNEY_STAGES[0];
-}
-
-/** The rule's inputs, from the record — the same signals the server reads. */
-function signalsOf(app: MockApplication) {
-	const schools = app.schoolApplications ?? [];
-	return {
-		visaStage: app.visaStage,
-		agencyStageIndex: app.agencyStageIndex,
-		agencySettled: app.agencySettled,
-		appFeePaid: app.appFeePaid,
-		preDepartureTasks: app.preDepartureTasks,
-		paymentPlanId: app.paymentPlanId,
-		proceedStatus: app.proceedStatus,
-		travelAssistanceStatus: app.travelAssistanceStatus,
-		hasPackage: Boolean(app.fundingTrack),
-		hasSelection: schools.length > 0,
-		hasAdmitted: Boolean(app.acceptedSchoolId) || schools.some((s) => s.outcome === "Admitted"),
-	};
-}
-
-type Gate = {
-	/** ready: nothing blocks; work: Century's; wait: the client's (or the authority's). */
-	kind: "ready" | "work" | "wait";
-	label: string;
-	/** The rule's full sentence, for the tooltip. */
-	reason: string | null;
-	next: JourneyStage | null;
-	/** Consent paused or declined — the case is parked, not merely waiting. */
-	hold: boolean;
-};
-
-/** What holds the case in its column, in a few words. */
-function gateFor(app: MockApplication): Gate {
-	const stage = normaliseStage(app.stage);
-	const next = JOURNEY_STAGES[JOURNEY_STAGES.indexOf(stage) + 1] ?? null;
-	if (!next) return { kind: "ready", label: "Completed", reason: null, next: null, hold: false };
-	const reason = canAdvanceToStage(stage, next, signalsOf(app));
-	if (reason === null) return { kind: "ready", label: "Ready", reason: null, next, hold: false };
-	const r = reason.toLowerCase();
-	const wait = (label: string, hold = false): Gate => ({ kind: "wait", label, reason, next, hold });
-	const work = (label: string): Gate => ({ kind: "work", label, reason, next, hold: false });
-	if (r.startsWith("stopped")) return wait("Consent declined", true);
-	if (r.startsWith("paused")) return wait("On hold · consent", true);
-	if (r.startsWith("locked")) return wait("Awaiting consent");
-	if (r.includes("deposit")) return wait("Deposit unpaid");
-	if (r.includes("application fee")) return wait("Application fee unpaid");
-	if (r.includes("no service package")) return work("Choose a package");
-	if (r.includes("no schools selected")) return work("Choose schools");
-	if (r.includes("no accepted offer")) return wait("Awaiting an offer");
-	if (r.includes("visa must be approved")) {
-		if ((!app.visaStage || app.visaStage === "locked") && !app.visaInvoicePaid) return wait("Visa invoice unpaid");
-		return work(`Visa · ${(VISA_STAGE_LABELS[app.visaStage ?? "locked"] ?? app.visaStage ?? "not started").toLowerCase()}`);
-	}
-	if (r.includes("payment plan") || r.includes("balance") || r.includes("instalment")) return wait("Fee milestone unpaid");
-	if (r.includes("travel")) {
-		const s = app.travelAssistanceStatus;
-		if (!s || s === "decision_pending") return wait("Travel choice pending");
-		return work(`Travel · ${s.replace(/_/g, " ")}`);
-	}
-	if (r.includes("checklist")) {
-		const required = (app.preDepartureTasks ?? []).filter((t) => t.required !== false);
-		const done = required.filter((t) => t.done || t.waivedReason).length;
-		return work(`Checklist ${done} of ${required.length}`);
-	}
-	return work(reason.replace(/^cannot (advance|mark complete)[^:]*:\s*/i, ""));
-}
-
-function ageDays(app: MockApplication): number {
-	const at = new Date(app.updatedAt ?? app.submittedDate).getTime();
-	if (Number.isNaN(at)) return 0;
-	return Math.max(0, Math.floor((Date.now() - at) / 86_400_000));
-}
 
 function ageLabel(days: number): string {
 	if (days === 0) return "today";
@@ -233,8 +159,6 @@ export function CaseBoard({
 	const card = ({ app, gate, age }: { app: MockApplication; gate: Gate; age: number }): ReactNode => {
 		const stalled = age >= STALLED_AFTER_DAYS && gate.next !== null;
 		const canDrag = canMoveCase(app) && gate.kind === "ready" && gate.next !== null;
-		const checks = app.checklist.length;
-		const done = app.checklist.filter((c) => c.checked).length;
 		const unowned = !app.assignedStaff;
 		return (
 			<div
@@ -250,29 +174,18 @@ export function CaseBoard({
 				style={canDrag ? { cursor: "grab" } : undefined}
 				title={gate.reason ?? undefined}
 			>
-				<div className="ops-kase__name">{app.applicantName}</div>
-				<div className="ops-kase__sub" title={app.university}>
-					<span className="ops-kase__ref">{app.appId}</span>
-					{app.university ? ` · ${app.university}` : ""}
+				{/* Name + the plan's shape; the one thing holding the case; then
+				    where it is and who holds it. Everything else is in the detail. */}
+				<div className="ops-kase__name">
+					<span title={app.appId}>{app.applicantName}</span>
+					<ScopeChip scopeStages={app.scopeStages} />
 				</div>
-				<ScopeChip scopeStages={app.scopeStages} />
 				<div className="ops-kase__gate">
 					<span className={`ops-gate-dot${gate.kind === "wait" ? " ops-gate-dot--hollow" : ""}`} aria-hidden />
 					<span className={`ops-kase__gate-text${gate.kind === "wait" ? " ops-kase__gate-text--wait" : ""}`}>{gate.label}</span>
-					{checks > 0 && (
-						<span className="ops-kase__checks" title={`${done} of ${checks} checks`}>
-							<span className="ops-ticks" aria-hidden>
-								{Array.from({ length: checks }).map((_, i) => (
-									<span key={i} className={i < done ? "ops-ticks__on" : undefined} />
-								))}
-							</span>
-							<span className="ops-kase__checks-n">
-								{done}/{checks}
-							</span>
-						</span>
-					)}
 				</div>
 				<div className="ops-kase__foot">
+					<span title={app.university || app.appId}>{app.university || app.appId}</span>
 					{unowned && onAssign ? (
 						<button
 							type="button"

@@ -158,6 +158,9 @@ export function MoneyTab({
 		}
 	}
 	const fmtDay = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : null);
+	// Channels in the client's words, not Paystack's codes.
+	const channelLabel = (c: string | null | undefined) =>
+		!c ? null : c === "paystack-mobile_money" ? "MoMo" : c === "paystack-card" ? "Card" : c === "manual" || c === "cash" ? "Office" : c;
 	return (
 		<>
 			<div className="card">
@@ -393,41 +396,56 @@ export function MoneyTab({
 							<tr>
 								<th>Date</th>
 								<th>Entry</th>
-								<th>Channel</th>
-								<th>Reference</th>
-								<th>Recorded by</th>
 								<th className="num">Amount</th>
 								<th>Status</th>
 								<th className="num">Balance</th>
 							</tr>
 						</thead>
 						<tbody>
-							{ledger.map((r) => (
+							{/* Settled and declined first — money that moved. Scheduled charges
+							    sit below the divider: they are due, not payments yet. */}
+							{ledger.filter((r) => r.status !== "scheduled").map((r) => (
 								<tr key={r.id} className={r.status === "declined" ? "failed-row" : undefined}>
 									<td className="num">{fmtDay(r.at)}</td>
 									<td>
 										{r.label}
-										<span className="sub">{r.invoiceNumber}</span>
+										<span className="sub">
+											{[channelLabel(r.channel), r.reference, r.recordedBy, r.invoiceNumber].filter(Boolean).join(" · ")}
+										</span>
 									</td>
-									<td>{r.channel}</td>
-									<td className="ref">{r.reference ?? "—"}</td>
-									<td>{r.recordedBy ?? "—"}</td>
 									<td className="num">{formatMoney(r.amountCents, "ghs")}</td>
 									<td>
 										{r.status === "settled" ? (
 											<span className="st st--paid">settled</span>
 										) : r.status === "manual" ? (
 											<span className="st st--man">manual</span>
-										) : r.status === "declined" ? (
+										) : (
 											<>
 												<span className="st st--failed">declined</span>
 												{r.failureReason && <span className="sub">{r.failureReason}</span>}
 											</>
-										) : (
-											<span className="st st--sched">scheduled</span>
 										)}
 									</td>
 									<td className="num">{r.balanceAfterCents != null ? formatMoney(r.balanceAfterCents, "ghs") : "—"}</td>
+								</tr>
+							))}
+							{ledger.some((r) => r.status === "scheduled") && (
+								<tr>
+									<td colSpan={5} className="ledger__divide">Still to come — nothing leaves until the date</td>
+								</tr>
+							)}
+							{ledger.filter((r) => r.status === "scheduled").map((r) => (
+								<tr key={r.id} className="ledger__sched">
+									<td className="num">{fmtDay(r.at)}</td>
+									<td>
+										{r.label}
+										<span className="sub">{r.invoiceNumber}</span>
+									</td>
+									<td className="num">{formatMoney(r.amountCents, "ghs")}</td>
+									<td>
+										<span className="st st--sched">scheduled</span>
+									</td>
+									<td className="num">—</td>
 								</tr>
 							))}
 						</tbody>

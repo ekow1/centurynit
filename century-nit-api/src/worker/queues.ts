@@ -94,6 +94,7 @@ export const campaignQueue = new Queue("campaign", { connection });
 export const autopayQueue = new Queue("autopay", { connection });
 export const chatReplyEmailQueue = new Queue("chatReplyEmail", { connection });
 export const helpdeskSweepQueue = new Queue("helpdeskSweep", { connection });
+export const automationSweepQueue = new Queue("automationSweep", { connection });
 
 /* ── Email ───────────────────────────────────────────────────────────────── */
 
@@ -256,6 +257,24 @@ export async function scheduleHelpdeskSweep(): Promise<void> {
 		"sweep",
 		{},
 		{ repeat: { every: 15 * 60 * 1000 }, jobId: undefined },
+	);
+}
+
+/**
+ * The automation sweep — delivers due automation_sends rows (each carries its
+ * own scheduledFor delay). Runs every minute; repeatables dedupe by key.
+ */
+export async function scheduleAutomationSweep(): Promise<void> {
+	await automationSweepQueue.add(
+		"sweep",
+		{},
+		{ repeat: { every: 60 * 1000 }, jobId: undefined },
+	);
+	// Date-defined triggers (departure −30, invoice overdue) — once a day.
+	await automationSweepQueue.add(
+		"dates",
+		{},
+		{ repeat: { every: 24 * 60 * 60 * 1000 }, jobId: undefined },
 	);
 }
 

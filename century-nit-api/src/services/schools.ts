@@ -517,6 +517,8 @@ export async function updateSchoolStatus(
 	if (input.outcome === "Admitted" && target.outcome !== "Admitted" && target.applicationId) {
 		const { fireDueTrigger } = await import("./serviceFee.js");
 		await fireDueTrigger(target.applicationId, "offer");
+		const { offerReceived } = await import("./automationHooks.js");
+		await offerReceived(target.applicationId);
 	}
 
 	if (input.sendUpdateEmail) {

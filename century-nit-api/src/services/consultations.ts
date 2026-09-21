@@ -1097,6 +1097,14 @@ export async function completeConsultationAssessment(input: {
 		}).catch(() => {});
 	}
 
+	// Marketing automations: the "assessed but not enrolled" nudge hangs off
+	// this moment — its own delay sets day 3 / day 10, and its segment drops
+	// the client if they enrol before the send lands.
+	if (applicant.email) {
+		const { assessmentCompleted } = await import("./automationHooks.js");
+		await assessmentCompleted(applicant.email, applicant.name ?? null, row.id);
+	}
+
 	// Covers every exit below — eligible or not, the consultation is now
 	// COMPLETED and an eligible outcome may also have opened an application.
 	await emitConsultationEvent(updated, "consultation.updated");

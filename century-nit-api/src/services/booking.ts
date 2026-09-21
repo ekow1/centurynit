@@ -1511,6 +1511,8 @@ export async function markNoShow(input: {
 	await audit(booking.id, "no_show", input.actor.email);
 	await cancelQueued(`notify:reminder:client:${booking.id}`);
 	await cancelQueued(`notify:reminder:employee:${booking.id}`);
+	const { bookingNoShow } = await import("./automationHooks.js");
+	await bookingNoShow(booking.id, booking.clientEmail, booking.clientName);
 	emitBookingEvent(updated, "booking.updated");
 	return updated;
 }

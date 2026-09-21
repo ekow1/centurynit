@@ -7,6 +7,7 @@ import { pushWorker } from "./push.js";
 import { autopayWorker } from "./autopay.js";
 import { chatReplyEmailWorker } from "./chat-reply.js";
 import { helpdeskSweepWorker } from "./helpdesk-sweep.js";
+import { automationSweepWorker } from "./automation-sweep.js";
 import {
 	connection,
 	emailQueue,
@@ -20,6 +21,8 @@ import {
 	scheduleDocumentCleanup,
 	scheduleAutoPaySweep,
 	scheduleHelpdeskSweep,
+	scheduleAutomationSweep,
+	automationSweepQueue,
 	autopayQueue,
 	chatReplyEmailQueue,
 	helpdeskSweepQueue,
@@ -56,6 +59,7 @@ const workers = [
 	{ name: "autopay", worker: autopayWorker },
 	{ name: "chatReplyEmail", worker: chatReplyEmailWorker },
 	{ name: "helpdeskSweep", worker: helpdeskSweepWorker },
+	{ name: "automationSweep", worker: automationSweepWorker },
 ];
 
 console.log(
@@ -81,6 +85,9 @@ scheduleAutoPaySweep().catch((err) => console.error("[autopay] schedule error:",
 
 // Schedule the unclaimed-request sweep (every 15min, idempotent).
 scheduleHelpdeskSweep().catch((err) => console.error("[helpdesk-sweep] schedule error:", err.message));
+
+// Schedule the automation send sweep (every minute, idempotent).
+scheduleAutomationSweep().catch((err) => console.error("[automation-sweep] schedule error:", err.message));
 
 /**
  * Graceful shutdown.
@@ -113,6 +120,7 @@ async function shutdown(signal: string) {
 			campaignQueue.close(),
 			chatReplyEmailQueue.close(),
 			helpdeskSweepQueue.close(),
+			automationSweepQueue.close(),
 		]);
 		await connection.quit();
 		clearTimeout(timeout);

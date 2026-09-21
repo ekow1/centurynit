@@ -2491,6 +2491,8 @@ export async function setApplicationVisaStage(
 	if (visaOutcome === "approved" && row.visaOutcome !== "approved") {
 		const { fireDueTrigger } = await import("./serviceFee.js");
 		await fireDueTrigger(id, "visa_approved");
+		const { visaApproved } = await import("./automationHooks.js");
+		await visaApproved(id);
 	}
 	const factLines = describeVisaDetails(details, mergedDetails);
 	await db.insert(caseComments).values({

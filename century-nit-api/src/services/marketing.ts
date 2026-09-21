@@ -673,7 +673,7 @@ export async function consentStatesFor(emails: string[]): Promise<Map<string, Co
  * is | is_not | within_days | older_than_days.
  * ══════════════════════════════════════════════════════════════════════════ */
 
-type SegmentFilter = { field: string; op: string; value: unknown };
+type SegmentFilter = { field: string; op: string; value?: unknown };
 type AudienceRow = { email: string; name: string | null; contactId: string | null };
 
 const within = (col: unknown, days: number) => sql`${col} >= NOW() - make_interval(days => ${days})`;

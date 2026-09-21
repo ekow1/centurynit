@@ -47,7 +47,7 @@ const norm = (e: string) => e.trim().toLowerCase();
  * Segments
  * ══════════════════════════════════════════════════════════════════════════ */
 
-const filterSchema = z.object({ field: z.string(), op: z.string(), value: z.unknown() });
+const filterSchema = z.object({ field: z.string(), op: z.string(), value: z.any() });
 
 const segmentSchema = z.object({
 	id: z.string().uuid(),
@@ -173,7 +173,7 @@ marketingAudienceRouter.openapi(
 		const staff = c.get("staff");
 		const [row] = await db
 			.insert(marketingSegments)
-			.values({ name: body.name, entity: body.entity, filters: body.filters, createdBy: staff?.opsUserId ?? null })
+			.values({ name: body.name, entity: body.entity, filters: body.filters as { field: string; op: string; value: unknown }[], createdBy: staff?.opsUserId ?? null })
 			.returning();
 		return c.json({ segment: serializeSegment(row) }, 201);
 	},
@@ -201,9 +201,10 @@ marketingAudienceRouter.openapi(
 	async (c) => {
 		const { id } = c.req.valid("param");
 		const body = c.req.valid("json");
+		const { filters, ...rest } = body;
 		const [row] = await db
 			.update(marketingSegments)
-			.set({ ...body, updatedAt: new Date() })
+			.set({ ...rest, ...(filters ? { filters: filters as { field: string; op: string; value: unknown }[] } : {}), updatedAt: new Date() })
 			.where(eq(marketingSegments.id, id))
 			.returning();
 		if (!row) throw new HttpError(404, "NOT_FOUND", "Segment not found");

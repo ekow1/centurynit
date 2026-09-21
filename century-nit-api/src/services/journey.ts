@@ -6,6 +6,7 @@ import {
 	type DerivedJourney,
 	type JourneyStage,
 	preDepartureChecklistDone,
+	scopeHas,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
 import { applications, consultations, invoices, travelAssistanceRequests } from "../db/schema.js";
@@ -111,7 +112,10 @@ export async function journeyForApplicant(
 		// the handler must issue it before the applicant can pay.
 		appInvoiceIssued: invoiceIs("application", "issued", "partial", "paid"),
 		appInvoicePaid: Boolean(application && (await applicationFeesSettled(application))) || invoiceIs("application", "paid"),
-		hasAdmitted: schoolTracks.schools.some((s) => s.outcome === "Admitted"),
+		// A visa or departure entry brought its own offer, verified at consultation.
+		hasAdmitted:
+			schoolTracks.schools.some((s) => s.outcome === "Admitted") ||
+			(application?.scopeStages != null && !scopeHas(application.scopeStages, "admissions")),
 		hasVisaConsent: visaConsent?.decision === "continue",
 		visaInvoicePaid: Boolean(application && (await visaCostsSettled(application))) || invoiceIs("visa", "paid"),
 		visaDone: application?.visaStage === "complete" && application?.visaOutcome === "approved",

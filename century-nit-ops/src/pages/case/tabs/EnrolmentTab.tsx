@@ -9,7 +9,7 @@ import { PackageSheet } from "../PackageSheet";
 
 import { useCases } from "../../../hooks/useCases";
 import { caseHandlerName } from "../../../lib/pendingTasks";
-import { DECISION_LABELS, PAYMENT_PLAN_LABELS, SERVICE_STAGE_LABELS, decisionOf, normaliseScope, scopeLabel, type ServiceStage } from "century-nit-shared";
+import { DECISION_LABELS, PAYMENT_PLAN_LABELS, SERVICE_STAGES, SERVICE_STAGE_LABELS, decisionOf, normaliseScope, scopeLabel, type ServiceStage } from "century-nit-shared";
 
 
 /** Enrolment — the client's four steps: confirmed, package & plan, deposit, consultant. */
@@ -20,7 +20,7 @@ export function EnrolmentTab({ app, caseInvoices, canIssueInvoices, canWork, fla
 	const [savingPlan, setSavingPlan] = useState(false);
 	// The plan's scope. A case that predates scopes bought the full journey.
 	const scope = app.fundingTrack ? normaliseScope(app.scopeStages ?? null) : null;
-	const missing = scope ? (["visa", "departure"] as const).filter((st) => !scope.includes(st)) : [];
+	const missing = scope ? SERVICE_STAGES.filter((st) => !scope.includes(st)) : [];
 	// The moment to offer the next stage: an offer is in and Visa is not on the plan.
 	const hasOffer = (app.schoolApplications ?? []).some((sc) => sc.outcome === "Admitted");
 	const offerUpgrade = canWork && scope != null && !scope.includes("visa") && hasOffer;
@@ -61,7 +61,7 @@ export function EnrolmentTab({ app, caseInvoices, canIssueInvoices, canWork, fla
 							{app.applicationConsent?.reason ? ` — “${app.applicationConsent.reason}”` : ""}
 						</p>
 					</div>
-					<div><p className="muted text-xs">Package</p><p>{app.fundingTrack || "Not chosen"}</p></div>
+					<div><p className="muted text-xs">Track</p><p>{app.fundingTrack === "undecided" ? "None — no Admissions on the plan" : app.fundingTrack || "Not chosen"}</p></div>
 					<div>
 						<p className="muted text-xs">Plan</p>
 						<p>

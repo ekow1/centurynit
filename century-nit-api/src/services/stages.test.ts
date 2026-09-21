@@ -1,17 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { milestoneLines, normaliseScope, quoteTotal, scopeLabel, serviceStageForJourney, stageLines } from "century-nit-shared";
+import { entryJourneyStage, entryStage, intentScope, milestoneLines, normaliseScope, quoteTotal, scopeLabel, serviceStageForJourney, stageLines } from "century-nit-shared";
 
 const prices = { admissions: 70_000, visa: 70_000, departure: 30_000 };
 const split = { depositPercent: 10, preDeparturePercent: 30, admissionsStartPercent: 50 };
 
 describe("scope", () => {
-	it("always holds admissions and drops departure without visa", () => {
+	it("is a contiguous segment of the line — an entry point and an exit point", () => {
 		expect(normaliseScope([])).toEqual(["admissions"]);
 		expect(normaliseScope(null)).toEqual(["admissions", "visa", "departure"]);
-		expect(normaliseScope(["departure"])).toEqual(["admissions"]);
-		expect(normaliseScope(["visa", "departure"])).toEqual(["admissions", "visa", "departure"]);
-		expect(normaliseScope(["bogus", "visa"])).toEqual(["admissions", "visa"]);
+		expect(normaliseScope(["departure"])).toEqual(["departure"]);
+		expect(normaliseScope(["visa", "departure"])).toEqual(["visa", "departure"]);
+		expect(normaliseScope(["bogus", "visa"])).toEqual(["visa"]);
+		// A gap is filled: nobody works a case they did not see the middle of.
+		expect(normaliseScope(["admissions", "departure"])).toEqual(["admissions", "visa", "departure"]);
 		expect(scopeLabel(["admissions", "visa"])).toBe("Admissions + Visa");
+		expect(scopeLabel(["visa"])).toBe("Visa only");
+		expect(scopeLabel(["visa", "departure"])).toBe("Visa + Departure");
+	});
+
+	it("knows where a plan enters and which journey stage that opens", () => {
+		expect(entryStage(["visa", "departure"])).toBe("visa");
+		expect(entryJourneyStage(["visa"])).toBe("visa_processing");
+		expect(entryJourneyStage(["departure"])).toBe("travel_assistance");
+		expect(entryJourneyStage(null)).toBe("school_submission");
+		expect(intentScope("visa")).toEqual(["visa"]);
+		expect(intentScope("full")).toEqual(["admissions", "visa", "departure"]);
 	});
 
 	it("maps the journey stages that a plan can leave out", () => {
@@ -79,6 +92,20 @@ describe("milestoneLines", () => {
 		const lines = milestoneLines(q, split, null);
 		expect(lines.at(-1)).toMatchObject({ amountCents: 70_000, dueOn: "visa_open", stage: "visa" });
 		expect(lines.reduce((n, l) => n + l.amountCents, 0)).toBe(140_000);
+	});
+
+	it("makes the entry stage due on acceptance — accepting the plan opens that file", () => {
+		const visaOnly = quoteTotal({ bundleCents: 150_000, stagePrices: prices, stages: ["visa"] });
+		expect(milestoneLines(visaOnly, split, null).map((l) => [l.amountCents, l.dueOn])).toEqual([[70_000, "acceptance"]]);
+		const visaDep = quoteTotal({ bundleCents: 150_000, stagePrices: prices, stages: ["visa", "departure"] });
+		expect(milestoneLines(visaDep, split, null).map((l) => [l.amountCents, l.dueOn])).toEqual([
+			[70_000, "acceptance"],
+			[30_000, "visa_approved"],
+		]);
+		const depOnly = quoteTotal({ bundleCents: 150_000, stagePrices: prices, stages: ["departure"] });
+		expect(milestoneLines(depOnly, split, null).map((l) => [l.amountCents, l.dueOn])).toEqual([[30_000, "acceptance"]]);
+		// No bundle without all three.
+		expect(visaDep.bundleDiscountCents).toBe(0);
 	});
 
 	it("honours the admissions split setting", () => {

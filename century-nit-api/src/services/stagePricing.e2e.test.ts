@@ -99,6 +99,68 @@ afterAll(async () => {
 });
 
 describe("stage-priced plans", () => {
+	maybe()("a client who brings an offer enters at Visa: no track, the Visa line due on acceptance, the visa stage opened by the first payment", async () => {
+		// Booked with the intent "I have an offer, I need the visa" — the profile carries the offer.
+		const [applicant] = await db
+			.insert(applicants)
+			.values({
+				userId: CLIENT_ID,
+				name: "Kwame Mensah",
+				email: `client${SUFFIX}`,
+				branch: "accra",
+				profile: { entryIntent: "visa", offerUniversity: "University of Leeds", offerProgram: "MSc Data Science", offerCountry: "United Kingdom", offerType: "Unconditional · CAS" },
+			})
+			.returning();
+		const [row] = await db
+			.insert(consultations)
+			.values({ reference: `CNS-SP-V-${Date.now().toString(36)}`, applicantId: applicant.id, branch: "accra", status: "IN_ASSESSMENT" })
+			.returning();
+		// The consultant widened the plan to Visa + Departure.
+		const { application } = await completeConsultationAssessment({
+			id: row.id,
+			result: { outcome: "Eligible", notes: "Offer sound; funds short — sponsor route.", recCountry: "", recUniversity: "", recProgram: "", recPackage: "", recStages: ["visa", "departure"], verdict: "widen" },
+			actor: ACTOR,
+		});
+		const appId = application!.id;
+		// The case carries the offer the client brought and the recommended shape.
+		expect(application!.university).toBe("University of Leeds");
+		expect(application!.scopeStages).toEqual(["visa", "departure"]);
+		expect(application!.stage).toBe("document_verification");
+		await processConsentDecision({ userId: CLIENT_ID, stage: "application", decision: "continue" });
+
+		// A track is refused only when Admissions is on the plan; here there is none.
+		await expect(setApplicationPackage({ id: appId, degreeLevel: "Master's", stages: ["admissions", "visa"] })).rejects.toMatchObject({ code: "TRACK_REQUIRED" });
+		await setApplicationPackage({ id: appId, degreeLevel: "Master's", stages: ["visa", "departure"] });
+		const { row: inv, lines } = await agencyInvoice(appId);
+		// Visa and Departure are flat catalogue items: the seeded 0105 amounts, not the package's.
+		expect(lines.map((l) => [l.dueOn, l.dueAt != null])).toEqual([
+			["acceptance", true],
+			["visa_approved", false],
+		]);
+		expect(inv.subtotalCents).toBe(lines[0].amountCents + lines[1].amountCents);
+		expect(inv.note).toContain("Visa + Departure");
+		const [bound] = await db.select().from(applications).where(eq(applications.id, appId));
+		expect(bound.packageId).toBeNull();
+		expect(bound.fundingTrack).toBe("undecided");
+
+		// Paying the first milestone opens the visa stage — nothing precedes it.
+		await recordPayment({ invoiceId: inv.id, amountCents: lines[0].amountCents, method: "card", actor: ACTOR });
+		const [opened] = await db.select().from(applications).where(eq(applications.id, appId));
+		expect(opened.depositPaid).toBe(true);
+		expect(opened.stage).toBe("visa_processing");
+
+		// Documents: the offer letter is the entry evidence; no transcripts asked for.
+		const { documentChecklistForApplication } = await import("./documentChecklist.js");
+		const ids = (await documentChecklistForApplication(appId)).map((d) => d.id);
+		expect(ids[0]).toBe("admission_letter");
+		expect(ids).toContain("visa_grant");
+		expect(ids).not.toContain("transcript");
+
+		// Tidy: this client is reused by the next test.
+		await wipe();
+		await seed();
+	});
+
 	maybe()("prices an admissions-only plan per stage, grows it once money is on it, and dates lines from case events", async () => {
 		const appId = await openCase();
 

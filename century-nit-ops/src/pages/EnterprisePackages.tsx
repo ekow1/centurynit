@@ -255,6 +255,8 @@ export function EnterprisePackages() {
 	const inactive = sorted.filter((p) => !p.active);
 	const mostChosen = [...active].sort((a, b) => clientsOn(b) - clientsOn(a))[0] ?? null;
 	const chosenMax = Math.max(1, ...sorted.map(clientsOn));
+	// Visa and Departure are flat catalogue items; the package's own numbers stand in when an item is off.
+	const flatCents = (st: "visa" | "departure") => (catalogue?.items ?? []).find((i) => i.key === `stage_${st}` && i.active && i.amountCents > 0)?.amountCents ?? null;
 	const includedNames = (pkg: ServicePackage) => pkg.includedFeeKeys.map((k) => (catalogue?.items ?? []).find((i) => i.key === k)?.name ?? k);
 
 	return (
@@ -305,7 +307,7 @@ export function EnterprisePackages() {
 					<section className="dash-panel" style={{ marginBottom: "1rem" }}>
 						<header className="dash-panel__head">
 							<h2 className="dash-panel__title">Stage prices · USD</h2>
-							<span className="cn-detailhead__meta">bundle = all three stages · a plan that stops short pays à la carte</span>
+							<span className="cn-detailhead__meta">Admissions by track · Visa and Departure flat (fee schedule) · bundle = all three</span>
 						</header>
 						<div className="ops-table-wrap">
 							<table className="admin-table">
@@ -323,13 +325,17 @@ export function EnterprisePackages() {
 								<tbody>
 									{SERVICE_STAGES.map((st) => (
 										<tr key={st}>
-											<td>{SERVICE_STAGE_LABELS[st]}</td>
+											<td>
+												{SERVICE_STAGE_LABELS[st]}
+												{st !== "admissions" && <span className="sub">flat · from the fee schedule{flatCents(st) == null ? " · not set, using the package's number" : ""}</span>}
+											</td>
 											{active.map((p) => {
 												const sp = p.stagePrices ?? defaultStagePrices(p.priceCents);
+												const cents = st === "admissions" ? sp[st] : (flatCents(st) ?? sp[st]);
 												return (
-													<td key={p.code} className="mono" style={{ textAlign: "right" }}>
-														{(sp[st] / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-														{!p.stagePrices && <span className="muted" title="Not priced yet — a default split of the bundle"> *</span>}
+													<td key={p.code} className="mono" style={{ textAlign: "right", color: st !== "admissions" ? "var(--muted-foreground)" : undefined }}>
+														{(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+														{st === "admissions" && !p.stagePrices && <span className="muted" title="Not priced yet — a default split of the bundle"> *</span>}
 													</td>
 												);
 											})}

@@ -3,11 +3,13 @@ import { z } from "zod";
 /**
  * The service stages — what a client buys.
  *
- * A package (the track: how hard Century searches) prices each stage on
- * its own and the three together as a bundle. The client's *scope* is the
- * set of stages on their plan; the service fee is the sum of those stages,
- * or the bundle price when all three are chosen. Admissions is always in;
- * Departure needs Visa. So the only shapes are A, A+V and A+V+D.
+ * A package (the track: how hard Century searches) prices Admissions; Visa
+ * and Departure are flat, from the fee catalogue; the three together are
+ * the bundle. The client's *scope* is a contiguous segment of the line
+ * Admissions → Visa → Departure: where they enter and where they leave.
+ * A client who already holds an offer enters at Visa; the chapters before
+ * the entry are discarded, not locked. Six shapes: A · A+V · A+V+D · V ·
+ * V+D · D.
  *
  * This module is the one place the fee and its milestones are computed —
  * the portal builder, the ops sheet, the fee-schedule example and the API
@@ -41,28 +43,106 @@ export type StagePrices = z.infer<typeof stagePricesSchema>;
 export const ALL_STAGES: readonly ServiceStage[] = SERVICE_STAGES;
 
 /**
- * Normalise a scope: admissions always in, departure only with visa, in
- * canonical order. Anything unknown is dropped. No scope at all (a legacy
- * case, an old client) is the full journey.
+ * Where a client says they are when they book. It shapes the intake form,
+ * what the consultation checks, and pre-fills the plan. Not a contract —
+ * the plan is accepted after the consultation.
+ */
+export const SERVICE_INTENTS = ["admissions", "visa", "departure", "full"] as const;
+export const serviceIntentSchema = z.enum(SERVICE_INTENTS);
+export type ServiceIntent = z.infer<typeof serviceIntentSchema>;
+
+export const SERVICE_INTENT_LABELS: Record<ServiceIntent, string> = {
+	admissions: "I need help getting admitted",
+	visa: "I have an offer, I need the visa",
+	departure: "Visa approved — help me get there",
+	full: "Take me from the start to arrival",
+};
+
+/** The stages an intent starts the plan with. */
+export function intentScope(intent: ServiceIntent | null | undefined): ServiceStage[] {
+	switch (intent) {
+		case "visa":
+			return ["visa"];
+		case "departure":
+			return ["departure"];
+		case "admissions":
+			return ["admissions"];
+		default:
+			return [...SERVICE_STAGES];
+	}
+}
+
+/**
+ * Normalise a scope: a contiguous segment of the line, in canonical order,
+ * with any gap filled (Admissions + Departure means the visa too — nobody
+ * works a case they did not see the middle of). Anything unknown is
+ * dropped; an empty list is Admissions; no scope at all (a legacy case, an
+ * old client) is the full journey.
  */
 export function normaliseScope(stages: readonly string[] | null | undefined): ServiceStage[] {
 	if (stages == null) return [...SERVICE_STAGES];
-	const set = new Set(stages.filter((s): s is ServiceStage => (SERVICE_STAGES as readonly string[]).includes(s)));
-	set.add("admissions");
-	if (set.has("departure") && !set.has("visa")) set.delete("departure");
-	return SERVICE_STAGES.filter((s) => set.has(s));
+	const idx = stages
+		.map((s) => (SERVICE_STAGES as readonly string[]).indexOf(s))
+		.filter((i) => i >= 0);
+	if (idx.length === 0) return ["admissions"];
+	const lo = Math.min(...idx);
+	const hi = Math.max(...idx);
+	return SERVICE_STAGES.slice(lo, hi + 1);
+}
+
+/** The stage the client enters at — the first on the plan. */
+export function entryStage(stages: readonly string[] | null | undefined): ServiceStage {
+	return normaliseScope(stages)[0];
+}
+
+/** The journey stage a case opens at for its entry, once the plan's first milestone is paid. */
+export function entryJourneyStage(stages: readonly string[] | null | undefined): "school_submission" | "visa_processing" | "travel_assistance" {
+	switch (entryStage(stages)) {
+		case "visa":
+			return "visa_processing";
+		case "departure":
+			return "travel_assistance";
+		default:
+			return "school_submission";
+	}
 }
 
 export function isFullScope(stages: readonly string[] | null | undefined): boolean {
 	return normaliseScope(stages).length === SERVICE_STAGES.length;
 }
 
+/** Whether the plan includes the stage — a legacy case (no scope) has them all. */
+export function scopeHas(stages: readonly string[] | null | undefined, stage: ServiceStage): boolean {
+	return normaliseScope(stages).includes(stage);
+}
+
+const SHORT: Record<ServiceStage, string> = { admissions: "Admissions", visa: "Visa", departure: "Departure" };
+
 export function scopeLabel(stages: readonly string[] | null | undefined): string {
 	const scope = normaliseScope(stages);
 	if (scope.length === 3) return "Full journey";
-	if (scope.length === 2) return "Admissions + Visa";
-	return "Admissions only";
+	if (scope.length === 1) return `${SHORT[scope[0]]} only`;
+	return scope.map((s) => SHORT[s]).join(" + ");
 }
+
+/**
+ * The documents each stage needs, by document type id (see DOCUMENT_TYPES
+ * in core). A case's checklist is the union over its scope; the entry
+ * stage's *evidence* is what must be verified before that stage's file
+ * opens — the offer letter for a visa entry, the visa grant for departure.
+ * The Admissions set is the package's `requiredDocuments` (by track), so it
+ * is not listed here.
+ */
+export const STAGE_DOCUMENT_IDS: Record<Exclude<ServiceStage, "admissions">, readonly string[]> = {
+	visa: ["passport", "photo", "financial", "admission_letter", "tb_test"],
+	departure: ["visa_grant", "insurance", "accommodation_proof"],
+};
+
+export const ENTRY_EVIDENCE_IDS: Record<ServiceStage, readonly string[]> = {
+	admissions: [],
+	visa: ["admission_letter"],
+	departure: ["visa_grant", "admission_letter"],
+};
 
 /**
  * Stage prices for a package that has none yet — the legacy rows priced
@@ -152,7 +232,9 @@ export const DEFAULT_ADMISSIONS_START_PERCENT = 50;
  * Full journey keeps the deposit / pre-departure / post-arrival shape (the
  * only scope where "post-arrival" exists), or deposit + balance on the full
  * plan. A partial scope is paid per stage: Admissions half on acceptance
- * and half on the first offer, Visa when its file opens.
+ * and half on the first offer, Visa when its file opens, Departure on visa
+ * approval — except that the *entry* stage is always due on acceptance,
+ * because accepting the plan is what opens that file.
  */
 export function milestoneLines(quote: Quote, split: MilestoneSplit, paymentPlanId: string | null | undefined): MilestoneLine[] {
 	const total = quote.totalCents;
@@ -173,7 +255,7 @@ export function milestoneLines(quote: Quote, split: MilestoneSplit, paymentPlanI
 		];
 		return split3.filter((l) => l.amountCents > 0);
 	}
-	return stageLines(quote.stageLines, split, 0);
+	return stageLines(quote.stageLines, split, 0, 0, quote.scope[0]);
 }
 
 /**
@@ -186,6 +268,8 @@ export function stageLines(
 	split: MilestoneSplit,
 	firstPosition: number,
 	discountCents = 0,
+	/** The plan's entry stage: its line is due on acceptance rather than on its event. */
+	entry: ServiceStage | null = null,
 ): MilestoneLine[] {
 	const out: MilestoneLine[] = [];
 	let position = firstPosition;
@@ -195,9 +279,11 @@ export function stageLines(
 			out.push({ position: position++, label: "Admissions · on acceptance", detail: "Opens document verification and school matching", amountCents: start, dueOn: "acceptance", stage });
 			out.push({ position: position++, label: "Admissions · on offer", detail: DUE_TRIGGER_LABELS.offer, amountCents: amountCents - start, dueOn: "offer", stage });
 		} else if (stage === "visa") {
-			out.push({ position: position++, label: "Visa", detail: DUE_TRIGGER_LABELS.visa_open, amountCents, dueOn: "visa_open", stage });
+			const atEntry = entry === "visa";
+			out.push({ position: position++, label: "Visa", detail: atEntry ? "On acceptance — opens your visa file" : DUE_TRIGGER_LABELS.visa_open, amountCents, dueOn: atEntry ? "acceptance" : "visa_open", stage });
 		} else {
-			out.push({ position: position++, label: "Departure & arrival", detail: DUE_TRIGGER_LABELS.visa_approved, amountCents, dueOn: "visa_approved", stage });
+			const atEntry = entry === "departure";
+			out.push({ position: position++, label: "Departure & arrival", detail: atEntry ? "On acceptance — opens your departure file" : DUE_TRIGGER_LABELS.visa_approved, amountCents, dueOn: atEntry ? "acceptance" : "visa_approved", stage });
 		}
 	}
 	if (discountCents > 0 && out.length > 0) {

@@ -212,7 +212,14 @@ export function EnterpriseFeeSchedule() {
 	const passLines = passThrough.filter((i) => i.active && !i.optional);
 	const exampleStages: ServiceStage[] = exampleScope === "admissions" ? ["admissions"] : exampleScope === "visa" ? ["admissions", "visa"] : ["admissions", "visa", "departure"];
 	// The same function the portal builder and the raise use — the example can never drift from the invoice.
-	const quote = pkg ? quoteTotal({ bundleCents: pkg.priceCents, stagePrices: pkg.stagePrices, stages: exampleStages }) : null;
+	const flatOf = (key: string) => items.find((i) => i.key === key && i.active && i.amountCents > 0)?.amountCents;
+	const examplePrices = pkg
+		? (() => {
+				const base = pkg.stagePrices ?? defaultStagePrices(pkg.priceCents);
+				return { admissions: base.admissions, visa: flatOf("stage_visa") ?? base.visa, departure: flatOf("stage_departure") ?? base.departure };
+			})()
+		: null;
+	const quote = pkg && examplePrices ? quoteTotal({ bundleCents: pkg.priceCents, stagePrices: examplePrices, stages: exampleStages }) : null;
 	const visaInScope = exampleStages.includes("visa");
 	const departureInScope = exampleStages.includes("departure");
 	const centuryTotal = (quote?.totalCents ?? 0) + centuryLines.reduce((n, i) => n + i.amountCents, 0);
@@ -270,10 +277,12 @@ export function EnterpriseFeeSchedule() {
 					<div className="cn-stack" style={{ gap: "1rem" }}>
 						<section style={{ border: "1px solid var(--border-light)" }}>
 							<div className="ops-band hd-band" style={{ borderTop: "none" }}>
-								<span className="ops-band__name">Century's fee · {century.length + SERVICE_STAGES.length + 1}</span>
+								<span className="ops-band__name">Century's fee · {century.length + 2}</span>
 								<span className="ops-band__note">ours · in the service fee or on top</span>
 							</div>
 							{SERVICE_STAGES.map((st) => {
+								// Visa and Departure are the flat `stage_visa` / `stage_departure` items, listed with the other Century items below.
+								if (st !== "admissions") return null;
 								const prices = packages.map((x) => (x.stagePrices ?? defaultStagePrices(x.priceCents))[st]);
 								const lo = prices.length ? Math.min(...prices) : 0;
 								const hi = prices.length ? Math.max(...prices) : 0;
@@ -437,7 +446,7 @@ export function EnterpriseFeeSchedule() {
 							{quote &&
 								SERVICE_STAGES.map((st) => {
 									const line = quote.stageLines.find((l) => l.stage === st);
-									const price = (pkg?.stagePrices ?? defaultStagePrices(pkg?.priceCents ?? 0))[st];
+									const price = examplePrices ? examplePrices[st] : 0;
 									return (
 										<div key={st} className="ops-bill__row" style={line ? undefined : { opacity: 0.5, textDecoration: "line-through" }}>
 											<span>

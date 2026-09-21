@@ -401,6 +401,12 @@ export const assessmentResultSchema = z.object({
 	recPackage: z.string().max(200).default(""),
 	/** The stages the consultant recommends; empty means the full journey. */
 	recStages: z.array(serviceStageSchema).max(3).default([]),
+	/**
+	 * For a visa or departure entry, what the consultation found: the plan
+	 * stands as chosen, should be widened, or is not viable. `outcome` still
+	 * carries Eligible / Not Eligible for everything that reads it.
+	 */
+	verdict: z.enum(["proceed", "widen", "not_viable"]).optional(),
 });
 export type AssessmentResult = z.infer<typeof assessmentResultSchema>;
 
@@ -453,6 +459,21 @@ export const applicantProfileSchema = z.object({
 	sponsorName: z.string().optional(),
 	sponsorRelationship: z.string().optional(),
 	referralSource: z.string().optional(),
+	/** Where the client said they were at booking — shapes the intake and the consultation. */
+	entryIntent: z.string().optional(),
+	/** A visa or departure entry: the offer the client already holds. */
+	offerUniversity: z.string().optional(),
+	offerProgram: z.string().optional(),
+	offerCountry: z.string().optional(),
+	offerType: z.string().optional(),
+	offerReference: z.string().optional(),
+	offerIntake: z.string().optional(),
+	offerTuition: z.string().optional(),
+	offerDepositPaid: z.string().optional(),
+	/** A departure entry: the visa the client already holds. */
+	visaGrantReference: z.string().optional(),
+	visaGrantDate: z.string().optional(),
+	arrivalWindow: z.string().optional(),
 });
 export type ApplicantProfile = z.infer<typeof applicantProfileSchema>;
 

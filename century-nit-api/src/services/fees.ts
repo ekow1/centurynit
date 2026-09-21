@@ -10,6 +10,8 @@ import {
 	type FeeItem,
 	type MilestoneSplit,
 	type PostArrivalCatalogue,
+	type StagePrices,
+	defaultStagePrices,
 	type PostArrivalFrequency,
 	type ServiceFeeSplit,
 	type UpdateDestinationTariff,
@@ -137,6 +139,22 @@ export async function serviceFeeSplit(): Promise<ServiceFeeSplit> {
 	let preDeparturePercent = await pct("SERVICE_FEE_PRE_DEPARTURE_PERCENT", DEFAULT_SERVICE_FEE_SPLIT.preDeparturePercent);
 	if (depositPercent + preDeparturePercent >= 100) preDeparturePercent = Math.max(1, 99 - depositPercent);
 	return { depositPercent, preDeparturePercent, postArrivalPercent: 100 - depositPercent - preDeparturePercent };
+}
+
+/**
+ * The per-stage prices a plan is quoted from: Admissions by track (on the
+ * package), Visa and Departure flat (the `stage_visa` / `stage_departure`
+ * catalogue items), with the package's own numbers behind a switched-off
+ * item. No package (a visa or departure entry) means no Admissions price.
+ */
+export async function stagePricesFor(pkg: { priceCents: number; stagePrices: StagePrices | null } | null): Promise<StagePrices> {
+	const [visa, departure] = await Promise.all([activeFeeItem("stage_visa"), activeFeeItem("stage_departure")]);
+	const fallback = pkg ? (pkg.stagePrices ?? defaultStagePrices(pkg.priceCents)) : { admissions: 0, visa: 0, departure: 0 };
+	return {
+		admissions: fallback.admissions,
+		visa: visa && visa.amountCents > 0 ? visa.amountCents : fallback.visa,
+		departure: departure && departure.amountCents > 0 ? departure.amountCents : fallback.departure,
+	};
 }
 
 /** Admissions on its own: the share due on acceptance, the rest on the first offer. */

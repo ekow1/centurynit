@@ -66,7 +66,8 @@ export const updateServicePackageSchema = createServicePackageSchema.partial();
 export type UpdateServicePackage = z.infer<typeof updateServicePackageSchema>;
 
 export const choosePackageSchema = z.object({
-	packageCode: packageCodeSchema,
+	/** The track. Required when Admissions is on the plan; a visa or departure entry has no track. */
+	packageCode: packageCodeSchema.optional(),
 	degreeLevel: z.string().min(1).max(64),
 	targetSchoolCount: z.number().int().min(1).max(10).optional(),
 	/** The stages on the plan. Omitted means the full journey. Admissions is always in. */

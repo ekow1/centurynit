@@ -121,6 +121,8 @@ export type AssessmentResult = {
 	recPackage: string;
 	/** The stages the consultant recommends; empty (or absent on older rows) means the full journey. */
 	recStages?: string[];
+	/** A visa or departure entry: proceed as chosen, widen the scope, or not viable. */
+	verdict?: "proceed" | "widen" | "not_viable";
 };
 
 export interface MockConsultation {
@@ -147,6 +149,22 @@ export interface MockConsultation {
 	employment: { currentRole: string; company: string; experienceYears: string };
 	financial: { source: string; budget: string };
 	goals: { degreeLevel: string; intake: string; major: string; choices?: StudyChoice[] };
+	/** Where the client said they were at booking — "admissions" | "visa" | "departure" | "full"; empty on older rows. */
+	entryIntent?: string;
+	/** A visa or departure entry: the offer (and visa) the client already holds. */
+	entry?: {
+		offerUniversity: string;
+		offerProgram: string;
+		offerCountry: string;
+		offerType: string;
+		offerReference: string;
+		offerIntake: string;
+		offerTuition: string;
+		offerDepositPaid: string;
+		visaGrantReference: string;
+		visaGrantDate: string;
+		arrivalWindow: string;
+	};
 	documents: { name: string; status: string }[];
 	assessmentResult?: AssessmentResult;
 	/** Consultant has confirmed the assigned slot. */

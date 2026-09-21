@@ -19,6 +19,9 @@ import {
 
 
 
+	intentScope,
+	normaliseScope,
+	type ServiceIntent,
 } from "century-nit-shared";
 
 
@@ -561,6 +564,8 @@ export async function serializeConsultation(row: ConsultationRow, forApplicant =
 	const documentChecklist = await documentChecklistFor({
 		ownerUserId: applicant?.userId ?? null,
 		recommendedPackage: (row.assessmentResult as { recPackage?: string } | null)?.recPackage ?? null,
+		scopeStages: (row.assessmentResult as { recStages?: string[] } | null)?.recStages?.length ? (row.assessmentResult as unknown as { recStages: string[] }).recStages : null,
+		entryIntent: (applicant?.profile as { entryIntent?: string } | null)?.entryIntent ?? null,
 	});
 
 	const workflow = ((): ApiConsultation["workflow"] => {
@@ -1068,6 +1073,13 @@ export async function completeConsultationAssessment(input: {
 		label,
 		checked: false,
 	}));
+	// The plan's starting shape: the consultant's recommendation, else what the
+	// client said at booking. A visa or departure entry brings its own offer —
+	// it becomes the case's school so everything downstream reads it.
+	const profile = (applicant.profile ?? {}) as ApplicantProfile;
+	const recScope = input.result.recStages?.length ? input.result.recStages : intentScope(profile.entryIntent as ServiceIntent | undefined);
+	const startScope = normaliseScope(recScope);
+	const bringsOffer = !startScope.includes("admissions");
 
 	const created = await db.transaction(async (tx) => {
 		const txDb = tx as unknown as typeof db;
@@ -1078,9 +1090,9 @@ export async function completeConsultationAssessment(input: {
 				appNumber,
 				applicantId: row.applicantId,
 				consultationId: row.id,
-				university: input.result.recUniversity || "TBC",
-				program: input.result.recProgram || "TBC",
-				country: input.result.recCountry || row.targetCountry || applicant.targetCountry || "TBC",
+				university: (bringsOffer && profile.offerUniversity) || input.result.recUniversity || "TBC",
+				program: (bringsOffer && profile.offerProgram) || input.result.recProgram || "TBC",
+				country: (bringsOffer && profile.offerCountry) || input.result.recCountry || row.targetCountry || applicant.targetCountry || "TBC",
 				degreeLevel: (applicant.profile as ApplicantProfile)?.degreeLevel || "Master's",
 				// Normally null: the consultation's officer is not inherited — a
 				// manager assigns the application handler from the ops workspace.
@@ -1097,6 +1109,9 @@ export async function completeConsultationAssessment(input: {
 				// The application is locked until the client consents to start it.
 				proceedStatus: "invited",
 				fundingTrack: input.result.recPackage || null,
+				// Recorded now so the checklist and the builder know the shape; the
+				// accepted plan overwrites it.
+				scopeStages: startScope,
 				notes: input.result.notes || "Opened from a completed consultation assessment.",
 				checklist,
 				requestedDocuments: row.requestedDocuments ?? [],

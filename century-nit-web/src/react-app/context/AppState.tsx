@@ -420,6 +420,22 @@ export type AssessmentData = {
 	budgetRange: string;
 	sponsorName: string;
 	sponsorRelationship: string;
+	// Where the client is on the journey — shapes the rest of the form and
+	// what the consultation checks. Empty until picked.
+	entryIntent: "" | "admissions" | "visa" | "departure" | "full";
+	// A visa or departure entry: the offer already held.
+	offerUniversity: string;
+	offerProgram: string;
+	offerCountry: string;
+	offerType: string;
+	offerReference: string;
+	offerIntake: string;
+	offerTuition: string;
+	offerDepositPaid: string;
+	// A departure entry: the visa already held.
+	visaGrantReference: string;
+	visaGrantDate: string;
+	arrivalWindow: string;
 };
 
 export type BookingData = {
@@ -649,6 +665,18 @@ const defaultAssessment: AssessmentData = {
 	budgetRange: "",
 	sponsorName: "",
 	sponsorRelationship: "",
+	entryIntent: "",
+	offerUniversity: "",
+	offerProgram: "",
+	offerCountry: "",
+	offerType: "",
+	offerReference: "",
+	offerIntake: "",
+	offerTuition: "",
+	offerDepositPaid: "",
+	visaGrantReference: "",
+	visaGrantDate: "",
+	arrivalWindow: "",
 };
 
 export function emptyStudyChoice(): StudyChoice {
@@ -1168,7 +1196,8 @@ type AppStateContextValue = {
 	/** Raise / pay stage invoices */
 	raiseApplicationInvoice: () => void;
 	payApplicationInvoice: () => void;
-	chooseSchoolPackage: (funding: SchoolFundingTrack, level: SchoolDegreeLevel, targetSchoolCount?: number, explicitPriceCents?: number, stages?: ServiceStage[]) => void;
+	/** `funding` is "undecided" on a plan without Admissions — a visa or departure entry has no track. */
+	chooseSchoolPackage: (funding: SchoolFundingTrack | "undecided", level: SchoolDegreeLevel, targetSchoolCount?: number, explicitPriceCents?: number, stages?: ServiceStage[]) => void;
 	choosePaymentPlan: (planId: PaymentPlanId) => void;
 	choosePostArrivalSchedule: (scheduleId: string) => void;
 	/** Post-arrival schedule options enabled by ops (null = all enabled) */
@@ -1794,7 +1823,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	);
 
 	const chooseSchoolPackage = useCallback(
-		(funding: SchoolFundingTrack, level: SchoolDegreeLevel, targetSchoolCount: number = 3, explicitPriceCents?: number, stages?: ServiceStage[]) => {
+		(funding: SchoolFundingTrack | "undecided", level: SchoolDegreeLevel, targetSchoolCount: number = 3, explicitPriceCents?: number, stages?: ServiceStage[]) => {
 			const fund = SCHOOL_FUNDING_TRACKS.find((f) => f.id === funding);
 			const deg = SCHOOL_DEGREE_LEVELS.find((d) => d.id === level);
 			const now = new Date().toISOString();
@@ -1802,13 +1831,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			// Agency estimate comes from the package price or shared catalogue
 			const totalCents = explicitPriceCents && explicitPriceCents > 0
 				? explicitPriceCents
-				: serviceFeeForPackage(level, funding, targetSchoolCount);
+				: funding === "undecided" ? 0 : serviceFeeForPackage(level, funding, targetSchoolCount);
 			const agencyBase = totalCents / 100;
 			setApplication((prev) => ({
 				...prev,
 				proceedStatus: "accepted",
 				applicationPackageId: id,
-				schoolFundingTrack: funding,
+				schoolFundingTrack: funding as SchoolFundingTrack,
 				schoolDegreeLevel: level,
 				targetSchoolCount,
 				scopeStages: stages ?? prev.scopeStages ?? null,

@@ -11261,3 +11261,62 @@ a.portal-ch--on:hover {
 		display: none;
 	}
 }
+
+/* ── Booking · where you are on the journey ── */
+.pintents {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+	gap: 0.7rem;
+}
+
+.pintent {
+	border: 1.5px solid var(--border);
+	background: var(--background);
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	padding: 0.9rem 1rem;
+	cursor: pointer;
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	min-width: 0;
+}
+
+.pintent:hover:not(:disabled) {
+	box-shadow: inset 0 0 0 1px var(--foreground);
+}
+
+.pintent--on {
+	background: var(--foreground);
+	color: var(--accent-foreground);
+	border-color: var(--foreground);
+}
+
+.pintent__k {
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	opacity: 0.7;
+}
+
+.pintent__n {
+	font-weight: 700;
+	font-size: 0.92rem;
+}
+
+.pintent__d {
+	font-size: 0.72rem;
+	line-height: 1.5;
+	opacity: 0.85;
+}
+
+.pintent__ev {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	margin-top: 0.35rem;
+	border-top: 1px dashed currentColor;
+	padding-top: 0.35rem;
+	opacity: 0.8;
+}

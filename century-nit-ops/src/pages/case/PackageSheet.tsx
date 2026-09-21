@@ -62,7 +62,9 @@ export function PackageSheet({
 
 	// Money on the ledger: the track is fixed and stages can only be added.
 	const locked = Boolean(app.depositPaid);
-	const current = app.scopeStages ? normaliseScope(app.scopeStages) : app.fundingTrack ? [...SERVICE_STAGES] : [];
+	// The stages already paid for (a locked plan); before the deposit the row's scope is only the recommendation.
+	const current = locked ? normaliseScope(app.scopeStages ?? null) : [];
+	const needsTrack = stages.includes("admissions");
 
 	useEffect(() => {
 		if (!open) return;
@@ -84,7 +86,7 @@ export function PackageSheet({
 	useEffect(() => {
 		if (!open) return;
 		setPackageCode((app.fundingTrack as PackageCode) || "");
-		setStages(normaliseScope([...(app.scopeStages ?? (app.fundingTrack ? SERVICE_STAGES : ["admissions"])), ...(addStages ?? [])]));
+		setStages(normaliseScope([...(app.scopeStages ?? SERVICE_STAGES), ...(addStages ?? [])]));
 		setDegreeLevel(SCHOOL_DEGREE_LEVELS.some((d) => d.id === app.degreeLevel) ? app.degreeLevel : "");
 		setSchools(app.targetSchoolCount ? String(app.targetSchoolCount) : "");
 		setPlan(app.paymentPlanId || "");
@@ -93,9 +95,16 @@ export function PackageSheet({
 	}, [open, app.fundingTrack, app.scopeStages, app.degreeLevel, app.targetSchoolCount, app.paymentPlanId, addStages]);
 
 	const selected = packages?.find((p) => p.code === packageCode) ?? null;
+	// Admissions by track (the package); Visa and Departure flat, from the fee catalogue.
+	const flatOf = (key: string) => catalogue?.items.find((i) => i.key === key && i.active && i.amountCents > 0)?.amountCents;
+	const stagePrices = useMemo(() => {
+		const pkg = selected ? (selected.stagePrices ?? quoteTotal({ bundleCents: selected.priceCents, stagePrices: null, stages: null }).stageLines.reduce((acc, l) => ({ ...acc, [l.stage]: l.amountCents }), { admissions: 0, visa: 0, departure: 0 })) : { admissions: 0, visa: 0, departure: 0 };
+		return { admissions: pkg.admissions, visa: flatOf("stage_visa") ?? pkg.visa, departure: flatOf("stage_departure") ?? pkg.departure };
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [selected, catalogue]);
 	const quote = useMemo(
-		() => (selected ? quoteTotal({ bundleCents: selected.priceCents, stagePrices: selected.stagePrices, stages }) : null),
-		[selected, stages],
+		() => (selected || !needsTrack ? quoteTotal({ bundleCents: needsTrack && selected ? selected.priceCents : 0, stagePrices, stages }) : null),
+		[selected, stages, stagePrices, needsTrack],
 	);
 	const split = {
 		depositPercent: catalogue?.serviceFeeSplit.depositPercent ?? DEFAULT_SERVICE_FEE_SPLIT.depositPercent,
@@ -110,21 +119,21 @@ export function PackageSheet({
 	const ghs = (c: number) => `GH₵ ${((c / 100) * ghsPerUsd()).toLocaleString("en-GH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
 	function toggle(stage: ServiceStage) {
-		if (stage === "admissions") return;
 		if (locked && current.includes(stage)) return;
 		setStages((prev) => {
 			const next = prev.includes(stage) ? prev.filter((s) => s !== stage) : [...prev, stage];
-			return normaliseScope(next);
+			// A plan needs at least one stage; the segment stays contiguous.
+			return next.length === 0 ? prev : normaliseScope(next);
 		});
 	}
 
 	async function submit() {
-		if (!packageCode || !degreeLevel) return;
+		if ((needsTrack && !packageCode) || !degreeLevel) return;
 		setBusy(true);
 		setError(null);
 		try {
 			await selectPackage(app.appId, {
-				packageCode,
+				packageCode: needsTrack ? (packageCode as PackageCode) : undefined,
 				degreeLevel,
 				targetSchoolCount: schools ? Number(schools) : undefined,
 				stages,
@@ -157,8 +166,9 @@ export function PackageSheet({
 				<p className="muted text-sm">Loading packages…</p>
 			) : (
 				<div className="cn-stack">
+					{needsTrack && (
 					<div>
-						<p className="muted text-xs mb-1">Track</p>
+						<p className="muted text-xs mb-1">Track · prices the Admissions stage</p>
 						<select className="input" value={packageCode} disabled={locked} onChange={(e) => setPackageCode(e.target.value as PackageCode | "")}>
 							<option value="">Choose…</option>
 							{packages.map((p) => (
@@ -170,15 +180,16 @@ export function PackageSheet({
 						</select>
 						{selected?.tagline && <p className="muted mt-1 text-xs">{selected.tagline}</p>}
 					</div>
+					)}
 
 					<div>
-						<p className="muted text-xs mb-1">Stages on the plan</p>
+						<p className="muted text-xs mb-1">Stages on the plan · {scopeLabel(stages)} · enters at {SERVICE_STAGE_LABELS[stages[0]]}</p>
 						<div className="cn-stack" style={{ gap: "0.35rem" }}>
 							{SERVICE_STAGES.map((st) => {
 								const on = stages.includes(st);
-								const fixed = st === "admissions" || (locked && current.includes(st));
-								const needsVisa = st === "departure" && !stages.includes("visa");
-								const price = selected ? (selected.stagePrices ? selected.stagePrices[st] : quoteTotal({ bundleCents: selected.priceCents, stagePrices: null, stages: [st, "visa"] }).stageLines.find((l) => l.stage === st)?.amountCents ?? 0) : 0;
+								const fixed = locked && current.includes(st);
+								const needsVisa = false;
+								const price = stagePrices[st];
 								return (
 									<label
 										key={st}
@@ -198,13 +209,13 @@ export function PackageSheet({
 										<span>
 											<span style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
 												{SERVICE_STAGE_LABELS[st]}
-												{st === "admissions" && <span className="muted text-xs"> · always on</span>}
-												{locked && current.includes(st) && st !== "admissions" && <span className="muted text-xs"> · on the invoice</span>}
+												{on && st === stages[0] && <span className="muted text-xs"> · entry</span>}
+												{locked && current.includes(st) && <span className="muted text-xs"> · on the invoice</span>}
 												{needsVisa && <span className="muted text-xs"> · needs Visa</span>}
 											</span>
 											<span className="muted text-xs" style={{ display: "block", lineHeight: 1.45 }}>{SERVICE_STAGE_BLURBS[st]}</span>
 										</span>
-										<span className="mono text-xs" style={{ whiteSpace: "nowrap" }}>{selected ? usd(price) : "—"}</span>
+										<span className="mono text-xs" style={{ whiteSpace: "nowrap" }}>{st !== "admissions" || selected ? usd(price) : "by track"}</span>
 									</label>
 								);
 							})}
@@ -264,6 +275,7 @@ export function PackageSheet({
 							))}
 						</select>
 					</div>
+					{needsTrack && (
 					<div>
 						<p className="muted text-xs mb-1">Target schools</p>
 						<input className="input" type="number" min={1} max={10} placeholder={selected?.maxSchools ? String(selected.maxSchools) : "3"} value={schools} onChange={(e) => setSchools(e.target.value)} />
@@ -273,6 +285,7 @@ export function PackageSheet({
 							</p>
 						)}
 					</div>
+					)}
 					{quote?.full && (
 						<div>
 							<p className="muted text-xs mb-1">Payment plan (optional)</p>
@@ -292,7 +305,7 @@ export function PackageSheet({
 					</div>
 					{error && <p className="cn-assign__error">{error}</p>}
 					<div className="cn-assign__row">
-						<button type="button" className="btn btn--sm btn--primary" disabled={busy || !packageCode || !degreeLevel || (locked && removed.length > 0)} onClick={() => void submit()}>
+						<button type="button" className="btn btn--sm btn--primary" disabled={busy || (needsTrack && !packageCode) || !degreeLevel || (locked && removed.length > 0)} onClick={() => void submit()}>
 							{busy ? "Saving…" : extending ? "Extend plan" : "Record plan"}
 						</button>
 						<button type="button" className="btn btn--sm btn--ghost" onClick={onClose} disabled={busy}>

@@ -722,6 +722,13 @@
                   "when": 1790400100000,
                   "tag": "0104_stage_pricing",
                   "breakpoints": true
+            },
+            {
+                  "idx": 105,
+                  "version": "7",
+                  "when": 1790400200000,
+                  "tag": "0105_stage_fee_items",
+                  "breakpoints": true
             }
       ]
 }

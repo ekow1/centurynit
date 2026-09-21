@@ -9,7 +9,7 @@ import { HistorySheet, type HistoryEvent } from "./HistorySheet";
 import { CaseTabs, useCaseTab } from "./CaseTabs";
 import type { MockConsultation } from "century-nit-core/ops";
 import { documentsApi, bookingsApi, ApiError } from "century-nit-core/api";
-import { SERVICE_STAGES, SERVICE_STAGE_LABELS, normaliseScope, scopeLabel, type ApplicantDocument, type ServiceStage } from "century-nit-shared";
+import { SERVICE_INTENT_LABELS, SERVICE_STAGES, SERVICE_STAGE_LABELS, intentScope, normaliseScope, scopeLabel, type ApplicantDocument, type ServiceIntent, type ServiceStage } from "century-nit-shared";
 import { getConsultationActivity, type ConsultationActivityEvent } from "../../lib/api";
 import { CaseHeader, StatusPill, type NextAction } from "century-nit-core/ui";
 import { CaseTodo } from "./CaseTodo";
@@ -105,6 +105,9 @@ export function ConsultationDetail({
 	const [recPackage, setRecPackage] = useState("undecided");
 	// The stages the consultant recommends. All three is the full journey.
 	const [recStages, setRecStages] = useState<ServiceStage[]>([...SERVICE_STAGES]);
+	// A visa or departure entry is judged on the offer and the money, not on
+	// eligibility: proceed as chosen, widen the scope, or not viable.
+	const [verdict, setVerdict] = useState<"proceed" | "widen" | "not_viable">("proceed");
 	const [isSubmitted, setIsSubmitted] = useState(false);
 	const [showReschedule, setShowReschedule] = useState(false);
 	const [realDocs, setRealDocs] = useState<ApplicantDocument[]>([]);
@@ -151,7 +154,10 @@ export function ConsultationDetail({
 		setRecUniversity(consultation.assessmentResult?.recUniversity || "");
 		setRecProgram(consultation.assessmentResult?.recProgram || `${consultation.goals.degreeLevel || ""} in ${consultation.goals.major || ""}`.trim() || "");
 		setRecPackage(consultation.assessmentResult?.recPackage || "");
-		setRecStages(normaliseScope(consultation.assessmentResult?.recStages?.length ? consultation.assessmentResult.recStages : null));
+		// The recommendation starts from what the client said at booking.
+		const intent = (consultation.entryIntent || "full") as ServiceIntent;
+		setRecStages(normaliseScope(consultation.assessmentResult?.recStages?.length ? consultation.assessmentResult.recStages : intentScope(intent)));
+		setVerdict(consultation.assessmentResult?.verdict ?? "proceed");
 		setIsSubmitted(false);
 		setShowReschedule(false);
 		setEditingMeetingUrl(false);
@@ -187,7 +193,10 @@ export function ConsultationDetail({
 	async function handleCompleteAssessment(e: React.FormEvent) {
 		e.preventDefault();
 		if (!consultation) return;
-		const result = { outcome, notes, recCountry, recUniversity, recProgram, recPackage, recStages };
+		const bringsOffer = consultation.entryIntent === "visa" || consultation.entryIntent === "departure";
+		// For an entry that brings an offer, the verdict drives the outcome everything else reads.
+		const finalOutcome = bringsOffer ? (verdict === "not_viable" ? "Not Eligible" : "Eligible") : outcome;
+		const result = { outcome: finalOutcome, notes, recCountry, recUniversity, recProgram, recPackage, recStages, ...(bringsOffer ? { verdict } : {}) };
 		const res = await completeConsultationAssessment(consultation.id, result);
 		setCompletedResult(res.consultation.assessmentResult ?? result);
 		setIsSubmitted(true);
@@ -865,6 +874,30 @@ export function ConsultationDetail({
 				{detailTab === "profile" && (
 					<div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1rem" }}>
 						<div className="card">
+							<p className="eyebrow mb-2">Where they are on the journey</p>
+							<p style={{ fontWeight: 700 }}>{consultation.entryIntent ? SERVICE_INTENT_LABELS[consultation.entryIntent as ServiceIntent] ?? consultation.entryIntent : "Not said — treated as the full journey"}</p>
+							<p className="muted text-xs" style={{ marginTop: "0.2rem" }}>
+								Starts the plan at {scopeLabel(intentScope((consultation.entryIntent || "full") as ServiceIntent))}.
+								{consultation.entryIntent === "visa" || consultation.entryIntent === "departure" ? " Check the offer they brought before anything else — it is the whole risk on this case." : ""}
+							</p>
+							{(consultation.entryIntent === "visa" || consultation.entryIntent === "departure") && consultation.entry && (
+								<div className="ops-grid mt-3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>
+									<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Offer · university</p><p>{consultation.entry.offerUniversity || "—"}</p></div>
+									<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Programme</p><p>{consultation.entry.offerProgram || "—"}</p></div>
+									<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Country</p><p>{consultation.entry.offerCountry || "—"}</p></div>
+									<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Offer type · reference</p><p>{[consultation.entry.offerType, consultation.entry.offerReference].filter(Boolean).join(" · ") || "—"}</p></div>
+									<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Intake</p><p>{consultation.entry.offerIntake || "—"}</p></div>
+									<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Tuition · deposit paid</p><p>{[consultation.entry.offerTuition, consultation.entry.offerDepositPaid && `deposit: ${consultation.entry.offerDepositPaid}`].filter(Boolean).join(" · ") || "—"}</p></div>
+									{consultation.entryIntent === "departure" && (
+										<>
+											<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Visa grant</p><p>{[consultation.entry.visaGrantReference, consultation.entry.visaGrantDate].filter(Boolean).join(" · ") || "—"}</p></div>
+											<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Arrival window</p><p>{consultation.entry.arrivalWindow || "—"}</p></div>
+										</>
+									)}
+								</div>
+							)}
+						</div>
+						<div className="card">
 							<p className="eyebrow mb-2">Personal</p>
 							<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>
 								<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Nationality</p><p>{consultation.personal.nationality}</p></div>
@@ -988,6 +1021,26 @@ export function ConsultationDetail({
 						</p>
 						</div>
 					)}
+					{(consultation.entryIntent === "visa" || consultation.entryIntent === "departure") ? (
+					<div style={{ marginBottom: "1.25rem" }}>
+						<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.5rem" }}>
+							Verdict · on the {consultation.entryIntent === "visa" ? "offer and the finances" : "visa and the offer"}
+						</label>
+						<div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.5rem" }}>
+							{([
+								["proceed", "Proceed as chosen", "Offer sound, funds in place. The plan stands as the client picked it."],
+								["widen", "Widen the scope", "Offer sound but weak, or funds short. Recommend adding a stage below."],
+								["not_viable", "Not viable", "Offer unverifiable, sponsor unlicensed, or funds far short with no route."],
+							] as const).map(([id, title, hint]) => (
+								<button key={id} type="button" className={`btn ${verdict === id ? "btn--primary" : "btn--ghost"}`} style={{ textAlign: "left", display: "block", padding: "0.7rem 0.8rem", textTransform: "none", letterSpacing: 0 }} onClick={() => setVerdict(id)} aria-pressed={verdict === id}>
+									<span style={{ display: "block", fontWeight: 700 }}>{title}</span>
+									<span style={{ display: "block", fontSize: "var(--text-xs)", opacity: 0.8, marginTop: "0.2rem", lineHeight: 1.4 }}>{hint}</span>
+								</button>
+							))}
+						</div>
+						<p className="muted text-xs" style={{ marginTop: "0.4rem" }}>The plan can only be widened from what the client chose — narrowing is theirs to do in the builder.</p>
+					</div>
+					) : (
 					<div style={{ marginBottom: "1.25rem" }}>
 						<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.5rem" }}>
 							Assessment Outcome
@@ -999,6 +1052,7 @@ export function ConsultationDetail({
 							<option value="Not Eligible">Not Eligible</option>
 						</select>
 					</div>
+					)}
 					<div style={{ marginBottom: "1.25rem" }}>
 						<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.5rem" }}>
 							Consultant Recommendation Notes
@@ -1062,15 +1116,21 @@ export function ConsultationDetail({
 							<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
 								{SERVICE_STAGES.map((st) => {
 									const on = recStages.includes(st);
-									const fixed = st === "admissions";
-									const needsVisa = st === "departure" && !recStages.includes("visa");
+									// What the client chose stays; the consultant may only add.
+									const chosen = intentScope((consultation.entryIntent || "full") as ServiceIntent);
+									const fixed = chosen.includes(st) && consultation.entryIntent !== "full" && consultation.entryIntent !== "";
 									return (
-										<label key={st} className="btn btn--sm" style={{ display: "inline-flex", gap: "0.4rem", alignItems: "center", opacity: needsVisa ? 0.5 : 1 }}>
+										<label key={st} className="btn btn--sm" style={{ display: "inline-flex", gap: "0.4rem", alignItems: "center" }}>
 											<input
 												type="checkbox"
 												checked={on}
-												disabled={fixed || needsVisa}
-												onChange={() => setRecStages((prev) => normaliseScope(prev.includes(st) ? prev.filter((x) => x !== st) : [...prev, st]))}
+												disabled={fixed}
+												onChange={() =>
+													setRecStages((prev) => {
+														const next = prev.includes(st) ? prev.filter((x) => x !== st) : [...prev, st];
+														return next.length === 0 ? prev : normaliseScope(next);
+													})
+												}
 											/>
 											{SERVICE_STAGE_LABELS[st]}
 										</label>

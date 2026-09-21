@@ -26,6 +26,7 @@ import {
 	milestoneLines,
 	normaliseScope,
 	quoteTotal,
+	scopeHas,
 	scopeLabel,
 	serviceStageForJourney,
 	stageLines,
@@ -1808,9 +1809,8 @@ export async function setApplicationStage(
 	const clientInvoices = applicantInvoices.filter((i) => i.applicationId === row.id);
 	const hasAppInvoice = clientInvoices.some((i) => i.type === "application");
 	const hasSelection = schoolTracks.schools.length > 0 && (hasAppInvoice || schoolTracks.schools.some((s) => s.status !== "Preparing Application"));
-	const hasAdmitted = schoolTracks.schools.some(
-		(s) => s.outcome === "Admitted",
-	);
+	// A visa or departure entry brought its own offer, verified at consultation.
+	const hasAdmitted = schoolTracks.schools.some((s) => s.outcome === "Admitted") || (row.scopeStages != null && !scopeHas(row.scopeStages, "admissions"));
 	const hasVisaInvoice = clientInvoices.some((i) => i.type === "visa");
 
 	// ── Guard: the stage must be on the client's plan ───────────────────
@@ -2387,7 +2387,7 @@ export async function applicantUserIdOfApplication(id: string): Promise<string |
 
 import { serviceFeeForPackage } from "century-nit-core/content";
 import { nextInvoiceNumber, nextUncoveredDueAt } from "./invoice.js";
-import { milestoneSplit } from "./fees.js";
+import { milestoneSplit, stagePricesFor } from "./fees.js";
 
 type PackageOutcome = { application: ApplicationRow; proformaInvoice: typeof invoices.$inferSelect | null };
 
@@ -2412,7 +2412,8 @@ type PackageOutcome = { application: ApplicationRow; proformaInvoice: typeof inv
  */
 export async function setApplicationPackage(input: {
 	id: string;
-	packageCode: string;
+	/** The track. Required when Admissions is on the plan; a visa or departure entry has none. */
+	packageCode?: string | null;
 	degreeLevel: string;
 	targetSchoolCount?: number;
 	/** The stages on the plan; omitted means the full journey. */
@@ -2463,18 +2464,26 @@ export async function setApplicationPackage(input: {
 			throw new HttpError(409, "CONSENT_REQUIRED", "The applicant must consent to proceed before selecting a package.");
 		}
 
-		const [pkg] = await tx
-			.select()
-			.from(servicePackages)
-			.where(eq(servicePackages.code, input.packageCode as any))
-			.limit(1);
-		if (!pkg) throw new HttpError(404, "PACKAGE_NOT_FOUND", "Package not found");
-		if (!pkg.active) throw new HttpError(400, "PACKAGE_INACTIVE", "Package is no longer available");
+		const needsTrack = scope.includes("admissions");
+		const code = input.packageCode && input.packageCode !== "undecided" ? input.packageCode : null;
+		if (needsTrack && !code) throw new HttpError(400, "TRACK_REQUIRED", "Choose a track — Admissions is on the plan.");
+		const [pkg] = code
+			? await tx
+					.select()
+					.from(servicePackages)
+					.where(eq(servicePackages.code, code as any))
+					.limit(1)
+			: [];
+		if (code && !pkg) throw new HttpError(404, "PACKAGE_NOT_FOUND", "Package not found");
+		if (pkg && !pkg.active) throw new HttpError(400, "PACKAGE_INACTIVE", "Package is no longer available");
 
 		const targetSchools = input.targetSchoolCount ?? app.targetSchoolCount ?? 3;
 		// A row finance has not priced yet falls back to the legacy table.
-		const bundleCents = pkg.priceCents > 0 ? pkg.priceCents : Math.round(serviceFeeForPackage(input.degreeLevel, input.packageCode, targetSchools));
-		const quote = quoteTotal({ bundleCents, stagePrices: pkg.stagePrices ?? null, stages: scope });
+		const bundleCents = pkg ? (pkg.priceCents > 0 ? pkg.priceCents : Math.round(serviceFeeForPackage(input.degreeLevel, code!, targetSchools))) : 0;
+		// Admissions by track, Visa and Departure flat from the catalogue.
+		const stagePrices = await stagePricesFor(pkg ? { priceCents: bundleCents, stagePrices: pkg.stagePrices ?? null } : null);
+		const quote = quoteTotal({ bundleCents, stagePrices, stages: scope });
+		const planName = pkg ? pkg.name : scopeLabel(scope);
 
 		// The live agency invoice and what is on it.
 		const [live] = await tx
@@ -2487,15 +2496,18 @@ export async function setApplicationPackage(input: {
 			? await tx.select({ total: sql<number>`coalesce(sum(amount_cents), 0)::int` }).from(invoicePayments).where(eq(invoicePayments.invoiceId, live.id))
 			: [{ total: 0 }];
 		const paidCents = paidRow?.total ?? 0;
-		const prevScope = app.scopeStages ? normaliseScope(app.scopeStages) : app.packageId ? [...SERVICE_STAGES] : [];
+		// The scope the ledger knows: only once a plan was accepted (the invoice
+		// exists). Before that the row's scope is the recommendation.
+		const prevScope = live ? (app.scopeStages ? normaliseScope(app.scopeStages) : [...SERVICE_STAGES]) : [];
 
 		const bind = async () => {
 			const [updated] = await tx
 				.update(applications)
 				.set({
-					packageId: pkg.id,
+					packageId: pkg?.id ?? null,
 					packageSelectedAt: app.packageSelectedAt ?? new Date(),
-					fundingTrack: input.packageCode,
+					// "undecided" is the enum's own word for "no track" — a visa or departure entry.
+					fundingTrack: code ?? "undecided",
 					degreeLevel: input.degreeLevel,
 					targetSchoolCount: targetSchools,
 					scopeStages: scope,
@@ -2508,7 +2520,7 @@ export async function setApplicationPackage(input: {
 
 		// ── Money on the ledger: the plan can only grow ─────────────────
 		if (live && paidCents > 0) {
-			if (app.packageId && app.packageId !== pkg.id) {
+			if ((app.packageId ?? null) !== (pkg?.id ?? null)) {
 				throw new HttpError(409, "PACKAGE_LOCKED", "Payments are recorded on the current plan — the track cannot change. Void the service-fee invoice to start over.");
 			}
 			const removed = prevScope.filter((st) => !scope.includes(st));
@@ -2522,6 +2534,9 @@ export async function setApplicationPackage(input: {
 				return { application: updated, proformaInvoice: live };
 			}
 			const existing = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, live.id)).orderBy(invoiceLines.position);
+			// Stages added to a plan open on their own events; only a brand-new
+			// entry (Admissions added in front of a visa entry) is due on acceptance,
+			// which stageLines handles through the admissions split.
 			const lines = stageLines(added, split, existing.length, quote.bundleDiscountCents);
 			const addedCents = lines.reduce((n, l) => n + l.amountCents, 0);
 			await tx.insert(invoiceLines).values(
@@ -2531,7 +2546,7 @@ export async function setApplicationPackage(input: {
 				.update(invoices)
 				.set({
 					subtotalCents: live.subtotalCents + addedCents,
-					note: `Service package: ${pkg.name} · ${scopeLabel(scope)}`,
+					note: `Service package: ${planName} · ${scopeLabel(scope)}`,
 					// The invoice falls due with its first unpaid dated line.
 					dueAt: await nextUncoveredDueAt(live.id, paidCents, txDb),
 					updatedAt: new Date(),
@@ -2591,7 +2606,7 @@ export async function setApplicationPackage(input: {
 					status: "issued",
 					issuedBy: null,
 					issuedByName: "Century NIT",
-					note: `Service package: ${pkg.name} · ${scopeLabel(scope)}`,
+					note: `Service package: ${planName} · ${scopeLabel(scope)}`,
 					// The acceptance milestone is due now; the rest wait for their events.
 					dueAt: lines.some((l) => l.dueOn === "acceptance") ? new Date() : null,
 				})
@@ -2605,7 +2620,7 @@ export async function setApplicationPackage(input: {
 				invoiceId: created.id,
 				action: "issued",
 				actor: "system",
-				detail: `Issued from package ${pkg.code} · ${scopeLabel(scope)}`,
+				detail: `Issued from ${pkg ? `package ${pkg.code}` : "the fee catalogue"} · ${scopeLabel(scope)}`,
 			});
 
 			proformaInvoice = created;
@@ -2615,7 +2630,7 @@ export async function setApplicationPackage(input: {
 			targetType: "application",
 			targetId: app.id,
 			kind: "status",
-			text: `Package Agreement: ${pkg.name} · ${scopeLabel(scope)} · ${input.degreeLevel}${onBehalf}`,
+			text: `Package Agreement: ${planName} · ${scopeLabel(scope)} · ${input.degreeLevel}${onBehalf}`,
 			authorName: actorName,
 			authorOpsUserId: input.actor?.opsUserId ?? null,
 		});

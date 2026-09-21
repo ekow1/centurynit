@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { DEFAULT_REQUIRED_DOCUMENT_IDS, VISA_DOCUMENT_IDS, documentTypesFor } from "century-nit-core/content";
+import { ENTRY_EVIDENCE_IDS, STAGE_DOCUMENT_IDS, intentScope, normaliseScope, type ServiceIntent } from "century-nit-shared";
 import type { DocumentChecklistItem } from "century-nit-shared";
 import { db } from "../db/index.js";
 import { applicantDocuments, applications, consultations, servicePackages } from "../db/schema.js";
@@ -15,7 +16,25 @@ import { applicantDocuments, applications, consultations, servicePackages } from
 export async function requiredDocumentIdsFor(input: {
 	applicationPackageId?: string | null;
 	recommendedPackage?: string | null;
+	/** The plan's stages; null is the full journey. Entry evidence comes first, then each stage's set. */
+	scopeStages?: readonly string[] | null;
+	/** Where the client said they were at booking — pre-fills the scope before a plan exists. */
+	entryIntent?: string | null;
 }): Promise<string[]> {
+	const scope = normaliseScope(input.scopeStages ?? (input.entryIntent ? intentScope(input.entryIntent as ServiceIntent) : null));
+	const entry = scope[0];
+	const admissionsIds = scope.includes("admissions") ? await admissionsDocumentIdsFor(input) : [];
+	const ids = [
+		...ENTRY_EVIDENCE_IDS[entry],
+		...admissionsIds,
+		...(scope.includes("visa") ? STAGE_DOCUMENT_IDS.visa : []),
+		...(scope.includes("departure") ? STAGE_DOCUMENT_IDS.departure : []),
+	];
+	return [...new Set(ids)];
+}
+
+/** The Admissions set is the package's — by track — with the standard set behind it. */
+async function admissionsDocumentIdsFor(input: { applicationPackageId?: string | null; recommendedPackage?: string | null }): Promise<string[]> {
 	if (input.applicationPackageId) {
 		const [pkg] = await db
 			.select({ requiredDocuments: servicePackages.requiredDocuments })
@@ -43,6 +62,8 @@ export async function documentChecklistFor(input: {
 	ownerUserId: string | null | undefined;
 	applicationPackageId?: string | null;
 	recommendedPackage?: string | null;
+	scopeStages?: readonly string[] | null;
+	entryIntent?: string | null;
 }): Promise<DocumentChecklistItem[]> {
 	const ids = await requiredDocumentIdsFor(input);
 	return checklistForIds(input.ownerUserId, ids);
@@ -85,6 +106,7 @@ export async function documentChecklistForApplication(applicationId: string): Pr
 	const [row] = await db
 		.select({
 			packageId: applications.packageId,
+			scopeStages: applications.scopeStages,
 			consultationId: applications.consultationId,
 			applicantId: applications.applicantId,
 		})
@@ -107,6 +129,8 @@ export async function documentChecklistForApplication(applicationId: string): Pr
 		ownerUserId: applicant?.userId ?? null,
 		applicationPackageId: row.packageId,
 		recommendedPackage: recommended,
+		scopeStages: row.scopeStages ?? null,
+		entryIntent: (applicant?.profile as { entryIntent?: string } | null)?.entryIntent ?? null,
 	});
 }
 

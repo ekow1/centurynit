@@ -257,20 +257,29 @@ export function ChapterGate({
 	}
 
 	// The chapter is not on the client's plan: it is not locked, it is not
-	// bought. Say so, and point at where to add it.
-	const needed = chapter === "visa" ? "visa" : chapter === "travel_assistance" || chapter === "payment_execution" || chapter === "complete" ? "departure" : null;
+	// bought — either the plan stops before it, or the client entered after it
+	// (they brought their own offer or visa). Say which, and point at where to
+	// add it.
+	const needed =
+		chapter === "application" || chapter === "tracking" ? "admissions"
+		: chapter === "visa" ? "visa"
+		: chapter === "travel_assistance" || chapter === "payment_execution" || chapter === "complete" ? "departure"
+		: null;
 	const scope = application.scopeStages ?? null;
 	if (needed && scope && !scope.includes(needed)) {
+		const before = scope.length > 0 && ["admissions", "visa", "departure"].indexOf(needed) < ["admissions", "visa", "departure"].indexOf(scope[0]);
 		return (
 			<div className="chapter-gate">
 				<div className="chapter-gate__seal" aria-hidden>
 					<span className="chapter-gate__roman">{meta?.step ?? "⌀"}</span>
 					<span className="chapter-gate__ring" />
 				</div>
-				<p className="eyebrow">Not on your plan</p>
+				<p className="eyebrow">Not part of your plan</p>
 				<h1 className="page-title mt-1">{meta?.label ?? "Next stage"}</h1>
 				<p className="lead mt-2">
-					Your plan stops before this stage. Add it whenever you are ready — you pay for it only when it opens.
+					{before
+						? "You entered the journey after this stage — you brought your own offer or visa, so there is nothing for us to do here. Add it only if your consultant advised a second, stronger offer."
+						: "Your plan stops before this stage. Add it whenever you are ready — you pay for it only when it opens."}
 				</p>
 				<div className="row mt-4">
 					<Link to="/portal/package" className="btn btn--primary">

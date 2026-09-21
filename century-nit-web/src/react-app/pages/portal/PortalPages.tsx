@@ -38,9 +38,13 @@ import {
 	SERVICE_STAGES,
 	SERVICE_STAGE_BLURBS,
 	SERVICE_STAGE_LABELS,
+	SERVICE_INTENTS,
+	SERVICE_INTENT_LABELS,
+	entryStage,
 	milestoneLines,
 	normaliseScope,
 	quoteTotal,
+	scopeHas,
 	scopeLabel,
 	type ServiceStage,
 } from "century-nit-shared";
@@ -475,7 +479,8 @@ function SchoolPackageInner() {
 	const [targetSchoolCount, setTargetSchoolCount] = useState<number>(
 		application.targetSchoolCount || 3,
 	);
-	// The stages on the plan. Admissions is always in; Departure needs Visa.
+	// The stages on the plan — a contiguous segment of the journey. The case
+	// already carries the recommended shape (or the booking intent) as its scope.
 	const [stages, setStages] = useState<ServiceStage[]>(() => normaliseScope(application.scopeStages ?? null));
 	const [recommendedStages, setRecommendedStages] = useState<ServiceStage[] | null>(null);
 	const [extending, setExtending] = useState(false);
@@ -526,7 +531,7 @@ function SchoolPackageInner() {
 			// An empty recommendation is the full journey — the consultant left every stage on.
 			const recScope = normaliseScope(rec.recStages && rec.recStages.length > 0 ? rec.recStages : null);
 			setRecommendedStages(recScope);
-			if (!application.scopeStages) setStages(recScope);
+			if (!application.scopeStages && !hasSchoolPackage(application)) setStages(recScope);
 			if (rec.recPackage) {
 				const p = rec.recPackage.toLowerCase();
 				let track: SchoolFundingTrack | null = null;
@@ -571,6 +576,8 @@ function SchoolPackageInner() {
 			.catch(() => {});
 	}, [booking.assessmentResult, application.schoolFundingTrack, application.schoolDegreeLevel]);
 
+	// The track prices Admissions — a plan without it has no track to choose.
+	const needsTrack = scopeHas(stages, "admissions");
 	const activeFunding = (funding || application.schoolFundingTrack || "scholarship") as SchoolFundingTrack;
 	const activeLevel = normaliseDegreeLevel(level || application.schoolDegreeLevel) ?? "masters";
 
@@ -582,7 +589,11 @@ function SchoolPackageInner() {
 
 	// The same function ops and the API price from — what shows here is what the invoice carries.
 	const bundleCents = (selectedPkg && selectedPkg.priceCents > 0) ? selectedPkg.priceCents : serviceFeeForPackage(activeLevel, activeFunding, targetSchoolCount);
-	const quote = quoteTotal({ bundleCents, stagePrices: selectedPkg?.stagePrices ?? null, stages });
+	// Admissions by track (the package); Visa and Departure flat, from the fee catalogue.
+	const flatOf = (key: string) => fees?.catalogue.items.find((i) => i.key === key && i.active && i.amountCents > 0)?.amountCents;
+	const pkgPrices = selectedPkg?.stagePrices ?? quoteTotal({ bundleCents, stagePrices: null, stages: null }).stageLines.reduce((acc, l) => ({ ...acc, [l.stage]: l.amountCents }), { admissions: 0, visa: 0, departure: 0 });
+	const stagePrices = { admissions: pkgPrices.admissions, visa: flatOf("stage_visa") ?? pkgPrices.visa, departure: flatOf("stage_departure") ?? pkgPrices.departure };
+	const quote = quoteTotal({ bundleCents: needsTrack ? bundleCents : 0, stagePrices, stages });
 	const split = {
 		depositPercent: fees?.catalogue.serviceFeeSplit.depositPercent ?? DEFAULT_SERVICE_FEE_SPLIT.depositPercent,
 		preDeparturePercent: fees?.catalogue.serviceFeeSplit.preDeparturePercent ?? DEFAULT_SERVICE_FEE_SPLIT.preDeparturePercent,
@@ -596,17 +607,22 @@ function SchoolPackageInner() {
 	// Stages already on the plan (and paid for) cannot come off; new ones can be added at any time.
 	const onPlan = isLocked ? normaliseScope(application.scopeStages ?? null) : [];
 	const addedStages = stages.filter((st) => !onPlan.includes(st));
-	const stagePriceOf = (st: ServiceStage) => (selectedPkg?.stagePrices ? selectedPkg.stagePrices[st] : quoteTotal({ bundleCents, stagePrices: null, stages: null }).stageLines.find((l) => l.stage === st)?.amountCents ?? 0);
+	const stagePriceOf = (st: ServiceStage) => stagePrices[st];
 	function toggleStage(st: ServiceStage) {
-		if (st === "admissions" || onPlan.includes(st)) return;
-		setStages((prev) => normaliseScope(prev.includes(st) ? prev.filter((x) => x !== st) : [...prev, st]));
+		if (onPlan.includes(st)) return;
+		setStages((prev) => {
+			const next = prev.includes(st) ? prev.filter((x) => x !== st) : [...prev, st];
+			// A plan needs at least one stage; the segment stays contiguous.
+			return next.length === 0 ? prev : normaliseScope(next);
+		});
 	}
+	const entry = entryStage(stages);
 	async function extendPlan() {
 		if (!activeFunding || !activeLevel || addedStages.length === 0 || extending) return;
 		setExtending(true);
 		try {
-			await meApi.choosePackage({ packageCode: activeFunding, degreeLevel: activeLevel, targetSchoolCount, stages });
-			chooseSchoolPackage(activeFunding, activeLevel, targetSchoolCount, totalServiceFeeCents, stages);
+			await meApi.choosePackage({ packageCode: needsTrack ? activeFunding : undefined, degreeLevel: activeLevel, targetSchoolCount, stages });
+			chooseSchoolPackage(needsTrack ? activeFunding : "undecided", activeLevel, targetSchoolCount, totalServiceFeeCents, stages);
 			await syncFromServer();
 			toast.success(`${addedStages.map((st) => SERVICE_STAGE_LABELS[st]).join(" + ")} added to your plan.`);
 		} catch (err) {
@@ -636,16 +652,16 @@ function SchoolPackageInner() {
 		  }));
 
 	async function confirm(andPayDeposit = false) {
-		if (!funding || !level || saving || payingDeposit) return;
+		if ((needsTrack && !funding) || !level || saving || payingDeposit) return;
 		setSaving(true);
 		try {
 			await meApi.choosePackage({
-				packageCode: funding,
+				packageCode: needsTrack ? (funding as SchoolFundingTrack) : undefined,
 				degreeLevel: level,
 				targetSchoolCount,
 				stages,
 			});
-			chooseSchoolPackage(funding, level, targetSchoolCount, totalServiceFeeCents, stages);
+			chooseSchoolPackage(needsTrack ? (funding as SchoolFundingTrack) : "undecided", level, targetSchoolCount, totalServiceFeeCents, stages);
 			if (quote.full && plan !== application.paymentPlanId) {
 				await meApi.choosePaymentPlan({ paymentPlanId: plan });
 				choosePaymentPlan(plan);
@@ -737,6 +753,7 @@ function SchoolPackageInner() {
 
 					{confirmed && (
 						<>
+							{needsTrack && (
 							<section className="psec">
 								<p>
 									<span className={`psec__no${isLocked ? " psec__no--done" : ""}`}>2</span>
@@ -765,6 +782,7 @@ function SchoolPackageInner() {
 									))}
 								</div>
 							</section>
+							)}
 
 							<section className="psec">
 								<p>
@@ -773,13 +791,15 @@ function SchoolPackageInner() {
 								</p>
 								<p className="psec__hint">
 									Pay for each stage as it opens, never for one you don't reach. All three together get the bundle price.
+									{entry !== "admissions" ? ` You enter at ${SERVICE_STAGE_LABELS[entry]} — you brought your own ${entry === "visa" ? "offer" : "visa"}, so the chapters before it aren't part of your plan.` : ""}
 									{isLocked ? " Stages already on your plan stay; you can add the next one any time." : ""}
 								</p>
 								<div className="pstages">
 									{SERVICE_STAGES.map((st) => {
 										const on = stages.includes(st);
-										const fixed = st === "admissions" || onPlan.includes(st);
-										const needsVisa = st === "departure" && !stages.includes("visa");
+										const fixed = onPlan.includes(st);
+										const needsVisa = false;
+										const notNeeded = st === "admissions" && !on && recommendedStages != null && !recommendedStages.includes("admissions");
 										return (
 											<button
 												key={st}
@@ -793,16 +813,16 @@ function SchoolPackageInner() {
 												<span className="pstage__body">
 													<span className="pstage__name">
 														{SERVICE_STAGE_LABELS[st]}
-														{st === "admissions" && <small> · always on</small>}
-														{onPlan.includes(st) && st !== "admissions" && <small> · on your plan</small>}
-														{needsVisa && <small> · needs the Visa stage</small>}
+														{on && st === entry && <small> · your entry</small>}
+														{onPlan.includes(st) && <small> · on your plan</small>}
+														{notNeeded && <small> · not needed — you hold an offer</small>}
 														{recommendedStages?.includes(st) && !on && <small> · advisor's pick</small>}
 													</span>
 													<span className="pstage__desc">{SERVICE_STAGE_BLURBS[st]}</span>
 												</span>
 												<span className="pstage__price">
 													<MoneyInline usd={stagePriceOf(st) / 100} />
-													<small>{st === "admissions" ? `${split.admissionsStartPercent}% now · rest on your offer` : st === "visa" ? "when the visa file opens" : "on visa approval"}</small>
+													<small>{st === "admissions" ? `${split.admissionsStartPercent}% now · rest on your offer` : st === entry ? "on acceptance · opens your file" : st === "visa" ? "when the visa file opens" : "on visa approval"}</small>
 												</span>
 											</button>
 										);
@@ -810,7 +830,10 @@ function SchoolPackageInner() {
 								</div>
 								{!quote.full && (
 									<p className="psec__hint">
-										A plan that stops short has no post-arrival instalments — there is no arrival. Choose the full journey to spread the last part over the months after you land.
+										{scopeHas(stages, "departure")
+											? "Post-arrival instalments come with the full journey only. "
+											: "A plan that stops short has no post-arrival instalments — there is no arrival. "}
+										{needsTrack ? "Choose the full journey to spread the last part over the months after you land." : "No track to choose — the track is how hard we search for schools, and you've done that part."}
 									</p>
 								)}
 							</section>
@@ -840,6 +863,7 @@ function SchoolPackageInner() {
 								</div>
 							</section>
 
+							{needsTrack && (
 							<section className="psec">
 								<p>
 									<span className={`psec__no${isLocked ? " psec__no--done" : ""}`}>5</span>
@@ -865,6 +889,7 @@ function SchoolPackageInner() {
 									))}
 								</div>
 							</section>
+							)}
 
 							{quote.full && (
 							<section className="psec">
@@ -952,10 +977,10 @@ function SchoolPackageInner() {
 				<div className="prail">
 					<div className="sharp-card sharp-card--key">
 						<p className="eyebrow">Your plan</p>
-						{funding && level ? (
+						{(funding || !needsTrack) && level ? (
 							<>
 								<p className="prail__title">
-									{[fundMeta?.name, scopeLabel(stages), levelMeta?.short, `${targetSchoolCount} ${targetSchoolCount === 1 ? "school" : "schools"}`]
+									{[needsTrack ? fundMeta?.name : null, scopeLabel(stages), levelMeta?.short, needsTrack ? `${targetSchoolCount} ${targetSchoolCount === 1 ? "school" : "schools"}` : null]
 										.filter(Boolean)
 										.join(" · ")}
 								</p>
@@ -1029,7 +1054,7 @@ function SchoolPackageInner() {
 											type="button"
 											onClick={() => void confirm(true)}
 											arrow
-											disabled={!funding || !level || saving || payingDeposit}
+											disabled={(needsTrack && !funding) || !level || saving || payingDeposit}
 											style={{ width: "100%" }}
 										>
 											{payingDeposit ? (
@@ -1044,7 +1069,7 @@ function SchoolPackageInner() {
 											type="button"
 											variant="ghost"
 											onClick={() => void confirm(false)}
-											disabled={!funding || !level || saving || payingDeposit}
+											disabled={(needsTrack && !funding) || !level || saving || payingDeposit}
 											style={{ width: "100%", marginTop: "0.5rem" }}
 										>
 											{saving ? "Saving…" : "Save & pay later"}
@@ -1254,6 +1279,35 @@ const ASSESSMENT_DOC_FIELDS: { id: string; label: string; hint: string }[] = [
 	{ id: "additional", label: "Additional documents", hint: "Any other supporting documents" },
 ];
 
+/**
+ * What a client who already holds an offer (or a visa) uploads at booking:
+ * the evidence for their entry point first, then the visa file. Academics
+ * are not asked for — that decision was made by someone else's admissions
+ * office.
+ */
+const ENTRY_DOC_FIELDS: Record<"visa" | "departure", { id: string; label: string; hint: string }[]> = {
+	visa: [
+		{ id: "admission_letter", label: "Offer letter / CAS / I-20", hint: "The admission you already hold — checked at your consultation" },
+		{ id: "passport", label: "Passport bio page", hint: "Clear scan of photo page" },
+		{ id: "financial", label: "Financial proof", hint: "Bank statements (last 3 months)" },
+		{ id: "sponsorship", label: "Sponsorship letter", hint: "If a sponsor funds you" },
+		{ id: "additional", label: "Additional documents", hint: "Previous visas, refusals, anything else" },
+	],
+	departure: [
+		{ id: "visa_grant", label: "Visa grant / vignette", hint: "The visa you already hold" },
+		{ id: "admission_letter", label: "Offer letter / CAS", hint: "The admission the visa was issued for" },
+		{ id: "passport", label: "Passport bio page", hint: "Clear scan of photo page" },
+		{ id: "additional", label: "Additional documents", hint: "Accommodation, insurance, anything else" },
+	],
+};
+
+function assessmentDocFieldsFor(intent: AssessmentData["entryIntent"]): { id: string; label: string; hint: string }[] {
+	return intent === "visa" || intent === "departure" ? ENTRY_DOC_FIELDS[intent] : ASSESSMENT_DOC_FIELDS;
+}
+
+/** Sections that only make sense when Century is finding the school. */
+const ADMISSIONS_ONLY_SECTIONS = new Set(["education", "employment", "english", "preferences"]);
+
 /** The reference data the assessment form's selects are built from. */
 type AssessmentCatalog = {
 	lookups: LookupValue[];
@@ -1437,8 +1491,11 @@ const GENERIC_INTAKES = [
 ];
 
 const ASSESSMENT_SECTIONS = [
+	{ id: "entry", label: "Where you are", required: 1, fields: ["entryIntent"] },
 	{ id: "personal", label: "Personal", required: 4, fields: ["firstName", "middleName", "lastName", "email", "phone", "dateOfBirth", "gender", "nationality", "address"] },
 	{ id: "passport", label: "Passport", required: 0, fields: ["passportNumber", "passportCountry", "passportIssue", "passportExpiry"] },
+	{ id: "offer", label: "Your offer", required: 0, fields: ["offerUniversity", "offerProgram", "offerCountry", "offerType", "offerReference", "offerIntake", "offerTuition", "offerDepositPaid"] },
+	{ id: "visa", label: "Your visa", required: 0, fields: ["visaGrantReference", "visaGrantDate", "arrivalWindow"] },
 	{ id: "education", label: "Education", required: 0, fields: ["highestEducation", "institution", "fieldOfStudy", "graduationYear", "gpa"] },
 	{ id: "employment", label: "Employment", required: 0, fields: ["employmentStatus", "employer", "jobTitle", "yearsExperience"] },
 	{ id: "english", label: "English", required: 0, fields: ["englishTest", "englishScore", "englishDate"] },
@@ -1477,10 +1534,22 @@ function AssessmentForm({
 	const [pickDocId, setPickDocId] = useState<string | null>(null);
 
 	// Filled/total per section. Drives the counts in the TOC and each head.
+	const entry = assessment.entryIntent;
+	const bringsOffer = entry === "visa" || entry === "departure";
+	const docFields = assessmentDocFieldsFor(entry);
+	// The entry decides which sections exist: a client with an offer skips
+	// academics; the offer and visa sections exist only for them.
+	const sectionShown = (id: string) => {
+		if (ADMISSIONS_ONLY_SECTIONS.has(id)) return !bringsOffer;
+		if (id === "offer") return bringsOffer;
+		if (id === "visa") return entry === "departure";
+		return true;
+	};
+	const visibleSections = ASSESSMENT_SECTIONS.filter((s) => sectionShown(s.id));
 	function sectionProgress(id: string, fields: readonly string[]): { done: number; total: number } {
 		if (id === "documents") {
-			const total = ASSESSMENT_DOC_FIELDS.length;
-			const done = ASSESSMENT_DOC_FIELDS.filter((d) => assessmentDocs[d.id]?.fileName).length;
+			const total = docFields.length;
+			const done = docFields.filter((d) => assessmentDocs[d.id]?.fileName).length;
 			return { done, total };
 		}
 		const done = fields.filter((k) => {
@@ -1553,7 +1622,7 @@ function AssessmentForm({
 			<div className="assess-layout mt-3">
 				<nav className="assess-nav" aria-label="Assessment sections">
 					<ul>
-						{ASSESSMENT_SECTIONS.map((s) => {
+						{visibleSections.map((s) => {
 							const { done, total } = sectionProgress(s.id, s.fields);
 							return (
 								<li key={s.id}>
@@ -1567,6 +1636,35 @@ function AssessmentForm({
 					</ul>
 				</nav>
 				<div className="assess-body">
+				<section id="assess-entry" className="assess-section">
+					<h3 className="assess-section__title"><span>Start · Where are you on the journey?</span><span className="assess-section__meta">{sectionMeta("entry", 1)}</span></h3>
+					<p className="muted" style={{ fontSize: "0.85rem", marginBottom: "0.75rem" }}>
+						Pick the point you're at. It shapes the questions below, what your consultant checks, and which parts of the service you'll be offered. The consultation fee is the same whichever you pick.
+					</p>
+					<div className="pintents">
+						{SERVICE_INTENTS.map((it) => {
+							const on = assessment.entryIntent === it;
+							const bring =
+								it === "visa" ? "You'll bring: your offer letter / CAS · passport · proof of funds"
+								: it === "departure" ? "You'll bring: your visa grant · offer letter · arrival window"
+								: "You'll bring: transcripts · certificates · a goal";
+							const what =
+								it === "admissions" ? "No offer yet. We match you to schools, prepare and lodge applications, and review your offers."
+								: it === "visa" ? "You already hold an admission. We check the offer, build the financial file, lodge the visa and coach the interview."
+								: it === "departure" ? "Flights, housing, airport pickup, pre-departure briefing and a first-week check-in."
+								: "All three stages, at the bundle price, with post-arrival instalments.";
+							return (
+								<button key={it} type="button" className={`pintent${on ? " pintent--on" : ""}`} onClick={() => onUpdate({ entryIntent: it })} aria-pressed={on}>
+									<span className="pintent__k">{it === "full" ? "Full journey" : `Enter at ${SERVICE_STAGE_LABELS[it === "admissions" ? "admissions" : it === "visa" ? "visa" : "departure"]}`}</span>
+									<span className="pintent__n">{SERVICE_INTENT_LABELS[it]}</span>
+									<span className="pintent__d">{what}</span>
+									<span className="pintent__ev">{bring}</span>
+								</button>
+							);
+						})}
+					</div>
+				</section>
+
 				<section id="assess-personal" className="assess-section">
 					<h3 className="assess-section__title"><span>01 · Personal</span><span className="assess-section__meta">{sectionMeta("personal", 4)}</span></h3>
 					<div className="form-grid form-grid--3">
@@ -1634,6 +1732,81 @@ function AssessmentForm({
 					</div>
 				</section>
 
+				{bringsOffer && (
+				<section id="assess-offer" className="assess-section">
+					<h3 className="assess-section__title"><span>03 · Your offer</span><span className="assess-section__meta">{sectionMeta("offer", 0)}</span></h3>
+					<p className="muted" style={{ fontSize: "0.85rem", marginBottom: "0.75rem" }}>The admission you already hold. Your consultant verifies it before anything else — it's the whole risk on a visa case.</p>
+					<div className="form-grid form-grid--2">
+						<div className="field">
+							<label htmlFor="a-ou">University *</label>
+							<input id="a-ou" className="input input--full-border" value={assessment.offerUniversity} onChange={(e) => onUpdate({ offerUniversity: e.target.value })} placeholder="University of Leeds" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-op">Programme *</label>
+							<input id="a-op" className="input input--full-border" value={assessment.offerProgram} onChange={(e) => onUpdate({ offerProgram: e.target.value })} placeholder="MSc Data Science" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-oc">Country</label>
+							<input id="a-oc" className="input input--full-border" value={assessment.offerCountry} onChange={(e) => onUpdate({ offerCountry: e.target.value })} placeholder="United Kingdom" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-ot">Offer type</label>
+							<select id="a-ot" className="select select--full-border" value={assessment.offerType} onChange={(e) => onUpdate({ offerType: e.target.value })}>
+								<option value="">Select</option>
+								<option value="unconditional">Unconditional</option>
+								<option value="conditional">Conditional</option>
+								<option value="cas">CAS issued (UK)</option>
+								<option value="i20">I-20 issued (US)</option>
+								<option value="loa">Letter of acceptance (Canada)</option>
+							</select>
+						</div>
+						<div className="field">
+							<label htmlFor="a-or">Offer / CAS reference</label>
+							<input id="a-or" className="input input--full-border" value={assessment.offerReference} onChange={(e) => onUpdate({ offerReference: e.target.value })} />
+						</div>
+						<div className="field">
+							<label htmlFor="a-oi">Intake</label>
+							<input id="a-oi" className="input input--full-border" value={assessment.offerIntake} onChange={(e) => onUpdate({ offerIntake: e.target.value })} placeholder="September 2027" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-otu">Tuition (per year)</label>
+							<input id="a-otu" className="input input--full-border" value={assessment.offerTuition} onChange={(e) => onUpdate({ offerTuition: e.target.value })} placeholder="£24,500" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-od">Deposit paid to the school?</label>
+							<select id="a-od" className="select select--full-border" value={assessment.offerDepositPaid} onChange={(e) => onUpdate({ offerDepositPaid: e.target.value })}>
+								<option value="">Select</option>
+								<option value="yes">Yes</option>
+								<option value="no">Not yet</option>
+								<option value="none">No deposit required</option>
+							</select>
+						</div>
+					</div>
+				</section>
+				)}
+
+				{entry === "departure" && (
+				<section id="assess-visa" className="assess-section">
+					<h3 className="assess-section__title"><span>04 · Your visa</span><span className="assess-section__meta">{sectionMeta("visa", 0)}</span></h3>
+					<div className="form-grid form-grid--3">
+						<div className="field">
+							<label htmlFor="a-vr">Visa / grant reference</label>
+							<input id="a-vr" className="input input--full-border" value={assessment.visaGrantReference} onChange={(e) => onUpdate({ visaGrantReference: e.target.value })} />
+						</div>
+						<div className="field">
+							<label htmlFor="a-vd">Granted on</label>
+							<input id="a-vd" type="date" className="input input--full-border" value={assessment.visaGrantDate} onChange={(e) => onUpdate({ visaGrantDate: e.target.value })} />
+						</div>
+						<div className="field">
+							<label htmlFor="a-aw">When do you want to arrive?</label>
+							<input id="a-aw" className="input input--full-border" value={assessment.arrivalWindow} onChange={(e) => onUpdate({ arrivalWindow: e.target.value })} placeholder="First week of September" />
+						</div>
+					</div>
+				</section>
+				)}
+
+				{!bringsOffer && (
+				<>
 				<section id="assess-education" className="assess-section">
 					<h3 className="assess-section__title"><span>03 · Education</span><span className="assess-section__meta">{sectionMeta("education", 0)}</span></h3>
 					<div className="form-grid form-grid--3">
@@ -1733,6 +1906,9 @@ function AssessmentForm({
 					/>
 				</section>
 
+				</>
+				)}
+
 				<section id="assess-financial" className="assess-section">
 					<h3 className="assess-section__title"><span>07 · Financial</span><span className="assess-section__meta">{sectionMeta("financial", 0)}</span></h3>
 					<div className="form-grid form-grid--3">
@@ -1768,7 +1944,7 @@ function AssessmentForm({
 						Upload scanned copies of your documents. Accepted: PDF only (max 15 MB each).
 					</p>
 					<div className="form-grid form-grid--2">
-						{ASSESSMENT_DOC_FIELDS.map((doc) => {
+						{docFields.map((doc) => {
 							const uploaded = assessmentDocs[doc.id];
 							const pct = uploading[doc.id];
 							const isUploading = pct !== undefined;
@@ -1968,6 +2144,19 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 					major: booking.assessment.preferredField,
 					studyChoices: booking.assessment.studyChoices.filter((c) => c.country || c.university || c.program || c.field),
 					referralSource: "",
+					// Where the client is on the journey, and the offer / visa they bring.
+					entryIntent: booking.assessment.entryIntent || "full",
+					offerUniversity: booking.assessment.offerUniversity,
+					offerProgram: booking.assessment.offerProgram,
+					offerCountry: booking.assessment.offerCountry,
+					offerType: booking.assessment.offerType,
+					offerReference: booking.assessment.offerReference,
+					offerIntake: booking.assessment.offerIntake,
+					offerTuition: booking.assessment.offerTuition,
+					offerDepositPaid: booking.assessment.offerDepositPaid,
+					visaGrantReference: booking.assessment.visaGrantReference,
+					visaGrantDate: booking.assessment.visaGrantDate,
+					arrivalWindow: booking.assessment.arrivalWindow,
 				},
 			});
 
@@ -4211,7 +4400,8 @@ function VisaHubInner() {
 	const inv = application.visaInvoice;
 	const paySheet = usePaySheet(() => void syncFromServer());
 	const accepted = schoolApplications.filter((s) => s.outcome === "Admitted");
-	const hasAdmit = hasAcceptedOffer(schoolApplications);
+	// A client who entered at Visa brought their own offer, verified at consultation.
+	const hasAdmit = hasAcceptedOffer(schoolApplications) || (application.scopeStages != null && !scopeHas(application.scopeStages, "admissions"));
 	// The school the visa is for: the accepted offer, else the sole admission.
 	const chosen = schoolApplications.find((s) => s.id === application.acceptedSchoolId) ?? (accepted.length === 1 ? accepted[0] : null);
 	const { toast } = useNotifier();

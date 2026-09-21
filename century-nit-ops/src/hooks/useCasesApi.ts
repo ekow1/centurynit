@@ -128,6 +128,20 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 			source: p.fundingSource ?? "-",
 			budget: p.budget ?? "-",
 		},
+		entryIntent: p.entryIntent ?? "",
+		entry: {
+			offerUniversity: p.offerUniversity ?? "",
+			offerProgram: p.offerProgram ?? "",
+			offerCountry: p.offerCountry ?? "",
+			offerType: p.offerType ?? "",
+			offerReference: p.offerReference ?? "",
+			offerIntake: p.offerIntake ?? "",
+			offerTuition: p.offerTuition ?? "",
+			offerDepositPaid: p.offerDepositPaid ?? "",
+			visaGrantReference: p.visaGrantReference ?? "",
+			visaGrantDate: p.visaGrantDate ?? "",
+			arrivalWindow: p.arrivalWindow ?? "",
+		},
 		goals: {
 			degreeLevel: p.degreeLevel ?? "-",
 			intake: p.intake ?? "-",
@@ -596,7 +610,7 @@ export function useCasesApi() {
 			await refresh();
 		},
 		/** Bind the service package on the client's behalf — same server flow as the portal's, repricing included. */
-		selectPackage: async (appId: string, input: { packageCode: PackageCode; degreeLevel: string; targetSchoolCount?: number; stages?: ServiceStage[]; reason?: string }) => {
+		selectPackage: async (appId: string, input: { packageCode?: PackageCode; degreeLevel: string; targetSchoolCount?: number; stages?: ServiceStage[]; reason?: string }) => {
 			const app = applications.find((a) => a.appId === appId);
 			if (!app) return;
 			const res = await applicationsApi.choosePackage(app.id, input);

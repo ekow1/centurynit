@@ -1,3 +1,4 @@
+import { entryJourneyStage } from "century-nit-shared";
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type {
 	ApiInvoice,
@@ -723,15 +724,41 @@ export async function recordPayment(input: {
 				// The trigger has already recomputed depositPaid / agencyStageIndex
 				// from the ledger inside this transaction; read them back.
 				const [paidApp] = await txDb
-					.select({ stage: applications.stage, depositPaid: applications.depositPaid, assignedStaffId: applications.assignedStaffId })
+					.select({ stage: applications.stage, depositPaid: applications.depositPaid, assignedStaffId: applications.assignedStaffId, scopeStages: applications.scopeStages })
 					.from(applications)
 					.where(eq(applications.id, targetAppId))
 					.limit(1);
-				// The deposit is the single trigger for the school_submission
-				// handler. It fires once — on the payment that crosses the deposit
-				// line while the case is still at document_verification — so later
-				// installments never re-open a resolved handoff.
-				if (paidApp?.depositPaid && paidApp.stage === "document_verification") {
+				// The deposit is the single trigger for the entry stage's handler
+				// — school_submission for an Admissions entry, the visa or travel
+				// stage for a client who brought their own offer or visa. It fires
+				// once — on the payment that crosses the deposit line while the
+				// case is still at document_verification — so later installments
+				// never re-open a resolved handoff.
+				const entryStage = entryJourneyStage(paidApp?.scopeStages ?? null);
+				if (paidApp?.depositPaid && paidApp.stage === "document_verification" && entryStage !== "school_submission") {
+					// A visa or departure entry: open that stage now — the offer (or
+					// the visa) was verified at consultation, nothing precedes it.
+					await txDb
+						.update(applications)
+						.set({ stage: entryStage, updatedAt: new Date() })
+						.where(and(eq(applications.id, targetAppId), eq(applications.stage, "document_verification")));
+					if (entryStage === "travel_assistance") {
+						const { seedPreDepartureTasks } = await import("./preDeparture.js");
+						await seedPreDepartureTasks(targetAppId);
+					}
+					await txDb.insert(caseComments).values({
+						targetType: "application",
+						targetId: targetAppId,
+						kind: "status",
+						text: `Stage → ${entryStage} (first milestone paid; the plan enters here)`,
+						authorName: input.actor.name,
+						authorOpsUserId: null,
+					});
+					const { activeHandlerFor, createOrGetHandoff } = await import("./handoffs.js");
+					if (!(await activeHandlerFor(targetAppId, entryStage, txDb))) {
+						await createOrGetHandoff({ applicationId: targetAppId, stage: entryStage, source: "deposit_payment", tx: txDb });
+					}
+				} else if (paidApp?.depositPaid && paidApp.stage === "document_verification") {
 					const { activeHandlerFor, createOrGetHandoff } = await import("./handoffs.js");
 					const handler = await activeHandlerFor(targetAppId, "school_submission", txDb);
 					if (handler) {

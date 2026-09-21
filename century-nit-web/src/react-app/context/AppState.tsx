@@ -822,7 +822,9 @@ export function hasPackage(app: ApplicationData) {
 }
 
 export function hasPaymentPlan(app: ApplicationData) {
-	return Boolean(app.paymentPlanId && app.paymentPlanChosenAt);
+	// paymentPlanChosenAt is only set in-session by choosePaymentPlan; after a
+	// reload the server sends paymentPlanId alone. The persisted id is the truth.
+	return Boolean(app.paymentPlanId);
 }
 
 export function isAgencyDepositPaid(app: ApplicationData) {
@@ -2478,6 +2480,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					postArrivalStartAt: a.postArrivalStartAt ?? null,
 					postArrivalInterestPct: a.postArrivalInterestPct ?? null,
 					agencyDepositPaid: a.agencyStageIndex > 0 || prev.agencyDepositPaid,
+					// The server's stage index is truth for instalment plans; the
+					// invoice overlay in applyAgencyInvoice refines it after.
+					agencyStageIndex: Math.max(a.agencyStageIndex ?? 0, prev.agencyStageIndex),
 					travelInvoicePaid: a.travelInvoicePaid ?? prev.travelInvoicePaid,
 					applicationConsent: (a as any).applicationConsent ?? prev.applicationConsent,
 					visaConsent: (a as any).visaConsent ?? prev.visaConsent,

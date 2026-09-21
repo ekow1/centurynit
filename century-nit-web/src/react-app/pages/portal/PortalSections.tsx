@@ -2005,7 +2005,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 						</div>
 						<p className="muted mt-3" style={{ fontSize: "0.9rem" }}>
 							{plan
-								? `Chosen ${a.paymentPlanChosenAt ? new Date(a.paymentPlanChosenAt).toLocaleDateString() : ""}. Switch any time before the balance falls due.`
+								? `${a.paymentPlanChosenAt ? `Chosen ${new Date(a.paymentPlanChosenAt).toLocaleDateString()}. ` : "On file. "}Switch any time before the balance falls due.`
 								: "Deposit paid! Pick how you'd like to settle the remaining balance."}
 						</p>
 					</>

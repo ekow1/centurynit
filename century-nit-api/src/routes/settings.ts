@@ -177,6 +177,26 @@ settingsRouter.openapi(
 	},
 );
 
+/* ── GET /api/v1/settings/ops-config — the few numbers every officer's screen needs ── */
+
+settingsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/ops-config",
+		tags: ["Settings"],
+		summary: "Operational settings any signed-in staff member may read",
+		middleware: [requireAuth, requireMfa] as const,
+		responses: {
+			200: { content: { "application/json": { schema: z.object({ officerCapacity: z.number().int() }) } }, description: "Operational numbers" },
+		},
+	}),
+	async (c) => {
+		const raw = await getSetting("OFFICER_CAPACITY");
+		const n = raw ? Number.parseInt(raw, 10) : Number.NaN;
+		return c.json({ officerCapacity: Number.isFinite(n) && n > 0 ? n : 15 });
+	},
+);
+
 /* ── GET /api/v1/settings ──────────────────────────────────────────────────── */
 
 settingsRouter.openapi(

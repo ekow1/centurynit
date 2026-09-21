@@ -60,7 +60,7 @@ const inWindow = (iso: string | null | undefined, from: Date | null, to: Date | 
 	const t = new Date(iso).getTime();
 	return !Number.isNaN(t) && (from === null || t >= from.getTime()) && (to === null || t < to.getTime());
 };
-const FLIGHT_STAGES = JOURNEY_STAGES.filter((s) => s !== "completed");
+const FLIGHT_STAGES = JOURNEY_STAGES.filter((s) => s !== "completed" && s !== "payment_execution");
 const STAGE_SHORT: Record<string, string> = { document_verification: "Docs", school_submission: "School", offer_letter_review: "Offer", visa_processing: "Visa", travel_assistance: "Travel" };
 const MIN_SAMPLES = 5;
 const median = (xs: number[]): number | null => {

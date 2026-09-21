@@ -10,7 +10,9 @@ import { calendarApi, type CalendarStatus } from "century-nit-core/api";
 import { Sheet } from "century-nit-core/ui";
 import { DelegateSheet } from "./case/DelegateSheet";
 import { Toast } from "./OpsDialogs";
-import { JOURNEY_STAGES, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import { API_PREFIX, CHAPTERS_ORDERED, chapterProgress, type ChapterKey } from "century-nit-shared";
+import { gateFor, normaliseStage } from "../lib/caseGate";
+import { apiFetch } from "../lib/api";
 import { ScopeChip } from "../components/ScopeRoute";
 import type { PendingTask } from "../lib/pendingTasks";
 import { FilterGroup } from "./FilterGroup";
@@ -35,23 +37,18 @@ import { PreviewPane } from "./TaskPreview";
 
 const STALLED_AFTER_DAYS = 7;
 
-type Band = "consultations" | JourneyStage;
-const BAND_ORDER: Band[] = ["consultations", ...JOURNEY_STAGES];
-const BAND_LABEL: Record<Band, string> = {
-	consultations: "Consultations",
-	...JOURNEY_STAGE_LABELS,
-};
-/** The in-flight case stages — what the officer strip is made of. */
-const FLIGHT_STAGES = JOURNEY_STAGES.filter((s) => s !== "completed");
-const STAGE_SHORT: Record<JourneyStage, string> = {
-	document_verification: "Docs",
-	school_submission: "School",
-	offer_letter_review: "Offer",
-	visa_processing: "Visa",
-	travel_assistance: "Travel",
-	payment_execution: "Payment",
-	completed: "Done",
-};
+/**
+ * Bands are the chapters — the one numbering (I–VI) the case detail, the
+ * board and the list filters use. A consultation is chapter I; a case sits
+ * in the chapter its journey stage belongs to; `payment_execution` (folded
+ * into Departure by 0079) never gets a band of its own.
+ */
+type Band = ChapterKey;
+const BAND_ORDER: Band[] = CHAPTERS_ORDERED.map((c) => c.id);
+const BAND_LABEL: Record<Band, string> = Object.fromEntries(CHAPTERS_ORDERED.map((c) => [c.id, `${c.numeral} · ${c.label}`])) as Record<Band, string>;
+/** The four working chapters — what the officer strip is made of. */
+const FLIGHT_CHAPTERS: ChapterKey[] = ["enrolment", "applications", "visa", "departure"];
+const CHAPTER_SHORT: Record<ChapterKey, string> = { consultation: "I", enrolment: "II", applications: "III", visa: "IV", departure: "V", complete: "VI" };
 
 type Row = {
 	id: string;
@@ -77,6 +74,10 @@ type Row = {
 	updatedAt: string;
 	/** Days without movement when stalled; 0 otherwise. */
 	stalled: number;
+	/** Whose move it is while stalled — Century's or the client's — from the case's gate. */
+	stalledOn: "us" | "client" | null;
+	/** The case sits in its plan's last working chapter. */
+	atExit: boolean;
 	link: string;
 };
 
@@ -109,12 +110,13 @@ function stalledDays(updatedAt: string, done: boolean): number {
 	return Number.isNaN(days) || days < STALLED_AFTER_DAYS ? 0 : days;
 }
 
-type Chip = "all" | "case" | "consultation" | "stalled" | "completed";
+type Chip = "all" | "case" | "consultation" | "stalled" | "stalled_us" | "stalled_client" | "completed";
 const CHIPS: { id: Chip; label: string }[] = [
 	{ id: "all", label: "All" },
 	{ id: "case", label: "Cases" },
 	{ id: "consultation", label: "Consultations" },
-	{ id: "stalled", label: "Stalled" },
+	{ id: "stalled_us", label: "Waiting on us" },
+	{ id: "stalled_client", label: "Waiting on client" },
 	{ id: "completed", label: "Completed" },
 ];
 const CHIP_IDS = CHIPS.map((c) => c.id);
@@ -148,6 +150,15 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 	const showCompleted = doneParam === "1";
 	const [staffHours, setStaffHours] = useState<Record<string, CalendarStatus["workingHours"]>>({});
 	const [delegateFor, setDelegateFor] = useState<{ id: string; name: string; journeyCoordinatorName: string | null } | null>(null);
+	// One number turns the officer strip into the answer to its own question.
+	const [capacity, setCapacity] = useState(15);
+	useEffect(() => {
+		let alive = true;
+		apiFetch<{ officerCapacity: number }>(`${API_PREFIX}/settings/ops-config`)
+			.then((r) => { if (alive && r.officerCapacity > 0) setCapacity(r.officerCapacity); })
+			.catch(() => {});
+		return () => { alive = false; };
+	}, []);
 	const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
 	// Week hours are only needed once an officer's record opens — fetch lazily.
 	const hoursLoaded = useRef(false);
@@ -170,15 +181,18 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 		const scopedCons = scopeRecords(consultations, (c) => Boolean(c.assignedOfficerEmail || c.assignedOfficer));
 		const out: Row[] = [];
 		for (const a of scopedApps) {
-			const stage = a.stage as JourneyStage;
-			const idx = JOURNEY_STAGES.indexOf(stage);
+			const stage = normaliseStage(a.stage);
 			const done = stage === "completed";
 			const open = a.checklist.filter((c) => !c.checked).length;
 			const updatedAt = a.updatedAt ?? a.submittedDate;
+			// Progress in the chapters on this plan, and whose move it is.
+			const progress = chapterProgress(a.scopeStages ?? null, stage);
+			const gate = done ? null : gateFor(a);
+			const stalled = stalledDays(updatedAt, done);
 			out.push({
 				id: a.id,
 				kind: "case",
-				band: idx >= 0 ? stage : "document_verification",
+				band: progress.key,
 				done,
 				reference: a.appId,
 				clientName: a.applicantName,
@@ -188,13 +202,15 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 				journeyCoordinatorName: a.journeyCoordinatorName ?? null,
 				staffId: staffIdByEmail(a.assignedStaffEmail),
 				staffName: a.assignedStaff || null,
-				stageLabel: JOURNEY_STAGE_LABELS[stage] ?? a.stage,
-				step: idx >= 0 ? idx + 1 : 1,
-				total: JOURNEY_STAGES.length,
+				stageLabel: `${progress.numeral} · ${progress.label}${gate && gate.kind !== "ready" ? ` · ${gate.label}` : gate?.kind === "ready" && gate.next === "completed" ? " · ready to complete" : ""}`,
+				step: progress.step,
+				total: progress.total,
 				sub: [a.university || "No university yet", a.status, open > 0 ? `${open} checklist item${open === 1 ? "" : "s"} open` : null].filter(Boolean).join(" · "),
 				scopeStages: a.scopeStages ?? null,
 				updatedAt,
-				stalled: stalledDays(updatedAt, done),
+				stalled,
+				stalledOn: stalled > 0 && gate ? (gate.kind === "wait" ? "client" : "us") : null,
+				atExit: progress.atExit && !done,
 				link: `/applications?id=${a.id}`,
 			});
 		}
@@ -204,7 +220,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 			out.push({
 				id: c.id,
 				kind: "consultation",
-				band: done ? "completed" : "consultations",
+				band: done ? "complete" : "consultation",
 				done,
 				reference: c.ref,
 				clientName: c.applicantName,
@@ -221,6 +237,9 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 				scopeStages: null,
 				updatedAt,
 				stalled: stalledDays(updatedAt, done),
+				// A consultation waits on Century until it is held; the assessment is ours too.
+				stalledOn: stalledDays(updatedAt, done) > 0 ? "us" : null,
+				atExit: false,
 				link: `/consultations?id=${c.id}`,
 			});
 		}
@@ -248,16 +267,20 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 	}, [consultations, applications, assignees]);
 
 	const officers = useMemo(() => {
-		const map = new Map<string, { id: string; name: string; cases: number; consultations: number; stalled: number; stages: number[] }>();
+		const map = new Map<string, { id: string; name: string; cases: number; consultations: number; stalled: number; stalledUs: number; stalledClient: number; stages: number[] }>();
 		for (const r of rows) {
 			if (r.done || !r.staffId || !r.staffName) continue;
-			const o = map.get(r.staffId) ?? { id: r.staffId, name: r.staffName, cases: 0, consultations: 0, stalled: 0, stages: FLIGHT_STAGES.map(() => 0) };
+			const o = map.get(r.staffId) ?? { id: r.staffId, name: r.staffName, cases: 0, consultations: 0, stalled: 0, stalledUs: 0, stalledClient: 0, stages: FLIGHT_CHAPTERS.map(() => 0) };
 			if (r.kind === "case") {
 				o.cases++;
-				const i = (FLIGHT_STAGES as string[]).indexOf(r.band);
+				const i = FLIGHT_CHAPTERS.indexOf(r.band);
 				if (i >= 0) o.stages[i]++;
 			} else o.consultations++;
-			if (r.stalled) o.stalled++;
+			if (r.stalled) {
+				o.stalled++;
+				if (r.stalledOn === "client") o.stalledClient++;
+				else o.stalledUs++;
+			}
 			map.set(r.staffId, o);
 		}
 		return [...map.values()].sort((a, b) => b.cases + b.consultations - (a.cases + a.consultations) || a.name.localeCompare(b.name));
@@ -270,6 +293,8 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 			case: open.filter((r) => r.kind === "case").length,
 			consultation: open.filter((r) => r.kind === "consultation").length,
 			stalled: open.filter((r) => r.stalled > 0).length,
+			stalled_us: open.filter((r) => r.stalled > 0 && r.stalledOn !== "client").length,
+			stalled_client: open.filter((r) => r.stalled > 0 && r.stalledOn === "client").length,
 			completed: rows.filter((r) => r.done).length,
 		};
 	}, [rows]);
@@ -281,6 +306,8 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 			if (chip === "case" && r.kind !== "case") return false;
 			if (chip === "consultation" && r.kind !== "consultation") return false;
 			if (chip === "stalled" && !r.stalled) return false;
+			if (chip === "stalled_us" && !(r.stalled > 0 && r.stalledOn !== "client")) return false;
+			if (chip === "stalled_client" && !(r.stalled > 0 && r.stalledOn === "client")) return false;
 			if (staff !== "all" && r.staffId !== staff) return false;
 			if (branch !== "all" && r.branch !== branch) return false;
 			if (q && ![r.reference, r.clientName, r.clientEmail ?? "", r.staffName ?? ""].some((v) => v.toLowerCase().includes(q))) return false;
@@ -301,7 +328,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 
 	// The "All officers" card: everyone's stage mix in one bar.
 	const allStages = useMemo(() => {
-		const agg = FLIGHT_STAGES.map(() => 0);
+		const agg = FLIGHT_CHAPTERS.map(() => 0);
 		for (const o of officers) o.stages.forEach((n, i) => (agg[i] += n));
 		return agg;
 	}, [officers]);
@@ -311,7 +338,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 	// current load is zero — fall back to the staff directory, not the strip.
 	const selectedAssignee = staff !== "all" ? assignees.find((a) => a.opsUserId === staff) : undefined;
 	const selectedOfficer = selectedAssignee
-		? (officers.find((o) => o.id === staff) ?? { id: staff, name: selectedAssignee.name, cases: 0, consultations: 0, stalled: 0, stages: FLIGHT_STAGES.map(() => 0) })
+		? (officers.find((o) => o.id === staff) ?? { id: staff, name: selectedAssignee.name, cases: 0, consultations: 0, stalled: 0, stalledUs: 0, stalledClient: 0, stages: FLIGHT_CHAPTERS.map(() => 0) })
 		: null;
 	const officerRows = useMemo(
 		() => (selectedOfficer ? rows.filter((r) => r.staffId === selectedOfficer.id && !r.done).sort((a, b) => b.stalled - a.stalled || a.reference.localeCompare(b.reference)) : []),
@@ -384,7 +411,8 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 						</span>
 						<span className="ops-ocard__meta">
 							everyone
-							{counts.stalled > 0 ? <> · <span className="hot">{counts.stalled} stalled</span></> : ""}
+							{counts.stalled_us > 0 ? <> · <span className="hot">{counts.stalled_us} waiting on us</span></> : ""}
+							{counts.stalled_client > 0 ? <> · {counts.stalled_client} on client</> : ""}
 						</span>
 						<StageStrip counts={allStages} />
 					</button>
@@ -407,12 +435,15 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 										{o.name}
 										{o.id === me ? " (you)" : ""}
 									</span>
-									<span className="ops-ocard__load">{open}</span>
+									<span className={`ops-ocard__load${open > capacity ? " ops-ocard__load--over" : open >= Math.ceil(capacity * 0.9) ? " ops-ocard__load--near" : ""}`} title={`${open} open against a capacity of ${capacity}`}>
+										{open}<small>/{capacity}</small>
+									</span>
 								</span>
 								<span className="ops-ocard__meta">
 									{o.cases} case{o.cases === 1 ? "" : "s"} · {o.consultations} consult{o.consultations === 1 ? "" : "s"}
 									{assignee?.openStageSeats ? ` · ${assignee.openStageSeats} seat${assignee.openStageSeats === 1 ? "" : "s"}` : ""}
-									{o.stalled > 0 ? <> · <span className="hot">{o.stalled} stalled</span></> : ""}
+									{o.stalledUs > 0 ? <> · <span className="hot">{o.stalledUs} waiting on us</span></> : ""}
+									{o.stalledClient > 0 ? <> · {o.stalledClient} on client</> : ""}
 								</span>
 								{(coordinating.get(o.id) ?? 0) > 0 && (
 									<span className="ops-ocard__meta" style={{ textDecoration: "underline" }}>
@@ -435,7 +466,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 							id: c.id,
 							label: c.label,
 							count: counts[c.id],
-							hot: c.id === "stalled" && counts.stalled > 0,
+							hot: c.id === "stalled_us" && counts.stalled_us > 0,
 						}))}
 						value={chip}
 						onChange={setChip}
@@ -479,9 +510,10 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 			) : (
 				<div className="ops-bands" style={{ padding: 0 }}>
 					{bands.map(({ band, rows: list }) => {
-						const isDone = band === "completed";
-						const stalled = list.filter((r) => r.stalled > 0).length;
-						const note = isDone ? (completedOpen ? "hide" : "show ▸") : stalled > 0 ? `${stalled} stalled` : band === "consultations" ? "before a case opens" : "";
+						const isDone = band === "complete";
+						const stalledUs = list.filter((r) => r.stalled > 0 && r.stalledOn !== "client").length;
+						const stalledClient = list.filter((r) => r.stalled > 0 && r.stalledOn === "client").length;
+						const note = isDone ? (completedOpen ? "hide" : "show ▸") : [stalledUs > 0 ? `${stalledUs} waiting on us` : null, stalledClient > 0 ? `${stalledClient} on client` : null].filter(Boolean).join(" · ") || (band === "consultation" ? "before a case opens" : "");
 						return (
 							<div key={band}>
 								<div
@@ -535,13 +567,23 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 													<span className="ops-thing__kicker">
 														{r.stageLabel} <span className="ops-thing__kind">· {r.kind === "case" ? "Case" : "Consultation"}</span>
 													</span>
-													{r.stalled > 0 && <span className="ops-pill ops-pill--strong">Stalled {r.stalled} d</span>}
-													<span className="ops-steps" role="img" aria-label={`Step ${r.step} of ${r.total}`}>
-														{Array.from({ length: r.total }).map((_, i) => (
-															<span key={i} className={i < r.step ? "ops-steps__on" : undefined} />
-														))}
-													</span>
-													<span className="ops-steps__n">{r.step}/{r.total}</span>
+													{r.stalled > 0 && (
+														<span className={`ops-pill${r.stalledOn === "client" ? "" : " ops-pill--strong"}`}>
+															{r.stalledOn === "client" ? "Waiting on client" : "Waiting on us"} {r.stalled} d
+														</span>
+													)}
+													{r.atExit ? (
+														<span className="ops-steps__n" title="The last working chapter on this plan">at its exit</span>
+													) : (
+														<>
+															<span className="ops-steps" role="img" aria-label={`Chapter ${r.step} of ${r.total} on this plan`}>
+																{Array.from({ length: r.total }).map((_, i) => (
+																	<span key={i} className={i < r.step ? "ops-steps__on" : undefined} />
+																))}
+															</span>
+															<span className="ops-steps__n">{r.step}/{r.total}</span>
+														</>
+													)}
 												</div>
 												<div className="ops-client__sub" title={r.sub}>
 													{r.sub}
@@ -595,8 +637,8 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 							<span>
 								{selectedOfficer.cases}
 								{(() => {
-									const heaviest = FLIGHT_STAGES.map((s, i) => ({ s, n: selectedOfficer.stages[i] })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n)[0];
-									return heaviest ? ` — heaviest in ${STAGE_SHORT[heaviest.s]} (${heaviest.n})` : "";
+									const heaviest = FLIGHT_CHAPTERS.map((s, i) => ({ s, n: selectedOfficer.stages[i] })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n)[0];
+									return heaviest ? ` — heaviest in ${CHAPTER_SHORT[heaviest.s]} · ${CHAPTERS_ORDERED.find((c) => c.id === heaviest.s)?.label ?? heaviest.s} (${heaviest.n})` : "";
 								})()}
 							</span>
 						</div>
@@ -631,7 +673,7 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 									</span>
 									<span className="ops-mini__st">
 										{r.stalled > 0 ? (
-											<span className="portal-pill" style={{ textDecoration: "underline", textDecorationThickness: 2, fontWeight: 700 }}>stalled {r.stalled}d</span>
+											<span className="portal-pill" style={{ textDecoration: "underline", textDecorationThickness: 2, fontWeight: r.stalledOn === "client" ? 400 : 700 }}>{r.stalledOn === "client" ? "on client" : "on us"} {r.stalled}d</span>
 										) : (
 											r.stageLabel
 										)}
@@ -722,6 +764,10 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 }
 
 /** Where a load sits: one segment per in-flight stage, light → dark = early → late. */
+/** The four working chapters, in order — a caller's counts line up with these. */
+export const STRIP_CHAPTERS = FLIGHT_CHAPTERS;
+export const STRIP_SHORT = CHAPTER_SHORT;
+
 export function StageStrip({ counts }: { counts: number[] }) {
 	const total = counts.reduce((n, c) => n + c, 0);
 	if (total === 0) return <div className="ops-strip ops-strip--empty" aria-hidden />;

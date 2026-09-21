@@ -57,6 +57,7 @@ export type SettingKey =
 	| "PLATFORM_EXCHANGE_RATE"
 	| "SERVICE_FEE_DEPOSIT_PERCENT"
 	| "SERVICE_FEE_REQUIRES_APPROVAL"
+	| "OFFICER_CAPACITY"
 	| "SERVICE_FEE_ADMISSIONS_START_PERCENT"
 	| "PRE_DEPARTURE_TEMPLATE"
 	| "SERVICE_FEE_PRE_DEPARTURE_PERCENT"
@@ -276,6 +277,12 @@ export const SETTING_DEFS: Record<
 		group: "Fee Schedule",
 		secret: false,
 		description: "On a plan that stops short of the full journey, the share of the Admissions stage due on acceptance. The rest is due when the first offer letter is recorded. Default: 50.",
+	},
+	OFFICER_CAPACITY: {
+		label: "Officer capacity · open cases",
+		group: "Operations",
+		secret: false,
+		description: "How many open cases one officer is expected to carry. The caseload shades an officer amber at 90 % and red over it. Default: 15.",
 	},
 	SERVICE_FEE_REQUIRES_APPROVAL: {
 		label: "Service fee · needs approval before the client pays",

@@ -346,6 +346,70 @@ export function stageLines(
 	return out.filter((l) => l.amountCents > 0).map((l, i) => ({ ...l, position: firstPosition + i }));
 }
 
+/**
+ * The chapters — the one numbering every surface uses (I–VI). Consultation
+ * and Enrolment are on every plan; Applications, Visa and Departure only
+ * when the plan has that stage; Complete always. A journey stage maps onto
+ * one chapter; progress is counted in chapters *on the plan*, so a two-stage
+ * plan reads "2 of 4", never "step 4 of 7".
+ */
+export const CHAPTERS_ORDERED = [
+	{ id: "consultation", numeral: "I", label: "Consultation", stage: null },
+	{ id: "enrolment", numeral: "II", label: "Enrolment", stage: null },
+	{ id: "applications", numeral: "III", label: "Applications", stage: "admissions" },
+	{ id: "visa", numeral: "IV", label: "Visa", stage: "visa" },
+	{ id: "departure", numeral: "V", label: "Departure", stage: "departure" },
+	{ id: "complete", numeral: "VI", label: "Complete", stage: null },
+] as const;
+export type ChapterKey = (typeof CHAPTERS_ORDERED)[number]["id"];
+
+/** The chapter a journey stage sits in. `payment_execution` was folded into Departure. */
+export function chapterOfJourneyStage(stage: string): ChapterKey {
+	switch (stage) {
+		case "document_verification":
+			return "enrolment";
+		case "school_submission":
+		case "offer_letter_review":
+			return "applications";
+		case "visa_processing":
+			return "visa";
+		case "travel_assistance":
+		case "payment_execution":
+			return "departure";
+		case "completed":
+			return "complete";
+		default:
+			return "enrolment";
+	}
+}
+
+/** The chapters a plan has, in order. Null scope is the full journey. */
+export function planChapters(stages: readonly string[] | null | undefined): (typeof CHAPTERS_ORDERED)[number][] {
+	const scope = normaliseScope(stages);
+	return CHAPTERS_ORDERED.filter((c) => c.stage == null || scope.includes(c.stage));
+}
+
+/**
+ * Where a case is, counted in the chapters on its plan: "IV · Visa · 3 of
+ * 4". `atExit` when the case sits in the plan's last working chapter — the
+ * one after which the plan ends — so a card can say so instead of a fraction.
+ */
+export function chapterProgress(stages: readonly string[] | null | undefined, journeyStage: string): { key: ChapterKey; numeral: string; label: string; step: number; total: number; atExit: boolean } {
+	const chapters = planChapters(stages);
+	const key = chapterOfJourneyStage(journeyStage);
+	const idx = chapters.findIndex((c) => c.id === key);
+	const at = idx >= 0 ? chapters[idx] : chapters[0];
+	const working = chapters.filter((c) => c.id !== "complete");
+	return {
+		key: at.id,
+		numeral: at.numeral,
+		label: at.label,
+		step: Math.max(1, idx + 1),
+		total: chapters.length,
+		atExit: key !== "complete" && working[working.length - 1]?.id === key,
+	};
+}
+
 /** Which service stage a journey stage belongs to; null for the ones every plan has. */
 export function serviceStageForJourney(journeyStage: string): ServiceStage | null {
 	switch (journeyStage) {

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useWorkQueue } from "../hooks/useWorkQueue";
+import { passesQueueFilter, rememberedQueueCut } from "../lib/queueCut";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { LEAD_STAGE_LABELS } from "century-nit-core";
 import type { MockApplicant, MockApplication, MockConsultation } from "century-nit-core/ops";
@@ -509,12 +510,17 @@ function Panel({ title, link, live, children }: { title: ReactNode; link?: { to:
 
 /** The top of the queue: what is due or late first, then the rest by priority. */
 function QueuePanel({ items }: { items: PendingTask[] }) {
+	const { opsUser } = useOpsAuth();
 	const now = new Date();
-	const urgent = items.filter((t) => isDueToday(t, now) || isOverdue(t, now));
-	const rest = items.filter((t) => !urgent.includes(t));
+	// The Worklist's last cut, so this is the top of the same list.
+	const cut = rememberedQueueCut();
+	const inCut = items.filter((t) => passesQueueFilter(t, cut.filter, opsUser ?? undefined) && (cut.type === "all" || t.kind === cut.type));
+	const urgent = inCut.filter((t) => isDueToday(t, now) || isOverdue(t, now));
+	const rest = inCut.filter((t) => !urgent.includes(t));
 	const top = [...urgent, ...rest].slice(0, 5);
+	const cutLabel = cut.filter === "all" && cut.type === "all" ? "" : ` · ${cut.filter === "mine" ? "mine" : cut.filter.replace("needs_", "")}${cut.type !== "all" ? ` · ${cut.type}` : ""}`;
 	return (
-		<Panel title="The queue today" link={{ to: "/workspace", label: `All ${items.length} →` }}>
+		<Panel title={`The queue today${cutLabel}`} link={{ to: `/workspace?filter=${cut.filter}${cut.type !== "all" ? `&type=${cut.type}` : ""}`, label: `All ${inCut.length} →` }}>
 			{top.length === 0 ? (
 				<p className="dash-empty">Nothing on the desk. All caught up.</p>
 			) : (

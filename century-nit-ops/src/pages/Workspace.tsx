@@ -22,6 +22,7 @@ import {
 	type PendingTask,
 } from "../lib/pendingTasks";
 import { PendingTaskRows } from "./PendingTasks";
+import { passesQueueFilter, rememberQueueCut, type QueueFilter } from "../lib/queueCut";
 import type { HandlerPlacement } from "./case/AssignSheet";
 import { NowPane } from "./NowPane";
 import { CaseScaffold } from "./case/CaseScaffold";
@@ -60,7 +61,6 @@ const QUEUE_FILTERS = [
 	{ id: "needs_invoice", label: "Invoicing" },
 	{ id: "needs_followup", label: "Follow-up" },
 ] as const;
-type QueueFilter = (typeof QUEUE_FILTERS)[number]["id"];
 const QUEUE_IDS = QUEUE_FILTERS.map((f) => f.id);
 
 /** The three cuts that answer "what should I touch next" stay on the bar. */
@@ -68,25 +68,16 @@ const MAIN_FILTERS: readonly QueueFilter[] = ["all", "mine", "needs_assignment"]
 /** The occasional cuts live in the drawer. */
 const DRAWER_FILTERS: readonly QueueFilter[] = ["coordinated", "needs_invoice", "needs_followup"];
 
-const passesQueueFilter = (item: PendingTask, filter: QueueFilter, me?: { name?: string; email?: string }): boolean => {
-	if (filter === "all") return true;
-	// "Mine" is a real handler check — the seat is held by this officer.
-	if (filter === "mine") {
-		const who = [me?.name, me?.email].filter(Boolean);
-		return who.some((w) => item.owner === w);
-	}
-	// Delegated cases — a coordinator steers them; the manager watches here.
-	if (filter === "coordinated") {
-		return item.kind === "consultation" && Boolean(item.record.coordinatorId);
-	}
-	return item.category === filter;
-};
 
+/** One chip per task kind that exists, named for people; kinds with no tasks behind them get none. */
 const TYPE_FILTERS = [
-	{ id: "all", label: "All Types" },
+	{ id: "all", label: "All types" },
 	{ id: "consultation", label: "Consultation" },
 	{ id: "application", label: "Application" },
-	{ id: "travel", label: "Travel" },
+	{ id: "visa", label: "Visa" },
+	{ id: "travel", label: "Departure" },
+	{ id: "handoff", label: "Handler needed" },
+	{ id: "applicant", label: "Documents" },
 	{ id: "invoice", label: "Invoice" },
 	{ id: "lead", label: "Lead" },
 ] as const;
@@ -128,6 +119,10 @@ export function Workspace() {
 	// back instead of silently emptying the queue.
 	const [filter, setFilter] = useUrlParam<QueueFilter>("filter", { allowed: QUEUE_IDS, fallback: "all" });
 	const [typeFilter, setTypeFilter] = useUrlParam<TypeFilter>("type", { allowed: TYPE_IDS, fallback: "all" });
+	// The dashboard's "queue today" shows the top of *this* cut, so the two never disagree.
+	useEffect(() => {
+		rememberQueueCut({ filter, type: typeFilter });
+	}, [filter, typeFilter]);
 	const [branchFilter, setBranchFilter] = useUrlParam<string>("branch", { fallback: "all" });
 	const [dateSort, setDateSort] = useUrlParam<SortId>("sort", { allowed: SORT_IDS, fallback: "default" });
 	const [search, setSearch] = useUrlParam("q");

@@ -72,6 +72,8 @@ const listQuerySchema = z.object({
 	status: bookingStatusSchema.optional(),
 	branchId: z.string().min(1).optional(),
 	employeeId: z.string().uuid().optional(),
+	/** The case's check-ins — staff only; ignored for client reads. */
+	applicationId: z.string().uuid().optional(),
 });
 
 const employeesQuerySchema = z.object({
@@ -108,11 +110,13 @@ async function loadEmployee(employeeId: string | null) {
 	return row ?? null;
 }
 
-function toBookingResponse(row: BookingRow, employee?: { name: string; email: string } | null): Booking {
+export function toBookingResponse(row: BookingRow, employee?: { name: string; email: string } | null): Booking {
 	return {
 		id: row.id,
 		reference: row.reference,
 		status: row.status,
+		kind: (row.kind as "consultation" | "check_in") ?? "consultation",
+		applicationId: row.applicationId ?? null,
 		serviceId: row.serviceId,
 		serviceName: row.serviceName,
 		branchId: row.branchId,
@@ -656,6 +660,7 @@ bookingsRouter.openapi(
 				status: query.status ? [query.status] : undefined,
 				branchId: query.branchId,
 				employeeId: query.employeeId,
+				applicationId: query.applicationId,
 			});
 		} else {
 			const [mine, assigned] = await Promise.all([

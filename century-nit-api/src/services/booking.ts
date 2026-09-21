@@ -8,7 +8,7 @@ import {
   type RescheduleBooking,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { bookingEvents, bookings, consultations, opsUsers, staffCalendarFeeds } from "../db/schema.js";
+import { applicants, applications, bookingEvents, bookings, caseComments, consultations, opsUsers, staffCalendarFeeds } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import { isConflictError } from "../lib/db-errors.js";
 import { addMinutes, isValidTimeZone, zonedTimeToUtc } from "../lib/time.js";
@@ -160,6 +160,7 @@ export async function notificationContext(
     clientEmail: booking.clientEmail,
     employeeName: employee?.name ?? null,
     employeeEmail: employee?.email ?? null,
+    note: booking.notes,
     meetingUrl: booking.meetingUrl,
     meetingProvider: booking.meetingProvider,
     calendarSubscriptionUrl,
@@ -1632,10 +1633,186 @@ export async function listBookingsForClient(clientUserId: string): Promise<Booki
 		.orderBy(desc(bookings.startsAt));
 }
 
+/* ── Case check-ins ──────────────────────────────────────────────────────── */
+
+/**
+ * A handler schedules a meeting on an active case — a visa mock interview,
+ * an offer decision call, a pre-departure briefing. It is NOT a consultation:
+ * no intake row, no invoice, no checkout. The client is emailed (and the
+ * reminder queue runs) exactly as for a consultation.
+ *
+ * The host defaults to the caller; when one is named the booking lands
+ * ASSIGNED — the slot is held by the employee-overlap constraint, so the
+ * "who hosts" question is settled at creation, never queued for triage.
+ */
+export async function createCaseMeeting(input: {
+	applicationId: string;
+	data: {
+		purpose: string;
+		branchId: string;
+		type: "online" | "in_person";
+		date: string;
+		time: string;
+		durationMinutes: number;
+		timezone: string;
+		notes?: string;
+		employeeId?: string;
+	};
+	actor: { opsUserId: string; name: string; email: string };
+}): Promise<BookingRow> {
+	const { data, actor } = input;
+
+	const [app] = await db
+		.select({
+			id: applications.id,
+			stage: applications.stage,
+			appNumber: applications.appNumber,
+			applicantName: applicants.name,
+			applicantEmail: applicants.email,
+			applicantPhone: applicants.phone,
+			applicantUserId: applicants.userId,
+		})
+		.from(applications)
+		.innerJoin(applicants, eq(applicants.id, applications.applicantId))
+		.where(eq(applications.id, input.applicationId))
+		.limit(1);
+	if (!app) throw new HttpError(404, "NOT_FOUND", "Application not found");
+	if (!app.applicantUserId) {
+		throw new HttpError(409, "NO_PORTAL_ACCOUNT", "This client has no portal account — the meeting could not reach them");
+	}
+	if (app.stage === "completed") {
+		throw new HttpError(409, "CASE_CLOSED", "This case is complete — a check-in is scheduled on a live case");
+	}
+
+	if (!isValidTimeZone(data.timezone)) {
+		throw new HttpError(400, "VALIDATION_ERROR", `Unknown timezone: ${data.timezone}`);
+	}
+	const startsAt = zonedTimeToUtc(data.date, data.time, data.timezone);
+	const endsAt = addMinutes(startsAt, data.durationMinutes);
+	if (startsAt.getTime() <= Date.now()) {
+		throw new HttpError(400, SCHEDULING_ERROR_CODES.PAST_SLOT, "That time is in the past");
+	}
+
+	const hostId = data.employeeId ?? actor.opsUserId;
+	const host = await loadEmployee(hostId);
+	if (!host || !host.active) throw new HttpError(404, "NOT_FOUND", "Host not found");
+
+	// The host's calendar is the constraint — a named host cannot be double-booked.
+	const check = await isEmployeeAvailable(hostId, startsAt, data.durationMinutes, { timezone: data.timezone });
+	if (!check.available) {
+		throw new HttpError(
+			409,
+			check.reason === "outside-hours" || check.reason === "no-working-hours"
+				? SCHEDULING_ERROR_CODES.OUTSIDE_WORKING_HOURS
+				: SCHEDULING_ERROR_CODES.EMPLOYEE_UNAVAILABLE,
+			`${host.name} is not available at that time`,
+			{ reason: check.reason },
+		);
+	}
+
+	let booking: BookingRow;
+	try {
+		booking = await db.transaction(async (tx) => {
+			const reference = await nextReference(tx as unknown as typeof db);
+			const [row] = await tx
+				.insert(bookings)
+				.values({
+					reference,
+					kind: "check_in",
+					applicationId: input.applicationId,
+					clientUserId: app.applicantUserId!,
+					clientName: app.applicantName,
+					clientEmail: app.applicantEmail,
+					clientPhone: app.applicantPhone ?? null,
+					serviceId: "check_in",
+					serviceName: data.purpose,
+					branchId: data.branchId,
+					type: data.type,
+					startsAt,
+					endsAt,
+					timezone: data.timezone,
+					durationMinutes: data.durationMinutes,
+					status: "ASSIGNED",
+					employeeId: hostId,
+					assignedAt: new Date(),
+					assignedBy: actor.opsUserId,
+					calendarSyncStatus: data.type === "online" ? "PENDING" : "NOT_REQUIRED",
+					notes: data.notes ?? null,
+				})
+				.returning();
+			return row;
+		});
+	} catch (err) {
+		if (isConflictError(err)) {
+			throw new HttpError(409, SCHEDULING_ERROR_CODES.EMPLOYEE_UNAVAILABLE, `${host.name} was just booked for that time`);
+		}
+		throw err;
+	}
+
+	await audit(booking.id, "created", actor.email, { source: "case", applicationId: input.applicationId });
+
+	const { startAssignment: startBookingAssignment } = await import("./caseAssignments.js");
+	await startBookingAssignment({
+		targetType: "booking",
+		targetId: booking.id,
+		opsUserId: hostId,
+		assignedBy: actor.opsUserId,
+	});
+
+	// Online check-ins get the Meet link minted at once — the email carries it.
+	if (booking.type === "online") {
+		booking = await syncCalendarForBooking(booking.id);
+	}
+	await notifyBookingAssigned(booking, host);
+
+	// The case record says it happened, and the client's bell rings.
+	await db.insert(caseComments).values({
+		targetType: "application",
+		targetId: input.applicationId,
+		kind: "status",
+		text: `Check-in booked — ${data.purpose} · ${data.date} ${data.time} (${data.timezone}) · ${data.type === "online" ? "online" : "in person"} · host ${host.name}`,
+		authorName: actor.name,
+		authorOpsUserId: actor.opsUserId,
+	});
+	getStaffUserIdByEmail(host.email)
+		.then((userId) =>
+			userId && hostId !== actor.opsUserId
+				? notify({
+						recipientUserId: userId,
+						type: "booking.assigned",
+						title: "Check-in scheduled for you",
+						body: `${booking.clientName} · ${data.purpose} · ${data.date} ${data.time}`,
+						link: `/applications?id=${input.applicationId}`,
+					}).catch(() => {})
+				: undefined,
+		)
+		.catch(() => {});
+	notify({
+		recipientUserId: app.applicantUserId,
+		type: "booking.check_in",
+		title: `${data.purpose} booked`,
+		body: `${data.date} · ${data.time} with ${host.name}`,
+		link: "/portal/appointments",
+	}).catch(() => {});
+
+	emitBookingEvent(booking, "booking.created", { applicationId: input.applicationId, kind: "check_in" });
+	return booking;
+}
+
+/** A case's check-ins — the meetings block on the case detail. */
+export async function listCaseMeetings(applicationId: string): Promise<BookingRow[]> {
+	return db
+		.select()
+		.from(bookings)
+		.where(and(eq(bookings.applicationId, applicationId), eq(bookings.kind, "check_in")))
+		.orderBy(desc(bookings.startsAt));
+}
+
 export async function listBookings(filter: {
 	status?: BookingStatus[];
 	employeeId?: string;
 	branchId?: string;
+	applicationId?: string;
 }): Promise<BookingRow[]> {
 	return db
 		.select()
@@ -1645,6 +1822,7 @@ export async function listBookings(filter: {
 				filter.status?.length ? inArray(bookings.status, filter.status) : undefined,
 				filter.employeeId ? eq(bookings.employeeId, filter.employeeId) : undefined,
 				filter.branchId ? eq(bookings.branchId, filter.branchId) : undefined,
+				filter.applicationId ? eq(bookings.applicationId, filter.applicationId) : undefined,
 			),
 		)
 		.orderBy(desc(bookings.startsAt));

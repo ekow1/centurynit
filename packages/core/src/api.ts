@@ -74,6 +74,7 @@ import type {
 	CaseTeam,
 	StageHandoff,
 	ContinuationRequest,
+	CreateCaseMeeting,
 	StageIntakeSubmission,
 } from "century-nit-shared";
 import { API_PREFIX, type FeeSchedule } from "century-nit-shared";
@@ -306,7 +307,7 @@ export const bookingsApi = {
 	},
 
 
-	list(filter: { status?: BookingStatus; branchId?: string; employeeId?: string } = {}): Promise<{
+	list(filter: { status?: BookingStatus; branchId?: string; employeeId?: string; applicationId?: string } = {}): Promise<{
 		bookings: Booking[];
 		total: number;
 	}> {
@@ -1136,6 +1137,17 @@ export const applicationsApi = {
 	/** The office decides a client's request to take the stage beyond the plan's exit. */
 	decideContinuation(id: string, requestId: string, body: { decision: "approved" | "declined"; note?: string }): Promise<ContinuationRequest> {
 		return request(`${API_PREFIX}/applications/${id}/continuations/${requestId}`, {
+			method: "POST",
+			...json(body),
+		});
+	},
+	/** A case's check-ins — meetings the handler scheduled on the live case. */
+	meetings(id: string): Promise<{ meetings: Booking[] }> {
+		return request(`${API_PREFIX}/applications/${id}/meetings`);
+	},
+	/** Book a check-in on the case — online (Meet link) or in person; the client is emailed. */
+	createMeeting(id: string, body: CreateCaseMeeting): Promise<Booking> {
+		return request(`${API_PREFIX}/applications/${id}/meetings`, {
 			method: "POST",
 			...json(body),
 		});

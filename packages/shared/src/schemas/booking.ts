@@ -103,6 +103,34 @@ export const createBookingSchema = z.object({
 });
 export type CreateBooking = z.infer<typeof createBookingSchema>;
 
+/**
+ * A check-in on an active case — the handler schedules it, the client is
+ * emailed, no fee. `purpose` becomes the booking's service name so the
+ * existing notification templates carry it unchanged.
+ */
+export const CHECK_IN_PURPOSES = [
+	"General check-in",
+	"Document review",
+	"Offer decision call",
+	"Visa mock interview",
+	"Pre-departure briefing",
+] as const;
+export type CheckInPurpose = (typeof CHECK_IN_PURPOSES)[number];
+
+export const createCaseMeetingSchema = z.object({
+	purpose: z.string().min(1).max(120),
+	branchId: z.string().min(1),
+	type: bookingTypeSchema,
+	date: dateStringSchema,
+	time: timeStringSchema,
+	durationMinutes: z.number().int().min(15).max(240).default(45),
+	timezone: timezoneSchema,
+	notes: z.string().max(2000).optional(),
+	/** Host — defaults to the caller (the case handler). */
+	employeeId: z.string().uuid().optional(),
+});
+export type CreateCaseMeeting = z.infer<typeof createCaseMeetingSchema>;
+
 export const assignBookingSchema = z.object({
 	employeeId: z.string().uuid(),
 });
@@ -195,6 +223,11 @@ export const bookingSchema = z.object({
 	id: z.string().uuid(),
 	reference: z.string(),
 	status: bookingStatusSchema,
+
+	/** "consultation" (the paid intake) or "check_in" (a case meeting). */
+	kind: z.enum(["consultation", "check_in"]).default("consultation"),
+	/** The case a check-in belongs to. */
+	applicationId: z.string().uuid().nullable().optional(),
 
 	serviceId: z.string(),
 	serviceName: z.string(),

@@ -280,11 +280,13 @@ function useCancelBooking(onChanged: () => void) {
 		usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents),
 	);
 
-	async function cancel(id: string) {
+	async function cancel(id: string, kind?: string) {
 		const ok = await confirm({
 			title: "Can't make it?",
 			message:
-				`Moving is free. Use "Move" on this row and your slot holds until your consultant confirms. Cancelling releases the slot and ends the consultation; a new booking means a new fee · ${feeLabel}.`,
+				kind === "check_in"
+					? `Moving is free. Use "Move" on this row and your slot holds until your team confirms. Cancelling releases the slot — your handler can book another any time.`
+					: `Moving is free. Use "Move" on this row and your slot holds until your consultant confirms. Cancelling releases the slot and ends the consultation; a new booking means a new fee · ${feeLabel}.`,
 			confirmText: "Cancel & release the slot",
 			tone: "danger",
 		});
@@ -292,6 +294,7 @@ function useCancelBooking(onChanged: () => void) {
 		setBusy(true);
 		try {
 			await bookingsApi.cancel(id);
+
 			toast.success("Appointment cancelled.");
 			onChanged();
 		} catch (err) {
@@ -325,7 +328,7 @@ function BookingRow({ booking, onChanged }: { booking: Booking; onChanged: () =>
 					<span className="ptable__sub">{d.toLocaleDateString(undefined, { weekday: "short" })}</span>
 				</td>
 				<td>
-					<strong>{cap(booking.serviceName)}</strong>
+					<strong>{booking.kind === "check_in" ? "Check-in · " : ""}{cap(booking.serviceName)}</strong>
 					<span className="ptable__sub">
 						{d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZone: booking.timezone })}
 						{" · "}{booking.durationMinutes} min · {booking.type === "online" ? "Online" : "In person"}
@@ -359,7 +362,7 @@ function BookingRow({ booking, onChanged }: { booking: Booking; onChanged: () =>
 								{rescheduling ? "Close" : "Move"}
 							</button>
 							{" · "}
-							<button type="button" className="jlink" disabled={busy} onClick={() => void cancel(booking.id)}>
+							<button type="button" className="jlink" disabled={busy} onClick={() => void cancel(booking.id, booking.kind)}>
 								{busy ? "Cancelling…" : "Cancel"}
 							</button>
 						</>
@@ -493,7 +496,7 @@ export function PortalAppointments() {
 					</div>
 					<div className="pnext__what">
 						<p className="eyebrow">Next appointment</p>
-						<p className="pnext__title">{cap(next.serviceName)}</p>
+						<p className="pnext__title">{next.kind === "check_in" ? "Check-in · " : ""}{cap(next.serviceName)}</p>
 						<div className="pnext__facts">
 							<span>
 								<b>{new Date(next.startsAt).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: next.timezone })}</b>
@@ -554,7 +557,7 @@ export function PortalAppointments() {
 								{reschedulingNext ? "Keep current time" : "Reschedule"}
 							</button>
 						) : null}
-						<button type="button" className="btn btn--ghost" disabled={cancelBusy} onClick={() => void cancelNext(next.id)}>
+						<button type="button" className="btn btn--ghost" disabled={cancelBusy} onClick={() => void cancelNext(next.id, next.kind)}>
 							{cancelBusy ? "Cancelling…" : "Cancel"}
 						</button>
 					</div>

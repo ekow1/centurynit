@@ -375,6 +375,18 @@ export const bookings = pgTable(
 		clientEmail: varchar("client_email", { length: 255 }).notNull(),
 		clientPhone: varchar("client_phone", { length: 40 }),
 
+		/**
+		 * What the booking is for. "consultation" is the paid Stage-0 intake;
+		 * "check_in" is a free meeting a handler schedules on an active case.
+		 */
+		kind: varchar("kind", { length: 16 }).notNull().default("consultation"),
+		/**
+		 * The case a check-in belongs to. Null on consultations. The FK lives
+		 * in the migration — a `.references()` here would close a
+		 * bookings → applications → consultations → bookings type cycle.
+		 */
+		applicationId: uuid("application_id"),
+
 		/** Service catalogue stays in content.ts — this references it by id. */
 		serviceId: varchar("service_id", { length: 64 }).notNull(),
 		serviceName: text("service_name").notNull(),

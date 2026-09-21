@@ -44,6 +44,8 @@ export type BookingNotificationContext = {
 	meetingProvider?: string | null;
 	branchName?: string;
 	reason?: string | null;
+	/** The note a handler wrote on a check-in — shown to the client verbatim. */
+	note?: string | null;
 	/** iCal feed URL for the employee's personal calendar subscription (optional). */
 	calendarSubscriptionUrl?: string | null;
 };
@@ -162,6 +164,7 @@ export function bookingAssignedForClient(ctx: BookingNotificationContext): Queue
 		`<strong>When:</strong> ${when} (${ctx.durationMinutes} minutes)`,
 		`<strong>With:</strong> ${ctx.employeeName ?? "your consultant"}`,
 		`<strong>Reference:</strong> ${ctx.reference}`,
+		...(ctx.note ? [`<strong>Note from your team:</strong> ${ctx.note}`] : []),
 	];
 	const { html, text } = formatEmail("Your appointment is confirmed", lines, joinCtaUrl(ctx, "client"), ctx.reference);
 	return {
@@ -686,6 +689,25 @@ export function planUpdatedForClient(ctx: {
 		text,
 		idempotencyKey: `notify:plan_updated:${ctx.entityId}:${Date.now()}`,
 		template: "Plan updated",
+		reference: ctx.appNumber,
+	};
+}
+
+/** The office suggests the next stage; the client decides from their plan page. */
+export function stageProposedForClient(ctx: { entityId: string; clientName: string; clientEmail: string; appNumber: string; stageLabel: string; byName: string; note?: string | null }): QueuedEmail {
+	const lines = [
+		`Hi <strong>${ctx.clientName}</strong>,`,
+		`${ctx.byName} suggests adding the <strong>${ctx.stageLabel}</strong> stage to your plan.${ctx.note ? ` Their note: “${ctx.note}”.` : ""}`,
+		`Nothing changes until you say so. Open your plan on the portal to see what the stage covers and what it costs, and ask to add it from there.`,
+	];
+	const { html, text } = formatEmail("A suggestion for your plan", lines, null, ctx.appNumber);
+	return {
+		to: ctx.clientEmail,
+		subject: `Suggested for your plan · ${ctx.stageLabel} · ${ctx.appNumber}`,
+		html,
+		text,
+		idempotencyKey: `notify:stage_proposed:${ctx.entityId}:${ctx.stageLabel}:${Date.now()}`,
+		template: "Stage proposed",
 		reference: ctx.appNumber,
 	};
 }

@@ -28,7 +28,7 @@ import {
 
 /** The agency invoice's note names the plan: "Service package: <name> · <scope>". */
 function scopeOf(inv: Invoice): string | null {
-	if (inv.type !== "agency") return null;
+	if (inv.type !== "Agency") return null;
 	const m = /·\s*(Full journey|Admissions \+ Visa|Admissions only)\s*$/.exec(inv.note ?? "");
 	return m ? m[1] : null;
 }

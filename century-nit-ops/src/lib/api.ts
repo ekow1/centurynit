@@ -282,7 +282,7 @@ export type ApiInvoice = {
 	applicantEmail: string | null;
 	clientUserId: string | null;
 	applicationId: string | null;
-	lines: { id: string; label: string; detail: string | null; amountCents: number; schoolApplicationId?: string | null; dueAt?: string | null }[];
+	lines: { id: string; label: string; detail: string | null; amountCents: number; schoolApplicationId?: string | null; dueAt?: string | null; dueOn?: string | null }[];
 	subtotalCents: number;
 	paidCents: number;
 	creditedCents: number;

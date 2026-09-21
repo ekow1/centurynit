@@ -119,6 +119,8 @@ export type AssessmentResult = {
 	recUniversity: string;
 	recProgram: string;
 	recPackage: string;
+	/** The stages the consultant recommends; empty (or absent on older rows) means the full journey. */
+	recStages?: string[];
 };
 
 export interface MockConsultation {

@@ -134,11 +134,76 @@ export async function reshapeAgencyInvoiceForPlan(applicationId: string, planId:
 export async function fireDueTrigger(applicationId: string, trigger: DueTrigger): Promise<void> {
 	const inv = await liveAgencyInvoice(applicationId);
 	if (!inv) return;
-	await db
+	const stamped = await db
 		.update(invoiceLines)
 		.set({ dueAt: new Date() })
-		.where(and(eq(invoiceLines.invoiceId, inv.id), eq(invoiceLines.dueOn, trigger), sql`${invoiceLines.dueAt} IS NULL`));
+		.where(and(eq(invoiceLines.invoiceId, inv.id), eq(invoiceLines.dueOn, trigger), sql`${invoiceLines.dueAt} IS NULL`))
+		.returning({ id: invoiceLines.id });
 	await refreshInvoiceDueAt(inv.id);
+	if (stamped.length > 0) await notifyMilestoneDue(applicationId, inv.id, stamped.map((l) => l.id), trigger);
+}
+
+const DUE_BECAUSE: Record<DueTrigger, string> = {
+	acceptance: "You accepted your plan",
+	offer: "Your first offer letter has been recorded",
+	visa_open: "Your visa file has opened",
+	visa_approved: "Your visa has been approved",
+	arrival: "You have arrived",
+	scheduled: "An instalment date has come round",
+};
+
+/**
+ * A milestone just fell due: tell the client, in-app and by email, which
+ * line, how much, and why — the case event in their words — with a link to
+ * pay. Silent billing is what turns a fair milestone into a complaint.
+ */
+export async function notifyMilestoneDue(applicationId: string, invoiceId: string, lineIds: string[], trigger: DueTrigger): Promise<void> {
+	try {
+		const [who] = await db
+			.select({ userId: applicants.userId, name: applicants.name, email: applicants.email, appNumber: applications.appNumber })
+			.from(applications)
+			.innerJoin(applicants, eq(applications.applicantId, applicants.id))
+			.where(eq(applications.id, applicationId))
+			.limit(1);
+		if (!who) return;
+		const [inv] = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+		const lines = await db.select().from(invoiceLines).where(inArray(invoiceLines.id, lineIds)).orderBy(asc(invoiceLines.position));
+		if (!inv || lines.length === 0) return;
+		const rate = await exchangeRate();
+		const total = lines.reduce((n, l) => n + l.amountCents, 0);
+		const label = lines.length === 1 ? lines[0].label : `${lines.length} milestones`;
+		const amount = `${formatGhs((total / 100) * rate)} (${formatUsd(total / 100)})`;
+		const because = DUE_BECAUSE[trigger];
+		if (who.userId) {
+			const { notify } = await import("./notify.js");
+			await notify({
+				recipientUserId: who.userId,
+				type: "invoice.milestone_due",
+				title: `Now due: ${label} · ${amount}`,
+				body: `${because} — the next part of your service fee is due. Pay it from your portal when you are ready.`,
+				link: "/portal/payment-execution",
+				entityType: "invoice",
+				entityId: invoiceId,
+			});
+		}
+		if (who.email) {
+			const { milestoneDueForClient } = await import("./notifications.js");
+			await queueEmail(
+				milestoneDueForClient({
+					idempotencyKey: `milestone:due:${invoiceId}:${lines.map((l) => l.position).join(",")}`,
+					clientName: who.name ?? "there",
+					clientEmail: who.email,
+					invoiceNumber: inv.invoiceNumber,
+					lineLabel: label,
+					amountGhsFormatted: amount,
+					because,
+					payUrl: `${env.FRONTEND_URL}/portal/payment-execution`,
+				}),
+			);
+		}
+	} catch (err) {
+		console.warn("[serviceFee] milestone-due notification failed:", err);
+	}
 }
 
 /**
@@ -191,6 +256,7 @@ export async function reconcileDueTriggers(now = new Date()): Promise<{ stamped:
 		await db.insert(invoiceEvents).values({ invoiceId: r.invoiceId, action: "due_reconciled", actor: "system", detail: `"${r.dueOn}" had happened but the line was undated — stamped by the daily reconciliation` });
 		touched.add(r.invoiceId);
 		stamped += 1;
+		await notifyMilestoneDue(r.appId, r.invoiceId, [r.lineId], r.dueOn as DueTrigger);
 	}
 	for (const invoiceId of touched) await refreshInvoiceDueAt(invoiceId);
 	return { stamped, invoices: touched.size };

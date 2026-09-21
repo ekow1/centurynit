@@ -72,8 +72,11 @@ export async function requestContinuation(input: {
 	note?: string;
 }): Promise<ContinuationRequest> {
 	const { application } = await getApplicationForClientUser(input.applicantUserId);
-	if (application.stage !== "completed") {
-		throw new HttpError(409, "NOT_COMPLETED", "A stage can be requested once the journey is complete.");
+	// One rule for adding a stage: the client asks, the office records. A
+	// running case asks the same way a completed one does — the only thing a
+	// request needs is an accepted plan with a stage beyond its exit.
+	if (!application.scopeStages) {
+		throw new HttpError(409, "NO_PLAN", "Accept a plan first — a stage is added to a plan.");
 	}
 	const stage = requestableStageFor(application.scopeStages);
 	if (!stage) throw new HttpError(409, "NOTHING_TO_ADD", "The plan already covers the whole journey.");
@@ -193,6 +196,36 @@ export async function decideContinuation(input: {
 		decision: "continue",
 		decidedByClientUserId: clientUserId ?? undefined,
 	});
+
+	// A running case just grows: the added stage's lines carry their own
+	// triggers and the ordinary gates open it when the case gets there. Only
+	// a completed case is reopened into the stage.
+	if (row.stage !== "completed") {
+		const [decidedRunning] = await db
+			.update(stageContinuationRequests)
+			.set({ status: "approved", decisionNote: input.note?.trim() || null, decidedByOpsUserId: input.actor.opsUserId, decidedByName: input.actor.name, decidedAt: new Date(), updatedAt: new Date() })
+			.where(eq(stageContinuationRequests.id, req.id))
+			.returning();
+		await db.insert(caseComments).values({
+			targetType: "application",
+			targetId: row.id,
+			kind: "status",
+			text: `Continuation approved: ${SERVICE_STAGE_LABELS[req.stage as ServiceStage]} added to the plan — opens when the case reaches it`,
+			authorName: input.actor.name,
+			authorOpsUserId: input.actor.opsUserId,
+		});
+		if (clientUserId) {
+			notify({
+				recipientUserId: clientUserId,
+				type: "plan.updated",
+				title: `${SERVICE_STAGE_LABELS[req.stage as ServiceStage]} added to your plan`,
+				body: "Your request was approved. The stage is on your plan and its milestone is on your invoice; it opens when your case reaches it.",
+				link: "/portal/package",
+			}).catch(() => {});
+		}
+		emitDomain("case.updated", { caseId: row.id, targetType: "application", continuation: true }, { ops: true, userId: clientUserId });
+		return { request: serialize(decidedRunning), applicationId: row.id };
+	}
 
 	const resumeStage = entryJourneyStage([req.stage]);
 	const [reopened] = await db

@@ -661,6 +661,64 @@ export function documentReviewedForClient(ctx: {
 }
 
 /** Application advanced to the next journey stage — sent to the client. */
+/** The office recorded, extended or reduced the client's plan on their behalf. */
+export function planUpdatedForClient(ctx: {
+	entityId: string;
+	clientName: string;
+	clientEmail: string;
+	appNumber: string;
+	/** "recorded" | "extended" | "reduced" */
+	change: string;
+	planLabel: string;
+	byName: string;
+	reason?: string | null;
+}): QueuedEmail {
+	const lines = [
+		`Hi <strong>${ctx.clientName}</strong>,`,
+		`${ctx.byName} has ${ctx.change} your plan on your behalf. It now reads: <strong>${ctx.planLabel}</strong>.${ctx.reason ? ` Their note: “${ctx.reason}”.` : ""}`,
+		`Your service-fee invoice reflects the change. Log in to your portal to see the plan, its milestones and anything now due — and reply to your consultant if this is not what you agreed.`,
+	];
+	const { html, text } = formatEmail("Your plan was updated", lines, null, ctx.appNumber);
+	return {
+		to: ctx.clientEmail,
+		subject: `Your plan · ${ctx.planLabel} · ${ctx.appNumber}`,
+		html,
+		text,
+		idempotencyKey: `notify:plan_updated:${ctx.entityId}:${Date.now()}`,
+		template: "Plan updated",
+		reference: ctx.appNumber,
+	};
+}
+
+/** A service-fee milestone fell due — its case event just happened. */
+export function milestoneDueForClient(ctx: {
+	idempotencyKey: string;
+	clientName: string;
+	clientEmail: string;
+	invoiceNumber: string;
+	lineLabel: string;
+	amountGhsFormatted: string;
+	/** What happened to make it due, in the client's words. */
+	because: string;
+	payUrl: string;
+}): QueuedEmail {
+	const lines = [
+		`Hi <strong>${ctx.clientName}</strong>,`,
+		`${ctx.because} — so the next part of your service fee is now due: <strong>${ctx.lineLabel}</strong>, <strong>${ctx.amountGhsFormatted}</strong>.`,
+		`Pay it from your portal whenever you are ready: <a href="${ctx.payUrl}">${ctx.payUrl}</a>`,
+	];
+	const { html, text } = formatEmail("A milestone is now due", lines, null, ctx.invoiceNumber);
+	return {
+		to: ctx.clientEmail,
+		subject: `Now due · ${ctx.lineLabel} · ${ctx.amountGhsFormatted}`,
+		html,
+		text,
+		idempotencyKey: ctx.idempotencyKey,
+		template: "Milestone due",
+		reference: ctx.invoiceNumber,
+	};
+}
+
 export function stageAdvancedForClient(ctx: {
 	/** Application row id — keys the dedup; app numbers recycle. */
 	entityId?: string;

@@ -4,7 +4,9 @@ import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { LEAD_STAGE_LABELS, type LeadStage } from "century-nit-core";
-import { API_PREFIX, JOURNEY_STAGES, JOURNEY_STAGE_LABELS, LEAD_STAGE_FROM_DB, type JourneyStage } from "century-nit-shared";
+import { API_PREFIX, JOURNEY_STAGES, JOURNEY_STAGE_LABELS, LEAD_STAGE_FROM_DB, scopeLabel, type JourneyStage } from "century-nit-shared";
+import { useInvoiceApi } from "../hooks/useInvoiceApi";
+import { fmtGhs } from "./currency";
 import { documentsApi } from "century-nit-core/api";
 import type { ApplicantDocument } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
@@ -77,6 +79,7 @@ const pts = (a: number, b: number | null) => (b === null ? null : `${a - b >= 0 
 export function EnterpriseReports() {
 	const { opsRole, opsUser, canSeeAllBranches, scopeRecords, requiresAssignmentScope } = useOpsAuth();
 	const { consultations, applications, applicants } = useCases();
+	const { invoices } = useInvoiceApi();
 	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
 	const [documents, setDocuments] = useState<ApplicantDocument[]>([]);
 	const [period, setPeriod] = useState<PeriodId>("month");
@@ -108,6 +111,28 @@ export function EnterpriseReports() {
 		if (canSeeAllBranches) return all;
 		return requiresAssignmentScope ? all.filter((l) => l.assignedStaffName === me) : all;
 	}, [apiLeads, canSeeAllBranches, requiresAssignmentScope, me]);
+
+	/** Every case by the shape of its plan — the partial plans are the point of the model, so they get their own rows. */
+	const byPlan = useMemo(() => {
+		const rows = new Map<string, { label: string; cases: number; completed: number; visaDecided: number; visaApproved: number; feeTotal: number; feeCount: number }>();
+		const agencyByApp = new Map<string, number>();
+		for (const inv of invoices) if (inv.type === "Agency" && inv.status !== "void" && inv.applicationId) agencyByApp.set(inv.applicationId, inv.subtotal);
+		for (const a of apps) {
+			const label = a.scopeStages ? scopeLabel(a.scopeStages) : "Not accepted";
+			const r = rows.get(label) ?? { label, cases: 0, completed: 0, visaDecided: 0, visaApproved: 0, feeTotal: 0, feeCount: 0 };
+			r.cases += 1;
+			if (a.stage === "completed") r.completed += 1;
+			if (a.visaOutcome) r.visaDecided += 1;
+			if (a.visaOutcome === "approved") r.visaApproved += 1;
+			const fee = agencyByApp.get(a.id);
+			if (fee != null) {
+				r.feeTotal += fee;
+				r.feeCount += 1;
+			}
+			rows.set(label, r);
+		}
+		return [...rows.values()].sort((x, y) => y.cases - x.cases);
+	}, [apps, invoices]);
 
 	/** The period's counts, and the period before it for the deltas. */
 	const period_ = useMemo(() => {
@@ -355,6 +380,38 @@ export function EnterpriseReports() {
 					))}
 					<p className="cn-detailhead__meta" style={{ marginTop: "0.5rem" }}>Fewer than {MIN_SAMPLES} cases with both dates shows as —. Cases that skipped a step are left out.</p>
 				</section>
+
+			<section className="dash-panel">
+				<header className="dash-panel__head">
+					<h2 className="dash-panel__title">By plan</h2>
+					<span className="cn-detailhead__meta">what each shape of plan converts at, pays, and finishes</span>
+				</header>
+				<div className="ops-table-wrap">
+					<table className="admin-table">
+						<thead>
+							<tr>
+								<th>Plan</th>
+								<th style={{ textAlign: "right" }}>Cases</th>
+								<th style={{ textAlign: "right" }}>Completed</th>
+								<th style={{ textAlign: "right" }}>Visa approved</th>
+								<th style={{ textAlign: "right" }}>Service fee · avg</th>
+							</tr>
+						</thead>
+						<tbody>
+							{byPlan.map((r) => (
+								<tr key={r.label}>
+									<td>{r.label}</td>
+									<td className="mono" style={{ textAlign: "right" }}>{r.cases}</td>
+									<td className="mono" style={{ textAlign: "right" }}>{r.cases ? `${r.completed} · ${Math.round((r.completed / r.cases) * 100)}%` : "—"}</td>
+									<td className="mono" style={{ textAlign: "right" }}>{r.visaDecided ? `${r.visaApproved} / ${r.visaDecided}` : "—"}</td>
+									<td className="mono" style={{ textAlign: "right" }}>{r.feeCount ? fmtGhs(r.feeTotal / r.feeCount) : "—"}</td>
+								</tr>
+							))}
+						</tbody>
+					</table>
+				</div>
+				<p className="cn-detailhead__meta" style={{ marginTop: "0.5rem" }}>A case with no accepted plan counts under "Not accepted". Fees are the agency invoice's subtotal.</p>
+			</section>
 			</div>
 
 			<div className="dash-grid" style={{ gridTemplateColumns: "1fr 1fr", marginTop: "1rem" }}>

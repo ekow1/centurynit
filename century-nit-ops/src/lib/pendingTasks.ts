@@ -995,6 +995,71 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 		}
 	}
 
+	// ── the flow's silent moments, as work ────────────────────────────────
+	// A plan recommended but not accepted, a client who opted out of the next
+	// stage, and a refund flagged by a reduced plan: each used to be visible
+	// only to whoever opened the case.
+	for (const a of applications) {
+		const eligible = a.journey?.chapterUnlocks?.package ?? false;
+		const planned = a.plannedStages ?? null;
+		if (eligible && a.proceedStatus === "accepted" && !a.scopeStages && !a.depositPaid && a.stage !== "completed") {
+			const ageDays = Math.floor((Date.now() - new Date(a.updatedAt ?? Date.now()).getTime()) / 86_400_000);
+			q.push({
+				id: `a-plan-${a.id}`,
+				category: "needs_action",
+				kind: "application",
+				action: "review",
+				record: a,
+				title: a.applicantName,
+				subtitle: `Plan awaiting acceptance${planned ? ` · recommended ${scopeLabel(planned)}` : ""}${ageDays >= 7 ? ` · ${ageDays} days` : ""}`,
+				meta: "The client consented but has not accepted a plan. Nudge them, or record it on their behalf from Enrolment.",
+				branch: a.branch,
+				owner: caseHandlerName(a) || "—",
+				linkTo: `/applications?id=${a.id}&tab=enrolment`,
+				at: a.updatedAt,
+				priority: ageDays >= 7 ? PRIORITY.review_application : PRIORITY.followup,
+			});
+		}
+		const optedOut = a.visaConsent?.decision === "opt_out" ? "Visa" : a.travelConsent?.decision === "opt_out" ? "Departure" : null;
+		if (optedOut && a.stage !== "completed") {
+			q.push({
+				id: `a-optout-${a.id}`,
+				category: "needs_action",
+				kind: "application",
+				action: "review",
+				record: a,
+				title: a.applicantName,
+				subtitle: `Client opted out of ${optedOut} · complete the case where it stands`,
+				meta: stageMeta(a),
+				branch: a.branch,
+				owner: caseHandlerName(a) || "—",
+				linkTo: `/applications?id=${a.id}`,
+				at: a.updatedAt,
+				priority: PRIORITY.review_application,
+			});
+		}
+	}
+	for (const r of invoiceRows) {
+		const refund = [...(r.inv.history ?? [])].reverse().find((h) => h.action === "refund_due" || h.action === "credited" || h.action === "voided");
+		if (refund?.action === "refund_due") {
+			q.push({
+				id: `inv-refund-${r.inv.id}`,
+				category: "needs_invoice",
+				kind: "invoice",
+				action: "chase",
+				record: r.inv,
+				title: r.inv.applicantName,
+				subtitle: `Refund due · ${refund.detail ?? "the client paid ahead for a stage now off the plan"}`,
+				meta: `${r.inv.invoiceNumber} · issue a credit note from the invoice`,
+				branch: "",
+				owner: "Finance",
+				linkTo: `/invoices?open=${r.inv.id}`,
+				at: refund.at,
+				priority: PRIORITY.issue,
+			});
+		}
+	}
+
 	for (const r of invoiceRows) {
 		if (r.status === "proforma") {
 			q.push({

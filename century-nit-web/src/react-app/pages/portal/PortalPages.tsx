@@ -466,7 +466,7 @@ function normaliseDegreeLevel(raw: string | null | undefined): SchoolDegreeLevel
 }
 
 function SchoolPackageInner() {
-	const { application, chooseSchoolPackage, booking, choosePaymentPlan, fees, syncFromServer } = useAppState();
+	const { application, chooseSchoolPackage, booking, choosePaymentPlan, fees, syncFromServer, journey } = useAppState();
 	const { toast } = useNotifier();
 	const nav = useNavigate();
 	const paySheet = usePaySheet(() => void syncFromServer());
@@ -621,16 +621,32 @@ function SchoolPackageInner() {
 		});
 	}
 	const entry = entryStage(stages);
+	// One rule for adding a stage: the client asks, the office records. The
+	// request goes to the case's handler, who checks the stage's intake and
+	// approves; the stage and its milestone then appear here.
+	const pendingContinuation = (journey.pendingContinuationStage ?? null) as ServiceStage | null;
 	async function extendPlan() {
-		if (!activeFunding || !activeLevel || addedStages.length === 0 || extending) return;
+		if (addedStages.length === 0 || extending) return;
 		setExtending(true);
 		try {
-			await meApi.choosePackage({ packageCode: needsTrack ? activeFunding : undefined, degreeLevel: activeLevel, targetSchoolCount, stages });
-			chooseSchoolPackage(needsTrack ? activeFunding : "undecided", activeLevel, targetSchoolCount, totalServiceFeeCents, stages);
+			await meApi.requestContinuation({ note: `Asked from the plan page: add ${addedStages.map((st) => SERVICE_STAGE_LABELS[st]).join(" + ")}` });
 			await syncFromServer();
-			toast.success(`${addedStages.map((st) => SERVICE_STAGE_LABELS[st]).join(" + ")} added to your plan.`);
+			toast.success(`Request sent — your consultant will confirm ${addedStages.map((st) => SERVICE_STAGE_LABELS[st]).join(" + ")} and it will appear on your plan.`);
 		} catch (err) {
-			toast.error(err instanceof ApiError ? err.message : "Could not extend your plan. Please try again.");
+			toast.error(err instanceof ApiError ? err.message : "Could not send your request. Please try again.");
+		} finally {
+			setExtending(false);
+		}
+	}
+	async function withdrawRequest() {
+		if (extending) return;
+		setExtending(true);
+		try {
+			await meApi.withdrawContinuation();
+			await syncFromServer();
+			toast.success("Request withdrawn.");
+		} catch (err) {
+			toast.error(err instanceof ApiError ? err.message : "Could not withdraw the request.");
 		} finally {
 			setExtending(false);
 		}
@@ -1029,7 +1045,16 @@ function SchoolPackageInner() {
 										: "If you stop part-way, you owe only the stages that opened. Stages you never reach are never charged, and you can add the next one from this page when your offer arrives."}{" "}
 									School application fees and tuition are the institutions', not ours.
 								</p>
-								{isDepositPaid && addedStages.length > 0 ? (
+								{isDepositPaid && pendingContinuation ? (
+									<>
+										<p className="muted" style={{ fontSize: "0.72rem", lineHeight: 1.5, margin: "0 0 0.5rem" }}>
+											You asked to add <strong>{SERVICE_STAGE_LABELS[pendingContinuation]}</strong>. Your consultant is confirming it; the stage and its milestone appear here once approved.
+										</p>
+										<Button type="button" variant="ghost" onClick={() => void withdrawRequest()} disabled={extending} style={{ width: "100%" }}>
+											{extending ? "Withdrawing…" : "Withdraw the request"}
+										</Button>
+									</>
+								) : isDepositPaid && addedStages.length > 0 ? (
 									<Button
 										type="button"
 										arrow
@@ -1037,9 +1062,9 @@ function SchoolPackageInner() {
 										disabled={extending}
 										style={{ width: "100%" }}
 									>
-										{extending ? "Adding…" : (
+										{extending ? "Sending…" : (
 											<>
-												Add {addedStages.map((st) => SERVICE_STAGE_LABELS[st]).join(" + ")} · <MoneyInline usd={addedStages.reduce((n, st) => n + stagePriceOf(st), 0) / 100 - (quote.full ? quote.bundleDiscountCents / 100 : 0)} />
+												Ask to add {addedStages.map((st) => SERVICE_STAGE_LABELS[st]).join(" + ")} · <MoneyInline usd={addedStages.reduce((n, st) => n + stagePriceOf(st), 0) / 100 - (quote.full ? quote.bundleDiscountCents / 100 : 0)} />
 											</>
 										)}
 									</Button>

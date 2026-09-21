@@ -77,6 +77,21 @@ export function EnterpriseFinance() {
 	const scoped = useMemo(() => invoices.filter((i) => i.status !== "void" && i.status !== "proforma" && (branchFilter === "all" || branchOf(i) === branchFilter)), [invoices, branchFilter, branchOf]);
 
 	/** The period's money, and the period before it. */
+	// The two safety nets under stage billing, surfaced: milestones the daily
+	// sweep had to date (an event nobody recorded through its hook), and
+	// refunds a reduced plan flagged that finance has not yet credited.
+	const nets = useMemo(() => {
+		const since = now.getTime() - 7 * 86_400_000;
+		let reconciled = 0;
+		let refunds = 0;
+		for (const inv of invoices) {
+			const history = inv.history ?? [];
+			reconciled += history.filter((h) => h.action === "due_reconciled" && new Date(h.at).getTime() >= since).length;
+			const last = [...history].reverse().find((h) => h.action === "refund_due" || h.action === "credited" || h.action === "voided");
+			if (last?.action === "refund_due") refunds += 1;
+		}
+		return { reconciled, refunds };
+	}, [invoices, now]);
 	const figures = useMemo(() => {
 		const sum = (from: Date | null, to: Date | null) => {
 			let billed = 0;
@@ -283,6 +298,12 @@ export function EnterpriseFinance() {
 						{figures.oldest > 0 ? `oldest ${figures.oldest} d · ` : ""}
 						{figures.owing} account{figures.owing === 1 ? "" : "s"} owing
 					</span>
+				</div>
+				<div className="dash-kpi">
+					<span className="dash-kpi__label">Safety nets · 7 days</span>
+					<span className="dash-kpi__value">{nets.reconciled}</span>
+					<span className="dash-kpi__delta">milestone{nets.reconciled === 1 ? "" : "s"} dated by the daily sweep</span>
+					<span className="dash-kpi__note">{nets.refunds} refund{nets.refunds === 1 ? "" : "s"} flagged, awaiting a credit note</span>
 				</div>
 				<div className="dash-kpi">
 					<span className="dash-kpi__label">Gateway fees</span>

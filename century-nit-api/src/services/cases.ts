@@ -2553,6 +2553,49 @@ import { milestoneSplit, stagePricesFor } from "./fees.js";
 
 type PackageOutcome = { application: ApplicationRow; proformaInvoice: typeof invoices.$inferSelect | null };
 
+/**
+ * Ops recorded, extended or reduced the plan on the client's behalf: say so,
+ * in-app and by email, with the note they gave. A client should never learn
+ * their plan changed from an invoice. Never throws.
+ */
+async function notifyPlanChangedByOps(app: ApplicationRow, change: "recorded" | "extended" | "reduced", planLabel: string, actor: { name: string; reason?: string | null }): Promise<void> {
+	try {
+		const [who] = await db
+			.select({ userId: applicants.userId, name: applicants.name, email: applicants.email })
+			.from(applicants)
+			.where(eq(applicants.id, app.applicantId))
+			.limit(1);
+		if (!who) return;
+		if (who.userId) {
+			await notify({
+				recipientUserId: who.userId,
+				type: "plan.updated",
+				title: `Your plan was ${change}: ${planLabel}`,
+				body: `${actor.name} ${change} your plan on your behalf${actor.reason ? ` — “${actor.reason}”` : ""}. Your service-fee invoice reflects it.`,
+				link: "/portal/package",
+				entityType: "case",
+				entityId: app.id,
+			});
+		}
+		if (who.email) {
+			await queueEmails([
+				mail.planUpdatedForClient({
+					entityId: app.id,
+					clientName: who.name ?? "there",
+					clientEmail: who.email,
+					appNumber: app.appNumber,
+					change,
+					planLabel,
+					byName: actor.name,
+					reason: actor.reason ?? null,
+				}),
+			]);
+		}
+	} catch (err) {
+		console.warn("[cases] plan-changed notification failed:", err);
+	}
+}
+
 /** Which stage an agency line pays for — from its label; null on a full-journey split line. */
 function lineStage(l: { label: string }): ServiceStage | null {
 	if (l.label.startsWith("Admissions")) return "admissions";
@@ -2765,6 +2808,7 @@ export async function setApplicationPackage(input: {
 						authorOpsUserId: input.actor?.opsUserId ?? null,
 					});
 					const [fresh] = await tx.select().from(invoices).where(eq(invoices.id, live.id)).limit(1);
+					if (input.actor?.opsUserId && !input.internal) await notifyPlanChangedByOps(updated, "reduced", scopeLabel(scope), input.actor);
 					return { application: updated, proformaInvoice: fresh ?? live };
 				}
 				// Same plan — only the facts changed.
@@ -2808,6 +2852,7 @@ export async function setApplicationPackage(input: {
 				authorOpsUserId: input.actor?.opsUserId ?? null,
 			});
 			const [fresh] = await tx.select().from(invoices).where(eq(invoices.id, live.id)).limit(1);
+			if (input.actor?.opsUserId && !input.internal) await notifyPlanChangedByOps(updated, "extended", scopeLabel(scope), input.actor);
 			return { application: updated, proformaInvoice: fresh ?? live };
 		}
 
@@ -2874,6 +2919,7 @@ export async function setApplicationPackage(input: {
 			authorOpsUserId: input.actor?.opsUserId ?? null,
 		});
 
+		if (input.actor?.opsUserId && !input.internal) await notifyPlanChangedByOps(updated, "recorded", scopeLabel(scope), input.actor);
 		return { application: updated, proformaInvoice };
 	});
 }

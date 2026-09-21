@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile top bar — fix</title>
+<style>
+	:root{--bg:#fafaf8;--ink:#18181b;--mut:#71717a;--line:#dcdcd6;--linelt:#e9e9e4;--bad:#b91c1c;--good:#15803d;--mono:ui-monospace,Menlo,monospace}
+	*{box-sizing:border-box;margin:0;padding:0}
+	body{background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,sans-serif;padding:2rem clamp(1rem,4vw,3rem)}
+	h1{font-size:1.3rem;margin-bottom:.2rem}
+	.sub{color:var(--mut);font-size:.8rem;margin-bottom:1.75rem;max-width:48rem}
+	h2{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--mut);margin:2rem 0 .6rem}
+	.frame{width:360px;border:1.5px solid var(--ink);background:#fff;box-shadow:4px 4px 0 rgba(0,0,0,.12);overflow:hidden}
+	.tag{display:inline-block;font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;padding:.15rem .5rem;color:#fff}
+	.tag.bad{background:var(--bad)}.tag.good{background:var(--good)}
+	.cols{display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start}
+	.note{max-width:24rem;font-size:.78rem;color:var(--mut)}
+	.note li{margin-bottom:.5rem}
+	code{font-family:var(--mono);font-size:.7rem;background:var(--linelt);padding:.05em .3em}
+	/* current pbar */
+	.bar{display:flex;align-items:center;gap:.75rem;min-height:56px;padding:0 .9rem;border-bottom:1px solid var(--line);background:rgba(250,250,248,.94)}
+	.mark{width:2.1rem;height:2.1rem;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;flex-shrink:0}
+	.ic{width:2.35rem;height:2.35rem;margin-left:-.5rem;display:flex;align-items:center;justify-content:center;font-size:1.05rem;flex-shrink:0}
+	.t{flex:1;min-width:0}
+	.t b{display:block;font-size:1.05rem;line-height:1.15}
+	.t i{font-style:normal;font-family:var(--mono);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--mut)}
+	.bell{position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:1rem}
+	.nbadge{position:absolute;top:2px;right:2px;background:var(--ink);color:#fff;font:700 .6rem var(--mono);padding:.15rem .3rem;border:2px solid #fff}
+	.ava{width:1.9rem;height:1.9rem;border-radius:50%;background:#c4b5fd;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700}
+	.pnext{display:flex;gap:.5rem;align-items:center;background:var(--ink);color:#fff;font-size:.72rem;padding:.45rem .9rem}
+	.pnext em{font-style:normal;font-family:var(--mono);font-size:.52rem;text-transform:uppercase;opacity:.7}
+	/* fixed pbar */
+	.bar2{display:flex;align-items:center;gap:.5rem;height:56px;padding:0 .9rem;border-bottom:1.5px solid var(--ink);background:rgba(250,250,248,.96)}
+	.bar2 .ic{margin-left:-.35rem}
+	.acts{display:flex;align-items:center;gap:2px;margin-right:-.35rem}
+	.acts>button,.acts>.bell2{width:40px;height:40px;border:0;background:none;display:flex;align-items:center;justify-content:center;position:relative;font-size:1rem}
+	.ava2{width:26px;height:26px;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font:700 .58rem var(--mono)}
+	.content{padding:1rem .9rem;font-size:.72rem;color:var(--mut)}
+	.sk{height:.65rem;background:var(--linelt);margin:.45rem 0}
+</style>
+</head>
+<body>
+<h1>Mobile top bar — arrangement fix</h1>
+<p class="sub">The row has no shared hit-box contract: the avatar borrows the back-chevron's negative margin, the bell is a different size, and the actions cluster hugs the edge inconsistently. Result: crowded, misaligned right side.</p>
+
+<h2>Now vs proposed · 360px</h2>
+<div class="cols">
+	<div>
+		<span class="tag bad">Current</span>
+		<div class="frame" style="margin-top:.5rem">
+			<div class="bar">
+				<span class="mark">CN</span>
+				<span class="t"><b>Home</b><i>I · Consultation</i></span>
+				<span class="bell">🔔<span class="nbadge">3</span></span>
+				<span class="ic"><span class="ava">EA</span></span>
+			</div>
+			<div class="pnext"><em>Next</em> Pay enrolment invoice <span style="margin-left:auto">→</span></div>
+			<div class="content"><div class="sk" style="width:70%"></div><div class="sk" style="width:90%"></div></div>
+		</div>
+	</div>
+	<div>
+		<span class="tag good">Proposed</span>
+		<div class="frame" style="margin-top:.5rem">
+			<div class="bar2">
+				<span class="mark">CN</span>
+				<span class="t"><b>Home</b><i>I · Consultation</i></span>
+				<span class="acts">
+					<span class="bell2">🔔<span class="nbadge">3</span></span>
+					<button><span class="ava2">EA</span></button>
+				</span>
+			</div>
+			<div class="pnext"><em>Next</em> Pay enrolment invoice <span style="margin-left:auto">→</span></div>
+			<div class="content"><div class="sk" style="width:70%"></div><div class="sk" style="width:90%"></div></div>
+		</div>
+	</div>
+	<ul class="note">
+		<li><b>Actions get one contract</b> — bell + avatar become identical 40×40 buttons inside <code>.pbar__actions</code>, optically compensated as a group (<code>margin-right:-.35rem</code>), never individually.</li>
+		<li><b>Negative margin only on the back chevron</b> — a new <code>.pbar__back</code> class carries <code>margin-left:-.35rem</code>; the avatar stops borrowing it.</li>
+		<li><b>Avatar squares up</b> — mono initials on ink, matching the shell's square language instead of a soft round photo.</li>
+		<li><b>Bar bottom rule strengthens</b> to 1.5px ink — reads as the page's top edge, matches the card treatment everywhere else.</li>
+		<li><b>Dropdown anchors</b> — the account menu + notification panel pin to the actions cluster (<code>right:0</code>), can't fall off-screen left.</li>
+		<li>Also fixed while in here: <code>open-chat</code> vs <code>century:open-chat</code> — the Help tab's event name mismatch.</li>
+	</ul>
+</div>
+
+<h2>Stage page variant (back button)</h2>
+<div class="cols">
+	<div class="frame">
+		<span class="tag good">Proposed · stage page</span>
+		<div class="bar2" style="border-top:none">
+			<button class="ic" style="border:0;background:none">←</button>
+			<span class="t"><b>Visa</b><i>IV · Visa</i></span>
+			<span class="acts"><span class="bell2">🔔</span><button><span class="ava2">EA</span></button></span>
+		</div>
+		<div class="content"><div class="sk" style="width:55%"></div><div class="sk" style="width:80%"></div></div>
+	</div>
+	<p class="note">Back chevron replaces the CN mark on stage pages — same geometry, only the left slot changes. Chevron gets its own <code>.pbar__back</code> class so the negative margin never leaks onto the avatar again.</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile top nav — dead-zone fix</title>
+<style>
+	:root {
+		--bg:#fafaf8; --ink:#18181b; --mut:#71717a; --line:#dcdcd6; --linelt:#e9e9e4;
+		--bad:#b91c1c; --good:#15803d; --amber:#b45309; --accent:#5b21b6;
+		--mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+	}
+	* { box-sizing:border-box; margin:0; padding:0; }
+	body { background:var(--bg); color:var(--ink); font:14px/1.5 system-ui,sans-serif; padding:2rem clamp(1rem,4vw,3rem); }
+	h1 { font-size:1.4rem; margin-bottom:.25rem; }
+	.sub { color:var(--mut); font-size:.8rem; margin-bottom:2rem; max-width:52rem; }
+	h2 { font-family:var(--mono); font-size:.7rem; text-transform:uppercase; letter-spacing:.14em; color:var(--mut); margin:2.5rem 0 .75rem; border-bottom:1.5px solid var(--ink); padding-bottom:.4rem; }
+	.find { border:1.5px solid var(--ink); background:#fff; padding:1rem 1.2rem; margin-bottom:.6rem; font-size:.8rem; max-width:56rem; }
+	.find b { font-family:var(--mono); font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; display:block; margin-bottom:.3rem; }
+	.find.bad { border-left:5px solid var(--bad); }
+	.find.good { border-left:5px solid var(--good); }
+	code { font-family:var(--mono); font-size:.72rem; background:var(--linelt); padding:.05em .3em; }
+
+	.frame { border:1.5px solid var(--ink); background:#fff; margin-bottom:1rem; box-shadow:4px 4px 0 rgba(0,0,0,.12); overflow:hidden; position:relative; }
+	.frame__tag { font-family:var(--mono); font-size:.58rem; text-transform:uppercase; letter-spacing:.1em; background:var(--ink); color:#fff; padding:.2rem .6rem; display:inline-block; }
+	.land { width:min(1024px,100%); height:400px; }
+	.port { width:375px; height:640px; }
+	.cols { display:flex; gap:1.5rem; flex-wrap:wrap; align-items:flex-start; }
+
+	/* simulated chrome */
+	.topbar { display:flex; justify-content:space-between; align-items:center; gap:.6rem; padding:.55rem 1rem; border-bottom:1px solid var(--linelt); background:#f4f4f1; font-size:.75rem; }
+	.crumb { font-family:var(--mono); font-size:.6rem; text-transform:uppercase; color:var(--mut); white-space:nowrap; overflow:hidden; }
+	.crumb b { color:var(--ink); }
+	.topbar .r { display:flex; align-items:center; gap:.5rem; }
+	.next { background:var(--ink); color:#fff; font-family:var(--mono); font-size:.55rem; text-transform:uppercase; padding:.25rem .5rem; white-space:nowrap; }
+	.bell,.msg { border:1px solid var(--line); padding:.25rem .45rem; font-size:.6rem; white-space:nowrap; background:#fff; }
+	.tabbar { position:absolute; left:0; right:0; bottom:0; display:flex; border-top:1px solid var(--line); background:rgba(250,250,248,.92); backdrop-filter:blur(8px); z-index:5; }
+	.tabbar span { flex:1; text-align:center; font-family:var(--mono); font-size:.52rem; text-transform:uppercase; color:var(--mut); padding:.7rem 0 .8rem; }
+	.tabbar span.on { color:var(--ink); font-weight:700; box-shadow:inset 0 2px 0 var(--ink); }
+	.body { padding:1rem; font-size:.75rem; color:var(--mut); }
+	.sk { height:.7rem; background:var(--linelt); margin:.5rem 0; }
+	.aside { position:absolute; left:0; top:0; bottom:0; width:190px; background:var(--ink); color:#fff; padding:.9rem; font-size:.62rem; }
+	.aside .ch { padding:.45rem .5rem; border-left:2px solid transparent; color:#a1a1aa; font-family:var(--mono); font-size:.58rem; text-transform:uppercase; }
+	.aside .ch.on { color:#fff; border-left-color:#fff; background:rgba(255,255,255,.08); }
+	.main { margin-left:190px; height:100%; display:flex; flex-direction:column; }
+
+	.pbar { display:flex; align-items:center; gap:.6rem; padding:.5rem .8rem; border-bottom:1px solid var(--line); background:rgba(250,250,248,.94); backdrop-filter:blur(8px); }
+	.pbar .mark { width:1.8rem; height:1.8rem; background:var(--ink); color:#fff; display:flex; align-items:center; justify-content:center; font-size:.7rem; font-weight:700; flex-shrink:0; }
+	.pbar .t { flex:1; min-width:0; }
+	.pbar .t b { display:block; font-size:.82rem; }
+	.pbar .t i { font-style:normal; font-family:var(--mono); font-size:.52rem; text-transform:uppercase; letter-spacing:.08em; color:var(--mut); }
+	.pbar .ic { width:1.9rem; height:1.9rem; border:0; background:none; font-size:.9rem; }
+	.pnext { display:flex; gap:.5rem; align-items:center; background:var(--ink); color:#fff; font-size:.7rem; padding:.45rem .8rem; }
+	.pnext em { font-style:normal; font-family:var(--mono); font-size:.52rem; text-transform:uppercase; opacity:.7; }
+	.x { position:absolute; top:.3rem; right:.4rem; font-family:var(--mono); font-size:.6rem; color:var(--bad); }
+	.flag { position:absolute; background:var(--bad); color:#fff; font-family:var(--mono); font-size:.52rem; padding:.1rem .4rem; z-index:6; }
+</style>
+</head>
+<body>
+
+<h1>Top nav — the 960–1024 dead zone</h1>
+<p class="sub">Two different breakpoints own the chrome. The desktop sidebar + topbar hide below <b>960px</b>, but the bottom tab bar appears below <b>1024px</b> (it inherits the public site's nav collapse). Between them, both systems are live at once — and the tab bar's reserved space (<code>--shell-bottom</code>) is forced back to 0, so it floats over content.</p>
+
+<h2>What you're seeing — 1024×504 landscape</h2>
+<div class="frame land">
+	<span class="frame__tag">Today · both navs at once</span>
+	<div class="aside">
+		<div style="font-weight:700;font-size:.72rem;margin-bottom:.6rem">Century NIT<br><span style="opacity:.55;font-weight:400">Student portal</span></div>
+		<div class="ch on">I · Consultation</div><div class="ch">II · Enrolment</div><div class="ch">III · Applications</div>
+		<div class="ch">IV · Visa</div><div class="ch">V · Departure</div><div class="ch">VI · Complete</div>
+	</div>
+	<div class="main">
+		<div class="topbar">
+			<span class="crumb">I · CONSULTATION / <b>Home</b></span>
+			<span class="r"><span class="next">Next · Pay enrolment →</span><span class="bell">🔔 2</span><span class="msg">Message Ama</span></span>
+		</div>
+		<div class="body">
+			Content scrolls under the tab bar — the last ~64px of every page is unreachable.
+			<div class="sk" style="width:70%"></div><div class="sk" style="width:90%"></div><div class="sk" style="width:55%"></div>
+			<div class="sk" style="width:80%"></div><div class="sk" style="width:40%"></div>
+		</div>
+	</div>
+	<span class="flag" style="bottom:3.2rem;left:50%;transform:translateX(-50%)">tab bar covering content · --shell-bottom = 0</span>
+	<div class="tabbar"><span class="on">Home</span><span>Journey</span><span>Files</span><span>Pay</span><span>Help</span></div>
+</div>
+
+<div class="find bad"><b>Problem · split breakpoints</b>
+	<code>.pbar</code> and the sidebar swap at <code>959.98px</code>; <code>.tabbar</code> and <code>--shell-bottom</code> swap at <code>1023.98px</code>. Landscape phones (~930–1024px) and split-screen windows land in the gap: desktop chrome + floating tab bar, no reserved space.</div>
+<div class="find bad"><b>Problem · crowded topbar</b>
+	At these widths the desktop topbar crams breadcrumb + "Next · Pay enrolment →" + bell + "Message Ama" into one row — the row that wraps is the one your screenshot shows straining.</div>
+<div class="find good"><b>Fix · one breakpoint, one chrome</b>
+	Move the portal's mobile chrome boundary to <code>1023.98px</code> — same line the tab bar already uses. Below it: sidebar + desktop topbar hide, app bar + tab bar show, <code>--shell-bottom</code> reserves real space. Above it: pure desktop, no tab bar. No dead zone.</div>
+<div class="find good"><b>Fix · short-height trim</b>
+	On landscape-height screens (<code>max-height: 520px</code>) the "Next" strip folds into the app bar as a compact chip, and the kicker drops — the bar stops eating 15% of a 500px screen.</div>
+
+<h2>Proposed — same 1024×504 landscape</h2>
+<div class="frame land">
+	<span class="frame__tag">Proposed · one nav system</span>
+	<div class="pbar">
+		<span class="mark">CN</span>
+		<span class="t"><b>Home</b><i>I · Consultation</i></span>
+		<button class="ic">🔔</button><button class="ic">◉</button>
+	</div>
+	<div class="pnext"><em>Next</em> Pay enrolment invoice <span style="margin-left:auto">→</span></div>
+	<div class="body" style="padding-bottom:4.5rem">
+		Full width, real bottom padding — every pixel reachable.
+		<div class="sk" style="width:75%"></div><div class="sk" style="width:88%"></div><div class="sk" style="width:60%"></div>
+	</div>
+	<div class="tabbar"><span class="on">Home</span><span>Journey</span><span>Files</span><span>Pay</span><span>Help</span></div>
+</div>
+
+<h2>Portrait 375px — unchanged, already correct</h2>
+<div class="cols">
+	<div class="frame port">
+		<span class="frame__tag">375 · already fine</span>
+		<div class="pbar">
+			<button class="ic">←</button>
+			<span class="t"><b>Consultation</b><i>I · Consultation</i></span>
+			<button class="ic">🔔</button><button class="ic">◉</button>
+		</div>
+		<div class="pnext"><em>Next</em> Confirm your slot <span style="margin-left:auto">→</span></div>
+		<div class="body">
+			<div class="sk" style="width:60%"></div><div class="sk" style="width:85%"></div><div class="sk" style="width:70%"></div>
+			<div class="sk" style="width:45%"></div><div class="sk" style="width:80%"></div>
+		</div>
+		<div class="tabbar"><span>Home</span><span class="on">Journey</span><span>Files</span><span>Pay</span><span>Help</span></div>
+	</div>
+	<div style="max-width:22rem;font-size:.78rem;color:var(--mut)">
+		Portrait phones are already correct — sidebar hidden, app bar + back chevron + tab bar. The fix only changes the <b>960–1024px band</b>: it joins the mobile side.<br><br>
+		<b style="color:var(--ink)">Also fixed along the way:</b> the "Message us" button in the desktop topbar fires <code>open-chat</code> — CommunicationCenter listens for <code>century:open-chat</code>. Dead button on desktop, dead "Help" tab on mobile. Aligning on one event name.
+	</div>
+</div>
+
+<h2>CSS diff</h2>
+<div class="find"><b>base.mobile.css</b>
+<code>@media (max-width: 959.98px) { .pbar { display:flex } .portal__aside, .portal__topbar { display:none } … }</code><br><br>
+becomes <code>max-width: 1023.98px</code> — one line. Plus <code>@media (min-width:960px) .portal { --shell-bottom:0 }</code> is removed (it created the uncovered-content bug), and a <code>max-height:520px</code> rule compacts the app bar on landscape phones.</div>
+
+</body>
+</html>

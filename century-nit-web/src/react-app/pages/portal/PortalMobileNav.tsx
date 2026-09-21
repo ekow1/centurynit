@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAppState } from "../../context/AppState";
 import { useNotifier } from "../../components/notifier/Notifier";
-import { Avatar } from "../../components/ui/Avatar";
 import { NotificationBell } from "./NotificationBell";
 import {
 	IconChevronLeft,
@@ -85,7 +84,7 @@ export function PortalAppBar({
 		<header className="pbar pbar--stacked">
 			<div className="pbar__row">
 				{inStage ? (
-					<Link to="/portal/journey" className="pbar__icon-btn" aria-label="Back to journey">
+					<Link to="/portal/journey" className="pbar__icon-btn pbar__back" aria-label="Back to journey">
 						<IconChevronLeft size={20} />
 					</Link>
 				) : (
@@ -110,7 +109,9 @@ export function PortalAppBar({
 							aria-haspopup="menu"
 							aria-label="Account menu"
 						>
-							<Avatar name={authUser?.name ?? ""} image={authUser?.image} className="tabbar__avatar" />
+							<span className="pbar__ava" aria-hidden>
+								{(authUser?.name ?? "?").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
+							</span>
 						</button>
 						{profileOpen ? (
 							<div className="nav__dropdown nav__dropdown--profile pbar__menu">

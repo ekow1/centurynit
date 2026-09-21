@@ -210,11 +210,9 @@ textarea,
 	}
 }
 
-@media (min-width: 960px) {
-.portal {
-		--shell-bottom: 0px;
-	}
-}
+/* Removed: .portal used to zero --shell-bottom at ≥960px, which let the tab
+   bar (live to 1024px) cover page content in the 960–1024 dead zone. The
+   portal now follows the same boundary as the tab bar itself. */
 
 /* Grid with a fixed icon row, so every label sits on the same baseline —
    with flex centring the taller CTA item pushed its own label off the bar. */
@@ -602,7 +600,7 @@ body.sheet-lock {
 	background: color-mix(in srgb, var(--background) 90%, transparent);
 	-webkit-backdrop-filter: saturate(180%) blur(16px);
 	backdrop-filter: saturate(180%) blur(16px);
-	border-bottom: 1px solid var(--border);
+	border-bottom: 1.5px solid var(--foreground);
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -611,7 +609,12 @@ body.sheet-lock {
 	}
 }
 
-@media (max-width: 959.98px) {
+/* One chrome boundary for the whole portal. The tab bar already appears at
+   1024px — leaving the app bar at 960px produced a dead zone (960–1024px:
+   landscape phones, split-screen) where the desktop sidebar + topbar AND the
+   bottom tab bar were all live, with no space reserved for the tabs. */
+
+@media (max-width: 1023.98px) {
 .pbar {
 		display: flex;
 	}
@@ -650,15 +653,68 @@ body.sheet-lock {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 2.35rem;
-	height: 2.35rem;
-	margin-left: -0.5rem;
+	width: var(--tap);
+	height: var(--tap);
+	margin-left: 0;
 	flex-shrink: 0;
 	color: var(--foreground);
+	background: none;
+	border: 0;
+	padding: 0;
+	cursor: pointer;
+}
+
+/* Only the leading back chevron gets an optical pull to the screen edge.
+   Before, every button with this class inherited the negative margin — the
+   avatar in the actions cluster was dragged -8px into the bell. */
+
+.pbar__back {
+	margin-left: -0.5rem;
 }
 
 .pbar__icon-btn:active {
 	transform: scale(0.9);
+}
+
+/* The actions cluster (bell + avatar) is one unit: equal 44px hit-boxes on a
+   shared baseline, optically compensated at the row's right edge as a group. */
+
+.pbar__actions {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	margin-right: -0.35rem;
+	flex-shrink: 0;
+	position: relative;
+}
+
+.pbar__actions .notif > button {
+	width: var(--tap);
+	height: var(--tap);
+}
+
+.pbar__ava {
+	width: 26px;
+	height: 26px;
+	background: var(--foreground);
+	color: var(--background);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	font-weight: 700;
+}
+
+/* Landscape phones: the stacked Next strip plus the bar ate ~15% of a 500px
+   screen. Compact the strip when vertical space is scarce. */
+
+@media (max-height: 520px) and (max-width: 1023.98px) {
+.pbar__next {
+		padding-top: 0.3rem;
+		padding-bottom: 0.3rem;
+		font-size: 0.78rem;
+	}
 }
 
 .pbar__titles {
@@ -687,13 +743,6 @@ body.sheet-lock {
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
-}
-
-.pbar__actions {
-	display: flex;
-	align-items: center;
-	gap: 0.4rem;
-	flex-shrink: 0;
 }
 
 .fab__badge {

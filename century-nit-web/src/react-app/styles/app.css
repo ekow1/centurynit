@@ -11320,3 +11320,176 @@ a.portal-ch--on:hover {
 	padding-top: 0.35rem;
 	opacity: 0.8;
 }
+
+/* ============ Explore — destinations · universities · programs · funding ============ */
+.xp {
+	border: var(--thin);
+	background: #fff;
+}
+.xp__tabs {
+	display: flex;
+	border-bottom: var(--thin);
+	overflow-x: auto;
+}
+.xp__tab {
+	flex: 1;
+	min-width: 9rem;
+	padding: 1rem 1.2rem;
+	border: 0;
+	border-right: 1px solid var(--border-light);
+	background: #fff;
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	cursor: pointer;
+	text-align: left;
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+	color: var(--foreground);
+}
+.xp__tab:last-child {
+	border-right: 0;
+}
+.xp__tab small {
+	font-size: 0.52rem;
+	letter-spacing: 0.06em;
+	color: var(--muted-foreground);
+	text-transform: none;
+	font-family: var(--font-sans, inherit);
+}
+.xp__tab[aria-selected="true"] {
+	background: var(--foreground);
+	color: #fff;
+}
+.xp__tab[aria-selected="true"] small {
+	color: #a1a1aa;
+}
+.xp__pane {
+	padding: 1.6rem;
+}
+.xp__foot {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	border-top: var(--thin);
+	padding: 1rem 1.6rem;
+	gap: 1rem;
+	flex-wrap: wrap;
+}
+.xp__foot p {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	color: var(--muted-foreground);
+}
+
+/* chips pinned on the card image */
+.media-card__feat {
+	position: absolute;
+	top: 0;
+	left: 0;
+	background: var(--foreground);
+	color: #fff;
+	font-family: var(--font-mono);
+	font-size: 0.52rem;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	padding: 0.3rem 0.6rem;
+	z-index: 2;
+}
+.media-card__stat {
+	position: absolute;
+	bottom: 0;
+	right: 0;
+	background: #fff;
+	border: var(--thin);
+	border-right: 0;
+	border-bottom: 0;
+	font-family: var(--font-mono);
+	font-size: 0.55rem;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	padding: 0.3rem 0.55rem;
+	z-index: 2;
+}
+/* a thin duotone image band instead of the full frame — program cards */
+.media-card__img--band {
+	aspect-ratio: 21 / 6;
+}
+.media-card__img--band img {
+	filter: grayscale(1) contrast(1.1);
+	opacity: 0.85;
+}
+.media-card__img {
+	position: relative;
+}
+
+/* funding ledger */
+.fund {
+	border-top: 1px solid var(--border-light);
+}
+.fund__row {
+	display: grid;
+	grid-template-columns: 8rem 1.4fr 1fr 3rem;
+	gap: 1.4rem;
+	padding: 1.05rem 0.25rem;
+	border-bottom: 1px solid var(--border-light);
+	align-items: baseline;
+	text-decoration: none;
+	color: inherit;
+}
+.fund__row:hover {
+	background: var(--muted);
+}
+.fund__amt {
+	font-family: var(--font-display, inherit);
+	font-size: 1.4rem;
+	font-weight: 600;
+}
+.fund__amt small {
+	display: block;
+	font-family: var(--font-mono);
+	font-size: 0.52rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	font-weight: 400;
+	color: var(--muted-foreground);
+}
+.fund__name {
+	font-weight: 600;
+	font-size: 0.95rem;
+}
+.fund__name span {
+	display: block;
+	font-weight: 400;
+	font-size: 0.75rem;
+	color: var(--muted-foreground);
+	margin-top: 0.15rem;
+}
+.fund__dead {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--muted-foreground);
+}
+.fund__go {
+	font-family: var(--font-mono);
+	font-size: 0.66rem;
+	font-weight: 700;
+	text-align: right;
+}
+@media (max-width: 720px) {
+	.fund__row {
+		grid-template-columns: 6rem 1fr 2rem;
+	}
+	.fund__dead {
+		display: none;
+	}
+	.xp__pane {
+		padding: 1rem;
+	}
+}

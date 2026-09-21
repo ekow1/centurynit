@@ -15,7 +15,6 @@ import {
 	processSteps,
 	programs,
 	scholarships,
-	spotlightOffers,
 	stats,
 	testimonials,
 	universities,
@@ -49,6 +48,17 @@ const SERVICE_STAGE_TAG: Record<string, string> = {
 	"study-visa": "Stage II · Visa",
 	travel: "Stage III · Departure",
 };
+
+/** The Explore tabs — destinations, partners, programs and funding share one section. */
+const EXPLORE_TABS = [
+	{ id: "d", label: "Destinations", caption: "6 countries", foot: "All 6 destinations live on their own page", to: "/destinations" },
+	{ id: "u", label: "Universities", caption: "100+ partners", foot: "100+ partner institutions", to: "/universities" },
+	{ id: "p", label: "Programs", caption: "Featured", foot: "Full program catalogue", to: "/programs" },
+	{ id: "f", label: "Funding", caption: "Scholarships", foot: "All scholarships & deadlines", to: "/scholarships" },
+] as const;
+type ExploreTab = (typeof EXPLORE_TABS)[number]["id"];
+/** The pathways the old spotlight row featured — they lead the destinations grid. */
+const FEATURED_DESTINATION_IDS = new Set(["uk", "germany", "canada"]);
 
 const baseHeroSlides: Omit<HeroSlide, "primary" | "secondary">[] = [
 	{
@@ -154,6 +164,11 @@ function StatItem({
 export function Home() {
 	const statsRef = useRef<HTMLElement>(null);
 	const [statsActive, setStatsActive] = useState(false);
+	const [explore, setExplore] = useState<ExploreTab>("d");
+	// Featured pathways lead the destinations grid — the old spotlight row, in-grid.
+	const featuredDestinations = [...destinations].sort(
+		(a, b) => Number(FEATURED_DESTINATION_IDS.has(b.id)) - Number(FEATURED_DESTINATION_IDS.has(a.id)),
+	);
 	const [playing, setPlaying] = useState<string | null>(null);
 	const { isAuthenticated, journeyPhase } = useAppState();
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -239,42 +254,6 @@ export function Home() {
 				</div>
 			</section>
 
-			{/* Spotlight from live site themes */}
-			<section className="section">
-				<div className="container">
-					<div className="section__head">
-						<div>
-							<p className="eyebrow">Favourite pathways</p>
-							<h2 className="section-title">Germany · UK · Canada</h2>
-						</div>
-						<Link to="/destinations" className="link-arrow">
-							All countries →
-						</Link>
-					</div>
-					<div className="card-grid card-grid--3">
-						{spotlightOffers.map((s) => (
-							<Link key={s.id} to={s.to} className="media-card">
-								<span className="media-card__hint" aria-hidden>
-									→
-								</span>
-								<div className="media-card__body media-card__body--text">
-									<div className="stack" style={{ gap: "0.85rem" }}>
-										<span className="eyebrow">Featured</span>
-										<h3 className="media-card__title">{s.title}</h3>
-										<p className="media-card__text">{s.blurb}</p>
-									</div>
-									<span className="media-card__cta">
-										Read more <span aria-hidden>→</span>
-									</span>
-								</div>
-							</Link>
-						))}
-					</div>
-				</div>
-			</section>
-
-			<hr className="section-rule" />
-
 			{/* Core services — a plain list of what we offer */}
 			<section className="section texture-grid">
 				<div className="container">
@@ -318,136 +297,132 @@ export function Home() {
 
 			<hr className="section-rule" />
 
-			{/* Destinations */}
+			{/* Explore — destinations, universities, programs and funding as tabs */}
 			<section className="section">
 				<div className="container">
 					<div className="section__head">
 						<div>
-							<p className="eyebrow">Favourite destinations</p>
-							<h2 className="section-title">Choose your country</h2>
+							<p className="eyebrow">Explore</p>
+							<h2 className="section-title">Where could you go?</h2>
 						</div>
-						<Link to="/destinations" className="link-arrow">
-							View all →
+						<Link to="/start" className="link-arrow">
+							Talk it through →
 						</Link>
 					</div>
-					<div className="card-grid card-grid--3">
-						{destinations.slice(0, 6).map((d) => (
-							<Link
-								key={d.id}
-								to={`/destinations/${d.id}`}
-								className="media-card"
-								aria-label={`Explore ${d.name}`}
-							>
-								<span className="media-card__hint" aria-hidden>
-									→
-								</span>
-								<div className="media-card__img">
-									<img src={d.image} alt="" />
-								</div>
-								<div className="media-card__body">
-									<span className="eyebrow">
-										{d.flag} {d.region}
-									</span>
-									<h3 className="media-card__title">{d.name}</h3>
-									<p className="media-card__text">{d.tagline}</p>
-									<span className="media-card__cta">
-										Explore destination <span aria-hidden>→</span>
-									</span>
-								</div>
-							</Link>
-						))}
-					</div>
-				</div>
-			</section>
 
-			<hr className="section-rule" />
-
-			{/* Universities */}
-			<section className="section texture-grid">
-				<div className="container">
-					<div className="section__head">
-						<div>
-							<p className="eyebrow">Partner network</p>
-							<h2 className="section-title">Popular universities</h2>
-						</div>
-						<Link to="/universities" className="link-arrow">
-							Browse network →
-						</Link>
-					</div>
-					<div className="card-grid card-grid--2">
-						{universities.slice(0, 4).map((u) => (
-							<Link
-								key={u.id}
-								to={`/universities/${u.id}`}
-								className="media-card media-card--cover"
-								aria-label={`View ${u.name}`}
-							>
-								<span className="media-card__hint" aria-hidden>
-									→
-								</span>
-								<div className="media-card__cover-img">
-									<img src={u.image} alt="" />
-								</div>
-								<div className="media-card__body">
-									<span className="eyebrow">{u.ranking}</span>
-									<h3 className="media-card__title">{u.name}</h3>
-									<p className="media-card__text">
-										{u.city} · {u.type}
-									</p>
-									<span className="media-card__cta">
-										View university <span aria-hidden>→</span>
-									</span>
-								</div>
-							</Link>
-						))}
-					</div>
-				</div>
-			</section>
-
-			<hr className="section-rule" />
-
-			{/* Programs */}
-			<section className="section">
-				<div className="container">
-					<div className="section__head">
-						<div>
-							<p className="eyebrow">Featured programs</p>
-							<h2 className="section-title">Programs with gravity</h2>
-						</div>
-						<Link to="/programs" className="link-arrow">
-							All programs →
-						</Link>
-					</div>
-					<div className="card-grid card-grid--2">
-						{programs.slice(0, 4).map((p) => {
-							const uni = getUniversity(p.universityId);
-							return (
-								<Link
-									key={p.id}
-									to={`/programs/${p.id}`}
-									className="media-card"
-									aria-label={`Explore ${p.name}`}
+					<div className="xp">
+						<div className="xp__tabs" role="tablist" aria-label="Explore">
+							{EXPLORE_TABS.map((t) => (
+								<button
+									key={t.id}
+									type="button"
+									role="tab"
+									aria-selected={explore === t.id}
+									className="xp__tab"
+									onClick={() => setExplore(t.id)}
 								>
-									<span className="media-card__hint" aria-hidden>
-										→
-									</span>
-									<div className="media-card__body media-card__body--text">
-										<div className="stack" style={{ gap: "0.85rem" }}>
-											<span className="eyebrow">
-												{p.level} · {p.field}
+									{t.label}
+									<small>{t.caption}</small>
+								</button>
+							))}
+						</div>
+
+						{explore === "d" && (
+							<div className="xp__pane" data-open>
+								<div className="card-grid card-grid--3">
+									{featuredDestinations.map((d) => (
+										<Link key={d.id} to={`/destinations/${d.id}`} className="media-card" aria-label={`Explore ${d.name}`}>
+											<span className="media-card__hint" aria-hidden>→</span>
+											<div className="media-card__img">
+												{FEATURED_DESTINATION_IDS.has(d.id) && <span className="media-card__feat">Featured</span>}
+												<img src={d.image} alt="" />
+											</div>
+											<div className="media-card__body">
+												<span className="eyebrow">{d.flag} {d.region}</span>
+												<h3 className="media-card__title">{d.name}</h3>
+												<p className="media-card__text">{d.tagline}</p>
+												<span className="media-card__cta">Explore destination <span aria-hidden>→</span></span>
+											</div>
+										</Link>
+									))}
+								</div>
+							</div>
+						)}
+
+						{explore === "u" && (
+							<div className="xp__pane" data-open>
+								<div className="card-grid card-grid--3">
+									{universities.slice(0, 6).map((u) => (
+										<Link key={u.id} to={`/universities/${u.id}`} className="media-card" aria-label={`View ${u.name}`}>
+											<span className="media-card__hint" aria-hidden>→</span>
+											<div className="media-card__img">
+												<span className="media-card__stat">{u.ranking}</span>
+												<img src={u.image} alt="" />
+											</div>
+											<div className="media-card__body">
+												<span className="eyebrow">{u.city} · {u.type}</span>
+												<h3 className="media-card__title">{u.name}</h3>
+												<p className="media-card__text">{u.tags.join(" · ")}</p>
+												<span className="media-card__cta">View university <span aria-hidden>→</span></span>
+											</div>
+										</Link>
+									))}
+								</div>
+							</div>
+						)}
+
+						{explore === "p" && (
+							<div className="xp__pane" data-open>
+								<div className="card-grid card-grid--3">
+									{programs.slice(0, 6).map((p) => {
+										const uni = getUniversity(p.universityId);
+										return (
+											<Link key={p.id} to={`/programs/${p.id}`} className="media-card" aria-label={`Explore ${p.name}`}>
+												<span className="media-card__hint" aria-hidden>→</span>
+												<div className="media-card__img media-card__img--band">
+													{uni?.image && <img src={uni.image} alt="" />}
+													<span className="media-card__feat">{uni?.name ?? "Partner"}</span>
+												</div>
+												<div className="media-card__body">
+													<span className="eyebrow">{p.level} · {p.field}</span>
+													<h3 className="media-card__title">{p.name}</h3>
+													<p className="media-card__text">{p.duration} · {p.tuition} · {p.intake[0]}</p>
+													<span className="media-card__cta">View program <span aria-hidden>→</span></span>
+												</div>
+											</Link>
+										);
+									})}
+								</div>
+							</div>
+						)}
+
+						{explore === "f" && (
+							<div className="xp__pane" data-open>
+								<div className="fund">
+									{scholarships.slice(0, 6).map((s) => (
+										<Link key={s.id} to={`/scholarships/${s.id}`} className="fund__row">
+											<span className="fund__amt">
+												{s.amount.replace(/^Up to\s*/i, "")}
+												{s.amountQualifier && <small>{s.amountQualifier}</small>}
 											</span>
-											<h3 className="media-card__title">{p.name}</h3>
-											<p className="media-card__text">
-												{uni?.name} · {p.duration} · {p.tuition}
-											</p>
-										</div>
-										<span className="media-card__cta">
-											Explore program <span aria-hidden>→</span>
-										</span>
-									</div>
-								</Link>
-							);
-						})}
+											<span className="fund__name">
+												{s.name}
+												<span>{s.type} · {s.eligibility}</span>
+											</span>
+											<span className="fund__dead">Deadline · {s.deadline}</span>
+											<span className="fund__go">→</span>
+										</Link>
+									))}
+								</div>
+							</div>
+						)}
+
+						<div className="xp__foot">
+							<p>{EXPLORE_TABS.find((t) => t.id === explore)?.foot}</p>
+							<Link className="link-arrow" to={EXPLORE_TABS.find((t) => t.id === explore)?.to ?? "/"}>
+								View all →
+							</Link>
+						</div>
 					</div>
 				</div>
 			</section>
@@ -689,43 +664,6 @@ export function Home() {
 			</section>
 
 			<hr className="section-rule" />
-
-			{/* Scholarships */}
-			<section className="section">
-				<div className="container">
-					<div className="section__head">
-						<div>
-							<p className="eyebrow">Funding</p>
-							<h2 className="section-title">Scholarship opportunities</h2>
-						</div>
-						<Link to="/scholarships" className="link-arrow">
-							View all →
-						</Link>
-					</div>
-					<div className="card-grid card-grid--2">
-						{scholarships.slice(0, 4).map((s) => (
-							<Link
-								key={s.id}
-								to={`/scholarships/${s.id}`}
-								className="card card--pad card--hover scholarship-card"
-								style={{ textDecoration: "none", color: "inherit" }}
-							>
-								<span className="badge">{s.type}</span>
-								<h3 className="display mt-3" style={{ fontSize: "1.65rem", lineHeight: 1.2 }}>
-									{s.name}
-								</h3>
-								<p className="display mt-3" style={{ fontSize: "2.25rem" }}>
-									{s.amount}
-								</p>
-								<p className="muted mt-2" style={{ fontSize: "1.05rem", lineHeight: 1.55 }}>
-									{s.eligibility}
-								</p>
-								<p className="mono mt-3">Deadline · {s.deadline}</p>
-							</Link>
-						))}
-					</div>
-				</div>
-			</section>
 
 			{/* CTA band */}
 			<section className="cta-band texture-lines-light">

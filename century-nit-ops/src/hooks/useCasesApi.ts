@@ -23,6 +23,7 @@ import {
 	type DepartureDetails,
 	type JourneyStage,
 	type PackageCode,
+	type ServiceStage,
 	type UpdateSchoolStatus,
 	type OpsAddSchoolApplication,
 	type StageHandoff,
@@ -203,6 +204,7 @@ function toApplication(row: ApiApplication): MockApplication {
 		submittedDate: (row.submittedAt ?? row.createdAt).slice(0, 10),
 		checklist: row.checklist,
 		fundingTrack: row.fundingTrack ?? "",
+		scopeStages: row.scopeStages ?? null,
 		notes: row.notes ?? "",
 		comments: row.comments,
 		requestedDocuments: row.requestedDocuments,
@@ -594,7 +596,7 @@ export function useCasesApi() {
 			await refresh();
 		},
 		/** Bind the service package on the client's behalf — same server flow as the portal's, repricing included. */
-		selectPackage: async (appId: string, input: { packageCode: PackageCode; degreeLevel: string; targetSchoolCount?: number }) => {
+		selectPackage: async (appId: string, input: { packageCode: PackageCode; degreeLevel: string; targetSchoolCount?: number; stages?: ServiceStage[]; reason?: string }) => {
 			const app = applications.find((a) => a.appId === appId);
 			if (!app) return;
 			const res = await applicationsApi.choosePackage(app.id, input);

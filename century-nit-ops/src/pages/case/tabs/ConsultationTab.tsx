@@ -1,3 +1,4 @@
+import { scopeLabel } from "century-nit-shared";
 import { useNavigate } from "react-router-dom";
 
 import type { MockApplication, MockConsultation } from "century-nit-core/ops";
@@ -65,6 +66,7 @@ export function ConsultationTab({ app, consultation }: { app: MockApplication; c
 							<div><p className="muted text-xs">Recommended university</p><p>{consultation.assessmentResult.recUniversity || "—"}</p></div>
 							<div><p className="muted text-xs">Recommended programme</p><p>{consultation.assessmentResult.recProgram || "—"}</p></div>
 							<div><p className="muted text-xs">Recommended package</p><p>{consultation.assessmentResult.recPackage || "—"}</p></div>
+							<div><p className="muted text-xs">Recommended plan</p><p>{scopeLabel(consultation.assessmentResult.recStages?.length ? consultation.assessmentResult.recStages : null)}</p></div>
 						</div>
 					</>
 				) : (

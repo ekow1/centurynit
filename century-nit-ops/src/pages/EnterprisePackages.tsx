@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { PACKAGE_CODE_LABELS, FEE_KIND_LABELS, type FeeItem, type PackageCode, type ServicePackage } from "century-nit-shared";
+import { PACKAGE_CODE_LABELS, FEE_KIND_LABELS, SERVICE_STAGES, SERVICE_STAGE_LABELS, defaultStagePrices, type FeeItem, type PackageCode, type ServicePackage, type StagePrices } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
 import { DOCUMENT_TYPES, DEFAULT_REQUIRED_DOCUMENT_IDS, documentCategory } from "century-nit-core";
 import { Sheet } from "century-nit-core/ui";
@@ -29,7 +29,10 @@ type PackageForm = {
 	code: PackageCode;
 	name: string;
 	tagline: string;
+	/** The full-journey bundle. */
 	priceCents: number;
+	/** Each stage on its own. */
+	stagePrices: StagePrices;
 	currency: string;
 	features: string[];
 	exclusions: string[];
@@ -47,6 +50,7 @@ function emptyForm(code: PackageCode): PackageForm {
 		name: "",
 		tagline: "",
 		priceCents: 0,
+		stagePrices: { admissions: 0, visa: 0, departure: 0 },
 		currency: "USD",
 		features: [],
 		exclusions: [],
@@ -65,6 +69,7 @@ function formFromPackage(pkg: ServicePackage): PackageForm {
 		name: pkg.name,
 		tagline: pkg.tagline ?? "",
 		priceCents: pkg.priceCents,
+		stagePrices: pkg.stagePrices ?? defaultStagePrices(pkg.priceCents),
 		currency: pkg.currency,
 		features: [...pkg.features],
 		exclusions: [...pkg.exclusions],
@@ -193,6 +198,7 @@ export function EnterprisePackages() {
 			name: form.name,
 			tagline: form.tagline,
 			priceCents: form.priceCents,
+			stagePrices: form.stagePrices,
 			currency: form.currency,
 			features: form.features.map((s) => s.trim()).filter(Boolean),
 			exclusions: form.exclusions.map((s) => s.trim()).filter(Boolean),
@@ -296,6 +302,65 @@ export function EnterprisePackages() {
 				<p className="ops-people__empty">No packages yet — add the first one.</p>
 			) : (
 				<>
+					<section className="dash-panel" style={{ marginBottom: "1rem" }}>
+						<header className="dash-panel__head">
+							<h2 className="dash-panel__title">Stage prices · USD</h2>
+							<span className="cn-detailhead__meta">bundle = all three stages · a plan that stops short pays à la carte</span>
+						</header>
+						<div className="ops-table-wrap">
+							<table className="admin-table">
+								<thead>
+									<tr>
+										<th style={{ textAlign: "left" }}>Stage</th>
+										{active.map((p) => (
+											<th key={p.code} style={{ textAlign: "right" }}>
+												{p.name}
+												<span className="muted" style={{ display: "block", fontWeight: 400, fontSize: "0.68rem" }}>{p.maxSchools > 0 ? `${p.maxSchools} schools` : "no cap"}</span>
+											</th>
+										))}
+									</tr>
+								</thead>
+								<tbody>
+									{SERVICE_STAGES.map((st) => (
+										<tr key={st}>
+											<td>{SERVICE_STAGE_LABELS[st]}</td>
+											{active.map((p) => {
+												const sp = p.stagePrices ?? defaultStagePrices(p.priceCents);
+												return (
+													<td key={p.code} className="mono" style={{ textAlign: "right" }}>
+														{(sp[st] / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+														{!p.stagePrices && <span className="muted" title="Not priced yet — a default split of the bundle"> *</span>}
+													</td>
+												);
+											})}
+										</tr>
+									))}
+									<tr>
+										<td className="muted">À la carte</td>
+										{active.map((p) => {
+											const sp = p.stagePrices ?? defaultStagePrices(p.priceCents);
+											return <td key={p.code} className="mono muted" style={{ textAlign: "right" }}>{((sp.admissions + sp.visa + sp.departure) / 100).toLocaleString("en-US")}</td>;
+										})}
+									</tr>
+									<tr style={{ fontWeight: 700 }}>
+										<td>Full-journey bundle</td>
+										{active.map((p) => (
+											<td key={p.code} className="mono" style={{ textAlign: "right" }}>{(p.priceCents / 100).toLocaleString("en-US")}</td>
+										))}
+									</tr>
+									<tr>
+										<td className="muted">Bundle discount</td>
+										{active.map((p) => {
+											const sp = p.stagePrices ?? defaultStagePrices(p.priceCents);
+											const d = sp.admissions + sp.visa + sp.departure - p.priceCents;
+											return <td key={p.code} className="mono" style={{ textAlign: "right", color: d >= 0 ? "var(--ok, #0d7a3f)" : "var(--bad, #b91c1c)" }}>{d >= 0 ? `−${(d / 100).toLocaleString("en-US")}` : `+${(-d / 100).toLocaleString("en-US")} over`}</td>;
+										})}
+									</tr>
+								</tbody>
+							</table>
+						</div>
+						{active.some((p) => !p.stagePrices) && <p className="cn-detailhead__meta" style={{ marginTop: "0.5rem" }}>* not priced yet — shown as a default split of the bundle until you edit the package.</p>}
+					</section>
 					<div className="ops-plans">
 						{active.map((p) => {
 							const n = clientsOn(p);
@@ -471,9 +536,40 @@ export function EnterprisePackages() {
 							{fieldLabelEl("Tagline")}
 							<input value={form.tagline} onChange={(e) => setForm((f) => f && ({ ...f, tagline: e.target.value }))} className="input" style={{ width: "100%" }} />
 						</div>
+						<div>
+							{fieldLabelEl(`Stage prices (${form.currency}) · what each stage costs on its own`)}
+							<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem" }}>
+								{SERVICE_STAGES.map((st) => (
+									<div key={st}>
+										<p className="muted" style={{ fontSize: "0.7rem", marginBottom: "0.25rem" }}>{SERVICE_STAGE_LABELS[st]}</p>
+										<input
+											type="number"
+											min="0"
+											step="0.01"
+											value={form.stagePrices[st] / 100}
+											onChange={(e) => setForm((f) => f && ({ ...f, stagePrices: { ...f.stagePrices, [st]: Math.round((Number(e.target.value) || 0) * 100) } }))}
+											className="input"
+											style={{ width: "100%" }}
+											required
+											aria-label={`${SERVICE_STAGE_LABELS[st]} price`}
+										/>
+									</div>
+								))}
+							</div>
+							{(() => {
+								const alaCarte = form.stagePrices.admissions + form.stagePrices.visa + form.stagePrices.departure;
+								const bad = form.priceCents > alaCarte;
+								return (
+									<p className="mono mt-1" style={{ fontSize: "var(--text-xs)", color: bad ? "var(--bad, #b91c1c)" : undefined }}>
+										À la carte {formatCents(alaCarte, form.currency)} · bundle {formatCents(form.priceCents, form.currency)} ·{" "}
+										{bad ? "the bundle cannot cost more than its stages" : `discount ${formatCents(alaCarte - form.priceCents, form.currency)}`}
+									</p>
+								);
+							})()}
+						</div>
 						<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem" }}>
 							<div>
-								{fieldLabelEl(`Price (${form.currency})`)}
+								{fieldLabelEl(`Full-journey bundle (${form.currency})`)}
 								<input type="number" min="0" step="0.01" value={form.priceCents / 100} onChange={(e) => setForm((f) => f && ({ ...f, priceCents: Math.round((Number(e.target.value) || 0) * 100) }))} className="input" style={{ width: "100%" }} required />
 								<p className="mono mt-1" style={{ fontSize: "var(--text-xs)" }}>{formatCents(form.priceCents, form.currency)}</p>
 							</div>

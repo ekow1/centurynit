@@ -30,6 +30,7 @@ import {
 	type CaseComment,
 	type FeeCatalogue,
 	preDepartureChecklistDone,
+	type ServiceStage,
 	type StudyChoice,
 } from "century-nit-shared";
 import {
@@ -273,6 +274,8 @@ export type ApplicationData = {
 	schoolFundingTrack: SchoolFundingTrack | "";
 	schoolDegreeLevel: SchoolDegreeLevel | "";
 	targetSchoolCount?: number;
+	/** The stages on the plan; null until a package is chosen (a legacy case is the full journey). */
+	scopeStages?: ServiceStage[] | null;
 	/** The admitted school the client is going with. */
 	acceptedSchoolId?: string | null;
 	offerAcceptedAt?: string | null;
@@ -1165,7 +1168,7 @@ type AppStateContextValue = {
 	/** Raise / pay stage invoices */
 	raiseApplicationInvoice: () => void;
 	payApplicationInvoice: () => void;
-	chooseSchoolPackage: (funding: SchoolFundingTrack, level: SchoolDegreeLevel, targetSchoolCount?: number, explicitPriceCents?: number) => void;
+	chooseSchoolPackage: (funding: SchoolFundingTrack, level: SchoolDegreeLevel, targetSchoolCount?: number, explicitPriceCents?: number, stages?: ServiceStage[]) => void;
 	choosePaymentPlan: (planId: PaymentPlanId) => void;
 	choosePostArrivalSchedule: (scheduleId: string) => void;
 	/** Post-arrival schedule options enabled by ops (null = all enabled) */
@@ -1791,7 +1794,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	);
 
 	const chooseSchoolPackage = useCallback(
-		(funding: SchoolFundingTrack, level: SchoolDegreeLevel, targetSchoolCount: number = 3, explicitPriceCents?: number) => {
+		(funding: SchoolFundingTrack, level: SchoolDegreeLevel, targetSchoolCount: number = 3, explicitPriceCents?: number, stages?: ServiceStage[]) => {
 			const fund = SCHOOL_FUNDING_TRACKS.find((f) => f.id === funding);
 			const deg = SCHOOL_DEGREE_LEVELS.find((d) => d.id === level);
 			const now = new Date().toISOString();
@@ -1808,6 +1811,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				schoolFundingTrack: funding,
 				schoolDegreeLevel: level,
 				targetSchoolCount,
+				scopeStages: stages ?? prev.scopeStages ?? null,
 				packageSelectedAt: now,
 				packageChosenAt: now,
 				agencyTotal: agencyBase,
@@ -2433,6 +2437,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					schoolFundingTrack: (a.fundingTrack as SchoolFundingTrack) || prev.schoolFundingTrack,
 					schoolDegreeLevel: (a.degreeLevel as SchoolDegreeLevel) || prev.schoolDegreeLevel,
 					targetSchoolCount: a.targetSchoolCount ?? prev.targetSchoolCount,
+					scopeStages: a.scopeStages ?? prev.scopeStages ?? null,
 					acceptedSchoolId: a.acceptedSchoolId ?? null,
 					offerAcceptedAt: a.offerAcceptedAt ?? null,
 					visaStatus: (a.visaStage as VisaStatus) || prev.visaStatus,

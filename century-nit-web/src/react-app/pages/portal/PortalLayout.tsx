@@ -249,11 +249,36 @@ export function ChapterGate({
 	chapter: PortalChapterId;
 	children: React.ReactNode;
 }) {
-	const { chapterUnlocks, journeyReady } = useAppState();
+	const { chapterUnlocks, journeyReady, application } = useAppState();
 	const meta = PORTAL_CHAPTERS.find((c) => c.id === chapter);
 
 	if (chapterUnlocks[chapter]) {
 		return <>{children}</>;
+	}
+
+	// The chapter is not on the client's plan: it is not locked, it is not
+	// bought. Say so, and point at where to add it.
+	const needed = chapter === "visa" ? "visa" : chapter === "travel_assistance" || chapter === "payment_execution" || chapter === "complete" ? "departure" : null;
+	const scope = application.scopeStages ?? null;
+	if (needed && scope && !scope.includes(needed)) {
+		return (
+			<div className="chapter-gate">
+				<div className="chapter-gate__seal" aria-hidden>
+					<span className="chapter-gate__roman">{meta?.step ?? "⌀"}</span>
+					<span className="chapter-gate__ring" />
+				</div>
+				<p className="eyebrow">Not on your plan</p>
+				<h1 className="page-title mt-1">{meta?.label ?? "Next stage"}</h1>
+				<p className="lead mt-2">
+					Your plan stops before this stage. Add it whenever you are ready — you pay for it only when it opens.
+				</p>
+				<div className="row mt-4">
+					<Link to="/portal/package" className="btn btn--primary">
+						Add this stage →
+					</Link>
+				</div>
+			</div>
+		);
 	}
 
 	// No answer from the server yet (cold first load, nothing cached): say

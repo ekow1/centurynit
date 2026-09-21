@@ -56,6 +56,7 @@ export type SettingKey =
 	| "STRIPE_SECRET_KEY"
 	| "PLATFORM_EXCHANGE_RATE"
 	| "SERVICE_FEE_DEPOSIT_PERCENT"
+	| "SERVICE_FEE_ADMISSIONS_START_PERCENT"
 	| "PRE_DEPARTURE_TEMPLATE"
 	| "SERVICE_FEE_PRE_DEPARTURE_PERCENT"
 	| "POST_ARRIVAL_DURATIONS"
@@ -268,6 +269,12 @@ export const SETTING_DEFS: Record<
 		group: "Fee Schedule",
 		secret: false,
 		description: "Share of the service fee due as the deposit. Default: 10.",
+	},
+	SERVICE_FEE_ADMISSIONS_START_PERCENT: {
+		label: "Admissions stage · on acceptance %",
+		group: "Fee Schedule",
+		secret: false,
+		description: "On a plan that stops short of the full journey, the share of the Admissions stage due on acceptance. The rest is due when the first offer letter is recorded. Default: 50.",
 	},
 	SERVICE_FEE_PRE_DEPARTURE_PERCENT: {
 		label: "Service fee · pre-departure %",

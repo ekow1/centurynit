@@ -621,7 +621,8 @@ export async function serializeConsultation(row: ConsultationRow, forApplicant =
 		rescheduleRequestedAt: booking?.rescheduleRequestedAt?.toISOString() ?? null,
 		rescheduleRequestedStartsAt: booking?.rescheduleRequestedStartsAt?.toISOString() ?? null,
 		rescheduleRequestReason: booking?.rescheduleRequestReason ?? null,
-		assessmentResult: row.assessmentResult ?? null,
+		// Older rows predate the stage recommendation; empty means the full journey.
+		assessmentResult: row.assessmentResult ? { recStages: [], ...row.assessmentResult } : null,
 		requestedDocuments: row.requestedDocuments ?? [],
 		documentChecklist,
 		comments: comments.map(toComment),

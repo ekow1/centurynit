@@ -697,6 +697,7 @@ meRouter.openapi(
 			packageCode: body.packageCode,
 			degreeLevel: body.degreeLevel,
 			targetSchoolCount: body.targetSchoolCount,
+			stages: body.stages,
 		});
 		return c.json({
 			application: await serializeApplication(updated),

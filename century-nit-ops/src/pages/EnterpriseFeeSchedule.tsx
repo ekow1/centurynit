@@ -2,7 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
 	API_PREFIX,
+	DEFAULT_ADMISSIONS_START_PERCENT,
+	DUE_TRIGGER_LABELS,
 	FEE_KIND_LABELS,
+	SERVICE_STAGES,
+	SERVICE_STAGE_LABELS,
+	defaultStagePrices,
+	milestoneLines,
+	quoteTotal,
+	scopeLabel,
+	type ServiceStage,
 	type DestinationTariff,
 	type FeeCatalogue,
 	type FeeItem,
@@ -138,6 +147,7 @@ export function EnterpriseFeeSchedule() {
 			.catch(() => setPackages([]));
 	}, []);
 	const [examplePackage, setExamplePackage] = useState<string>("");
+	const [exampleScope, setExampleScope] = useState<"admissions" | "visa" | "departure">("departure");
 	const [exampleDestination, setExampleDestination] = useState<string>("");
 	async function putSetting(key: string, value: string) {
 		await apiFetch(`${API_PREFIX}/settings`, { method: "PUT", body: JSON.stringify({ key, value }) });
@@ -200,9 +210,18 @@ export function EnterpriseFeeSchedule() {
 	const dest = cat?.destinations.find((d) => d.id === exampleDestination) ?? cat?.destinations[0] ?? null;
 	const centuryLines = century.filter((i) => i.active && !i.optional);
 	const passLines = passThrough.filter((i) => i.active && !i.optional);
-	const centuryTotal = (pkg?.priceCents ?? 0) + centuryLines.reduce((n, i) => n + i.amountCents, 0);
-	const passTotal = (dest ? dest.visaFeeCents + dest.biometricsFeeCents : 0) + passLines.reduce((n, i) => n + i.amountCents, 0);
+	const exampleStages: ServiceStage[] = exampleScope === "admissions" ? ["admissions"] : exampleScope === "visa" ? ["admissions", "visa"] : ["admissions", "visa", "departure"];
+	// The same function the portal builder and the raise use — the example can never drift from the invoice.
+	const quote = pkg ? quoteTotal({ bundleCents: pkg.priceCents, stagePrices: pkg.stagePrices, stages: exampleStages }) : null;
+	const visaInScope = exampleStages.includes("visa");
+	const departureInScope = exampleStages.includes("departure");
+	const centuryTotal = (quote?.totalCents ?? 0) + centuryLines.reduce((n, i) => n + i.amountCents, 0);
+	const passTotal = (dest && visaInScope ? dest.visaFeeCents + dest.biometricsFeeCents : 0) + passLines.reduce((n, i) => n + i.amountCents, 0);
 	const split = cat?.serviceFeeSplit;
+	const exampleMilestones =
+		quote && split
+			? milestoneLines(quote, { depositPercent: split.depositPercent, preDeparturePercent: split.preDeparturePercent, admissionsStartPercent: cat?.admissionsStartPercent ?? DEFAULT_ADMISSIONS_START_PERCENT }, "installment")
+			: [];
 
 	return (
 		<div className="admin-page">
@@ -251,26 +270,46 @@ export function EnterpriseFeeSchedule() {
 					<div className="cn-stack" style={{ gap: "1rem" }}>
 						<section style={{ border: "1px solid var(--border-light)" }}>
 							<div className="ops-band hd-band" style={{ borderTop: "none" }}>
-								<span className="ops-band__name">Century's fee · {century.length + 1}</span>
+								<span className="ops-band__name">Century's fee · {century.length + SERVICE_STAGES.length + 1}</span>
 								<span className="ops-band__note">ours · in the service fee or on top</span>
 							</div>
+							{SERVICE_STAGES.map((st) => {
+								const prices = packages.map((x) => (x.stagePrices ?? defaultStagePrices(x.priceCents))[st]);
+								const lo = prices.length ? Math.min(...prices) : 0;
+								const hi = prices.length ? Math.max(...prices) : 0;
+								return (
+									<div key={st} className="ops-item">
+										<div>
+											<div className="ops-item__k">Century · service fee · {SERVICE_STAGE_LABELS[st]}</div>
+											<div className="ops-item__n">{SERVICE_STAGE_LABELS[st]} stage</div>
+											<div className="ops-item__s">
+												By track — {packages.length > 0 ? packages.map((x) => `${x.name} ${ghs((x.stagePrices ?? defaultStagePrices(x.priceCents))[st])}`).join(" · ") : "no active packages"} · edited under Packages
+											</div>
+										</div>
+										<span className="cn-money" style={{ fontSize: "var(--text-sm)", fontWeight: 700, textAlign: "right" }}>
+											{lo === hi ? ghs(lo) : `${ghs(lo)} – ${ghs(hi)}`}
+										</span>
+										<span className="ops-item__k" style={{ textAlign: "right", minWidth: "7rem" }}>
+											{st === "admissions" ? "always on" : "if on the plan"}
+											<br />
+											<Link to="/packages" className="dash-link">
+												packages →
+											</Link>
+										</span>
+									</div>
+								);
+							})}
 							<div className="ops-item">
 								<div>
-									<div className="ops-item__k">Century · Enrolment</div>
-									<div className="ops-item__n">Service fee</div>
-									<div className="ops-item__s">
-										By package — {packages.length > 0 ? packages.map((x) => `${x.name} ${ghs(x.priceCents)}`).join(" · ") : "no active packages"} · edited under Packages
-									</div>
+									<div className="ops-item__k">Century · service fee · bundle</div>
+									<div className="ops-item__n">Full journey — all three stages</div>
+									<div className="ops-item__s">{packages.length > 0 ? packages.map((x) => `${x.name} ${ghs(x.priceCents)}`).join(" · ") : "no active packages"} · cheaper than the stages added up</div>
 								</div>
 								<span className="cn-money" style={{ fontSize: "var(--text-sm)", fontWeight: 700 }}>
-									by package
+									by track
 								</span>
 								<span className="ops-item__k" style={{ textAlign: "right", minWidth: "7rem" }}>
 									in milestones
-									<br />
-									<Link to="/packages" className="dash-link">
-										packages →
-									</Link>
 								</span>
 							</div>
 							<ItemRows rows={century} empty="No items." />
@@ -378,6 +417,11 @@ export function EnterpriseFeeSchedule() {
 									))}
 									{packages.length === 0 && <option value="">No package</option>}
 								</select>
+								<select className="cn-filter__select" value={exampleScope} onChange={(e) => setExampleScope(e.target.value as typeof exampleScope)} aria-label="Example scope">
+									<option value="admissions">Admissions only</option>
+									<option value="visa">Admissions + Visa</option>
+									<option value="departure">Full journey</option>
+								</select>
 								<select className="cn-filter__select" value={dest?.id ?? ""} onChange={(e) => setExampleDestination(e.target.value)} aria-label="Example country">
 									{(cat?.destinations ?? []).map((d) => (
 										<option key={d.id} value={d.id}>
@@ -390,13 +434,39 @@ export function EnterpriseFeeSchedule() {
 							<div className="ops-bill__row ops-bill__row--head">
 								<span>Century</span>
 							</div>
-							<div className="ops-bill__row">
-								<span>
-									Service fee{pkg ? ` · ${pkg.name}` : ""}
-									{split && <small>deposit {split.depositPercent}% · pre-departure {split.preDeparturePercent}% · post-arrival {split.postArrivalPercent}%</small>}
-								</span>
-								<span className="cn-money">{pkg ? ghs(pkg.priceCents) : "—"}</span>
-							</div>
+							{quote &&
+								SERVICE_STAGES.map((st) => {
+									const line = quote.stageLines.find((l) => l.stage === st);
+									const price = (pkg?.stagePrices ?? defaultStagePrices(pkg?.priceCents ?? 0))[st];
+									return (
+										<div key={st} className="ops-bill__row" style={line ? undefined : { opacity: 0.5, textDecoration: "line-through" }}>
+											<span>
+												{SERVICE_STAGE_LABELS[st]}
+												{pkg ? ` · ${pkg.name}` : ""}
+												<small>{line ? (st === "admissions" ? `${cat?.admissionsStartPercent ?? DEFAULT_ADMISSIONS_START_PERCENT}% on acceptance · rest on the first offer` : DUE_TRIGGER_LABELS[st === "visa" ? "visa_open" : "visa_approved"]) : "not on the plan"}</small>
+											</span>
+											<span className="cn-money">{ghs(price)}</span>
+										</div>
+									);
+								})}
+							{quote && quote.bundleDiscountCents > 0 && (
+								<div className="ops-bill__row">
+									<span>
+										Full-journey bundle
+										{split && <small>collected as deposit {split.depositPercent}% · pre-departure {split.preDeparturePercent}% · post-arrival {split.postArrivalPercent}%</small>}
+									</span>
+									<span className="cn-money">−{ghs(quote.bundleDiscountCents)}</span>
+								</div>
+							)}
+							{quote && !quote.full && (
+								<div className="ops-bill__row">
+									<span>
+										Service fee · {scopeLabel(exampleStages)}
+										<small>{exampleMilestones.map((l) => `${l.label} ${ghs(l.amountCents)}`).join(" · ")}</small>
+									</span>
+									<span className="cn-money">{ghs(quote.totalCents)}</span>
+								</div>
+							)}
 							{centuryLines.map((i) => (
 								<div key={i.key} className="ops-bill__row">
 									<span>{i.clientLabel}</span>
@@ -412,7 +482,7 @@ export function EnterpriseFeeSchedule() {
 								</span>
 								<span className="cn-money">at cost</span>
 							</div>
-							{dest && (
+							{dest && visaInScope && (
 								<>
 									<div className="ops-bill__row">
 										<span>Visa fee · {dest.name}</span>
@@ -430,12 +500,14 @@ export function EnterpriseFeeSchedule() {
 									<span className="cn-money">{ghs(i.amountCents)}</span>
 								</div>
 							))}
-							<div className="ops-bill__row">
-								<span>
-									Flight ticket<small>as quoted</small>
-								</span>
-								<span className="cn-money">—</span>
-							</div>
+							{departureInScope && (
+								<div className="ops-bill__row">
+									<span>
+										Flight ticket<small>as quoted</small>
+									</span>
+									<span className="cn-money">—</span>
+								</div>
+							)}
 							<div className="ops-bill__row ops-bill__row--total">
 								<span>Before application fees and the ticket</span>
 								<span className="cn-money">

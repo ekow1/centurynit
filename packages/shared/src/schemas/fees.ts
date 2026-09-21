@@ -119,6 +119,8 @@ export const feeCatalogueSchema = z.object({
 	/** GHS per USD. The rate the client is charged at and receipts convert at. */
 	exchangeRate: z.number().positive(),
 	serviceFeeSplit: serviceFeeSplitSchema,
+	/** Admissions on its own: the share due on acceptance, the rest on the first offer. Optional so older clients keep parsing. */
+	admissionsStartPercent: z.number().int().min(1).max(99).optional(),
 	/** Optional only so older clients keep parsing. */
 	postArrival: postArrivalCatalogueSchema.optional(),
 });

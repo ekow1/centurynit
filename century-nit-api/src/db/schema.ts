@@ -15,7 +15,7 @@ import {
 	check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import type { ApplicantProfile, DepartureDetails, PreDepartureTemplateItem, VisaDetails } from "century-nit-shared";
+import type { ApplicantProfile, DepartureDetails, PreDepartureTemplateItem, ServiceStage, StagePrices, VisaDetails } from "century-nit-shared";
 
 /**
  * The flight a ticket invoice is for, and — with a PNR — the flight that was
@@ -674,8 +674,10 @@ export const invoiceLines = pgTable(
 		amountCents: integer("amount_cents").notNull(),
 		/** The school this line bills, so a draft application invoice can follow the school list. */
 		schoolApplicationId: uuid("school_application_id").references((): AnyPgColumn => schoolApplications.id, { onDelete: "set null" }),
-		/** When the line falls due — the post-arrival instalments; null on every other line. */
+		/** When the line falls due — stamped when its `dueOn` event fires, or dated on a post-arrival instalment. */
 		dueAt: timestamp("due_at", { withTimezone: true }),
+		/** The case event that makes this line due (see DUE_TRIGGERS); null on lines raised by hand. */
+		dueOn: text("due_on"),
 	},
 	(t) => ({
 		byInvoice: index("invoice_lines_invoice_idx").on(t.invoiceId, t.position),
@@ -1072,7 +1074,10 @@ export const servicePackages = pgTable(
 		code: packageCodeEnum("code").notNull().unique(),
 		name: varchar("name", { length: 120 }).notNull(),
 		tagline: text("tagline"),
+		/** The full-journey bundle — all three stages together. */
 		priceCents: integer("price_cents").notNull(),
+		/** What each stage costs on its own; null until finance prices the row. */
+		stagePrices: jsonb("stage_prices").$type<StagePrices>(),
 		currency: varchar("currency", { length: 3 }).notNull().default("USD"),
 		features: jsonb("features").$type<string[]>().notNull().default([]),
 		exclusions: jsonb("exclusions").$type<string[]>().notNull().default([]),
@@ -1140,6 +1145,8 @@ export const applications = pgTable(
 		fundingTrack: text("funding_track"),
 		packageId: uuid("package_id").references(() => servicePackages.id, { onDelete: "set null" }),
 		packageSelectedAt: timestamp("package_selected_at", { withTimezone: true }),
+		/** The stages on the client's plan; null until a package is chosen (a legacy case is the full journey). */
+		scopeStages: jsonb("scope_stages").$type<ServiceStage[]>(),
 		targetSchoolCount: integer("target_school_count").default(3),
 		notes: text("notes"),
 		checklist: jsonb("checklist")

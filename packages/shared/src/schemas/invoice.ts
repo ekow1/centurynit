@@ -169,8 +169,10 @@ export const invoiceLineSchema = z.object({
 	detail: z.string().nullable(),
 	amountCents: z.number().int(),
 	schoolApplicationId: z.string().uuid().nullable().optional(),
-	/** When this line falls due. Set on post-arrival instalments; null otherwise. */
+	/** When this line falls due. Stamped when its `dueOn` event fires, or dated on a post-arrival instalment. */
 	dueAt: z.string().datetime().nullable().optional(),
+	/** The case event that makes this line due; null on lines raised by hand. */
+	dueOn: z.string().nullable().optional(),
 });
 
 export const invoicePaymentSchema = z.object({

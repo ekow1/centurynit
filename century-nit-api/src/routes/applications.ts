@@ -331,12 +331,16 @@ applicationsRouter.openapi(
 		const row = await getApplication(id);
 		if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
 		await assertApplicationAccess(c, id, "update");
+		const staff = c.get("staff")!;
 		const body = c.req.valid("json");
 		const { application: updated, proformaInvoice } = await setApplicationPackage({
 			id,
 			packageCode: body.packageCode,
 			degreeLevel: body.degreeLevel,
 			targetSchoolCount: body.targetSchoolCount,
+			stages: body.stages,
+			// Ops choosing for the client goes on the case with the reason.
+			actor: { name: staff.name, opsUserId: staff.opsUserId, reason: body.reason ?? null },
 		});
 		return c.json({
 			application: await serializeApplication(updated),

@@ -23,6 +23,14 @@ import {
 	type DepartureDetails,
 	type PreDepartureTask,
 	VISA_STAGE_LABELS,
+	milestoneLines,
+	normaliseScope,
+	quoteTotal,
+	scopeLabel,
+	serviceStageForJourney,
+	stageLines,
+	SERVICE_STAGE_LABELS,
+	SERVICE_STAGES,
 } from "century-nit-shared";
 import { serviceFeeFor, type SchoolFundingTrack } from "century-nit-core/content";
 import { canonicalBranchId } from "./availability.js";
@@ -44,6 +52,7 @@ import {
 	invoices,
 	invoiceEvents,
 	invoiceLines,
+	invoicePayments,
 	notifications,
 	opsUsers,
 	destinations,
@@ -62,7 +71,7 @@ import { notify, notifyMany, getStaffUserId, getManagerAndCoordinatorUserIds } f
 import { emitDomain } from "../worker/pubsub.js";
 import { listSchoolsForApplication } from "./schools.js";
 import { applicationFeeLinesFor, createInvoice, type InvoiceRow } from "./invoice.js";
-import { activeFeeItem, serviceFeeSplit } from "./fees.js";
+import { activeFeeItem } from "./fees.js";
 import { resolvePreDepartureTasks, seedPreDepartureTasks } from "./preDeparture.js";
 import {
 
@@ -343,6 +352,7 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		proceededAt: row.proceededAt?.toISOString() ?? null,
 		declinedReason: row.declinedReason,
 		fundingTrack: row.fundingTrack,
+		scopeStages: row.scopeStages ?? null,
 		targetSchoolCount: row.targetSchoolCount ?? null,
 		acceptedSchoolId: row.acceptedSchoolId ?? null,
 		offerAcceptedAt: row.offerAcceptedAt?.toISOString() ?? null,
@@ -1803,6 +1813,18 @@ export async function setApplicationStage(
 	);
 	const hasVisaInvoice = clientInvoices.some((i) => i.type === "visa");
 
+	// ── Guard: the stage must be on the client's plan ───────────────────
+	// A case that bought Admissions only stops at the offer; the next
+	// chapter is sold, not opened. A legacy case (no scope) is the full journey.
+	const needed = serviceStageForJourney(stage);
+	if (needed && row.scopeStages && !normaliseScope(row.scopeStages).includes(needed)) {
+		throw new HttpError(
+			409,
+			"STAGE_NOT_IN_PLAN",
+			`Cannot advance to ${JOURNEY_STAGE_LABELS[stage]}: the ${SERVICE_STAGE_LABELS[needed]} stage is not on the client's plan (${scopeLabel(row.scopeStages)}). Extend the plan first.`,
+		);
+	}
+
 	// ── Guard: adjacency + completion + per-stage prerequisites ────────
 	const adjacencyReason = canAdvanceToStage(row.stage, stage, {
 		visaStage: row.visaStage,
@@ -1861,6 +1883,11 @@ export async function setApplicationStage(
 		.where(eq(applications.id, id))
 		.returning();
 	if (stage === "travel_assistance") await seedPreDepartureTasks(id);
+	// The visa file opening makes the Visa stage's milestone due.
+	if (stage === "visa_processing" && row.stage !== "visa_processing") {
+		const { fireDueTrigger } = await import("./serviceFee.js");
+		await fireDueTrigger(id, "visa_open");
+	}
 	await db.insert(caseComments).values({
 		targetType: "application",
 		targetId: id,
@@ -2125,8 +2152,9 @@ export async function updateDepartureDetails(id: string, patch: DepartureDetails
 		.returning();
 	// Arrival recorded: the post-arrival instalments take their dates from it.
 	if (patch.arrivedAt !== undefined) {
-		const { refreshPostArrivalDates } = await import("./serviceFee.js");
+		const { refreshPostArrivalDates, fireDueTrigger } = await import("./serviceFee.js");
 		await refreshPostArrivalDates(id);
+		if (merged.arrivedAt) await fireDueTrigger(id, "arrival");
 	}
 	const lines = describeDepartureDetails(patch, merged);
 	if (lines.length > 0) {
@@ -2252,6 +2280,11 @@ export async function setApplicationVisaStage(
 		})
 		.where(eq(applications.id, id))
 		.returning();
+	// Approval makes the pre-departure milestone (or the Departure stage) due.
+	if (visaOutcome === "approved" && row.visaOutcome !== "approved") {
+		const { fireDueTrigger } = await import("./serviceFee.js");
+		await fireDueTrigger(id, "visa_approved");
+	}
 	const factLines = describeVisaDetails(details, mergedDetails);
 	await db.insert(caseComments).values({
 		targetType: "application",
@@ -2352,15 +2385,46 @@ export async function applicantUserIdOfApplication(id: string): Promise<string |
  * applicant's own actions, not just staff's.
  */
 
-import { AGENCY_STAGES, serviceFeeForPackage } from "century-nit-core/content";
-import { nextInvoiceNumber } from "./invoice.js";
+import { serviceFeeForPackage } from "century-nit-core/content";
+import { nextInvoiceNumber, nextUncoveredDueAt } from "./invoice.js";
+import { milestoneSplit } from "./fees.js";
 
+type PackageOutcome = { application: ApplicationRow; proformaInvoice: typeof invoices.$inferSelect | null };
+
+/**
+ * Bind the client's plan: the track (package), the stages on it, the
+ * degree level and the school allowance — and raise the service fee the
+ * way the ledger carries it, one agency invoice whose lines are the
+ * milestones.
+ *
+ * The fee is `quoteTotal` from shared, so the portal, the ops sheet and
+ * this raise price identically. What happens to an existing invoice
+ * depends on whether money is on it:
+ *
+ *  - nothing paid: it is voided and a fresh one raised for the new plan;
+ *  - paid in part or full: the plan can only *grow*. Added stages are
+ *    appended as lines (a bundle completed this way gets its discount off
+ *    the last added line), the track cannot change, stages cannot be
+ *    removed. Void the invoice by hand to start over.
+ *
+ * Acceptance milestones fall due now; every other line waits for its case
+ * event (`fireDueTrigger`).
+ */
 export async function setApplicationPackage(input: {
 	id: string;
 	packageCode: string;
 	degreeLevel: string;
 	targetSchoolCount?: number;
-}): Promise<{ application: ApplicationRow; proformaInvoice: typeof invoices.$inferSelect | null }> {
+	/** The stages on the plan; omitted means the full journey. */
+	stages?: readonly string[];
+	/** Who is choosing — the client, or ops on their behalf (with a reason). */
+	actor?: { name: string; opsUserId?: string | null; reason?: string | null };
+}): Promise<PackageOutcome> {
+	const scope = normaliseScope(input.stages ?? SERVICE_STAGES);
+	const split = await milestoneSplit();
+	const actorName = input.actor?.name ?? "Applicant";
+	const onBehalf = input.actor?.opsUserId ? ` — recorded by ${actorName}${input.actor.reason ? ` (${input.actor.reason})` : ""}` : "";
+
 	return db.transaction(async (tx) => {
 		const txDb = tx as unknown as typeof db;
 
@@ -2408,61 +2472,108 @@ export async function setApplicationPackage(input: {
 		if (!pkg.active) throw new HttpError(400, "PACKAGE_INACTIVE", "Package is no longer available");
 
 		const targetSchools = input.targetSchoolCount ?? app.targetSchoolCount ?? 3;
+		// A row finance has not priced yet falls back to the legacy table.
+		const bundleCents = pkg.priceCents > 0 ? pkg.priceCents : Math.round(serviceFeeForPackage(input.degreeLevel, input.packageCode, targetSchools));
+		const quote = quoteTotal({ bundleCents, stagePrices: pkg.stagePrices ?? null, stages: scope });
 
-		const [updated] = await tx
-			.update(applications)
-			.set({
-				packageId: pkg.id,
-				packageSelectedAt: new Date(),
-				fundingTrack: input.packageCode,
-				degreeLevel: input.degreeLevel,
-				targetSchoolCount: targetSchools,
-				updatedAt: new Date(),
-			})
-			.where(eq(applications.id, app.id))
-			.returning();
-
-		// Void any prior unpaid agency invoices for this applicant.
-		const prior = await tx
-			.select({ id: invoices.id })
+		// The live agency invoice and what is on it.
+		const [live] = await tx
+			.select()
 			.from(invoices)
-			.where(
-				and(
-					eq(invoices.clientUserId, applicant.userId ?? ""),
-					eq(invoices.type, "agency"),
-					sql`${invoices.status} IN ('proforma', 'issued')`,
-				),
+			.where(and(eq(invoices.applicationId, app.id), eq(invoices.type, "agency"), ne(invoices.status, "void")))
+			.orderBy(desc(invoices.createdAt))
+			.limit(1);
+		const [paidRow] = live
+			? await tx.select({ total: sql<number>`coalesce(sum(amount_cents), 0)::int` }).from(invoicePayments).where(eq(invoicePayments.invoiceId, live.id))
+			: [{ total: 0 }];
+		const paidCents = paidRow?.total ?? 0;
+		const prevScope = app.scopeStages ? normaliseScope(app.scopeStages) : app.packageId ? [...SERVICE_STAGES] : [];
+
+		const bind = async () => {
+			const [updated] = await tx
+				.update(applications)
+				.set({
+					packageId: pkg.id,
+					packageSelectedAt: app.packageSelectedAt ?? new Date(),
+					fundingTrack: input.packageCode,
+					degreeLevel: input.degreeLevel,
+					targetSchoolCount: targetSchools,
+					scopeStages: scope,
+					updatedAt: new Date(),
+				})
+				.where(eq(applications.id, app.id))
+				.returning();
+			return updated;
+		};
+
+		// ── Money on the ledger: the plan can only grow ─────────────────
+		if (live && paidCents > 0) {
+			if (app.packageId && app.packageId !== pkg.id) {
+				throw new HttpError(409, "PACKAGE_LOCKED", "Payments are recorded on the current plan — the track cannot change. Void the service-fee invoice to start over.");
+			}
+			const removed = prevScope.filter((st) => !scope.includes(st));
+			if (removed.length > 0) {
+				throw new HttpError(409, "PACKAGE_LOCKED", `Payments are recorded — stages can be added, not removed (${removed.map((st) => SERVICE_STAGE_LABELS[st]).join(", ")}). Void the service-fee invoice to start over.`);
+			}
+			const added = quote.stageLines.filter((l) => !prevScope.includes(l.stage));
+			if (added.length === 0) {
+				// Same plan — only the facts changed.
+				const updated = await bind();
+				return { application: updated, proformaInvoice: live };
+			}
+			const existing = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, live.id)).orderBy(invoiceLines.position);
+			const lines = stageLines(added, split, existing.length, quote.bundleDiscountCents);
+			const addedCents = lines.reduce((n, l) => n + l.amountCents, 0);
+			await tx.insert(invoiceLines).values(
+				lines.map(({ stage: _stage, ...l }) => ({ invoiceId: live.id, ...l, dueAt: l.dueOn === "acceptance" ? new Date() : null })),
 			);
-		for (const p of prior) {
+			await tx
+				.update(invoices)
+				.set({
+					subtotalCents: live.subtotalCents + addedCents,
+					note: `Service package: ${pkg.name} · ${scopeLabel(scope)}`,
+					// The invoice falls due with its first unpaid dated line.
+					dueAt: await nextUncoveredDueAt(live.id, paidCents, txDb),
+					updatedAt: new Date(),
+				})
+				.where(eq(invoices.id, live.id));
+			const addedLabel = added.map((l) => SERVICE_STAGE_LABELS[l.stage]).join(" + ");
+			await tx.insert(invoiceEvents).values({
+				invoiceId: live.id,
+				action: "lines_added",
+				actor: input.actor?.opsUserId ? actorName : "client",
+				detail: `Plan extended: ${addedLabel}${quote.bundleDiscountCents > 0 ? " · full-journey bundle price applied" : ""}`,
+			});
+			const updated = await bind();
+			await tx.insert(caseComments).values({
+				targetType: "application",
+				targetId: app.id,
+				kind: "status",
+				text: `Plan extended: ${addedLabel} added · now ${scopeLabel(scope)}${onBehalf}`,
+				authorName: actorName,
+				authorOpsUserId: input.actor?.opsUserId ?? null,
+			});
+			const [fresh] = await tx.select().from(invoices).where(eq(invoices.id, live.id)).limit(1);
+			return { application: updated, proformaInvoice: fresh ?? live };
+		}
+
+		// ── Nothing paid: the previous invoice (if any) goes, a fresh one comes ──
+		if (live) {
 			await tx
 				.update(invoices)
 				.set({ status: "void", voidedAt: new Date(), voidReason: "Package re-selected" })
-				.where(eq(invoices.id, p.id));
+				.where(eq(invoices.id, live.id));
 			await tx.insert(invoiceEvents).values({
-				invoiceId: p.id,
+				invoiceId: live.id,
 				action: "voided",
 				actor: "system",
 				detail: "Replaced by new package selection",
 			});
 		}
 
-		// Raise the agency proforma pre-split into deposit / pre-departure / post-arrival milestones.
-		// Package price matches the price configured in Ops Center (pkg.priceCents).
-		const price = (pkg.priceCents && pkg.priceCents > 0)
-			? pkg.priceCents
-			: Math.round(serviceFeeForPackage(input.degreeLevel, input.packageCode, targetSchools));
-		const split = await serviceFeeSplit();
-		const portions = [split.depositPercent / 100, split.preDeparturePercent / 100, split.postArrivalPercent / 100];
-		const milestoneLines = AGENCY_STAGES.map((stage, i) => ({
-			position: i,
-			label: stage.label,
-			detail: stage.detail,
-			amountCents: i === AGENCY_STAGES.length - 1
-				? price - portions.slice(0, -1).reduce((n, portion) => n + Math.round(price * portion), 0)
-				: Math.round(price * portions[i]),
-		})).filter((l) => l.amountCents > 0);
-
-		const subtotalCents = milestoneLines.reduce((n, l) => n + l.amountCents, 0);
+		const updated = await bind();
+		const lines = milestoneLines(quote, split, app.paymentPlanId);
+		const subtotalCents = lines.reduce((n, l) => n + l.amountCents, 0);
 		let proformaInvoice: typeof invoices.$inferSelect | null = null;
 
 		if (subtotalCents > 0) {
@@ -2480,25 +2591,21 @@ export async function setApplicationPackage(input: {
 					status: "issued",
 					issuedBy: null,
 					issuedByName: "Century NIT",
-					note: `Service package: ${pkg.name}`,
+					note: `Service package: ${pkg.name} · ${scopeLabel(scope)}`,
+					// The acceptance milestone is due now; the rest wait for their events.
+					dueAt: lines.some((l) => l.dueOn === "acceptance") ? new Date() : null,
 				})
 				.returning();
 
 			await tx.insert(invoiceLines).values(
-				milestoneLines.map((l) => ({
-					invoiceId: created.id,
-					position: l.position,
-					label: l.label,
-					detail: l.detail,
-					amountCents: l.amountCents,
-				})),
+				lines.map(({ stage: _stage, ...l }) => ({ invoiceId: created.id, ...l, dueAt: l.dueOn === "acceptance" ? new Date() : null })),
 			);
 
 			await tx.insert(invoiceEvents).values({
 				invoiceId: created.id,
 				action: "issued",
 				actor: "system",
-				detail: `Issued from package ${pkg.code}`,
+				detail: `Issued from package ${pkg.code} · ${scopeLabel(scope)}`,
 			});
 
 			proformaInvoice = created;
@@ -2508,8 +2615,9 @@ export async function setApplicationPackage(input: {
 			targetType: "application",
 			targetId: app.id,
 			kind: "status",
-			text: `Package Agreement: ${pkg.name} · ${input.degreeLevel}`,
-			authorName: "Applicant",
+			text: `Package Agreement: ${pkg.name} · ${scopeLabel(scope)} · ${input.degreeLevel}${onBehalf}`,
+			authorName: actorName,
+			authorOpsUserId: input.actor?.opsUserId ?? null,
 		});
 
 		return { application: updated, proformaInvoice };

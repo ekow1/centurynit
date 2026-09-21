@@ -4,6 +4,7 @@ import { PAYMENT_PLANS } from "century-nit-core";
 import { invoiceAgeDays, invoiceBalance, invoicePaid } from "century-nit-core/ops";
 import {
 	API_PREFIX,
+	DEFAULT_ADMISSIONS_START_PERCENT,
 	DEFAULT_POST_ARRIVAL_CATALOGUE,
 	POST_ARRIVAL_FREQUENCIES,
 	POST_ARRIVAL_FREQUENCY_LABELS,
@@ -43,6 +44,8 @@ export function EnterprisePaymentConfig() {
 	const { catalogue, reload } = useFeeCatalogue();
 	const [deposit, setDeposit] = useState("");
 	const [preDeparture, setPreDeparture] = useState("");
+	// A plan that stops short of the full journey pays Admissions in two halves.
+	const [admissionsStart, setAdmissionsStart] = useState("");
 	const [pa, setPa] = useState<PostArrivalCatalogue>(DEFAULT_POST_ARRIVAL_CATALOGUE);
 	const [toast, setToast] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 	const [saving, setSaving] = useState(false);
@@ -51,6 +54,7 @@ export function EnterprisePaymentConfig() {
 		if (!catalogue) return;
 		setDeposit(String(catalogue.serviceFeeSplit.depositPercent));
 		setPreDeparture(String(catalogue.serviceFeeSplit.preDeparturePercent));
+		setAdmissionsStart(String(catalogue.admissionsStartPercent ?? DEFAULT_ADMISSIONS_START_PERCENT));
 		setPa(catalogue.postArrival ?? DEFAULT_POST_ARRIVAL_CATALOGUE);
 	}, [catalogue]);
 
@@ -85,6 +89,25 @@ export function EnterprisePaymentConfig() {
 	const p = Number.parseInt(preDeparture, 10);
 	const post = Number.isInteger(d) && Number.isInteger(p) ? 100 - d - p : NaN;
 	const validSplit = Number.isInteger(d) && Number.isInteger(p) && d >= 1 && p >= 1 && post >= 1;
+	const a = Number.parseInt(admissionsStart, 10);
+	const validAdmissions = Number.isInteger(a) && a >= 1 && a <= 99;
+
+	async function saveAdmissionsSplit() {
+		if (!validAdmissions) {
+			setToast({ tone: "error", text: "The on-acceptance share must be a whole percentage between 1 and 99." });
+			return;
+		}
+		setSaving(true);
+		try {
+			await apiFetch(`${API_PREFIX}/settings`, { method: "PUT", body: JSON.stringify({ key: "SERVICE_FEE_ADMISSIONS_START_PERCENT", value: String(a) }) });
+			await reload();
+			setToast({ tone: "success", text: "Saved — plans accepted from now on split Admissions this way." });
+		} catch (err) {
+			setToast({ tone: "error", text: err instanceof ApiError ? err.message : "Could not save the split." });
+		} finally {
+			setSaving(false);
+		}
+	}
 
 	async function saveSplit() {
 		if (!validSplit) {
@@ -279,6 +302,42 @@ export function EnterprisePaymentConfig() {
 					<p className="cn-detailhead__meta" style={{ marginTop: "0.5rem" }}>
 						On a {fmtGhs(example / 100)} fee: deposit {of(d)} · pre-departure {of(p)} · post-arrival {of(post)}
 					</p>
+				</section>
+
+				<section className="card cn-now">
+					<p className="cn-detail__eyebrow">A plan that stops short · Admissions on its own</p>
+					<p className="muted" style={{ fontSize: "var(--text-xs)", margin: "0 0 0.5rem", lineHeight: 1.5 }}>
+						The split above is for the full journey — its post-arrival remainder needs an arrival. A plan scoped to Admissions (or Admissions + Visa) pays each stage as it opens: Admissions in two parts, Visa when its file opens.
+					</p>
+					<label className="ops-rule">
+						<span>
+							Admissions · on acceptance<small>the share due when the plan is accepted</small>
+						</span>
+						<input className="ops-tariff__in" style={{ width: "100%" }} inputMode="numeric" value={admissionsStart} disabled={!canEdit} onChange={(e) => setAdmissionsStart(e.target.value)} aria-label="Admissions on-acceptance percent" />
+					</label>
+					<div className="ops-rule" style={{ borderBottom: "none" }}>
+						<span>
+							Admissions · on the first offer<small>the remainder · due when an offer letter is recorded</small>
+						</span>
+						<span className="cn-money" style={{ textAlign: "right", fontWeight: 700 }}>
+							{pct(Number.isInteger(a) ? 100 - a : NaN)}
+						</span>
+					</div>
+					<div className="ops-rule" style={{ borderBottom: "none" }}>
+						<span>
+							Visa stage<small>if on the plan · due when the visa file opens</small>
+						</span>
+						<span className="cn-money" style={{ textAlign: "right", fontWeight: 700 }}>
+							100%
+						</span>
+					</div>
+					{canEdit && (
+						<div className="cn-now__actions">
+							<button type="button" className="btn btn--sm btn--primary" disabled={saving || !validAdmissions} onClick={() => void saveAdmissionsSplit()}>
+								{saving ? "Saving…" : "Save"}
+							</button>
+						</div>
+					)}
 				</section>
 
 				<section className="card cn-now">

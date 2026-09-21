@@ -81,6 +81,26 @@ export async function paidCentsOf(invoiceId: string, tx: typeof db = db): Promis
 	return row?.total ?? 0;
 }
 
+/**
+ * The earliest `dueAt` among the lines the payments have not yet reached —
+ * lines are covered in position order. Null when nothing dated is unpaid.
+ */
+export async function nextUncoveredDueAt(invoiceId: string, paidCents: number, tx: typeof db = db): Promise<Date | null> {
+	const lines = await tx
+		.select({ amountCents: invoiceLines.amountCents, dueAt: invoiceLines.dueAt })
+		.from(invoiceLines)
+		.where(eq(invoiceLines.invoiceId, invoiceId))
+		.orderBy(invoiceLines.position);
+	let cum = 0;
+	let due: Date | null = null;
+	for (const line of lines) {
+		cum += line.amountCents;
+		if (paidCents >= cum || !line.dueAt) continue;
+		if (!due || line.dueAt.getTime() < due.getTime()) due = line.dueAt;
+	}
+	return due;
+}
+
 export function balanceOf(row: InvoiceRow, paidCents: number): number {
 	if (row.status === "void") return 0;
 	return Math.max(0, row.subtotalCents - paidCents - row.creditedCents);
@@ -169,6 +189,7 @@ export async function serializeInvoice(row: InvoiceRow): Promise<ApiInvoice> {
 			amountCents: l.amountCents,
 			schoolApplicationId: l.schoolApplicationId ?? null,
 			dueAt: l.dueAt?.toISOString() ?? null,
+			dueOn: l.dueOn ?? null,
 		})),
 		subtotalCents: row.subtotalCents,
 		paidCents,
@@ -614,9 +635,12 @@ export async function recordPayment(input: {
 		});
 
 		const status = storedStatusFor(row, paidCents + input.amountCents);
+		// A milestone invoice falls due with its first unpaid dated line; the
+		// payment may have covered that line, so the date moves on (or clears).
+		const nextDueAt = row.type === "agency" ? await nextUncoveredDueAt(row.id, paidCents + input.amountCents, txDb) : row.dueAt;
 		const [updated] = await tx
 			.update(invoices)
-			.set({ status, updatedAt: new Date() })
+			.set({ status, dueAt: nextDueAt, updatedAt: new Date() })
 			.where(eq(invoices.id, row.id))
 			.returning();
 

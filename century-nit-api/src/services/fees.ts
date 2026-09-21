@@ -1,5 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import {
+	DEFAULT_ADMISSIONS_START_PERCENT,
 	DEFAULT_EXCHANGE_RATE,
 	DEFAULT_POST_ARRIVAL_CATALOGUE,
 	DEFAULT_SERVICE_FEE_SPLIT,
@@ -7,6 +8,7 @@ import {
 	type DestinationTariff,
 	type FeeCatalogue,
 	type FeeItem,
+	type MilestoneSplit,
 	type PostArrivalCatalogue,
 	type PostArrivalFrequency,
 	type ServiceFeeSplit,
@@ -137,6 +139,19 @@ export async function serviceFeeSplit(): Promise<ServiceFeeSplit> {
 	return { depositPercent, preDeparturePercent, postArrivalPercent: 100 - depositPercent - preDeparturePercent };
 }
 
+/** Admissions on its own: the share due on acceptance, the rest on the first offer. */
+export async function admissionsStartPercent(): Promise<number> {
+	const raw = await getSetting("SERVICE_FEE_ADMISSIONS_START_PERCENT");
+	const n = raw ? Number.parseInt(raw, 10) : Number.NaN;
+	return Number.isFinite(n) && n >= 1 && n <= 99 ? n : DEFAULT_ADMISSIONS_START_PERCENT;
+}
+
+/** Everything `milestoneLines` needs, in one read. */
+export async function milestoneSplit(): Promise<MilestoneSplit> {
+	const [split, admissions] = await Promise.all([serviceFeeSplit(), admissionsStartPercent()]);
+	return { depositPercent: split.depositPercent, preDeparturePercent: split.preDeparturePercent, admissionsStartPercent: admissions };
+}
+
 /** What the client may pick for the post-arrival remainder — from settings, with the defaults behind them. */
 export async function postArrivalCatalogue(): Promise<PostArrivalCatalogue> {
 	const d = DEFAULT_POST_ARRIVAL_CATALOGUE;
@@ -164,6 +179,13 @@ export async function postArrivalCatalogue(): Promise<PostArrivalCatalogue> {
 }
 
 export async function feeCatalogue(): Promise<FeeCatalogue> {
-	const [items, tariffs, rate, split, postArrival] = await Promise.all([listFeeItems(), listDestinationTariffs(), exchangeRate(), serviceFeeSplit(), postArrivalCatalogue()]);
-	return { items, destinations: tariffs, exchangeRate: rate, serviceFeeSplit: split, postArrival };
+	const [items, tariffs, rate, split, postArrival, admissions] = await Promise.all([
+		listFeeItems(),
+		listDestinationTariffs(),
+		exchangeRate(),
+		serviceFeeSplit(),
+		postArrivalCatalogue(),
+		admissionsStartPercent(),
+	]);
+	return { items, destinations: tariffs, exchangeRate: rate, serviceFeeSplit: split, admissionsStartPercent: admissions, postArrival };
 }

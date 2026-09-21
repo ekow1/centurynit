@@ -44,6 +44,7 @@ function adaptInvoice(api: ApiInvoice): Invoice {
 		amount: l.amountCents / 100,
 		schoolApplicationId: l.schoolApplicationId ?? null,
 		dueAt: l.dueAt ?? null,
+		dueOn: l.dueOn ?? null,
 	}));
 
 	const payments: InvoicePayment[] = api.payments.map((p) => ({

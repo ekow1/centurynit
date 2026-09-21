@@ -1,7 +1,12 @@
-import { and, asc, eq, ne, desc } from "drizzle-orm";
+import { and, asc, eq, ne, desc, sql } from "drizzle-orm";
 import {
+	isFullScope,
+	milestoneLines,
+	SERVICE_STAGES,
+	type Quote,
 	postArrivalInstalments,
 	postArrivalScheduleChoiceSchema,
+	type DueTrigger,
 	type PostArrivalFrequency,
 	type PostArrivalScheduleChoice,
 	POST_ARRIVAL_FREQUENCY_LABELS,
@@ -10,7 +15,8 @@ import { AGENCY_STAGES } from "century-nit-core/content";
 import { db } from "../db/index.js";
 import { applicants, applications, caseComments, invoiceLines, invoicePayments, invoices, travelAssistanceRequests } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
-import { exchangeRate, postArrivalCatalogue, serviceFeeSplit } from "./fees.js";
+import { exchangeRate, milestoneSplit, postArrivalCatalogue } from "./fees.js";
+import { nextUncoveredDueAt } from "./invoice.js";
 import { cancelQueued, queueEmail, queueReminder } from "../worker/queues.js";
 import { emailLayout } from "../lib/email-templates.js";
 import { instalmentDueForClient } from "./notifications.js";
@@ -83,43 +89,67 @@ export function nextChargeCents(lines: { amountCents: number }[], paidCents: num
 }
 
 /**
- * The lines a plan wants, from the configured split. The full plan is the
- * deposit and the balance; instalments are the deposit, the pre-departure
- * milestone and the post-arrival remainder (one line until scheduled).
+ * The lines a full-journey plan wants, from the configured split. The full
+ * plan is the deposit and the balance; instalments are the deposit, the
+ * pre-departure milestone and the post-arrival remainder (one line until
+ * scheduled). A partial scope has no plan shape — its lines are its stages.
  */
-export async function planLines(subtotalCents: number, planId: string | null): Promise<{ position: number; label: string; detail: string; amountCents: number }[]> {
-	const split = await serviceFeeSplit();
-	const deposit = Math.round((subtotalCents * split.depositPercent) / 100);
-	if (planId === "full") {
-		return [
-			{ position: 0, label: AGENCY_STAGES[0].label, detail: AGENCY_STAGES[0].detail, amountCents: deposit },
-			{ position: 1, label: "Service fee · balance", detail: "Due after your visa is approved — releases your travel documents", amountCents: subtotalCents - deposit },
-		].filter((l) => l.amountCents > 0);
-	}
-	const pre = Math.round((subtotalCents * split.preDeparturePercent) / 100);
-	return [
-		{ position: 0, label: AGENCY_STAGES[0].label, detail: AGENCY_STAGES[0].detail, amountCents: deposit },
-		{ position: 1, label: AGENCY_STAGES[1].label, detail: AGENCY_STAGES[1].detail, amountCents: pre },
-		{ position: 2, label: AGENCY_STAGES[2].label, detail: AGENCY_STAGES[2].detail, amountCents: subtotalCents - deposit - pre },
-	].filter((l) => l.amountCents > 0);
+export async function planLines(subtotalCents: number, planId: string | null): Promise<{ position: number; label: string; detail: string; amountCents: number; dueOn: DueTrigger }[]> {
+	const split = await milestoneSplit();
+	const quote: Quote = { scope: [...SERVICE_STAGES], full: true, stageLines: [], alaCarteCents: subtotalCents, bundleDiscountCents: 0, totalCents: subtotalCents };
+	return milestoneLines(quote, split, planId).map(({ stage: _stage, ...l }) => l);
 }
 
 /**
  * The plan was chosen (or changed): reshape the unpaid part of the agency
  * invoice to match. Only while nothing beyond the deposit has been paid —
- * after that the lines are the record and the plan cannot move.
+ * after that the lines are the record and the plan cannot move. Only a
+ * full-journey invoice raised as one has a plan shape: a partial scope, or
+ * a plan that grew stage by stage, keeps its stage lines.
  */
 export async function reshapeAgencyInvoiceForPlan(applicationId: string, planId: string): Promise<void> {
 	const inv = await liveAgencyInvoice(applicationId);
 	if (!inv) return;
+	const [app] = await db.select({ scopeStages: applications.scopeStages }).from(applications).where(eq(applications.id, applicationId)).limit(1);
+	if (app && app.scopeStages && !isFullScope(app.scopeStages)) return;
 	const { lines, paidCents } = await linesAndPaid(inv.id);
+	if (lines.some((l) => l.dueOn === "offer" || l.dueOn === "visa_open")) return;
 	const deposit = lines[0]?.amountCents ?? 0;
 	if (lines.length > 0 && paidCents > deposit) return;
 	const wanted = await planLines(inv.subtotalCents, planId);
+	const acceptedAt = lines[0]?.dueAt ?? new Date();
 	await db.transaction(async (tx) => {
 		await tx.delete(invoiceLines).where(eq(invoiceLines.invoiceId, inv.id));
-		await tx.insert(invoiceLines).values(wanted.map((l) => ({ invoiceId: inv.id, ...l })));
+		await tx.insert(invoiceLines).values(wanted.map((l) => ({ invoiceId: inv.id, ...l, dueAt: l.dueOn === "acceptance" ? acceptedAt : null })));
 	});
+	await refreshInvoiceDueAt(inv.id);
+}
+
+/**
+ * A case event that makes a milestone due — the first offer, the visa
+ * file opening, the visa approval, the arrival. Stamps `dueAt` on the
+ * live agency invoice's matching lines (once) and moves the invoice's own
+ * due date to the earliest unpaid one, which is what "overdue" reads.
+ */
+export async function fireDueTrigger(applicationId: string, trigger: DueTrigger): Promise<void> {
+	const inv = await liveAgencyInvoice(applicationId);
+	if (!inv) return;
+	await db
+		.update(invoiceLines)
+		.set({ dueAt: new Date() })
+		.where(and(eq(invoiceLines.invoiceId, inv.id), eq(invoiceLines.dueOn, trigger), sql`${invoiceLines.dueAt} IS NULL`));
+	await refreshInvoiceDueAt(inv.id);
+}
+
+/**
+ * The invoice falls due when its first unpaid dated line does. Payments
+ * cover lines in position order, so the invoice's due date is the earliest
+ * `dueAt` among the lines the payments have not yet reached.
+ */
+export async function refreshInvoiceDueAt(invoiceId: string): Promise<void> {
+	const { paidCents } = await linesAndPaid(invoiceId);
+	const due = await nextUncoveredDueAt(invoiceId, paidCents);
+	await db.update(invoices).set({ dueAt: due, updatedAt: new Date() }).where(eq(invoices.id, invoiceId));
 }
 
 /** When the post-arrival dates count from: arrival if recorded, else the booked flight's departure. */
@@ -305,8 +335,10 @@ async function collapsePostArrivalTail(applicationId: string): Promise<void> {
 			detail: "A payment schedule is under review — dates appear once approved",
 			amountCents: remainderCents,
 			dueAt: null,
+			dueOn: "arrival",
 		});
 	});
+	await refreshInvoiceDueAt(inv.id);
 }
 
 /** Tell the client their schedule was approved or declined. */
@@ -385,9 +417,11 @@ export async function rewritePostArrivalLines(applicationId: string): Promise<vo
 				detail: `${app.postArrivalMonths} months · ${freq}${interestNote}${p.dueAt ? "" : " · dated once you arrive"}`,
 				amountCents: p.amountCents,
 				dueAt: p.dueAt ? new Date(p.dueAt) : null,
+				dueOn: "scheduled",
 			})),
 		);
 	});
+	await refreshInvoiceDueAt(inv.id);
 	await queueInstalmentReminders(applicationId, inv.id, inv.invoiceNumber, catalogue.remindDays);
 }
 

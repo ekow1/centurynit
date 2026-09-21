@@ -513,6 +513,12 @@ export async function updateSchoolStatus(
 		financialNote: input.financialNote,
 	});
 
+	// The first offer letter makes the Admissions stage's second milestone due.
+	if (input.outcome === "Admitted" && target.outcome !== "Admitted" && target.applicationId) {
+		const { fireDueTrigger } = await import("./serviceFee.js");
+		await fireDueTrigger(target.applicationId, "offer");
+	}
+
 	if (input.sendUpdateEmail) {
 		try {
 			const [appRow] = await db

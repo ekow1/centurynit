@@ -59,6 +59,7 @@ packagesRouter.openapi(
 				name: r.name,
 				tagline: r.tagline,
 				priceCents: r.priceCents,
+				stagePrices: r.stagePrices ?? null,
 				currency: r.currency,
 				features: r.features,
 				exclusions: r.exclusions,
@@ -104,6 +105,7 @@ packagesRouter.openapi(
 				name: r.name,
 				tagline: r.tagline,
 				priceCents: r.priceCents,
+				stagePrices: r.stagePrices ?? null,
 				currency: r.currency,
 				features: r.features,
 				exclusions: r.exclusions,
@@ -155,6 +157,7 @@ packagesRouter.openapi(
 				name: row.name,
 				tagline: row.tagline,
 				priceCents: row.priceCents,
+				stagePrices: row.stagePrices ?? null,
 				currency: row.currency,
 				features: row.features,
 				exclusions: row.exclusions,
@@ -169,6 +172,23 @@ packagesRouter.openapi(
 		});
 	},
 );
+
+/**
+ * A bundle dearer than its stages is a mistake, and a stage priced at zero
+ * would give it away. Checked on the merged row so a partial update cannot
+ * slip past.
+ */
+function assertStagePricing(row: { priceCents: number; stagePrices?: { admissions: number; visa: number; departure: number } | null }): void {
+	const sp = row.stagePrices;
+	if (!sp) return;
+	const alaCarte = sp.admissions + sp.visa + sp.departure;
+	if (sp.admissions <= 0 || sp.visa <= 0 || sp.departure <= 0) {
+		throw new HttpError(400, "STAGE_PRICE_ZERO", "Every stage needs a price above zero.");
+	}
+	if (row.priceCents > alaCarte) {
+		throw new HttpError(400, "BUNDLE_ABOVE_STAGES", "The full-journey bundle cannot cost more than the three stages added up.");
+	}
+}
 
 /* ── POST /api/v1/packages (staff create) ─────────────────────────────────── */
 
@@ -194,6 +214,7 @@ packagesRouter.openapi(
 	}),
 	async (c) => {
 		const body = c.req.valid("json" as never) as z.infer<typeof createServicePackageSchema>;
+		assertStagePricing(body);
 		const [existing] = await db
 			.select({ id: servicePackages.id })
 			.from(servicePackages)
@@ -224,6 +245,7 @@ packagesRouter.openapi(
 				name: row.name,
 				tagline: row.tagline,
 				priceCents: row.priceCents,
+				stagePrices: row.stagePrices ?? null,
 				currency: row.currency,
 				features: row.features,
 				exclusions: row.exclusions,
@@ -266,6 +288,9 @@ packagesRouter.openapi(
 	async (c) => {
 		const { code } = c.req.valid("param" as never) as z.infer<typeof packageParamsSchema>;
 		const body = c.req.valid("json" as never) as z.infer<typeof updateServicePackageSchema>;
+		const [current] = await db.select({ priceCents: servicePackages.priceCents, stagePrices: servicePackages.stagePrices }).from(servicePackages).where(eq(servicePackages.code, code)).limit(1);
+		if (!current) throw new HttpError(404, "PACKAGE_NOT_FOUND", "Package not found");
+		assertStagePricing({ priceCents: body.priceCents ?? current.priceCents, stagePrices: body.stagePrices === undefined ? current.stagePrices : body.stagePrices });
 		const [row] = await db
 			.update(servicePackages)
 			.set({ ...body, updatedAt: new Date() })
@@ -279,6 +304,7 @@ packagesRouter.openapi(
 				name: row.name,
 				tagline: row.tagline,
 				priceCents: row.priceCents,
+				stagePrices: row.stagePrices ?? null,
 				currency: row.currency,
 				features: row.features,
 				exclusions: row.exclusions,

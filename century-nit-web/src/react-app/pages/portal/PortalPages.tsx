@@ -28,7 +28,22 @@ import {
 	emptyStudyChoice,
 	flattenStudyChoices,
 } from "../../context/AppState";
-import { usdFromCents, feePlanSentences, DEFAULT_SERVICE_FEE_SPLIT, DEFAULT_POST_ARRIVAL_CATALOGUE } from "century-nit-shared";
+import {
+	usdFromCents,
+	feePlanSentences,
+	DEFAULT_SERVICE_FEE_SPLIT,
+	DEFAULT_POST_ARRIVAL_CATALOGUE,
+	DEFAULT_ADMISSIONS_START_PERCENT,
+	DUE_TRIGGER_LABELS,
+	SERVICE_STAGES,
+	SERVICE_STAGE_BLURBS,
+	SERVICE_STAGE_LABELS,
+	milestoneLines,
+	normaliseScope,
+	quoteTotal,
+	scopeLabel,
+	type ServiceStage,
+} from "century-nit-shared";
 import {
 	formatDualCurrency,
 	getDestination,
@@ -460,6 +475,10 @@ function SchoolPackageInner() {
 	const [targetSchoolCount, setTargetSchoolCount] = useState<number>(
 		application.targetSchoolCount || 3,
 	);
+	// The stages on the plan. Admissions is always in; Departure needs Visa.
+	const [stages, setStages] = useState<ServiceStage[]>(() => normaliseScope(application.scopeStages ?? null));
+	const [recommendedStages, setRecommendedStages] = useState<ServiceStage[] | null>(null);
+	const [extending, setExtending] = useState(false);
 	const [recommendedTrack, setRecommendedTrack] = useState<SchoolFundingTrack | null>(null);
 	const [recommendedLevel, setRecommendedLevel] = useState<SchoolDegreeLevel | null>(null);
 	const [saving, setSaving] = useState(false);
@@ -502,8 +521,12 @@ function SchoolPackageInner() {
 	}, []);
 
 	useEffect(() => {
-		const applyRec = (rec?: { recPackage?: string | null; recProgram?: string | null }) => {
+		const applyRec = (rec?: { recPackage?: string | null; recProgram?: string | null; recStages?: string[] | null }) => {
 			if (!rec) return;
+			// An empty recommendation is the full journey — the consultant left every stage on.
+			const recScope = normaliseScope(rec.recStages && rec.recStages.length > 0 ? rec.recStages : null);
+			setRecommendedStages(recScope);
+			if (!application.scopeStages) setStages(recScope);
 			if (rec.recPackage) {
 				const p = rec.recPackage.toLowerCase();
 				let track: SchoolFundingTrack | null = null;
@@ -557,13 +580,41 @@ function SchoolPackageInner() {
 		: SCHOOL_FUNDING_TRACKS.find((f) => f.id === activeFunding);
 	const levelMeta = SCHOOL_DEGREE_LEVELS.find((d) => d.id === activeLevel);
 
-	const totalServiceFeeCents = (selectedPkg && selectedPkg.priceCents > 0)
-		? selectedPkg.priceCents
-		: serviceFeeForPackage(activeLevel, activeFunding, targetSchoolCount);
+	// The same function ops and the API price from — what shows here is what the invoice carries.
+	const bundleCents = (selectedPkg && selectedPkg.priceCents > 0) ? selectedPkg.priceCents : serviceFeeForPackage(activeLevel, activeFunding, targetSchoolCount);
+	const quote = quoteTotal({ bundleCents, stagePrices: selectedPkg?.stagePrices ?? null, stages });
+	const split = {
+		depositPercent: fees?.catalogue.serviceFeeSplit.depositPercent ?? DEFAULT_SERVICE_FEE_SPLIT.depositPercent,
+		preDeparturePercent: fees?.catalogue.serviceFeeSplit.preDeparturePercent ?? DEFAULT_SERVICE_FEE_SPLIT.preDeparturePercent,
+		admissionsStartPercent: fees?.catalogue.admissionsStartPercent ?? DEFAULT_ADMISSIONS_START_PERCENT,
+	};
+	const totalServiceFeeCents = quote.totalCents;
 	const serviceFee = totalServiceFeeCents / 100;
-	const depositCents = Math.max(1, Math.round(totalServiceFeeCents * 0.1));
+	const milestones = milestoneLines(quote, split, quote.full ? plan : null);
+	const depositCents = Math.max(1, milestones[0]?.amountCents ?? Math.round(totalServiceFeeCents * 0.1));
 	const depositUsd = depositCents / 100;
-	const remainingUsd = serviceFee - depositUsd;
+	// Stages already on the plan (and paid for) cannot come off; new ones can be added at any time.
+	const onPlan = isLocked ? normaliseScope(application.scopeStages ?? null) : [];
+	const addedStages = stages.filter((st) => !onPlan.includes(st));
+	const stagePriceOf = (st: ServiceStage) => (selectedPkg?.stagePrices ? selectedPkg.stagePrices[st] : quoteTotal({ bundleCents, stagePrices: null, stages: null }).stageLines.find((l) => l.stage === st)?.amountCents ?? 0);
+	function toggleStage(st: ServiceStage) {
+		if (st === "admissions" || onPlan.includes(st)) return;
+		setStages((prev) => normaliseScope(prev.includes(st) ? prev.filter((x) => x !== st) : [...prev, st]));
+	}
+	async function extendPlan() {
+		if (!activeFunding || !activeLevel || addedStages.length === 0 || extending) return;
+		setExtending(true);
+		try {
+			await meApi.choosePackage({ packageCode: activeFunding, degreeLevel: activeLevel, targetSchoolCount, stages });
+			chooseSchoolPackage(activeFunding, activeLevel, targetSchoolCount, totalServiceFeeCents, stages);
+			await syncFromServer();
+			toast.success(`${addedStages.map((st) => SERVICE_STAGE_LABELS[st]).join(" + ")} added to your plan.`);
+		} catch (err) {
+			toast.error(err instanceof ApiError ? err.message : "Could not extend your plan. Please try again.");
+		} finally {
+			setExtending(false);
+		}
+	}
 
 	const packageCards = dbPackages.length > 0
 		? dbPackages.map((p) => ({
@@ -592,9 +643,10 @@ function SchoolPackageInner() {
 				packageCode: funding,
 				degreeLevel: level,
 				targetSchoolCount,
+				stages,
 			});
-			chooseSchoolPackage(funding, level, targetSchoolCount, totalServiceFeeCents);
-			if (plan !== application.paymentPlanId) {
+			chooseSchoolPackage(funding, level, targetSchoolCount, totalServiceFeeCents, stages);
+			if (quote.full && plan !== application.paymentPlanId) {
 				await meApi.choosePaymentPlan({ paymentPlanId: plan });
 				choosePaymentPlan(plan);
 			}
@@ -645,8 +697,8 @@ function SchoolPackageInner() {
 					<p className="eyebrow">Chapter II · Enrolment</p>
 					<h1 className="page-title mt-1">Enrol with Century NIT</h1>
 					<p className="lead mt-2">
-						Confirm you're enrolling, choose your package and plan, pay the deposit. Your
-						consultant is assigned when it lands.
+						Confirm you're enrolling, choose your track and the stages you want us to handle, pay
+						the first milestone. Your consultant is assigned when it lands.
 					</p>
 				</div>
 			</header>
@@ -716,7 +768,56 @@ function SchoolPackageInner() {
 
 							<section className="psec">
 								<p>
-									<span className={`psec__no${isLocked ? " psec__no--done" : ""}`}>3</span>
+									<span className={`psec__no${isLocked && addedStages.length === 0 ? " psec__no--done" : ""}`}>3</span>
+									<span className="psec__title">Stages on your plan</span>
+								</p>
+								<p className="psec__hint">
+									Pay for each stage as it opens, never for one you don't reach. All three together get the bundle price.
+									{isLocked ? " Stages already on your plan stay; you can add the next one any time." : ""}
+								</p>
+								<div className="pstages">
+									{SERVICE_STAGES.map((st) => {
+										const on = stages.includes(st);
+										const fixed = st === "admissions" || onPlan.includes(st);
+										const needsVisa = st === "departure" && !stages.includes("visa");
+										return (
+											<button
+												key={st}
+												type="button"
+												className={`pstage${on ? " pstage--on" : ""}${fixed ? " pstage--fixed" : ""}${needsVisa ? " pstage--locked" : ""}`}
+												onClick={() => !needsVisa && toggleStage(st)}
+												disabled={fixed || needsVisa}
+												aria-pressed={on}
+											>
+												<span className="pstage__box" aria-hidden="true">{on ? "✓" : ""}</span>
+												<span className="pstage__body">
+													<span className="pstage__name">
+														{SERVICE_STAGE_LABELS[st]}
+														{st === "admissions" && <small> · always on</small>}
+														{onPlan.includes(st) && st !== "admissions" && <small> · on your plan</small>}
+														{needsVisa && <small> · needs the Visa stage</small>}
+														{recommendedStages?.includes(st) && !on && <small> · advisor's pick</small>}
+													</span>
+													<span className="pstage__desc">{SERVICE_STAGE_BLURBS[st]}</span>
+												</span>
+												<span className="pstage__price">
+													<MoneyInline usd={stagePriceOf(st) / 100} />
+													<small>{st === "admissions" ? `${split.admissionsStartPercent}% now · rest on your offer` : st === "visa" ? "when the visa file opens" : "on visa approval"}</small>
+												</span>
+											</button>
+										);
+									})}
+								</div>
+								{!quote.full && (
+									<p className="psec__hint">
+										A plan that stops short has no post-arrival instalments — there is no arrival. Choose the full journey to spread the last part over the months after you land.
+									</p>
+								)}
+							</section>
+
+							<section className="psec">
+								<p>
+									<span className={`psec__no${isLocked ? " psec__no--done" : ""}`}>4</span>
 									<span className="psec__title">Degree level</span>
 								</p>
 								<div className="pchips" style={{ marginTop: "0.6rem" }}>
@@ -741,7 +842,7 @@ function SchoolPackageInner() {
 
 							<section className="psec">
 								<p>
-									<span className={`psec__no${isLocked ? " psec__no--done" : ""}`}>4</span>
+									<span className={`psec__no${isLocked ? " psec__no--done" : ""}`}>5</span>
 									<span className="psec__title">Target schools</span>
 								</p>
 								<p className="psec__hint">
@@ -765,9 +866,10 @@ function SchoolPackageInner() {
 								</div>
 							</section>
 
+							{quote.full && (
 							<section className="psec">
 								<p>
-									<span className={`psec__no${isLocked ? " psec__no--done" : ""}`}>5</span>
+									<span className={`psec__no${isLocked ? " psec__no--done" : ""}`}>6</span>
 									<span className="psec__title">Payment plan</span>
 								</p>
 								<p className="psec__hint">
@@ -800,6 +902,7 @@ function SchoolPackageInner() {
 									</p>
 								)}
 							</section>
+							)}
 
 							<section className="psec">
 								<p className="eyebrow" style={{ marginBottom: "0.5rem" }}>
@@ -848,45 +951,70 @@ function SchoolPackageInner() {
 				{/* right: the composed package. The money never scrolls away */}
 				<div className="prail">
 					<div className="sharp-card sharp-card--key">
-						<p className="eyebrow">Your package</p>
+						<p className="eyebrow">Your plan</p>
 						{funding && level ? (
 							<>
 								<p className="prail__title">
-									{[fundMeta?.name, levelMeta?.short, `${targetSchoolCount} ${targetSchoolCount === 1 ? "school" : "schools"}`]
+									{[fundMeta?.name, scopeLabel(stages), levelMeta?.short, `${targetSchoolCount} ${targetSchoolCount === 1 ? "school" : "schools"}`]
 										.filter(Boolean)
 										.join(" · ")}
 								</p>
-								<div className="pkv">
+								{quote.stageLines.map((l) => (
+									<div key={l.stage} className="pkv">
+										<span className="pkv__k">{SERVICE_STAGE_LABELS[l.stage]}</span>
+										<span className="pkv__v">
+											<MoneyInline usd={l.amountCents / 100} />
+										</span>
+									</div>
+								))}
+								{quote.bundleDiscountCents > 0 && (
+									<div className="pkv">
+										<span className="pkv__k">Full-journey bundle</span>
+										<span className="pkv__v">
+											− <MoneyInline usd={quote.bundleDiscountCents / 100} />
+										</span>
+									</div>
+								)}
+								<div className="pkv pkv--due">
 									<span className="pkv__k">Service fee</span>
 									<span className="pkv__v">
 										<MoneyInline usd={serviceFee} />
 									</span>
 								</div>
-								<div className="pkv pkv--due">
-									<span className="pkv__k">Deposit · due now (10%)</span>
-									<span className="pkv__v">
-										{isDepositPaid ? "Paid ✓" : <MoneyInline usd={depositUsd} />}
-									</span>
-								</div>
-								<div className="pkv">
-									<span className="pkv__k">Pre-departure milestone</span>
-									<span className="pkv__v">
-										<MoneyInline usd={remainingUsd} />
-									</span>
-								</div>
-								<div className="pkv">
-									<span className="pkv__k">Due</span>
-									<span className="pkv__v muted">once your flight is booked</span>
-								</div>
+								<p className="eyebrow" style={{ margin: "0.8rem 0 0.3rem" }}>When you pay</p>
+								{milestones.map((m, i) => (
+									<div key={m.position} className="pkv">
+										<span className="pkv__k">
+											{m.label}
+											<span className="muted" style={{ display: "block", fontSize: "0.66rem" }}>{DUE_TRIGGER_LABELS[m.dueOn]}</span>
+										</span>
+										<span className="pkv__v">{i === 0 && isDepositPaid ? "Paid ✓" : <MoneyInline usd={m.amountCents / 100} />}</span>
+									</div>
+								))}
 								<p
 									className="muted"
 									style={{ fontSize: "0.68rem", lineHeight: 1.5, margin: "0.8rem 0" }}
 								>
-									By paying the deposit you agree: your admission letter, visa documents and e-ticket
-									are released after the pre-departure milestone. Which unlocks once your flight is booked.
+									{quote.full
+										? "By paying the deposit you agree: your admission letter, visa documents and e-ticket are released after the pre-departure milestone, which unlocks once your visa is approved."
+										: "If you stop part-way, you owe only the stages that opened. Stages you never reach are never charged, and you can add the next one from this page when your offer arrives."}{" "}
 									School application fees and tuition are the institutions', not ours.
 								</p>
-								{isDepositPaid ? (
+								{isDepositPaid && addedStages.length > 0 ? (
+									<Button
+										type="button"
+										arrow
+										onClick={() => void extendPlan()}
+										disabled={extending}
+										style={{ width: "100%" }}
+									>
+										{extending ? "Adding…" : (
+											<>
+												Add {addedStages.map((st) => SERVICE_STAGE_LABELS[st]).join(" + ")} · <MoneyInline usd={addedStages.reduce((n, st) => n + stagePriceOf(st), 0) / 100 - (quote.full ? quote.bundleDiscountCents / 100 : 0)} />
+											</>
+										)}
+									</Button>
+								) : isDepositPaid ? (
 									<Button
 										type="button"
 										arrow
@@ -908,7 +1036,7 @@ function SchoolPackageInner() {
 												"Connecting to Paystack…"
 											) : (
 												<>
-													Pay the deposit · <MoneyInline usd={depositUsd} />
+													{quote.full ? "Pay the deposit" : "Pay the first milestone"} · <MoneyInline usd={depositUsd} />
 												</>
 											)}
 										</Button>
@@ -926,7 +1054,7 @@ function SchoolPackageInner() {
 							</>
 						) : (
 							<p className="muted" style={{ fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
-								Pick a funding track and degree level. The fee and deposit compose here.
+								Pick a funding track, the stages you want, and a degree level. The fee and its milestones compose here.
 							</p>
 						)}
 					</div>

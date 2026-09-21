@@ -9,14 +9,25 @@ import { PackageSheet } from "../PackageSheet";
 
 import { useCases } from "../../../hooks/useCases";
 import { caseHandlerName } from "../../../lib/pendingTasks";
-import { DECISION_LABELS, PAYMENT_PLAN_LABELS, decisionOf } from "century-nit-shared";
+import { DECISION_LABELS, PAYMENT_PLAN_LABELS, SERVICE_STAGE_LABELS, decisionOf, normaliseScope, scopeLabel, type ServiceStage } from "century-nit-shared";
 
 
 /** Enrolment — the client's four steps: confirmed, package & plan, deposit, consultant. */
 export function EnrolmentTab({ app, caseInvoices, canIssueInvoices, canWork, flash, fail }: { app: MockApplication; caseInvoices: ApiInvoice[]; canIssueInvoices: boolean; canWork: boolean; flash: Flash; fail: Fail }) {
 	const { updateCaseFacts } = useCases();
 	const [packageOpen, setPackageOpen] = useState(false);
+	const [addStages, setAddStages] = useState<ServiceStage[] | undefined>(undefined);
 	const [savingPlan, setSavingPlan] = useState(false);
+	// The plan's scope. A case that predates scopes bought the full journey.
+	const scope = app.fundingTrack ? normaliseScope(app.scopeStages ?? null) : null;
+	const missing = scope ? (["visa", "departure"] as const).filter((st) => !scope.includes(st)) : [];
+	// The moment to offer the next stage: an offer is in and Visa is not on the plan.
+	const hasOffer = (app.schoolApplications ?? []).some((sc) => sc.outcome === "Admitted");
+	const offerUpgrade = canWork && scope != null && !scope.includes("visa") && hasOffer;
+	const openSheet = (stages?: ServiceStage[]) => {
+		setAddStages(stages);
+		setPackageOpen(true);
+	};
 	return (
 		<>
 			{/* Enrolment — the four steps the client takes on one page: confirm, package & plan, deposit, consultant. */}
@@ -51,6 +62,13 @@ export function EnrolmentTab({ app, caseInvoices, canIssueInvoices, canWork, fla
 						</p>
 					</div>
 					<div><p className="muted text-xs">Package</p><p>{app.fundingTrack || "Not chosen"}</p></div>
+					<div>
+						<p className="muted text-xs">Plan</p>
+						<p>
+							{scope ? scopeLabel(scope) : "Not chosen"}
+							{missing.length > 0 && <span className="muted text-xs"> · without {missing.map((st) => SERVICE_STAGE_LABELS[st]).join(" & ")}</span>}
+						</p>
+					</div>
 					<div><p className="muted text-xs">Payment plan</p><p>{PAYMENT_PLAN_LABELS[app.paymentPlanId ?? ""] ?? "Not chosen"}</p></div>
 					<div><p className="muted text-xs">Target schools</p><p>{app.targetSchoolCount ? `${app.targetSchoolCount} institution${app.targetSchoolCount === 1 ? "" : "s"}` : "Not specified"}</p></div>
 					<div><p className="muted text-xs">Deposit (10%)</p><p>{app.depositPaid ? "Paid" : "Not paid"}</p></div>
@@ -59,8 +77,8 @@ export function EnrolmentTab({ app, caseInvoices, canIssueInvoices, canWork, fla
 				{canWork && (!app.fundingTrack || !app.paymentPlanId) && (
 					<div className="mt-3" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
 						{!app.fundingTrack && (
-							<button type="button" className="btn btn--sm btn--primary" onClick={() => setPackageOpen(true)}>
-								Select package
+							<button type="button" className="btn btn--sm btn--primary" onClick={() => openSheet()}>
+								Record plan
 							</button>
 						)}
 						{app.fundingTrack && !app.paymentPlanId && (
@@ -91,14 +109,32 @@ export function EnrolmentTab({ app, caseInvoices, canIssueInvoices, canWork, fla
 						)}
 					</div>
 				)}
+				{offerUpgrade && (
+					<div className="mt-3" style={{ border: "1.5px solid var(--border)", padding: "0.75rem 0.9rem", display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap", justifyContent: "space-between" }}>
+						<div>
+							<p style={{ fontWeight: 700, margin: 0 }}>An offer is in — the next chapter is not on the plan</p>
+							<p className="muted text-xs" style={{ margin: "0.15rem 0 0", lineHeight: 1.5 }}>
+								This case is scoped to {scopeLabel(scope)}. The visa stage cannot open until it is added; the client can add it from the portal, or you can record it here.
+							</p>
+						</div>
+						<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+							<button type="button" className="btn btn--sm btn--ghost" onClick={() => openSheet(["visa"])}>
+								Add Visa
+							</button>
+							<button type="button" className="btn btn--sm btn--primary" onClick={() => openSheet(["visa", "departure"])}>
+								Complete the journey
+							</button>
+						</div>
+					</div>
+				)}
 				{canWork && app.fundingTrack && (
 					<p style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem" }}>
-						<button type="button" className="link-arrow" onClick={() => setPackageOpen(true)}>
-							Change package…
+						<button type="button" className="link-arrow" onClick={() => openSheet()}>
+							{app.depositPaid ? (missing.length > 0 ? "Extend the plan…" : "Plan details…") : "Change the plan…"}
 						</button>
 					</p>
 				)}
-				<PackageSheet app={app} open={packageOpen} onClose={() => setPackageOpen(false)} onDone={flash} />
+				<PackageSheet app={app} open={packageOpen} addStages={addStages} onClose={() => setPackageOpen(false)} onDone={flash} />
 				{caseInvoices.find((i) => i.type === "agency") && (
 					<div className="mt-3">
 						<InvoiceCard

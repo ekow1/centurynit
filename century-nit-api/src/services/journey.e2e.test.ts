@@ -185,7 +185,7 @@ describe("the applicant journey, end to end", () => {
 		// ── Assessment: eligible, with a recommended package ─────────────
 		const { application: opened } = await completeConsultationAssessment({
 			id: consultationId,
-			result: { outcome: "Eligible", notes: "", recCountry: "Canada", recUniversity: "", recProgram: "", recPackage: "non_scholarship" },
+			result: { outcome: "Eligible", notes: "", recCountry: "Canada", recUniversity: "", recProgram: "", recPackage: "non_scholarship", recStages: [] },
 			actor: ACTOR,
 		});
 		expect(opened).not.toBeNull();
@@ -481,7 +481,7 @@ describe("the applicant journey, end to end", () => {
 		const consultationId = await openConsultation();
 		const { application: second } = await completeConsultationAssessment({
 			id: consultationId,
-			result: { outcome: "Eligible", notes: "", recCountry: "", recUniversity: "", recProgram: "", recPackage: "" },
+			result: { outcome: "Eligible", notes: "", recCountry: "", recUniversity: "", recProgram: "", recPackage: "", recStages: [] },
 			actor: ACTOR,
 		});
 		expect(second).not.toBeNull();

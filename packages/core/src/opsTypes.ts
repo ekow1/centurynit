@@ -257,6 +257,8 @@ export interface MockApplication {
 	submittedDate: string;
 	checklist: { id: string; label: string; checked: boolean }[];
 	fundingTrack: string;
+	/** The stages on the client's plan; null until a package is chosen (a legacy case is the full journey). */
+	scopeStages?: string[] | null;
 	notes: string;
 	comments?: CaseComment[];
 	requestedDocuments?: string[];
@@ -439,8 +441,10 @@ export type OpsInvoiceLine = {
 	amount: number;
 	/** The school this line bills, on application invoices. Kept through a review. */
 	schoolApplicationId?: string | null;
-	/** When the line falls due. The post-arrival instalments; null otherwise. */
+	/** When the line falls due — stamped when its `dueOn` event fires, or dated on a post-arrival instalment. */
 	dueAt?: string | null;
+	/** The case event that makes this line due (acceptance · offer · visa_open · visa_approved · arrival · scheduled). */
+	dueOn?: string | null;
 };
 
 export type InvoiceType = "Application" | "Visa" | "Consultation" | "Agency" | "Travel" | "Custom";

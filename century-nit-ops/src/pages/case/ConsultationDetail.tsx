@@ -9,7 +9,7 @@ import { HistorySheet, type HistoryEvent } from "./HistorySheet";
 import { CaseTabs, useCaseTab } from "./CaseTabs";
 import type { MockConsultation } from "century-nit-core/ops";
 import { documentsApi, bookingsApi, ApiError } from "century-nit-core/api";
-import type { ApplicantDocument } from "century-nit-shared";
+import { SERVICE_STAGES, SERVICE_STAGE_LABELS, normaliseScope, scopeLabel, type ApplicantDocument, type ServiceStage } from "century-nit-shared";
 import { getConsultationActivity, type ConsultationActivityEvent } from "../../lib/api";
 import { CaseHeader, StatusPill, type NextAction } from "century-nit-core/ui";
 import { CaseTodo } from "./CaseTodo";
@@ -103,6 +103,8 @@ export function ConsultationDetail({
 	const [recUniversity, setRecUniversity] = useState("University of Toronto");
 	const [recProgram, setRecProgram] = useState("Master of Science in Computer Science");
 	const [recPackage, setRecPackage] = useState("undecided");
+	// The stages the consultant recommends. All three is the full journey.
+	const [recStages, setRecStages] = useState<ServiceStage[]>([...SERVICE_STAGES]);
 	const [isSubmitted, setIsSubmitted] = useState(false);
 	const [showReschedule, setShowReschedule] = useState(false);
 	const [realDocs, setRealDocs] = useState<ApplicantDocument[]>([]);
@@ -149,6 +151,7 @@ export function ConsultationDetail({
 		setRecUniversity(consultation.assessmentResult?.recUniversity || "");
 		setRecProgram(consultation.assessmentResult?.recProgram || `${consultation.goals.degreeLevel || ""} in ${consultation.goals.major || ""}`.trim() || "");
 		setRecPackage(consultation.assessmentResult?.recPackage || "");
+		setRecStages(normaliseScope(consultation.assessmentResult?.recStages?.length ? consultation.assessmentResult.recStages : null));
 		setIsSubmitted(false);
 		setShowReschedule(false);
 		setEditingMeetingUrl(false);
@@ -184,7 +187,7 @@ export function ConsultationDetail({
 	async function handleCompleteAssessment(e: React.FormEvent) {
 		e.preventDefault();
 		if (!consultation) return;
-		const result = { outcome, notes, recCountry, recUniversity, recProgram, recPackage };
+		const result = { outcome, notes, recCountry, recUniversity, recProgram, recPackage, recStages };
 		const res = await completeConsultationAssessment(consultation.id, result);
 		setCompletedResult(res.consultation.assessmentResult ?? result);
 		setIsSubmitted(true);
@@ -953,6 +956,9 @@ export function ConsultationDetail({
 
 							<dt>Recommended Package</dt>
 							<dd>{consultation.assessmentResult?.recPackage ?? "—"}</dd>
+
+							<dt>Recommended Plan</dt>
+							<dd>{scopeLabel(consultation.assessmentResult?.recStages?.length ? consultation.assessmentResult.recStages : null)}</dd>
 						</dl>
 					</div>
 				)}
@@ -1050,6 +1056,28 @@ export function ConsultationDetail({
 								<option value="scholarship">Scholarship</option>
 								<option value="hybrid">Hybrid</option>
 							</select>
+						</div>
+						<div>
+							<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.35rem" }}>Recommended Plan · {scopeLabel(recStages)}</label>
+							<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+								{SERVICE_STAGES.map((st) => {
+									const on = recStages.includes(st);
+									const fixed = st === "admissions";
+									const needsVisa = st === "departure" && !recStages.includes("visa");
+									return (
+										<label key={st} className="btn btn--sm" style={{ display: "inline-flex", gap: "0.4rem", alignItems: "center", opacity: needsVisa ? 0.5 : 1 }}>
+											<input
+												type="checkbox"
+												checked={on}
+												disabled={fixed || needsVisa}
+												onChange={() => setRecStages((prev) => normaliseScope(prev.includes(st) ? prev.filter((x) => x !== st) : [...prev, st]))}
+											/>
+											{SERVICE_STAGE_LABELS[st]}
+										</label>
+									);
+								})}
+							</div>
+							<p className="muted text-xs" style={{ marginTop: "0.35rem" }}>Pre-fills the client's plan builder. They can change it before accepting.</p>
 						</div>
 					</div>
 					<button type="submit" className="btn btn--primary" style={{ width: "100%", padding: "1rem", fontSize: "1rem", textTransform: "uppercase", letterSpacing: "1px" }}>

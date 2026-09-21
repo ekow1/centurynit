@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ops · CMS — Brand / Content / Media — redesign mock</title>
+<style>
+	:root {
+		--ink: #17161a; --paper: #f5f4f0; --card: #fff; --line: #ddd9cf; --line-lt: #eae7de;
+		--muted: #6e6a60; --amber: #b97a10; --amber-soft: #f3e8d2; --green: #2e6b34; --red: #a33b2e;
+		--blue: #31577a;
+	}
+	* { box-sizing: border-box; margin: 0; padding: 0; }
+	body { font-family: Georgia, "Times New Roman", serif; background: var(--paper); color: var(--ink); font-size: 14px; }
+	.wrap { max-width: 1240px; margin: 0 auto; padding: 1.75rem 1.5rem 5rem; }
+	.mono { font-family: ui-monospace, monospace; }
+
+	.sect { margin-bottom: 4rem; }
+	.sect > .tag { font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber); }
+	.sect > h2 { font-size: 1.2rem; margin: 0.3rem 0 0.25rem; }
+	.sect > p.note { font-size: 0.78rem; color: var(--muted); max-width: 78ch; line-height: 1.55; margin-bottom: 1rem; }
+	.sect > p.note code { font-family: ui-monospace, monospace; font-size: 0.72rem; background: var(--amber-soft); padding: 0 0.3em; }
+	.frame { border: 1px solid var(--line); background: var(--card); }
+	.new { outline: 2px solid var(--amber); outline-offset: -2px; position: relative; }
+	.new::before { content: "NEW"; position: absolute; top: -0.55rem; left: 0.6rem; background: var(--amber); color: #fff; font-family: ui-monospace, monospace; font-size: 0.5rem; letter-spacing: 0.12em; padding: 0.1rem 0.4rem; z-index: 2; }
+	.newb { outline: 2px solid var(--blue); outline-offset: -2px; position: relative; }
+	.newb::before { content: "CHANGED"; position: absolute; top: -0.55rem; left: 0.6rem; background: var(--blue); color: #fff; font-family: ui-monospace, monospace; font-size: 0.5rem; letter-spacing: 0.12em; padding: 0.1rem 0.4rem; z-index: 2; }
+	.dies { outline: 2px solid var(--red); outline-offset: -2px; position: relative; }
+	.dies::before { content: "DELETED"; position: absolute; top: -0.55rem; left: 0.6rem; background: var(--red); color: #fff; font-family: ui-monospace, monospace; font-size: 0.5rem; letter-spacing: 0.12em; padding: 0.1rem 0.4rem; z-index: 2; }
+
+	/* shared chrome */
+	.pagebar { display: flex; align-items: center; gap: 0.7rem; padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--line); background: #fbfaf7; }
+	.pagebar h3 { font-size: 0.9rem; }
+	.pagebar .crumb { font-family: ui-monospace, monospace; font-size: 0.62rem; color: var(--muted); }
+	.pagebar .right { margin-left: auto; display: flex; gap: 0.45rem; align-items: center; }
+	.btn { font-family: ui-monospace, monospace; font-size: 0.62rem; letter-spacing: 0.06em; border: 1px solid var(--ink); background: var(--ink); color: #fff; padding: 0.4rem 0.7rem; cursor: pointer; }
+	.btn.ghost { background: none; color: var(--ink); border-color: var(--line); }
+	.btn.ghost:hover { border-color: var(--ink); }
+	.btn.warn { border-color: var(--red); color: var(--red); background: none; }
+	.btn.small { padding: 0.25rem 0.5rem; font-size: 0.58rem; }
+	.live { display: inline-flex; align-items: center; gap: 0.35rem; font-family: ui-monospace, monospace; font-size: 0.58rem; color: var(--green); letter-spacing: 0.08em; }
+	.live::before { content: ""; width: 6px; height: 6px; background: var(--green); animation: blink 1.6s infinite; }
+	@keyframes blink { 50% { opacity: 0.25; } }
+
+	/* tabs */
+	.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); background: #fbfaf7; }
+	.tab { font-family: ui-monospace, monospace; font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.6rem 1rem; border: none; border-right: 1px solid var(--line); background: none; cursor: pointer; color: var(--muted); }
+	.tab.on { color: var(--ink); font-weight: 700; box-shadow: inset 0 -2px 0 var(--ink); background: var(--card); }
+	.tab .n { color: var(--amber); font-weight: 700; margin-left: 0.3rem; }
+
+	/* forms */
+	.fgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; padding: 0.9rem; }
+	.field label { display: block; font-family: ui-monospace, monospace; font-size: 0.55rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.25rem; }
+	.field .val { font-size: 0.82rem; padding: 0.45rem 0.55rem; border: 1px solid var(--line); background: #fbfaf7; }
+	.field .val.set { border-color: var(--amber); background: var(--amber-soft); }
+	.field .hint { font-size: 0.65rem; color: var(--muted); margin-top: 0.2rem; }
+	.subhead { font-family: ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); padding: 0.55rem 0.9rem; background: #f6f5f1; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+
+	/* status pills */
+	.st { font-family: ui-monospace, monospace; font-size: 0.55rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.12rem 0.45rem; border: 1px solid var(--line); }
+	.st.draft { color: var(--muted); }
+	.st.review { color: var(--blue); border-color: var(--blue); }
+	.st.pub { background: var(--ink); color: #fff; border-color: var(--ink); }
+	.st.sched { color: var(--amber); border-color: var(--amber); }
+
+	/* rows */
+	.rows { list-style: none; }
+	.rows li { display: grid; align-items: center; gap: 0.7rem; padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--line-lt); }
+	.rows li:hover { background: #fbfaf7; }
+	.rows .t { font-weight: 600; font-size: 0.84rem; }
+	.rows .sub { font-size: 0.68rem; color: var(--muted); display: block; margin-top: 0.1rem; }
+	.rows .m { font-family: ui-monospace, monospace; font-size: 0.6rem; color: var(--muted); text-align: right; }
+
+	/* colour tokens + preview */
+	.tokrow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.6rem; padding: 0.9rem; }
+	.tok { border: 1px solid var(--line); }
+	.tok .sw { height: 2.4rem; border-bottom: 1px solid var(--line); }
+	.tok .meta { padding: 0.4rem 0.55rem; }
+	.tok .nm { font-size: 0.7rem; font-weight: 600; }
+	.tok .hex { font-family: ui-monospace, monospace; font-size: 0.6rem; color: var(--muted); }
+	.tok .cc { font-family: ui-monospace, monospace; font-size: 0.52rem; margin-top: 0.2rem; }
+	.tok .cc.ok { color: var(--green); }
+	.tok .cc.bad { color: var(--red); }
+
+	.surfaces { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.6rem; padding: 0.9rem; }
+	.surf { border: 1px solid var(--line); font-size: 0.68rem; }
+	.surf .cap { font-family: ui-monospace, monospace; font-size: 0.52rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--line); background: #f6f5f1; }
+	.surf .body { padding: 0.6rem; min-height: 6.5rem; }
+
+	/* media grid */
+	.mgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.6rem; padding: 0.9rem; }
+	.tile { border: 1px solid var(--line); background: #eceadf; }
+	.tile .img { height: 5.5rem; display: flex; align-items: center; justify-content: center; font-family: ui-monospace, monospace; font-size: 0.55rem; color: var(--muted); background: repeating-linear-gradient(45deg, #e6e2d6, #e6e2d6 8px, #dfdccd 8px, #dfdccd 16px); position: relative; }
+	.tile .img .focal { position: absolute; width: 10px; height: 10px; border: 2px solid var(--amber); border-radius: 50%; }
+	.tile .inf { padding: 0.3rem 0.45rem; font-size: 0.6rem; border-top: 1px solid var(--line); background: var(--card); }
+	.tile .inf .nm { font-weight: 600; font-size: 0.62rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.tile .inf .us { font-family: ui-monospace, monospace; font-size: 0.5rem; color: var(--muted); }
+	.tile.uns { outline: 2px dashed var(--red); outline-offset: -2px; }
+	.tile.uns .img::after { content: "UNSPLASH"; position: absolute; top: 0.2rem; left: 0.2rem; background: var(--red); color: #fff; font-family: ui-monospace, monospace; font-size: 0.45rem; padding: 0.1rem 0.3rem; }
+
+	/* nav builder */
+	.navrow { display: grid; grid-template-columns: 1.4rem 1fr 8rem 6rem 4rem; align-items: center; gap: 0.6rem; padding: 0.45rem 0.9rem; border-bottom: 1px solid var(--line-lt); }
+	.navrow .grip { color: var(--line); font-size: 0.9rem; cursor: grab; }
+	.navrow.grp { background: #fbfaf7; font-weight: 600; }
+	.navrow.child { padding-left: 2.6rem; }
+
+	/* diff / history */
+	.hist { list-style: none; }
+	.hist li { display: grid; grid-template-columns: 5rem 1fr 7rem 5rem; gap: 0.6rem; align-items: center; padding: 0.45rem 0.9rem; border-bottom: 1px solid var(--line-lt); font-size: 0.72rem; }
+	.hist li.cur { background: var(--amber-soft); }
+
+	/* change list */
+	.clist { display: grid; gap: 0; border: 1px solid var(--line); }
+	.clist .row { display: grid; grid-template-columns: 9rem 1fr 1fr; gap: 1rem; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--line-lt); font-size: 0.75rem; background: var(--card); }
+	.clist .row.head { font-family: ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); background: #f6f5f1; }
+	.clist .row .where { font-family: ui-monospace, monospace; font-size: 0.62rem; color: var(--amber); }
+	.clist .row .now { color: var(--muted); }
+
+	.kicker { font-family: ui-monospace, monospace; font-size: 0.6rem; color: var(--muted); }
+	.badge-warn { font-family: ui-monospace, monospace; font-size: 0.55rem; color: var(--red); border: 1px solid var(--red); padding: 0.1rem 0.4rem; }
+	.badge-ok { font-family: ui-monospace, monospace; font-size: 0.55rem; color: var(--green); border: 1px solid var(--green); padding: 0.1rem 0.4rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+	<!-- ═══════════════ 0 · THE /cms SURFACE ═══════════════ -->
+	<section class="sect">
+		<span class="tag">0 · What /cms becomes</span>
+		<h2>One surface, seven tabs — the empty state dies</h2>
+		<p class="note">
+			<code>CmsManager.tsx</code> today is 26 lines — "Content management is not yet available." The
+			<code>localStorage cmsOverlay</code> the old manager wrote is dead (nothing writes it), yet
+			<code>useSiteContent()</code> still polls it every 1.5 s. Both get deleted: the site fetches
+			<code>/content/*</code> (edge-cached, revalidated on publish). <code>/site</code>'s branding mock
+			folds into <b>Brand</b>, its nav list into <b>Navigation</b>.
+		</p>
+		<div class="frame new">
+			<div class="pagebar">
+				<span class="crumb">ops / cms</span>
+				<h3>Content management</h3>
+				<div class="right">
+					<span class="live">published · edge cached</span>
+					<button class="btn ghost small">Preview site</button>
+					<button class="btn small">Publish all staged</button>
+				</div>
+			</div>
+			<div class="tabs">
+				<button class="tab on">Brand</button>
+				<button class="tab">Pages<span class="n">9</span></button>
+				<button class="tab">Collections<span class="n">7</span></button>
+				<button class="tab">Blog<span class="n">23</span></button>
+				<button class="tab">Media<span class="n">184</span></button>
+				<button class="tab">Navigation</button>
+				<button class="tab">Copy<span class="n">58</span></button>
+			</div>
+			<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:0.8rem">
+				Each tab is a list → editor sheet. Status bands, last-edited, preview link — the same chrome as Cases/Helpdesk.
+			</div>
+		</div>
+	</section>
+
+	<!-- ═══════════════ 1 · BRAND ═══════════════ -->
+	<section class="sect">
+		<span class="tag">1 · Brand — the identity record every surface reads</span>
+		<h2>One record. Four consumers. The name drift ends.</h2>
+		<p class="note">
+			Today the brand is <b>~30 literals</b>: <i>Century NIT Consult</i> (17), <i>International</i> (nav + title),
+			<i>Operations</i> (console), legal <i>Century Nit Consult Limited</i> — and three domains
+			(<code>centurynit.com</code> ×30, <code>century-nit.com</code> ×24, <code>centurynit.org</code> in
+			<code>company.website</code>). The email footer claims London; the company block doesn't. This record is
+			served as <code>/brand.json</code> + CSS vars into <code>:root</code>, server-rendered into
+			<code>index.html</code> head, inlined into the email layout — edit once, every surface agrees.
+		</p>
+		<div class="frame new">
+			<div class="pagebar">
+				<span class="crumb">ops / cms / brand</span>
+				<h3>Brand identity</h3>
+				<div class="right">
+					<span class="kicker">v14 · published 2d ago by efua@</span>
+					<button class="btn ghost small">History</button>
+					<button class="btn small">Save draft</button>
+					<button class="btn small">Publish</button>
+				</div>
+			</div>
+
+			<div class="subhead">Names — every surface stops hard-coding</div>
+			<div class="fgrid">
+				<div class="field"><label>Brand name</label><div class="val set">Century NIT Consult</div><div class="hint">index.html title, footer, emails</div></div>
+				<div class="field"><label>Legal name</label><div class="val set">Century Nit Consult Limited</div><div class="hint">invoices, receipts, contracts</div></div>
+				<div class="field"><label>Short mark</label><div class="val set">Century NIT</div><div class="hint">nav, portal chrome, PWA name</div></div>
+				<div class="field"><label>Console name</label><div class="val set">Century NIT · Ops</div><div class="hint">ops header + sign-in</div></div>
+				<div class="field"><label>Tagline</label><div class="val set">Your global education partner</div><div class="hint">meta description fallback</div></div>
+				<div class="field"><label>Primary domain</label><div class="val set">centurynit.com</div><div class="hint">canonical, emails, OG URLs — the other two redirect</div></div>
+			</div>
+
+			<div class="subhead">Contact — per purpose, not one mailbox</div>
+			<div class="fgrid">
+				<div class="field"><label>Info</label><div class="val">info@centurynit.com</div></div>
+				<div class="field"><label>Support</label><div class="val">support@centurynit.com</div></div>
+				<div class="field"><label>Admissions</label><div class="val">admissions@centurynit.com</div></div>
+				<div class="field"><label>Finance</label><div class="val">accounts@centurynit.com</div></div>
+				<div class="field"><label>Phone · Accra</label><div class="val">+233 30 274 0000</div></div>
+				<div class="field"><label>Phone · Kumasi</label><div class="val">+233 32 200 0000</div></div>
+				<div class="field"><label>Registered address</label><div class="val">14 Liberation Rd, Accra</div><div class="hint">receipts + footer — Kumasi branch lives in Collections</div></div>
+				<div class="field"><label>Hours</label><div class="val">Mon–Fri 08:00–17:00 GMT</div><div class="hint">shared with helpdesk settings</div></div>
+			</div>
+
+			<div class="subhead">Logo set — files in storage, text wordmark only as fallback</div>
+			<div class="fgrid" style="grid-template-columns:repeat(6,1fr)">
+				<div class="field"><label>Primary</label><div class="val" style="padding:0.8rem;text-align:center;background:var(--ink);color:#fff">Century NIT▪</div><div class="hint">svg · site nav</div></div>
+				<div class="field"><label>Inverse</label><div class="val" style="padding:0.8rem;text-align:center">Century NIT▫</div><div class="hint">svg · dark surfaces</div></div>
+				<div class="field"><label>Mark</label><div class="val" style="padding:0.8rem;text-align:center">▪N▪</div><div class="hint">square · avatar, chat</div></div>
+				<div class="field"><label>Favicon</label><div class="val" style="padding:0.8rem;text-align:center">◼</div><div class="hint">ico/png 32·180</div></div>
+				<div class="field"><label>Email header</label><div class="val" style="padding:0.8rem;text-align:center">Century NIT</div><div class="hint">png 2× · all templates</div></div>
+				<div class="field"><label>App icon</label><div class="val" style="padding:0.8rem;text-align:center">▪</div><div class="hint">png 512 · PWA manifest</div></div>
+			</div>
+
+			<div class="subhead">Colour tokens — written to :root on all three apps + inlined into email</div>
+			<div class="tokrow">
+				<div class="tok"><div class="sw" style="background:#1d4d3b"></div><div class="meta"><div class="nm">primary</div><div class="hex">#1D4D3B</div><div class="cc ok">on paper 8.9:1 · AA ✓</div></div></div>
+				<div class="tok"><div class="sw" style="background:#b97a10"></div><div class="meta"><div class="nm">accent</div><div class="hex">#B97A10</div><div class="cc ok">on ink 4.6:1 · AA ✓</div></div></div>
+				<div class="tok"><div class="sw" style="background:#17161a"></div><div class="meta"><div class="nm">ink</div><div class="hex">#17161A</div><div class="cc ok">on paper 15.2:1 · AAA ✓</div></div></div>
+				<div class="tok"><div class="sw" style="background:#f5f4f0;border-bottom:1px solid var(--line)"></div><div class="meta"><div class="nm">surface</div><div class="hex">#F5F4F0</div><div class="cc ok">paper ✓</div></div></div>
+				<div class="tok"><div class="sw" style="background:#2e6b34"></div><div class="meta"><div class="nm">success</div><div class="hex">#2E6B34</div><div class="cc ok">AA ✓</div></div></div>
+				<div class="tok"><div class="sw" style="background:#a33b2e"></div><div class="meta"><div class="nm">danger</div><div class="hex">#A33B2E</div><div class="cc bad">on white 4.3:1 · fails large — use ink text</div></div></div>
+				<div class="tok"><div class="sw" style="background:linear-gradient(90deg,#444,#999)"></div><div class="meta"><div class="nm">display font</div><div class="hex">Fraunces</div><div class="cc ok">self-hosted</div></div></div>
+				<div class="tok"><div class="sw" style="background:linear-gradient(90deg,#333,#777)"></div><div class="meta"><div class="nm">body / mono</div><div class="hex">Inter / IBM Plex Mono</div><div class="cc ok">self-hosted</div></div></div>
+			</div>
+
+			<div class="subhead">Live preview — the tokens applied before publish</div>
+			<div class="surfaces">
+				<div class="surf"><div class="cap">Site</div><div class="body">
+					<div style="background:#1d4d3b;color:#fff;padding:0.4rem 0.55rem;font-size:0.62rem">Century NIT▪ <span style="opacity:.7">Destinations · Universities</span></div>
+					<div style="margin-top:0.5rem;font-weight:700">Study in the UK.</div>
+					<div style="margin-top:0.3rem;display:inline-block;background:#b97a10;color:#fff;padding:0.2rem 0.5rem;font-size:0.58rem">Book a consultation</div>
+				</div></div>
+				<div class="surf"><div class="cap">Portal</div><div class="body">
+					<div style="border:1px solid var(--line);padding:0.4rem"><div style="font-size:0.58rem;color:var(--muted)">STAGE II · VISA</div><div style="font-weight:600">Documents</div><div style="margin-top:0.3rem;display:inline-block;background:#1d4d3b;color:#fff;padding:0.18rem 0.45rem;font-size:0.55rem">Upload</div></div>
+				</div></div>
+				<div class="surf"><div class="cap">Console</div><div class="body">
+					<div style="font-family:ui-monospace,monospace;font-size:0.6rem;border-bottom:1px solid var(--line);padding-bottom:0.3rem">Century NIT · Ops</div>
+					<div style="margin-top:0.4rem"><span class="st pub">open</span> <span class="st sched">breaching</span></div>
+				</div></div>
+				<div class="surf"><div class="cap">Email</div><div class="body" style="background:#fafaf7">
+					<div style="text-align:center;padding:0.3rem;border-bottom:2px solid #1d4d3b"><b>Century NIT</b></div>
+					<div style="font-size:0.6rem;padding:0.4rem">Your invoice is ready…</div>
+				</div></div>
+			</div>
+		</div>
+	</section>
+
+	<!-- ═══════════════ 2 · PAGES & COLLECTIONS ═══════════════ -->
+	<section class="sect">
+		<span class="tag">2 · Pages & Collections — content.ts becomes records</span>
+		<h2>Draft → review → published, scheduled, versioned, previewable</h2>
+		<p class="note">
+			<code>content.ts</code> (2,730 lines) becomes DB rows. <b>Destinations / Universities / Programs /
+			Scholarships merge with the existing <code>/catalog/*</code> tables</b> — the Programmes page and the
+			website finally edit the same rows, so ops stops shipping a website that disagrees with the catalog.
+		</p>
+		<div class="frame new" style="margin-bottom:1rem">
+			<div class="pagebar"><span class="crumb">ops / cms / collections</span><h3>Collections</h3>
+				<div class="right"><button class="btn ghost small">+ New entry</button></div></div>
+			<ul class="rows">
+				<li style="grid-template-columns:1fr 6rem 5rem 9rem 4rem"><span class="t">Destinations<span class="sub">12 published · catalog-linked</span></span><span class="st pub">synced</span><span class="m">12 rows</span><span class="m">efua · 2d</span><span class="m">edit →</span></li>
+				<li style="grid-template-columns:1fr 6rem 5rem 9rem 4rem"><span class="t">Universities<span class="sub">48 published · catalog-linked</span></span><span class="st pub">synced</span><span class="m">48 rows</span><span class="m">kwame · 5d</span><span class="m">edit →</span></li>
+				<li style="grid-template-columns:1fr 6rem 5rem 9rem 4rem"><span class="t">Programs<span class="sub">132 published · catalog-linked</span></span><span class="st pub">synced</span><span class="m">132 rows</span><span class="m">efua · 1d</span><span class="m">edit →</span></li>
+				<li style="grid-template-columns:1fr 6rem 5rem 9rem 4rem"><span class="t">Testimonials<span class="sub">8 written · 4 video</span></span><span class="st pub">published</span><span class="m">12 rows</span><span class="m">ama · 1w</span><span class="m">edit →</span></li>
+				<li style="grid-template-columns:1fr 6rem 5rem 9rem 4rem"><span class="t">FAQs<span class="sub">4 groups · 31 questions</span></span><span class="st pub">published</span><span class="m">31 rows</span><span class="m">efua · 3d</span><span class="m">edit →</span></li>
+				<li style="grid-template-columns:1fr 6rem 5rem 9rem 4rem"><span class="t">Success stories<span class="sub">6 published · 1 in review</span></span><span class="st review">review</span><span class="m">7 rows</span><span class="m">kofi · 4h</span><span class="m">edit →</span></li>
+				<li style="grid-template-columns:1fr 6rem 5rem 9rem 4rem"><span class="t">Events<span class="sub">3 upcoming · 18 past</span></span><span class="st pub">published</span><span class="m">21 rows</span><span class="m">ama · 6d</span><span class="m">edit →</span></li>
+			</ul>
+		</div>
+
+		<div class="frame new">
+			<div class="pagebar"><span class="crumb">ops / cms / collections / universities</span><h3>University of Manchester</h3>
+				<div class="right">
+					<span class="st draft">draft v4</span>
+					<button class="btn ghost small">👁 Preview on site</button>
+					<button class="btn ghost small">History</button>
+					<button class="btn small">Submit for review</button>
+				</div></div>
+			<div class="fgrid" style="grid-template-columns:repeat(4,1fr)">
+				<div class="field"><label>Name</label><div class="val">University of Manchester</div></div>
+				<div class="field"><label>Country</label><div class="val">United Kingdom</div></div>
+				<div class="field"><label>Ranking</label><div class="val">QS 32</div></div>
+				<div class="field"><label>City</label><div class="val">Manchester</div></div>
+				<div class="field" style="grid-column:span 2"><label>Summary</label><div class="val">A Russell Group university with strong engineering and business schools…</div></div>
+				<div class="field"><label>Hero image</label><div class="val set">uom-hero.webp · library ↗</div><div class="hint">was: unsplash.com/photo-1523…</div></div>
+				<div class="field"><label>Logo</label><div class="val set">uom-crest.png · library ↗</div></div>
+			</div>
+			<div class="subhead">SEO</div>
+			<div class="fgrid" style="grid-template-columns:repeat(4,1fr)">
+				<div class="field" style="grid-column:span 2"><label>Title</label><div class="val">University of Manchester — Century NIT</div></div>
+				<div class="field" style="grid-column:span 2"><label>Description</label><div class="val">Apply to Manchester through Century NIT — courses, fees, scholarships…</div></div>
+				<div class="field"><label>OG image</label><div class="val">og/uom.png</div></div>
+				<div class="field"><label>Canonical</label><div class="val">/universities/manchester</div></div>
+				<div class="field"><label>noindex</label><div class="val">off</div></div>
+				<div class="field"><label>Publish at</label><div class="val set">Sep 26 · 09:00</div><div class="hint">scheduled</div></div>
+			</div>
+			<div class="subhead">History — diff &amp; revert, last edited by</div>
+			<ul class="hist">
+				<li class="cur"><span class="mono">v4 · now</span><span>hero image → uom-hero.webp · summary +2 sentences</span><span class="m">efua · 12:41</span><span class="m"><button class="btn ghost small">revert</button></span></li>
+				<li><span class="mono">v3</span><span>ranking QS 34 → 32</span><span class="m">kwame · Sep 18</span><span class="m"><button class="btn ghost small">revert</button></span></li>
+				<li><span class="mono">v2</span><span>published · catalog merge</span><span class="m">system · Sep 12</span><span class="m"><button class="btn ghost small">revert</button></span></li>
+			</ul>
+		</div>
+	</section>
+
+	<!-- ═══════════════ 3 · MEDIA ═══════════════ -->
+	<section class="sect">
+		<span class="tag">3 · Media library — own the 45 hotlinks</span>
+		<h2>Upload once, used everywhere, with alt + focal + usage</h2>
+		<p class="note">
+			45 Unsplash hotlinks ship the brand's imagery from a third party. Same storage the documents use
+			(public prefix), auto variants (320/768/1600 + webp), usage list per file, and a sweep that flags every
+			record still pointing at <code>images.unsplash.com</code> until they're all replaced.
+		</p>
+		<div class="frame new">
+			<div class="pagebar"><span class="crumb">ops / cms / media</span><h3>Media library</h3>
+				<div class="right"><span class="badge-warn">14 unsplash links left</span><button class="btn ghost small">Upload</button></div></div>
+			<div class="mgrid">
+				<div class="tile"><div class="img"><span class="focal" style="top:30%;left:60%"></span></div><div class="inf"><div class="nm">uom-hero.webp</div><div class="us">used ×3 · UoM, UK dest, blog</div></div></div>
+				<div class="tile"><div class="img"><span class="focal" style="top:50%;left:50%"></span></div><div class="inf"><div class="nm">accra-office.jpg</div><div class="us">used ×2 · Contact, About</div></div></div>
+				<div class="tile"><div class="img"></div><div class="inf"><div class="nm">grad-cap-hero.webp</div><div class="us">used ×1 · Home hero</div></div></div>
+				<div class="tile uns"><div class="img"></div><div class="inf"><div class="nm">photo-1523050854…</div><div class="us">hotlinked · Canada dest</div></div></div>
+				<div class="tile uns"><div class="img"></div><div class="inf"><div class="nm">photo-1541339907…</div><div class="us">hotlinked · Australia</div></div></div>
+				<div class="tile"><div class="img"></div><div class="inf"><div class="nm">red-seat-still.mp4</div><div class="us">video · Red Seat</div></div></div>
+			</div>
+			<div class="subhead">Selected — uom-hero.webp</div>
+			<div class="fgrid" style="grid-template-columns:repeat(4,1fr)">
+				<div class="field"><label>Alt text</label><div class="val">Students outside the Manchester engineering building</div></div>
+				<div class="field"><label>Focal point</label><div class="val">60% · 30%</div></div>
+				<div class="field"><label>Variants</label><div class="val">320 · 768 · 1600 · og-1200</div></div>
+				<div class="field"><label>Used on</label><div class="val set">UoM page · UK destination · "Engineering in the UK" post</div></div>
+			</div>
+		</div>
+	</section>
+
+	<!-- ═══════════════ 4 · NAVIGATION ═══════════════ -->
+	<section class="sect">
+		<span class="tag">4 · Navigation — the real nav, not the mock's list</span>
+		<h2>Ordered links, groups, the CTA — mobile derived</h2>
+		<p class="note">
+			The <code>/site</code> mock lists <i>Destinations, Universities, Programs, Scholarships, Visa Services,
+			Blog, Contact</i> — the real nav is <i>About, Destinations, Universities, Programs, Scholarships,
+			Red Seat, FAQs</i>. The builder edits the real one; <code>/site</code>'s list is deleted with it.
+		</p>
+		<div class="frame new">
+			<div class="pagebar"><span class="crumb">ops / cms / navigation</span><h3>Site header</h3>
+				<div class="right"><button class="btn ghost small">+ Link</button><button class="btn ghost small">+ Group</button><button class="btn small">Publish</button></div></div>
+			<div class="navrow grp"><span class="grip">⋮⋮</span><span>About</span><span class="kicker">/about</span><span class="kicker">visible</span><span class="kicker">✎</span></div>
+			<div class="navrow grp"><span class="grip">⋮⋮</span><span>Destinations</span><span class="kicker">/destinations</span><span class="kicker">visible</span><span class="kicker">✎</span></div>
+			<div class="navrow child"><span class="grip">⋮⋮</span><span>— United Kingdom</span><span class="kicker">/destinations/uk</span><span class="kicker">mega</span><span class="kicker">✎</span></div>
+			<div class="navrow child"><span class="grip">⋮⋮</span><span>— Canada</span><span class="kicker">/destinations/canada</span><span class="kicker">mega</span><span class="kicker">✎</span></div>
+			<div class="navrow"><span class="grip">⋮⋮</span><span>Universities</span><span class="kicker">/universities</span><span class="kicker">visible</span><span class="kicker">✎</span></div>
+			<div class="navrow"><span class="grip">⋮⋮</span><span>Programs</span><span class="kicker">/programs</span><span class="kicker">visible</span><span class="kicker">✎</span></div>
+			<div class="navrow"><span class="grip">⋮⋮</span><span>Scholarships</span><span class="kicker">/scholarships</span><span class="kicker">visible</span><span class="kicker">✎</span></div>
+			<div class="navrow"><span class="grip">⋮⋮</span><span>Red Seat</span><span class="kicker">/red-seat</span><span class="kicker">visible</span><span class="kicker">✎</span></div>
+			<div class="navrow"><span class="grip">⋮⋮</span><span>FAQs</span><span class="kicker">/faqs</span><span class="kicker">visible</span><span class="kicker">✎</span></div>
+			<div class="navrow" style="background:var(--amber-soft)"><span class="grip">⋮⋮</span><span><b>CTA → Book a consultation</b></span><span class="kicker">/consultation</span><span class="kicker">button</span><span class="kicker">✎</span></div>
+			<div class="subhead">Footer columns + socials live here too — same builder, second list</div>
+		</div>
+	</section>
+
+	<!-- ═══════════════ 5 · COPY ═══════════════ -->
+	<section class="sect">
+		<span class="tag">5 · Copy — the strings that currently cost a deploy</span>
+		<h2>Keyed copy, edited once, read by portal + console + emails</h2>
+		<p class="note">
+			The welcome line, chapter intros, consent copy, the pre-departure guide, email subjects — today
+			hard-coded across three apps. One <code>copy</code> collection with keys; the Notifications catalogue's
+			"editable copy" reads from the same store.
+		</p>
+		<div class="frame new">
+			<div class="pagebar"><span class="crumb">ops / cms / copy</span><h3>Copy</h3>
+				<div class="right"><input class="btn ghost small" style="border:1px solid var(--line);font-family:ui-monospace,monospace" placeholder="search keys…"><button class="btn small">+ Key</button></div></div>
+			<ul class="rows">
+				<li style="grid-template-columns:14rem 1fr 7rem 6rem"><span class="mono" style="font-size:0.68rem">portal.welcome</span><span class="t" style="font-weight:400;font-size:0.78rem">Welcome back, {firstName} — here's where your journey stands.</span><span class="m">portal</span><span class="m">published</span></li>
+				<li style="grid-template-columns:14rem 1fr 7rem 6rem"><span class="mono" style="font-size:0.68rem">portal.chapter.admissions</span><span class="t" style="font-weight:400;font-size:0.78rem">What happens in Applications — we prepare, submit and track…</span><span class="m">portal</span><span class="m">published</span></li>
+				<li style="grid-template-columns:14rem 1fr 7rem 6rem"><span class="mono" style="font-size:0.68rem">email.invoice.subject</span><span class="t" style="font-weight:400;font-size:0.78rem">Your invoice {number} is ready — {amount} due {date}</span><span class="m">email</span><span class="m set" style="color:var(--amber)">draft</span></li>
+				<li style="grid-template-columns:14rem 1fr 7rem 6rem"><span class="mono" style="font-size:0.68rem">portal.consent.stage2</span><span class="t" style="font-weight:400;font-size:0.78rem">Starting Stage II means we begin your visa file. You'll be invoiced…</span><span class="m">portal</span><span class="m">published</span></li>
+			</ul>
+		</div>
+	</section>
+
+	<!-- ═══════════════ 6 · CHANGE LIST ═══════════════ -->
+	<section class="sect">
+		<span class="tag">6 · Change list — what dies, what gets built, in what order</span>
+		<h2>The build, sequenced</h2>
+		<div class="clist">
+			<div class="row head"><span>Area</span><span>Now</span><span>After</span></div>
+			<div class="row"><span class="where">dies</span><span><code>useSiteContent</code> polls a dead <code>localStorage</code> overlay every 1.5 s</span><span>Site fetches <code>/content/*</code> — edge-cached, revalidated on publish</span></div>
+			<div class="row"><span class="where">dies</span><span><code>/site</code> branding + nav — <code>useState</code> literals, save flashes and persists nothing</span><span>Folds into CMS Brand + Navigation — real settings, audited</span></div>
+			<div class="row"><span class="where">dies</span><span><code>content.ts</code> — 2,730 lines of static arrays; a phone number is a deploy</span><span>DB collections + <code>/content/*</code> read API; file deleted after seed</span></div>
+			<div class="row"><span class="where">migration</span><span>—</span><span><code>0113_cms.sql</code>: <code>brand</code> (single row), <code>cms_collections</code>, <code>cms_entries</code> (status/scheduled_at/version/published_by/seo jsonb), <code>cms_versions</code>, <code>media</code>, <code>cms_nav</code>, <code>copy_keys</code></span></div>
+			<div class="row"><span class="where">catalog merge</span><span><code>/catalog/*</code> (ops Programmes) vs static arrays (public site) — two truths</span><span>Catalog tables get CMS columns (hero image, SEO, status); website + ops read the same rows</span></div>
+			<div class="row"><span class="where">api</span><span>—</span><span><code>GET /brand.json</code>, <code>GET /content/{collection}</code> (edge-cached), <code>GET /content/preview?draft=</code>, admin CRUD + publish + revert + media upload</span></div>
+			<div class="row"><span class="where">brand</span><span>~30 name literals, 3 domains, text logo, monochrome tokens in 3 stylesheets</span><span>One record → <code>:root</code> vars + <code>index.html</code> head + email layout + manifest; logo set from storage</span></div>
+			<div class="row"><span class="where">media</span><span>45 Unsplash hotlinks</span><span>Library on existing storage: alt, focal, 4 variants, usage list, hotlink sweep</span></div>
+			<div class="row"><span class="where">seo</span><span>One static title/description for every route</span><span>Per-record title/desc/OG/canonical/noindex; sitemap + structured data generated</span></div>
+			<div class="row"><span class="where">copy</span><span>Portal/email strings hard-coded across 3 apps</span><span>Keyed copy collection; notification subjects read it too</span></div>
+			<div class="row"><span class="where">deferred</span><span>—</span><span>Localization, per-branch theming, AI copy assist, scheduled un-publish</span></div>
+		</div>
+		<p class="note" style="margin-top:1rem">
+			<b>Order:</b> Brand (kills the name/domain drift, ships logo + colours) → catalog merge + point the site
+			at it → Media → Pages/Blog/FAQs/Testimonials → Navigation + SEO → Copy.
+		</p>
+	</section>
+
+</div>
+</body>
+</html>

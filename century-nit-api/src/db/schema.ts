@@ -2655,6 +2655,8 @@ export const destinations = pgTable("destinations", {
 	programs: integer("programs").default(0),
 	image: text("image"),
 	flag: text("flag"),
+	seo: jsonb("seo").$type<Record<string, unknown>>(),
+	heroMediaId: uuid("hero_media_id"),
 	isActive: boolean("is_active").default(true),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
@@ -2673,6 +2675,8 @@ export const catalogUniversities = pgTable("catalog_universities", {
 	description: text("description"),
 	image: text("image"),
 	tags: jsonb("tags").$type<string[]>(), // Array of strings
+	seo: jsonb("seo").$type<Record<string, unknown>>(),
+	heroMediaId: uuid("hero_media_id"),
 	isActive: boolean("is_active").default(true),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
@@ -2692,6 +2696,15 @@ export const catalogPrograms = pgTable("catalog_programs", {
 	intake: jsonb("intake").$type<string[]>(), // ["Sept 2024", "Jan 2025"]
 	applicationDeadline: text("application_deadline"),
 	description: text("description"),
+	format: text("format"),
+	languageRequirement: text("language_requirement"),
+	entryRequirements: jsonb("entry_requirements").$type<string[]>(),
+	curriculum: jsonb("curriculum").$type<string[]>(),
+	careerOutcomes: jsonb("career_outcomes").$type<string[]>(),
+	scholarshipsAvailable: jsonb("scholarships_available").$type<string[]>(),
+	facts: jsonb("facts").$type<{ label: string; value: string }[]>(),
+	seo: jsonb("seo").$type<Record<string, unknown>>(),
+	heroMediaId: uuid("hero_media_id"),
 	isActive: boolean("is_active").default(true),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
@@ -2705,6 +2718,14 @@ export const catalogScholarships = pgTable("catalog_scholarships", {
 	type: text("type"),
 	deadline: text("deadline"),
 	eligibility: text("eligibility"),
+	amountUsd: integer("amount_usd"),
+	amountQualifier: text("amount_qualifier"),
+	amountNote: text("amount_note"),
+	image: text("image"),
+	description: text("description"),
+	criteria: jsonb("criteria").$type<string[]>(),
+	seo: jsonb("seo").$type<Record<string, unknown>>(),
+	heroMediaId: uuid("hero_media_id"),
 	isActive: boolean("is_active").default(true),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
@@ -2821,4 +2842,85 @@ export const feeItems = pgTable("fee_items", {
 	sortOrder: integer("sort_order").notNull().default(0),
 	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/* ── CMS (migration 0114) ────────────────────────────────────────────────────
+ * One identity record + one content store + one media library, read by the
+ * site, the portal, the console and the email layout.
+ */
+
+export const cmsBrand = pgTable("cms_brand", {
+	id: varchar("id", { length: 24 }).primaryKey().default("brand"),
+	/** Working copy — the editor saves here. */
+	draft: jsonb("draft"),
+	/** What /brand.json serves. */
+	published: jsonb("published").notNull(),
+	publishedVersion: integer("published_version").notNull().default(1),
+	publishedAt: timestamp("published_at", { withTimezone: true }),
+	publishedBy: text("published_by"),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	updatedBy: text("updated_by"),
+});
+
+export const cmsVersions = pgTable("cms_versions", {
+	id: uuid("id").primaryKey().defaultRandom(),
+	entity: varchar("entity", { length: 32 }).notNull(),
+	entityKey: varchar("entity_key", { length: 160 }).notNull(),
+	version: integer("version").notNull(),
+	payload: jsonb("payload").notNull(),
+	editorId: text("editor_id"),
+	editorEmail: text("editor_email"),
+	note: text("note"),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+	byEntity: index("cms_versions_entity_idx").on(t.entity, t.entityKey, t.version),
+}));
+
+export const media = pgTable("media", {
+	id: uuid("id").primaryKey().defaultRandom(),
+	key: text("key").notNull().unique(),
+	fileName: text("file_name").notNull(),
+	mime: varchar("mime", { length: 80 }).notNull(),
+	sizeBytes: integer("size_bytes"),
+	width: integer("width"),
+	height: integer("height"),
+	alt: text("alt").notNull().default(""),
+	focalX: integer("focal_x").notNull().default(50),
+	focalY: integer("focal_y").notNull().default(50),
+	uploadedBy: text("uploaded_by"),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const cmsEntries = pgTable("cms_entries", {
+	id: uuid("id").primaryKey().defaultRandom(),
+	collection: varchar("collection", { length: 48 }).notNull(),
+	slug: varchar("slug", { length: 160 }).notNull(),
+	status: varchar("status", { length: 16 }).notNull().default("draft"),
+	payload: jsonb("payload").notNull().default({}),
+	seo: jsonb("seo").$type<Record<string, unknown>>(),
+	scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
+	publishedAt: timestamp("published_at", { withTimezone: true }),
+	publishedBy: text("published_by"),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	updatedBy: text("updated_by"),
+}, (t) => ({
+	bySlug: uniqueIndex("cms_entries_collection_slug_uq").on(t.collection, t.slug),
+	byStatus: index("cms_entries_collection_status_idx").on(t.collection, t.status),
+	scheduled: index("cms_entries_scheduled_idx").on(t.status, t.scheduledAt),
+}));
+
+export const cmsNav = pgTable("cms_nav", {
+	surface: varchar("surface", { length: 24 }).primaryKey(),
+	items: jsonb("items").$type<unknown[]>().notNull().default([]),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	updatedBy: text("updated_by"),
+});
+
+export const copyKeys = pgTable("copy_keys", {
+	key: varchar("key", { length: 160 }).primaryKey(),
+	value: text("value").notNull().default(""),
+	surface: varchar("surface", { length: 24 }).notNull().default("site"),
+	status: varchar("status", { length: 16 }).notNull().default("published"),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	updatedBy: text("updated_by"),
 });

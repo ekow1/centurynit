@@ -4,7 +4,24 @@
  * Responsive HTML email templates matching the web design system:
  * Pure black/white, sharp edges (no border-radius), serif type,
  * thick borders, no gradients or shadows.
+ *
+ * Brand values come from the CMS `cms_brand` record (services/cms.getBrandCached)
+ * rather than literals, so the header badge, footer address and accent colour
+ * follow whatever Ops publishes. Renderers stay synchronous: each call warms a
+ * 60 s cache, and the first render after a cold start falls back to
+ * DEFAULT_BRAND — an email must never fail because the brand table did.
  */
+import { DEFAULT_BRAND, type Brand } from "century-nit-shared";
+import { getBrandCached } from "../services/cms.js";
+
+let emailBrand: Brand = DEFAULT_BRAND;
+
+/** Keep the layout's brand fresh; called fire-and-forget by emailLayout. */
+function warmEmailBrand(): void {
+	void getBrandCached()
+		.then((b) => { emailBrand = b; })
+		.catch(() => { /* keep previous brand */ });
+}
 
 export function escapeHtml(value: string): string {
 	return value
@@ -31,6 +48,14 @@ export function emailLayout({
 	footerNote?: string;
 	flush?: boolean;
 }): string {
+	warmEmailBrand();
+	const brand = emailBrand;
+	const ink = brand.colors.ink;
+	const surface = brand.colors.surface;
+	const primary = brand.colors.primary;
+	const shortName = brand.names.short;
+	const legalName = brand.names.legal;
+	const footerLine = [brand.contacts.address, brand.contacts.support].filter(Boolean).join(" • ");
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -43,24 +68,24 @@ export function emailLayout({
 	</style>
 	<![endif]-->
 </head>
-<body style="margin:0;padding:0;background-color:#f5f5f5;font-family:Georgia,'Times New Roman',Times,serif;-webkit-font-smoothing:antialiased;color:#000000;">
+<body style="margin:0;padding:0;background-color:#f5f5f5;font-family:${escapeHtml(brand.fonts.body)},Georgia,'Times New Roman',Times,serif;-webkit-font-smoothing:antialiased;color:${ink};">
 	${preheader ? `<div style="display:none;font-size:1px;color:#f5f5f5;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">${escapeHtml(preheader)}</div>` : ""}
 
 	<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#f5f5f5;padding:32px 16px;">
 		<tr>
 			<td align="center">
-				<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:580px;background-color:#ffffff;border:4px solid #000000;">
+				<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:580px;background-color:${surface};border:4px solid ${ink};">
 
 					<!-- Header -->
 					<tr>
-						<td style="background-color:#000000;padding:28px 36px;text-align:left;border-bottom:4px solid #000000;">
+						<td style="background-color:${primary};padding:28px 36px;text-align:left;border-bottom:4px solid ${ink};">
 							<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
 								<tr>
 									<td>
-										<div style="display:inline-block;padding:3px 8px;border:1px solid #ffffff;margin-bottom:8px;">
-											<span style="color:#ffffff;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;">Century NIT</span>
+										<div style="display:inline-block;padding:3px 8px;border:1px solid ${surface};margin-bottom:8px;">
+											<span style="color:${surface};font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;">${escapeHtml(shortName)}</span>
 										</div>
-										<h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;line-height:1.3;font-family:Georgia,'Times New Roman',Times,serif;">
+										<h1 style="margin:0;color:${surface};font-size:20px;font-weight:700;letter-spacing:-0.3px;line-height:1.3;font-family:${escapeHtml(brand.fonts.display)},Georgia,'Times New Roman',Times,serif;">
 											${escapeHtml(title)}
 										</h1>
 									</td>
@@ -78,13 +103,13 @@ export function emailLayout({
 
 					<!-- Footer -->
 					<tr>
-						<td style="background-color:#f5f5f5;padding:24px 36px;border-top:2px solid #000000;text-align:center;font-size:12px;line-height:1.6;color:#666666;">
+						<td style="background-color:#f5f5f5;padding:24px 36px;border-top:2px solid ${ink};text-align:center;font-size:12px;line-height:1.6;color:#666666;">
 							${footerNote ? `<p style="margin:0 0 8px 0;color:#999999;">${footerNote}</p>` : ""}
-							<p style="margin:0;font-weight:600;color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;font-size:11px;letter-spacing:0.5px;">
-								Century NIT Consult
+							<p style="margin:0;font-weight:600;color:${ink};font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;font-size:11px;letter-spacing:0.5px;">
+								${escapeHtml(legalName)}
 							</p>
 							<p style="margin:4px 0 0 0;color:#999999;">
-								Accra, Ghana &bull; London, UK &bull; support@centurynit.com
+								${escapeHtml(footerLine)}
 							</p>
 						</td>
 					</tr>

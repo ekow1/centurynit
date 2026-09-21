@@ -20,7 +20,6 @@ export type AdminSection =
 	| "users"
 	| "auth"
 	| "cms"
-	| "site"
 	| "notifications"
 	| "settings";
 
@@ -39,11 +38,7 @@ const SECTION_META: Record<AdminSection, { title: string; blurb: string }> = {
 	},
 	cms: {
 		title: "Content Management",
-		blurb: "Pages, programmes, destinations, and blog content on the public site.",
-	},
-	site: {
-		title: "Site & UI",
-		blurb: "Branding, navigation, and the public-facing web experience.",
+		blurb: "Brand identity, pages, collections, media, navigation and copy.",
 	},
 	notifications: {
 		title: "System Notifications",
@@ -70,7 +65,6 @@ export function EnterpriseAdministration({ section = "system" }: { section?: Adm
 			{section === "users" && <UsersAndRoles />}
 			{section === "auth" && <AuthSettings />}
 			{section === "cms" && <CmsManager />}
-			{section === "site" && <SiteSettings />}
 			{section === "notifications" && <SystemNotifications />}
 			{section === "settings" && <PlatformSettings />}
 		</div>
@@ -2734,107 +2728,6 @@ function PolicyNum({ label, hint, value, min, max, onChange }: {
 
 /* ─── CMS ─── */
 
-/* ─── Site & UI ─── */
-
-function SiteSettings() {
-	const [navItems, setNavItems] = useState(["Destinations", "Universities", "Programs", "Scholarships", "Visa Services", "Blog", "Contact"]);
-	const [branding, setBranding] = useState({ siteName: "Century NIT", tagline: "Your global education partner", typeface: "Display serif / mono accents", theme: "Monochrome, light", favicon: "favicon.svg" });
-	const [editingBranding, setEditingBranding] = useState(false);
-	const [saved, setSaved] = useState(false);
-
-	function moveNav(index: number, dir: -1 | 1) {
-		const next = [...navItems];
-		const target = index + dir;
-		if (target < 0 || target >= next.length) return;
-		[next[index], next[target]] = [next[target], next[index]];
-		setNavItems(next);
-	}
-
-	function removeNav(index: number) {
-		setNavItems(navItems.filter((_, i) => i !== index));
-	}
-
-	function save() {
-		setSaved(true);
-		window.setTimeout(() => setSaved(false), 2500);
-	}
-
-	return (
-		<>
-			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
-				<div className="card">
-					<div className="admin-section-head" style={{ marginBottom: "1rem" }}>
-						<h2 className="section-title">Branding</h2>
-						<button className="btn btn--ghost btn--sm" onClick={() => setEditingBranding(!editingBranding)}>
-							{editingBranding ? "Cancel" : "Edit"}
-						</button>
-					</div>
-					{editingBranding ? (
-						<div className="admin-form-grid">
-							<div className="field">
-								<label>Site name</label>
-								<input className="input input--full-border" value={branding.siteName} onChange={(e) => setBranding({ ...branding, siteName: e.target.value })} />
-							</div>
-							<div className="field">
-								<label>Tagline</label>
-								<input className="input input--full-border" value={branding.tagline} onChange={(e) => setBranding({ ...branding, tagline: e.target.value })} />
-							</div>
-							<div className="field">
-								<label>Primary typeface</label>
-								<input className="input input--full-border" value={branding.typeface} onChange={(e) => setBranding({ ...branding, typeface: e.target.value })} />
-							</div>
-							<div className="field">
-								<label>Theme</label>
-								<select className="input input--full-border" value={branding.theme} onChange={(e) => setBranding({ ...branding, theme: e.target.value })}>
-									<option>Monochrome, light</option>
-									<option>Monochrome, dark</option>
-									<option>High contrast</option>
-								</select>
-							</div>
-							<div className="field">
-								<label>Favicon</label>
-								<input className="input input--full-border" value={branding.favicon} onChange={(e) => setBranding({ ...branding, favicon: e.target.value })} />
-							</div>
-							<div className="admin-form-card__actions" style={{ marginTop: "0.5rem" }}>
-								<button className="btn btn--primary btn--sm" onClick={() => { setEditingBranding(false); save(); }}>Save changes</button>
-							</div>
-						</div>
-					) : (
-						<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-							<Row label="Site name" value={branding.siteName} />
-							<Row label="Tagline" value={branding.tagline} />
-							<Row label="Primary typeface" value={branding.typeface} />
-							<Row label="Theme" value={branding.theme} />
-							<Row label="Favicon" value={branding.favicon} />
-						</ul>
-					)}
-				</div>
-
-				<div className="card">
-					<h2 className="section-title mb-3">Public Navigation</h2>
-					<p className="muted mb-3" style={{ fontSize: "var(--text-sm)" }}>
-						Items shown in the public site header, in order.
-					</p>
-					<ul className="admin-nav-list">
-						{navItems.map((item, i) => (
-							<li key={item} className="admin-nav-item">
-								<span className="admin-nav-item__index">{String(i + 1).padStart(2, "0")}</span>
-								<span className="admin-nav-item__label">{item}</span>
-								<span className="admin-nav-item__actions">
-									<button className="admin-icon-btn" onClick={() => moveNav(i, -1)} disabled={i === 0} title="Move up">↑</button>
-									<button className="admin-icon-btn" onClick={() => moveNav(i, 1)} disabled={i === navItems.length - 1} title="Move down">↓</button>
-									<button className="admin-icon-btn admin-btn--danger" onClick={() => removeNav(i)} title="Remove">✕</button>
-								</span>
-							</li>
-						))}
-					</ul>
-					{saved && <span className="admin-saved-indicator" style={{ marginTop: "1rem", display: "inline-block" }}>✓ Changes saved</span>}
-				</div>
-			</div>
-		</>
-	);
-}
-
 /* ─── System notifications ─── */
 
 function SystemNotifications() {
@@ -3270,15 +3163,6 @@ function Stat({ label, value, note, inverted }: { label: string; value: string; 
 			<p className="page-title mt-1" style={inverted ? { color: "var(--background)" } : undefined}>{value}</p>
 			<p className="muted mt-2" style={inverted ? { color: "var(--muted-foreground)" } : undefined}>{note}</p>
 		</div>
-	);
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-	return (
-		<li style={{ display: "flex", justifyContent: "space-between", gap: "1rem", padding: "0.6rem 0", borderBottom: "1px solid var(--border-light)", fontSize: "var(--text-sm)" }}>
-			<span className="muted">{label}</span>
-			<span style={{ textAlign: "right" }}>{value}</span>
-		</li>
 	);
 }
 

@@ -18,6 +18,7 @@ import { useJoinMeeting } from "./case/ConsultationCall";
 import { useWorkQueue } from "../hooks/useWorkQueue";
 import { useChatConversations } from "../hooks/useChatApi";
 import { documentsApi } from "century-nit-core/api";
+import { useBrand } from "../lib/useBrand";
 import { roleCanAccess, type ChatConversation } from "century-nit-shared";
 import { isDueToday, isOverdue } from "../lib/pendingTasks";
 
@@ -132,8 +133,7 @@ const SECTIONS: NavSection[] = [
 				icon: "cms",
 				blurb: "Pages, posts & the site",
 				children: [
-					{ to: "/cms", module: "cms", label: "Content (CMS)", blurb: "Pages & posts", icon: "cms" },
-					{ to: "/site", module: "site", label: "Site & UI", blurb: "Branding & nav", icon: "site" },
+					{ to: "/cms", module: "cms", label: "Content (CMS)", blurb: "Brand, pages & media", icon: "cms" },
 				],
 			},
 			{
@@ -286,6 +286,7 @@ function useShellSignals() {
 
 function OpsShell() {
 	const { opsUser, opsRole, opsSignOut, hasPermission } = useOpsAuth();
+	const brand = useBrand();
 	// Loads the fee catalogue once, which also sets the rate every GHS figure renders at.
 	useFeeCatalogue();
 	const signals = useShellSignals();
@@ -395,7 +396,7 @@ function OpsShell() {
 			<aside className="portal__aside">
 				<div className="portal__brand">
 					<Link to={opsRole ? ROLE_HOME[opsRole] : "/"} className="nav__logo">
-						Century NIT <span>Operations</span>
+						{brand.names.short} <span>Operations</span>
 					</Link>
 					{opsUser && !sidebarCollapsed && (
 						<p className="portal__tagline">

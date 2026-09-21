@@ -4,7 +4,8 @@ import { Button } from "../ui/Button";
 import { Avatar } from "../ui/Avatar";
 import { JourneyButton } from "../ui/JourneyButton";
 import { useAppState } from "../../context/AppState";
-import { MAIN_LINKS as mainLinks, SECONDARY_LINKS as mobileExtra } from "./navLinks";
+import { MAIN_LINKS as staticMainLinks, SECONDARY_LINKS as staticExtra } from "./navLinks";
+import { useBrand } from "../../data/useBrand";
 
 export function Nav() {
 	const [open, setOpen] = useState(false);
@@ -17,6 +18,16 @@ export function Nav() {
 
 	const { isAuthenticated, authUser, signOut, unreadCount, notifications, markAllNotificationsRead } =
 		useAppState();
+	const { brand, nav } = useBrand();
+
+	// Published nav wins; the compiled lists stay as the fallback until
+	// /nav/header resolves (or if the CMS row is empty).
+	const mainLinks = nav.filter((i) => i.kind === "top" && i.visible !== false)
+		.map((i) => ({ to: i.href, label: i.label }));
+	const mobileExtra = nav.filter((i) => i.kind === "secondary" && i.visible !== false)
+		.map((i) => ({ to: i.href, label: i.label }));
+	const desktopLinks = mainLinks.length ? mainLinks : staticMainLinks;
+	const extraLinks = mobileExtra.length ? mobileExtra : staticExtra;
 
 	useEffect(() => {
 		const t = setTimeout(() => {
@@ -51,12 +62,12 @@ export function Nav() {
 	return (
 		<header className="nav">
 			<div className="container nav__inner">
-				<Link to="/" className="nav__logo" aria-label="Century NIT home">
-					Century NIT <span>International</span>
+				<Link to="/" className="nav__logo" aria-label={`${brand.names.brand} home`}>
+					{brand.names.brand}
 				</Link>
 
 				<nav className="nav__links" aria-label="Primary">
-					{mainLinks.map((l) => (
+					{desktopLinks.map((l) => (
 						<NavLink key={l.to} to={l.to} className={linkClass} style={{ whiteSpace: "nowrap" }}>
 							{l.label}
 						</NavLink>
@@ -190,7 +201,7 @@ export function Nav() {
 			</div>
 
 			<div className={`nav__mobile${open ? " nav__mobile--open" : ""}`} hidden={!open}>
-				{[...mainLinks, ...mobileExtra].map((l) => (
+				{[...desktopLinks, ...extraLinks].map((l) => (
 					<Link key={l.to} to={l.to}>
 						{l.label}
 					</Link>

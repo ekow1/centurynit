@@ -27,6 +27,7 @@ import { CommunicationCenter } from "./CommunicationCenter";
 import { PortalAppBar, PortalTabBar } from "./PortalMobileNav";
 import { OnboardingModal } from "../../components/portal/OnboardingModal";
 import { MfaPrompt } from "../../components/portal/MfaPrompt";
+import { useBrand } from "../../data/useBrand";
 
 /**
  * The sidebar is the journey: the six chapters as the spine. Done, current,
@@ -88,6 +89,8 @@ function MainNavItem({
 }
 
 export function PortalLayout() {
+	const { brand } = useBrand();
+	const brandShort = brand.names.short;
 	const {
 		authUser,
 		signOut,
@@ -146,7 +149,7 @@ export function PortalLayout() {
 			<aside className="portal__aside">
 				<div className="portal__brand">
 					<Link to="/portal/home" className="nav__logo">
-						Century NIT <span>Student portal</span>
+						{brandShort} <span>Student portal</span>
 					</Link>
 					<p className="portal__tagline">
 						{currentRef ?? "No reference yet"}

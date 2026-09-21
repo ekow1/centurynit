@@ -10,7 +10,6 @@ import {
 	articles,
 	company,
 	coreServices,
-	destinations,
 	events,
 	faqs,
 	getDestination,
@@ -20,16 +19,11 @@ import {
 	getService,
 	getUniversity,
 	processSteps,
-	programs,
-	programsForUniversity,
-	scholarships,
 	stats,
 	testimonials,
-	universities,
-	universitiesForDestination,
 	videoTestimonials,
 } from "century-nit-core";
-import { useSiteContent } from "../data/useSiteContent";
+import { useCatalog } from "../data/useCatalog";
 
 function PageHeader({
 	eyebrow,
@@ -235,6 +229,7 @@ export function WhyChooseUs() {
 }
 
 export function Destinations() {
+	const catalog = useCatalog();
 	return (
 		<>
 			<PageHeader
@@ -245,7 +240,7 @@ export function Destinations() {
 			<section className="section">
 				<div className="container">
 					<div className="card-grid card-grid--3">
-						{destinations.map((d) => (
+						{catalog.destinations.map((d) => (
 							<Link
 								key={d.id}
 								to={`/destinations/${d.id}`}
@@ -281,9 +276,14 @@ export function Destinations() {
 
 export function DestinationDetail() {
 	const { id } = useParams();
-	const d = getDestination(id ?? "");
-	if (!d) return <Navigate to="/destinations" replace />;
-	const unis = universitiesForDestination(d.id);
+	const catalog = useCatalog();
+	const d = catalog.destinations.find((x) => x.id === id) ?? getDestination(id ?? "");
+	if (!d) {
+		// Wait for the catalog before concluding the slug is bad — a destination
+		// created in ops exists only in the DB until the fetch lands.
+		return catalog.ready ? <Navigate to="/destinations" replace /> : null;
+	}
+	const unis = catalog.universities.filter((u) => u.destinationId === d.id);
 	return (
 		<>
 			<header className="page-header">
@@ -356,12 +356,10 @@ export function DestinationDetail() {
 
 export function Universities() {
 	const [filter, setFilter] = useState("all");
-	// CMS edits applied, unpublished records dropped
-	const { live } = useSiteContent();
+	const catalog = useCatalog();
 	const list = useMemo(() => {
-		const published = live("universities", universities);
-		return filter === "all" ? published : published.filter((u) => u.destinationId === filter);
-	}, [filter, live]);
+		return filter === "all" ? catalog.universities : catalog.universities.filter((u) => u.destinationId === filter);
+	}, [filter, catalog.universities]);
 	return (
 		<>
 			<PageHeader
@@ -379,7 +377,7 @@ export function Universities() {
 						>
 							All
 						</button>
-						{destinations.map((d) => (
+						{catalog.destinations.map((d) => (
 							<button
 								key={d.id}
 								type="button"
@@ -435,10 +433,11 @@ export function Universities() {
 
 export function UniversityDetail() {
 	const { id } = useParams();
-	const u = getUniversity(id ?? "");
-	if (!u) return <Navigate to="/universities" replace />;
-	const dest = getDestination(u.destinationId);
-	const progs = programsForUniversity(u.id);
+	const catalog = useCatalog();
+	const u = catalog.universities.find((x) => x.id === id) ?? getUniversity(id ?? "");
+	if (!u) return catalog.ready ? <Navigate to="/universities" replace /> : null;
+	const dest = catalog.destinations.find((x) => x.id === u.destinationId) ?? getDestination(u.destinationId);
+	const progs = catalog.programs.filter((p) => p.universityId === u.id);
 	return (
 		<>
 			<header className="page-header">
@@ -532,11 +531,10 @@ export function UniversityDetail() {
 
 export function Programs() {
 	const [level, setLevel] = useState("all");
-	const { live } = useSiteContent();
+	const catalog = useCatalog();
 	const list = useMemo(() => {
-		const published = live("programs", programs);
-		return level === "all" ? published : published.filter((p) => p.level === level);
-	}, [level, live]);
+		return level === "all" ? catalog.programs : catalog.programs.filter((p) => p.level === level);
+	}, [level, catalog.programs]);
 	const levels = ["all", "Undergraduate", "Postgraduate", "PhD", "Diploma"] as const;
 	return (
 		<>
@@ -561,7 +559,7 @@ export function Programs() {
 					</div>
 					<div className="card-grid card-grid--2">
 						{list.map((p) => {
-							const uni = getUniversity(p.universityId);
+							const uni = catalog.universities.find((x) => x.id === p.universityId) ?? getUniversity(p.universityId);
 							return (
 								<Link
 									key={p.id}
@@ -598,9 +596,10 @@ export function Programs() {
 
 export function ProgramDetail() {
 	const { id } = useParams();
-	const p = getProgram(id ?? "");
-	if (!p) return <Navigate to="/programs" replace />;
-	const uni = getUniversity(p.universityId);
+	const catalog = useCatalog();
+	const p = catalog.programs.find((x) => x.id === id) ?? getProgram(id ?? "");
+	if (!p) return catalog.ready ? <Navigate to="/programs" replace /> : null;
+	const uni = catalog.universities.find((x) => x.id === p.universityId) ?? getUniversity(p.universityId);
 
 	const quickFacts = [
 		{ label: "University", value: uni?.name },
@@ -853,11 +852,10 @@ export function ProgramDetail() {
 export function Scholarships() {
 	const [type, setType] = useState("all");
 	const types = ["all", "Merit", "Field-specific", "Need + Merit", "Destination"];
-	const { live } = useSiteContent();
+	const catalog = useCatalog();
 	const list = useMemo(() => {
-		const published = live("scholarships", scholarships);
-		return type === "all" ? published : published.filter((s) => s.type === type);
-	}, [type, live]);
+		return type === "all" ? catalog.scholarships : catalog.scholarships.filter((s) => s.type === type);
+	}, [type, catalog.scholarships]);
 	return (
 		<>
 			<PageHeader
@@ -920,9 +918,10 @@ export function Scholarships() {
 
 export function ScholarshipDetail() {
 	const { id } = useParams();
-	const s = getScholarship(id ?? "");
-	if (!s) return <Navigate to="/scholarships" replace />;
-	const otherScholarships = scholarships.filter((x) => x.id !== s.id).slice(0, 3);
+	const catalog = useCatalog();
+	const s = catalog.scholarships.find((x) => x.id === id) ?? getScholarship(id ?? "");
+	if (!s) return catalog.ready ? <Navigate to="/scholarships" replace /> : null;
+	const otherScholarships = catalog.scholarships.filter((x) => x.id !== s.id).slice(0, 3);
 	return (
 		<>
 			<PageHeader

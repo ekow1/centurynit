@@ -5,8 +5,10 @@ import { Button } from "../ui/Button";
 import { Input } from "../ui/Field";
 import { EnquiryButton } from "../EnquiryContext";
 import { company } from "century-nit-core";
+import { useBrand } from "../../data/useBrand";
 
 export function Footer() {
+  const { brand } = useBrand();
   const [email, setEmail] = useState("");
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -56,7 +58,7 @@ export function Footer() {
       <div className="container">
         <div className="footer__grid">
           <div>
-            <div className="footer__brand">Century NIT</div>
+            <div className="footer__brand">{brand.names.brand}</div>
             <p style={{ color: "rgba(255,255,255,0.7)", maxWidth: "28rem", marginBottom: "1rem" }}>
               {company.summary}
             </p>
@@ -127,16 +129,16 @@ export function Footer() {
 						<ul>
 							<li>
 								<span style={{ color: "rgba(255,255,255,0.75)", fontSize: "0.9rem" }}>
-									{company.branches[0].address}
+									{brand.contacts.address || company.branches[0].address}
 								</span>
 							</li>
-							{company.branches[0].phones.map((p) => (
+							{(brand.contacts.phoneAccra ? [brand.contacts.phoneAccra] : company.branches[0].phones).map((p) => (
 								<li key={p}>
 									<a href={`tel:${p.replace(/\s/g, "")}`}>{p}</a>
 								</li>
 							))}
 							<li>
-								<a href={`mailto:${company.email}`}>{company.email}</a>
+								<a href={`mailto:${brand.contacts.info}`}>{brand.contacts.info}</a>
 							</li>
 						</ul>
 					</div>
@@ -144,19 +146,21 @@ export function Footer() {
 					<div className="footer__col">
 						<h4>Kumasi</h4>
 						<ul>
-							<li>
-								<span style={{ color: "rgba(255,255,255,0.75)", fontSize: "0.9rem" }}>
-									{company.branches[1].address}
-								</span>
-							</li>
-							{company.branches[1].phones.map((p) => (
+							{company.branches[1] ? (
+								<li>
+									<span style={{ color: "rgba(255,255,255,0.75)", fontSize: "0.9rem" }}>
+										{company.branches[1].address}
+									</span>
+								</li>
+							) : null}
+							{(brand.contacts.phoneKumasi ? [brand.contacts.phoneKumasi] : (company.branches[1]?.phones ?? [])).map((p) => (
 								<li key={p}>
 									<a href={`tel:${p.replace(/\s/g, "")}`}>{p}</a>
 								</li>
 							))}
 							<li>
 								<span style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.85rem" }}>
-									{company.hours}
+									{brand.contacts.hours || company.hours}
 								</span>
 							</li>
 							<li>
@@ -179,19 +183,19 @@ export function Footer() {
 
 				<div className="footer__bottom">
 					<span>
-						© {new Date().getFullYear()} {company.legalName}
+						© {new Date().getFullYear()} {brand.names.legal}
 					</span>
 					<span>
 						<a
-							href={company.website}
+							href={`https://${brand.domain}`}
 							target="_blank"
 							rel="noreferrer"
 							style={{ color: "inherit" }}
 						>
-							centurynit.org
+							{brand.domain}
 						</a>
 						{" · "}
-						Prototype Phase 1
+						{brand.names.tagline}
 					</span>
 				</div>
 			</div>

@@ -205,7 +205,8 @@ export default function App() {
 									<Route path="auth" element={<Ops module="auth"><EnterpriseAdministration section="auth" /></Ops>} />
 									<Route path="audit" element={<Ops module="system"><EnterpriseAuditLogs /></Ops>} />
 									<Route path="cms" element={<Ops module="cms"><EnterpriseAdministration section="cms" /></Ops>} />
-									<Route path="site" element={<Ops module="site"><EnterpriseAdministration section="site" /></Ops>} />
+									{/* Site & UI folded into the CMS — Brand and Navigation live there now. */}
+									<Route path="site" element={<Navigate to="/cms" replace />} />
 									<Route path="notifications" element={<Ops module="notifications"><EnterpriseAdministration section="notifications" /></Ops>} />
 									<Route path="settings" element={<Ops module="settings"><EnterpriseAdministration section="settings" /></Ops>} />
 

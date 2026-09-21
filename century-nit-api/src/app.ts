@@ -24,6 +24,7 @@ import { settingsRouter } from "./routes/settings.js";
 import { schedulingRouter } from "./routes/scheduling.js";
 import { lookupsRouter } from "./routes/lookups.js";
 import { catalogRoutes } from "./routes/catalog.js";
+import { cmsRouter, contentRouter } from "./routes/cms.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { applicantsRouter } from "./routes/applicants.js";
 import { applicationsRouter } from "./routes/applications.js";
@@ -183,6 +184,8 @@ export function createApp() {
 	app.route(`${API_PREFIX}/notifications`, notificationsRouter);
 	app.route(`${API_PREFIX}/push`, pushRouter);
 	app.route(`${API_PREFIX}/events`, eventsRouter);
+	app.route(`${API_PREFIX}/cms`, cmsRouter);
+	app.route(API_PREFIX, contentRouter);
 	app.route(`${API_PREFIX}/marketing`, marketingRouter);
 	app.route(`${API_PREFIX}/marketing`, marketingAudienceRouter);
 	app.route(`${API_PREFIX}/newsletter`, newsletterRouter);

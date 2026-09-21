@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Sheet, type AssignableStaff } from "century-nit-core/ui";
-import { canOwnStage, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import { canOwnStage, roleHasCapability, JOURNEY_STAGE_LABELS, type Capability, type JourneyStage } from "century-nit-shared";
 import { OPS_BRANCHES, branchId } from "century-nit-core/ops";
 import { useOpsAuth } from "../OpsAuthContext";
 
@@ -43,6 +43,7 @@ export function AssignSheet({
 	why,
 	coverage = false,
 	coverageDefault = "stage",
+	preferCapability,
 	onAssign,
 	onKeep,
 	onLeaveOpen,
@@ -67,6 +68,8 @@ export function AssignSheet({
 	/** Offer the coverage choice — applications, consultations and handoffs. */
 	coverage?: boolean;
 	coverageDefault?: "stage" | "all";
+	/** Staff whose role carries this capability are listed first (a visa entrant → own:visa). A preference, never a filter. */
+	preferCapability?: Capability;
 	onAssign: (placement: HandlerPlacement) => Promise<unknown>;
 	onKeep?: (reason?: string) => Promise<unknown>;
 	/** "Leave it open" — refer the file to the chosen branch without a handler. */
@@ -107,13 +110,17 @@ export function AssignSheet({
 		// option (keepName is set) — otherwise they're just another row.
 		const keep = keepOpsUserId && keepName ? atBranch.find((s) => s.opsUserId === keepOpsUserId) : undefined;
 		const rest = keep ? atBranch.filter((s) => s.opsUserId !== keepOpsUserId) : [...atBranch];
-		// Lightest load first — a heavy load dims but never blocks a pick.
+		// Lightest load first — a heavy load dims but never blocks a pick. A
+		// preferred capability (visa staff for a visa entrant) sorts ahead of load.
+		const prefers = (s: AssignableStaff) => (preferCapability && s.role ? (roleHasCapability(s.role, preferCapability, permissions) ? 0 : 1) : 0);
 		rest.sort(
 			(a, b) =>
+				prefers(a) - prefers(b) ||
 				(a.openCases ?? 0) + (a.openStageSeats ?? 0) - ((b.openCases ?? 0) + (b.openStageSeats ?? 0)),
 		);
 		return { keep, rest };
-	}, [staff, stage, pickBranch, permissions, keepOpsUserId, keepName]);
+	}, [staff, stage, pickBranch, permissions, keepOpsUserId, keepName, preferCapability]);
+	const preferred = (s: AssignableStaff) => Boolean(preferCapability && s.role && roleHasCapability(s.role, preferCapability, permissions));
 
 	const loadOf = (s: AssignableStaff) =>
 		typeof s.openCases === "number"
@@ -217,7 +224,7 @@ export function AssignSheet({
 							{s.name}
 						</span>
 						<span className="hsheet__hint">
-							{s.role ?? ""}{loadOf(s) ? ` · ${loadOf(s)}` : ""}
+							{s.role ?? ""}{preferred(s) ? " · fits this entry" : ""}{loadOf(s) ? ` · ${loadOf(s)}` : ""}
 						</span>
 					</button>
 				))}

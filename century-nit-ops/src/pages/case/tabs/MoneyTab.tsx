@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { TRIGGER_WORDS, lineDue } from "../../../lib/invoiceLines";
 import { Link } from "react-router-dom";
 
 import { useCases } from "../../../hooks/useCases";
@@ -87,6 +88,9 @@ export function MoneyTab({
 			return { l, i, covered, partly, days, late, isNext, paidAt: covered ? (lastPay?.at ?? null) : null };
 		});
 	})();
+	// Per-stage lines (a plan that stops short, or one that grew) carry their own
+	// trigger; the full-journey split is still read by position.
+	const stageLines = Boolean(agencyInv?.lines.some((l) => l.dueOn && l.dueOn !== "acceptance" && l.dueOn !== "visa_approved" && l.dueOn !== "arrival" && l.dueOn !== "scheduled"));
 	const [schedOpen, setSchedOpen] = useState(false);
 	const [schedMonths, setSchedMonths] = useState("6");
 	const [schedFreq, setSchedFreq] = useState<PostArrivalFrequency>("monthly");
@@ -214,8 +218,12 @@ export function MoneyTab({
 					<div className="cn-fee">
 						{feeRows.map(({ l, i, covered, partly, days, late, isNext, paidAt }) => (
 							<div key={l.id} className={`cn-fee__r${covered ? " cn-fee__r--paid" : late ? " cn-fee__r--late" : isNext ? " cn-fee__r--due" : ""}`}>
-								<span className="cn-fee__i">{i === 0 ? "deposit" : i === 1 ? (app.paymentPlanId === "full" ? "balance" : "pre-dep") : `${i - 1} / ${feeRows.length - 2}`}</span>
-								<span className="cn-fee__d">{fmtDay(l.dueAt) ?? (i === 0 ? fmtDay(agencyInv.createdAt) : i === 1 ? "after visa" : "after arrival")}</span>
+								<span className="cn-fee__i">
+									{stageLines
+										? (l.dueOn ? TRIGGER_WORDS[l.dueOn] ?? l.dueOn : "—")
+										: i === 0 ? "deposit" : i === 1 ? (app.paymentPlanId === "full" ? "balance" : "pre-dep") : `${i - 1} / ${feeRows.length - 2}`}
+								</span>
+								<span className="cn-fee__d">{fmtDay(l.dueAt) ?? (l.dueOn && !l.dueAt ? "not yet" : i === 0 ? fmtDay(agencyInv.createdAt) : i === 1 ? "after visa" : "after arrival")}</span>
 								<span>
 									{l.label.replace(/^Service fee · /, "")}
 									{l.detail ? <span className="muted"> · {l.detail}</span> : null}
@@ -230,9 +238,7 @@ export function MoneyTab({
 												? `${-days!} day${days === -1 ? "" : "s"} late`
 												: days !== null
 													? days === 0 ? "due today" : `due in ${days} day${days === 1 ? "" : "s"}`
-													: isNext
-														? "due next"
-														: ""}
+													: (lineDue(l, covered)?.text ?? (isNext ? "due next" : ""))}
 								</span>
 							</div>
 						))}

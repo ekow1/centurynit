@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { asc, eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { applicants, applications, consultations, invoiceEvents, invoiceLines, invoices, opsUsers, servicePackages, users } from "../db/schema.js";
+import { applicantDocuments, applicants, applications, consultations, invoiceEvents, invoiceLines, invoices, opsUsers, servicePackages, users } from "../db/schema.js";
 import { serializeApplication, setApplicationPackage } from "./cases.js";
 import { completeConsultationAssessment } from "./consultations.js";
 import { recordPayment } from "./invoice.js";
@@ -32,6 +32,7 @@ const maybe = () => (dbAvailable ? it : it.skip);
 
 async function wipe() {
 	await db.execute(sql`DELETE FROM invoices WHERE client_user_id = ${CLIENT_ID} OR applicant_email = ${"client" + SUFFIX}`);
+	await db.execute(sql`DELETE FROM applicant_documents WHERE owner_user_id = ${CLIENT_ID}`);
 	await db.execute(sql`DELETE FROM applicants WHERE user_id = ${CLIENT_ID}`);
 	await db.execute(sql`DELETE FROM users WHERE id = ${CLIENT_ID}`);
 	await db.execute(sql`DELETE FROM ops_users WHERE email LIKE ${"%" + SUFFIX}`);
@@ -115,12 +116,19 @@ describe("stage-priced plans", () => {
 			.insert(consultations)
 			.values({ reference: `CNS-SP-V-${Date.now().toString(36)}`, applicantId: applicant.id, branch: "accra", status: "IN_ASSESSMENT" })
 			.returning();
-		// The consultant widened the plan to Visa + Departure.
-		const { application } = await completeConsultationAssessment({
-			id: row.id,
-			result: { outcome: "Eligible", notes: "Offer sound; funds short — sponsor route.", recCountry: "", recUniversity: "", recProgram: "", recPackage: "", recStages: ["visa", "departure"], verdict: "widen" },
-			actor: ACTOR,
+		// The consultant widened the plan to Visa + Departure — but not before
+		// the offer letter is verified in the vault: the gate is the vault's status.
+		const widen = { outcome: "Eligible", notes: "Offer sound; funds short — sponsor route.", recCountry: "", recUniversity: "", recProgram: "", recPackage: "", recStages: ["visa", "departure"] as ("visa" | "departure")[], verdict: "widen" as const };
+		await expect(completeConsultationAssessment({ id: row.id, result: widen, actor: ACTOR })).rejects.toMatchObject({ code: "ENTRY_EVIDENCE_UNVERIFIED" });
+		await db.insert(applicantDocuments).values({
+			ownerUserId: CLIENT_ID,
+			documentType: "admission_letter",
+			fileName: "leeds-cas.pdf",
+			contentType: "application/pdf",
+			storageKey: `e2e/${CLIENT_ID}/admission_letter`,
+			status: "VERIFIED",
 		});
+		const { application } = await completeConsultationAssessment({ id: row.id, result: widen, actor: ACTOR });
 		const appId = application!.id;
 		// The case carries the offer the client brought. The recommended shape is
 		// *derived* (recommendation → intent), never copied: scopeStages is the

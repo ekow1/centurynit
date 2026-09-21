@@ -88,6 +88,10 @@ export function EnterpriseConsultations() {
 	// Every control is a URL param — a filtered diary is a shareable link.
 	const [statusFilter, setStatusFilter] = useUrlParam<StatusFilter>("status", { allowed: STATUS_PARAM_IDS, fallback: "All" });
 	const [ownerFilter, setOwnerFilter] = useUrlParam<"all" | "mine">("owner", { allowed: ["all", "mine"], fallback: "all" });
+	// Where the client said they are on the journey — a visa entrant is a
+	// different consultation from an admissions one, and staffed differently.
+	const [entryFilter, setEntryFilter] = useUrlParam<"all" | "admissions" | "visa" | "departure">("entry", { allowed: ["all", "admissions", "visa", "departure"], fallback: "all" });
+	const entryOf = (c: MockConsultation): "admissions" | "visa" | "departure" => (c.entryIntent === "visa" || c.entryIntent === "departure" ? c.entryIntent : "admissions");
 	const [branchFilter, setBranchFilter] = useUrlParam<string>("branch", { fallback: "all" });
 	const [searchQuery, setSearchQuery] = useUrlParam("q");
 	const now = useNow();
@@ -149,7 +153,7 @@ export function EnterpriseConsultations() {
 		);
 	});
 	const statusCounts = new Map(STATUS_PARAM_IDS.map((s) => [s, searchScoped.filter((c) => matchesStatus(c, s)).length]));
-	const filteredConsultations = searchScoped.filter((c) => (ownerFilter === "mine" ? isMine(c) : true) && matchesStatus(c, statusFilter));
+	const filteredConsultations = searchScoped.filter((c) => (ownerFilter === "mine" ? isMine(c) : true) && matchesStatus(c, statusFilter) && (entryFilter === "all" || entryOf(c) === entryFilter));
 
 	const bands = BAND_ORDER.map((band) => ({
 		band,
@@ -241,6 +245,17 @@ export function EnterpriseConsultations() {
 									value={statusFilter}
 									onChange={setStatusFilter}
 								/>
+								<FilterGroup
+									label="Entry"
+									options={[
+										{ id: "all" as const, label: "Any entry", count: searchScoped.length },
+										{ id: "admissions" as const, label: "Admissions", count: searchScoped.filter((c) => entryOf(c) === "admissions").length },
+										{ id: "visa" as const, label: "Enter at Visa", count: searchScoped.filter((c) => entryOf(c) === "visa").length, hot: searchScoped.some((c) => entryOf(c) === "visa" && !c.assignedOfficer) },
+										{ id: "departure" as const, label: "Enter at Departure", count: searchScoped.filter((c) => entryOf(c) === "departure").length },
+									]}
+									value={entryFilter}
+									onChange={setEntryFilter}
+								/>
 								{!requiresAssignmentScope && (
 									<FilterGroup
 										label="Owner"
@@ -330,6 +345,7 @@ export function EnterpriseConsultations() {
 																{c.status}
 															</StatusPill>
 															{isOffHours(c) && <StatusPill tone="waiting">off-hours — verify</StatusPill>}
+															{entryOf(c) !== "admissions" && <StatusPill tone="current">{entryOf(c) === "visa" ? "enter at Visa · brings an offer" : "enter at Departure · brings a visa"}</StatusPill>}
 															<span className="cn-row__chan">
 																{isOnline(c) ? `◉ ${call ?? "online"}` : "◎ in person"}
 															</span>
@@ -380,6 +396,9 @@ export function EnterpriseConsultations() {
 					staff={assignees}
 					branch={assignFor.branch}
 					currentName={assignFor.assignedOfficer || null}
+					// A visa entrant is best read by someone who can own the visa chapter;
+					// a departure entrant by travel staff. Preferred, not required.
+					preferCapability={entryOf(assignFor) === "visa" ? "own:visa" : entryOf(assignFor) === "departure" ? "own:depart" : undefined}
 					coverage
 					onAssign={async ({ opsUserId, scope, branch }) => {
 						const to = assignees.find((a) => a.opsUserId === opsUserId);

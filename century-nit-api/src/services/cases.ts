@@ -33,6 +33,7 @@ import {
 	SERVICE_STAGE_LABELS,
 	SERVICE_STAGES,
 	type ServiceStage,
+	nextStepFor,
 } from "century-nit-shared";
 import { serviceFeeFor, type SchoolFundingTrack } from "century-nit-core/content";
 import { canonicalBranchId } from "./availability.js";
@@ -1835,16 +1836,14 @@ export async function setApplicationStage(
 	// for, so `completed` is reached straight from the exit stage.
 	const scopeNow = row.scopeStages ? normaliseScope(row.scopeStages) : null;
 	if (stage === "completed" && scopeNow && !scopeNow.includes("departure")) {
-		const exit = scopeNow[scopeNow.length - 1];
-		const exitDone =
-			exit === "visa"
-				? row.visaStage === "complete" && row.visaOutcome === "approved"
-				: schoolTracks.schools.some((s) => s.outcome === "Admitted");
-		if (!exitDone) {
-			throw new HttpError(409, "STAGE_ADVANCE_BLOCKED", exit === "visa" ? "Cannot complete: the visa is not approved." : "Cannot complete: no offer has been recorded.");
-		}
-		if (!row.agencySettled) {
-			throw new HttpError(409, "STAGE_ADVANCE_BLOCKED", "Cannot complete: the service fee is not settled.");
+		// The same function the ops next-action renders from.
+		const step = nextStepFor({
+			scopeStages: scopeNow,
+			stage: row.stage,
+			checks: { visaDone: row.visaStage === "complete" && row.visaOutcome === "approved", agencySettled: row.agencySettled, hasAdmitted },
+		});
+		if (step.kind !== "complete") {
+			throw new HttpError(409, "STAGE_ADVANCE_BLOCKED", `Cannot complete: ${step.kind === "blocked" ? step.reason : "the case is not at its exit stage"}.`);
 		}
 		return finishAdvance(row, stage, actor, applicant);
 	}

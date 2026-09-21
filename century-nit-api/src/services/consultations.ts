@@ -19,14 +19,18 @@ import {
 
 
 
+	ENTRY_EVIDENCE_IDS,
+	type ServiceIntent,
 } from "century-nit-shared";
 
 
 import { plannedStagesFor, documentChecklistFor } from "./documentChecklist.js";
+import { documentTypesFor } from "century-nit-core/content";
 import { canonicalBranchId } from "./availability.js";
 
 import { db } from "../db/index.js";
 import {
+	applicantDocuments,
 
 	applicants,
 	applications,
@@ -984,6 +988,46 @@ export async function completeConsultationAssessment(input: {
 			CASE_ERROR_CODES.CASE_CLOSED,
 			"Start the assessment before completing it",
 		);
+	}
+
+	// ── Entry evidence gate ──────────────────────────────────────────────
+	// A client who says they hold an offer (or a visa) is judged on it. The
+	// consultation may not conclude "proceed" or "widen" until the evidence
+	// is verified in the vault — the gate is the vault's own status — unless
+	// the consultant records why (an original sighted in office, say).
+	const applicantForGate = await getApplicant(row.applicantId);
+	const intent = ((applicantForGate?.profile as { entryIntent?: string } | null)?.entryIntent ?? "") as ServiceIntent | "";
+	const eligibleOutcome = input.result.outcome === "Eligible" || input.result.outcome === "Conditionally Eligible";
+	if ((intent === "visa" || intent === "departure") && eligibleOutcome && input.result.verdict !== "not_viable") {
+		const required = ENTRY_EVIDENCE_IDS[intent];
+		const verified = applicantForGate?.userId
+			? new Set(
+					(
+						await db
+							.select({ documentType: applicantDocuments.documentType })
+							.from(applicantDocuments)
+							.where(and(eq(applicantDocuments.ownerUserId, applicantForGate.userId), eq(applicantDocuments.status, "VERIFIED"), inArray(applicantDocuments.documentType, [...required])))
+					).map((d) => d.documentType),
+				)
+			: new Set<string>();
+		const missing = required.filter((id) => !verified.has(id));
+		if (missing.length > 0 && !input.result.overrideReason?.trim()) {
+			throw new HttpError(
+				409,
+				"ENTRY_EVIDENCE_UNVERIFIED",
+				`Verify the client's ${documentTypesFor(missing).map((d) => d.name).join(" and ")} in the vault before concluding, or record why you are proceeding without it.`,
+			);
+		}
+		if (missing.length > 0) {
+			await db.insert(caseComments).values({
+				targetType: "consultation",
+				targetId: row.id,
+				kind: "status",
+				text: `Assessment concluded with ${documentTypesFor(missing).map((d) => d.name).join(", ")} not yet verified — ${input.result.overrideReason!.trim()}`,
+				authorName: input.actor.name,
+				authorOpsUserId: input.actor.opsUserId,
+			});
+		}
 	}
 
 	const [updated] = await db

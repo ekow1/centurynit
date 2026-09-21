@@ -10,6 +10,7 @@ import { HistorySheet } from "./HistorySheet";
 import { TeamSheet } from "./TeamSheet";
 import { useCaseTab } from "./CaseTabs";
 import { CaseSpine } from "./CaseSpine";
+import { PackageSheet } from "./PackageSheet";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { ConsultationTab } from "./tabs/ConsultationTab";
 import { EnrolmentTab } from "./tabs/EnrolmentTab";
@@ -38,6 +39,12 @@ import {
 
 
 
+	nextStepFor,
+	normaliseScope,
+	scopeLabel,
+	entryStage,
+	SERVICE_STAGE_LABELS,
+	type ServiceStage,
 } from "century-nit-shared";
 
 
@@ -239,6 +246,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// The two case-level sheets: assignment (the one place a handler is set)
 	// and history (the one place notes are read and written).
 	const [assignOpen, setAssignOpen] = useState(false);
+	const [offerStages, setOfferStages] = useState<ServiceStage[] | null>(null);
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [teamOpen, setTeamOpen] = useState(false);
 
@@ -279,16 +287,27 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		: app.depositPaid || stageIndex >= stageIdx("school_submission");
 	const visaOpen = unlocks ? unlocks.visa : showVisa || hasAdmitted;
 	const travelOpen = unlocks ? unlocks.travel_assistance : showTravel || app.visaStage === "complete";
-	const tabs: { id: TabId; label: string; locked: boolean; hint?: string }[] = [
+	// The accepted plan. A chapter it does not include is "off": struck in the
+	// spine, not locked — the client never bought it. Null (no plan accepted
+	// yet, or a legacy case) leaves every chapter on.
+	const scope = app.scopeStages ? normaliseScope(app.scopeStages) : null;
+	const off = (st: "admissions" | "visa" | "departure") => scope != null && !scope.includes(st);
+	const tabs: { id: TabId; label: string; locked: boolean; hint?: string; off?: boolean }[] = [
 		{ id: "overview", label: "Overview", locked: false },
 		{ id: "consultation", label: "Consultation", locked: !consultation && !app.consultationId, hint: "Opened from a consultation" },
 		{ id: "enrolment", label: "Enrolment", locked: !enrolOpen, hint: "Unlocks after the assessment" },
-		{ id: "application", label: "Applications", locked: !applicationOpen, hint: "Unlocks once the deposit is paid" },
-		{ id: "visa", label: "Visa", locked: !visaOpen, hint: "Unlocks on the first admission" },
-		{ id: "travel", label: "Departure", locked: !travelOpen, hint: "Unlocks once the visa is approved" },
+		{ id: "application", label: "Applications", locked: !applicationOpen || off("admissions"), off: off("admissions"), hint: "Unlocks once the deposit is paid" },
+		{ id: "visa", label: "Visa", locked: !visaOpen || off("visa"), off: off("visa"), hint: "Unlocks on the first admission" },
+		{ id: "travel", label: "Departure", locked: !travelOpen || off("departure"), off: off("departure"), hint: "Unlocks once the visa is approved" },
 		{ id: "payments", label: "Billing", locked: false },
 		{ id: "documents", label: "Documents", locked: false },
 	];
+	// The plan, for the header: scope · entry · track.
+	const planLine = scope
+		? `${scopeLabel(scope)} · entered at ${SERVICE_STAGE_LABELS[entryStage(scope)]} · ${scope.includes("admissions") ? (app.fundingTrack && app.fundingTrack !== "undecided" ? app.fundingTrack : "track not chosen") : "no track"}`
+		: app.plannedStages
+			? `Recommended: ${scopeLabel(app.plannedStages)} · not accepted yet`
+			: null;
 	const isLocked = (id: TabId) => tabs.find((t) => t.id === id)?.locked ?? false;
 	// A locked request (e.g. the Visa queue opening a case whose visa has not
 	// started) falls back to the chapter the case is actually in.
@@ -367,8 +386,15 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// Normalise through stageIdx — a legacy payment_execution row resolves to
 	// travel_assistance here instead of falling back to the first stage.
 	const coarseStage = (JOURNEY_STAGES[Math.max(0, stageIdx(app.stage))] ?? JOURNEY_STAGES[0]) as JourneyStage;
-	const nextStage = JOURNEY_STAGES[JOURNEY_STAGES.indexOf(coarseStage) + 1] as JourneyStage | undefined;
-	const advanceBlock = nextStage ? canAdvanceToStage(coarseStage, nextStage, app) : null;
+	// What the case can do next, from the same function the server's advance
+	// handler runs — plan-aware, so a button here is never one the API refuses.
+	const step = nextStepFor({
+		scopeStages: app.scopeStages ?? null,
+		stage: coarseStage,
+		checks: { ...app, visaDone: app.visaStage === "complete" && app.visaOutcome === "approved", hasAdmitted: hasAdmitted || (scope != null && !scope.includes("admissions")), agencySettled: Boolean(app.agencySettled) },
+	});
+	const nextStage: JourneyStage | undefined = step.kind === "advance" ? step.to : step.kind === "complete" ? "completed" : step.kind === "blocked" ? step.to : undefined;
+	const advanceBlock = step.kind === "blocked" ? step.reason : null;
 	const mayAdvance =
 		canAssignWork ||
 		app.assignedStaffEmail === opsUser?.email ||
@@ -377,27 +403,49 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// it only when there is nothing to do; when there is, the task explains it.
 	const blockedBy =
 		nextStage && advanceBlock && mayAdvance && app.proceedStatus === "accepted" && !pendingHandoff
-			? `${JOURNEY_STAGE_LABELS[nextStage]} is not open yet — ${advanceBlock.replace(/^Cannot (advance to [^:]+|mark complete): /, "")}`
+			? `${nextStage === "completed" ? "The case cannot close yet" : `${JOURNEY_STAGE_LABELS[nextStage]} is not open yet`} — ${advanceBlock}`
 			: null;
+	// The stage the plan stops short of — the thing to sell. Shown beside
+	// whatever the case can do at its exit, never instead of it.
+	const offerAction =
+		step.kind !== "done" && step.offer && mayAdvance ? (
+			<button type="button" className="btn btn--sm btn--ghost" onClick={() => setOfferStages(step.offer === "visa" ? ["visa"] : ["visa", "departure"])}>
+				Offer {SERVICE_STAGE_LABELS[step.offer]} →
+			</button>
+		) : null;
 	if (nextStage && !advanceBlock && mayAdvance) {
+		const completing = nextStage === "completed";
 		nextActions.push({
 			id: "advance",
-			title: `Ready to advance to ${JOURNEY_STAGE_LABELS[nextStage]}`,
-			detail: `Every requirement for ${JOURNEY_STAGE_LABELS[coarseStage]} is met.`,
+			title: completing ? "Ready to complete the case" : `Ready to open ${JOURNEY_STAGE_LABELS[nextStage]}`,
+			detail: completing
+				? `The plan ends at ${JOURNEY_STAGE_LABELS[coarseStage]} — its work is done and the service fee is settled.${step.kind === "complete" && step.offer ? ` The client could still add ${SERVICE_STAGE_LABELS[step.offer]}.` : ""}`
+				: `Every requirement for ${JOURNEY_STAGE_LABELS[coarseStage]} is met.`,
 			tone: "done",
 			action: (
-				<button
-					type="button"
-					className="btn btn--sm btn--primary"
-					onClick={() =>
-						void setApplicationStage(app.appId, nextStage)
-							.then(() => flash(`Advanced to ${JOURNEY_STAGE_LABELS[nextStage]}.`))
-							.catch((e) => fail(e, "Could not advance the case"))
-					}
-				>
-					Advance →
-				</button>
+				<span style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+					{offerAction}
+					<button
+						type="button"
+						className="btn btn--sm btn--primary"
+						onClick={() =>
+							void setApplicationStage(app.appId, nextStage)
+								.then(() => flash(completing ? "Case completed." : `Opened ${JOURNEY_STAGE_LABELS[nextStage]}.`))
+								.catch((e) => fail(e, completing ? "Could not complete the case" : "Could not advance the case"))
+						}
+					>
+						{completing ? "Complete the case ✓" : `Open ${JOURNEY_STAGE_LABELS[nextStage]} →`}
+					</button>
+				</span>
 			),
+		});
+	} else if (step.kind === "blocked" && step.offer && offerAction && app.proceedStatus === "accepted") {
+		// At the exit but not done: the offer is still the one thing to do.
+		nextActions.push({
+			id: "offer",
+			title: `The plan stops before ${SERVICE_STAGE_LABELS[step.offer]}`,
+			detail: `${JOURNEY_STAGE_LABELS[coarseStage]} is the last chapter on the plan. The client can add the next stage from the portal, or you can record it here.`,
+			action: offerAction,
 		});
 	}
 	for (const task of tasksForApplication(app, { handoffs, travelRequests, invoices: allInvoices })) {
@@ -483,6 +531,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				]}
 				contact={{ email: app.email, phone: app.phone }}
 				extra={[
+					...(planLine ? [{ label: "Plan", value: planLine }] : []),
 					{ label: "Country", value: app.country || "—" },
 					{ label: "Programme", value: app.program || "—" },
 				]}
@@ -552,6 +601,8 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				</form>
 			</Sheet>
 
+			<PackageSheet app={app} open={offerStages != null} addStages={offerStages ?? undefined} onClose={() => setOfferStages(null)} onDone={flash} />
+
 			<CaseSpine
 				chapters={([
 					{ id: "consultation", numeral: "I" },
@@ -561,7 +612,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					{ id: "travel", numeral: "V" },
 				] as const).map((c) => {
 					const t = tabs.find((x) => x.id === c.id)!;
-					return { id: c.id as TabId, numeral: c.numeral, label: t.label, locked: t.locked, hint: t.hint };
+					return { id: c.id as TabId, numeral: c.numeral, label: t.label, locked: t.locked, hint: t.hint, off: t.off };
 				})}
 				current={current}
 				nowId={stageTab}

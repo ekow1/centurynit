@@ -123,6 +123,11 @@ export type AssessmentResult = {
 	recStages?: string[];
 	/** A visa or departure entry: proceed as chosen, widen the scope, or not viable. */
 	verdict?: "proceed" | "widen" | "not_viable";
+	/** A visa entry's findings — facts the verdict points at. */
+	sponsorLicensed?: boolean;
+	fundsMeetRule?: boolean;
+	/** Concluded with the entry evidence not yet verified; the reason goes on the case. */
+	overrideReason?: string;
 };
 
 export interface MockConsultation {

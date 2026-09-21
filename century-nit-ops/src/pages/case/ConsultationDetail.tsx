@@ -9,7 +9,8 @@ import { HistorySheet, type HistoryEvent } from "./HistorySheet";
 import { CaseTabs, useCaseTab } from "./CaseTabs";
 import type { MockConsultation } from "century-nit-core/ops";
 import { documentsApi, bookingsApi, ApiError } from "century-nit-core/api";
-import { SERVICE_INTENT_LABELS, SERVICE_STAGES, SERVICE_STAGE_LABELS, intentScope, normaliseScope, scopeLabel, type ApplicantDocument, type ServiceIntent, type ServiceStage } from "century-nit-shared";
+import { ENTRY_EVIDENCE_IDS, SERVICE_INTENT_LABELS, SERVICE_STAGES, SERVICE_STAGE_LABELS, intentScope, normaliseScope, scopeLabel, type ApplicantDocument, type ServiceIntent, type ServiceStage } from "century-nit-shared";
+import { documentTypesFor } from "century-nit-core/content";
 import { getConsultationActivity, type ConsultationActivityEvent } from "../../lib/api";
 import { CaseHeader, StatusPill, type NextAction } from "century-nit-core/ui";
 import { CaseTodo } from "./CaseTodo";
@@ -108,6 +109,11 @@ export function ConsultationDetail({
 	// A visa or departure entry is judged on the offer and the money, not on
 	// eligibility: proceed as chosen, widen the scope, or not viable.
 	const [verdict, setVerdict] = useState<"proceed" | "widen" | "not_viable">("proceed");
+	// Findings on a visa entry — facts the verdict points at, not prose.
+	const [sponsorLicensed, setSponsorLicensed] = useState<boolean | null>(null);
+	const [fundsMeetRule, setFundsMeetRule] = useState<boolean | null>(null);
+	// Concluding with the entry evidence not yet verified in the vault; recorded on the case.
+	const [overrideReason, setOverrideReason] = useState("");
 	const [isSubmitted, setIsSubmitted] = useState(false);
 	const [showReschedule, setShowReschedule] = useState(false);
 	const [realDocs, setRealDocs] = useState<ApplicantDocument[]>([]);
@@ -158,6 +164,9 @@ export function ConsultationDetail({
 		const intent = (consultation.entryIntent || "full") as ServiceIntent;
 		setRecStages(normaliseScope(consultation.assessmentResult?.recStages?.length ? consultation.assessmentResult.recStages : intentScope(intent)));
 		setVerdict(consultation.assessmentResult?.verdict ?? "proceed");
+		setSponsorLicensed(consultation.assessmentResult?.sponsorLicensed ?? null);
+		setFundsMeetRule(consultation.assessmentResult?.fundsMeetRule ?? null);
+		setOverrideReason("");
 		setIsSubmitted(false);
 		setShowReschedule(false);
 		setEditingMeetingUrl(false);
@@ -196,7 +205,25 @@ export function ConsultationDetail({
 		const bringsOffer = consultation.entryIntent === "visa" || consultation.entryIntent === "departure";
 		// For an entry that brings an offer, the verdict drives the outcome everything else reads.
 		const finalOutcome = bringsOffer ? (verdict === "not_viable" ? "Not Eligible" : "Eligible") : outcome;
-		const result = { outcome: finalOutcome, notes, recCountry, recUniversity, recProgram, recPackage, recStages, ...(bringsOffer ? { verdict } : {}) };
+		// No track on a plan without Admissions — the track prices that stage only.
+		const packageForPlan = recStages.includes("admissions") ? recPackage : "undecided";
+		const result = {
+			outcome: finalOutcome,
+			notes,
+			recCountry,
+			recUniversity,
+			recProgram,
+			recPackage: packageForPlan,
+			recStages,
+			...(bringsOffer
+				? {
+						verdict,
+						...(sponsorLicensed != null ? { sponsorLicensed } : {}),
+						...(fundsMeetRule != null ? { fundsMeetRule } : {}),
+						...(overrideReason.trim() ? { overrideReason: overrideReason.trim() } : {}),
+					}
+				: {}),
+		};
 		const res = await completeConsultationAssessment(consultation.id, result);
 		setCompletedResult(res.consultation.assessmentResult ?? result);
 		setIsSubmitted(true);
@@ -1023,21 +1050,84 @@ export function ConsultationDetail({
 					)}
 					{(consultation.entryIntent === "visa" || consultation.entryIntent === "departure") ? (
 					<div style={{ marginBottom: "1.25rem" }}>
-						<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.5rem" }}>
-							Verdict · on the {consultation.entryIntent === "visa" ? "offer and the finances" : "visa and the offer"}
-						</label>
-						<div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.5rem" }}>
-							{([
-								["proceed", "Proceed as chosen", "Offer sound, funds in place. The plan stands as the client picked it."],
-								["widen", "Widen the scope", "Offer sound but weak, or funds short. Recommend adding a stage below."],
-								["not_viable", "Not viable", "Offer unverifiable, sponsor unlicensed, or funds far short with no route."],
-							] as const).map(([id, title, hint]) => (
-								<button key={id} type="button" className={`btn ${verdict === id ? "btn--primary" : "btn--ghost"}`} style={{ textAlign: "left", display: "block", padding: "0.7rem 0.8rem", textTransform: "none", letterSpacing: 0 }} onClick={() => setVerdict(id)} aria-pressed={verdict === id}>
-									<span style={{ display: "block", fontWeight: 700 }}>{title}</span>
-									<span style={{ display: "block", fontSize: "var(--text-xs)", opacity: 0.8, marginTop: "0.2rem", lineHeight: 1.4 }}>{hint}</span>
-								</button>
-							))}
-						</div>
+						{(() => {
+							// The gate is the vault's own status: each required evidence
+							// document, with its best upload. Proceed / Widen unlock when all
+							// are verified — or when the consultant records why not.
+							const entry = consultation.entryIntent as "visa" | "departure";
+							const required = documentTypesFor(ENTRY_EVIDENCE_IDS[entry]);
+							const statusOf = (id: string) => {
+								const rank = { VERIFIED: 3, UPLOADED: 2, REJECTED: 1, PENDING_UPLOAD: 0 } as Record<string, number>;
+								return realDocs.filter((d) => d.documentType === id).sort((a, b) => (rank[b.status] ?? 0) - (rank[a.status] ?? 0))[0]?.status ?? null;
+							};
+							const rows = required.map((d) => ({ ...d, status: statusOf(d.id) }));
+							const allVerified = rows.every((r) => r.status === "VERIFIED");
+							const canConclude = allVerified || overrideReason.trim().length > 0;
+							return (
+								<>
+									<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.5rem" }}>
+										Entry evidence · from the vault
+									</label>
+									<div className="cn-detail__rows" style={{ marginBottom: "0.9rem" }}>
+										{rows.map((r) => (
+											<div key={r.id} className="cn-detail__row">
+												<span>
+													{r.name}
+													<span className="cn-detail__row-note" style={{ display: "block" }}>{r.hint}</span>
+												</span>
+												<span className="mono text-xs" style={{ color: r.status === "VERIFIED" ? "var(--ok, #0d7a3f)" : r.status === "UPLOADED" ? "var(--warn, #92400e)" : "var(--bad, #b91c1c)" }}>
+													{r.status === "VERIFIED" ? "✓ verified" : r.status === "UPLOADED" ? "uploaded · verify in Documents" : r.status === "REJECTED" ? "rejected" : "not uploaded"}
+												</span>
+											</div>
+										))}
+									</div>
+									{entry === "visa" && (
+										<>
+											<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.5rem" }}>Findings</label>
+											<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginBottom: "0.9rem" }}>
+												{([
+													["sponsorLicensed", "Sponsor licensed", "The school is on the register for this visa route", sponsorLicensed, setSponsorLicensed],
+													["fundsMeetRule", "Funds meet the rule", "Maintenance + first-year tuition, held for the required period", fundsMeetRule, setFundsMeetRule],
+												] as const).map(([id, title, hint, val, set]) => (
+													<div key={id} style={{ border: "1px solid var(--border-light)", padding: "0.6rem 0.75rem" }}>
+														<p style={{ fontWeight: 700, margin: 0, fontSize: "var(--text-sm)" }}>{title}</p>
+														<p className="muted text-xs" style={{ margin: "0.15rem 0 0.45rem" }}>{hint}</p>
+														<div style={{ display: "flex", gap: "0.4rem" }}>
+															<button type="button" className={`btn btn--sm ${val === true ? "btn--primary" : "btn--ghost"}`} onClick={() => set(true)} aria-pressed={val === true}>Yes</button>
+															<button type="button" className={`btn btn--sm ${val === false ? "btn--primary" : "btn--ghost"}`} onClick={() => set(false)} aria-pressed={val === false}>No</button>
+														</div>
+													</div>
+												))}
+											</div>
+										</>
+									)}
+									{!allVerified && (
+										<div style={{ marginBottom: "0.9rem" }}>
+											<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.35rem" }}>Conclude without verified evidence · why · goes on the case</label>
+											<input className="input" style={{ width: "100%", padding: "0.6rem" }} value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="e.g. Original CAS sighted in office, scan to follow" maxLength={500} />
+										</div>
+									)}
+									<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.5rem" }}>
+										Verdict · on the {entry === "visa" ? "offer and the finances" : "visa and the offer"}
+									</label>
+									<div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.5rem" }}>
+										{([
+											["proceed", "Proceed as chosen", "Offer sound, funds in place. The plan stands as the client picked it."],
+											["widen", "Widen the scope", "Offer sound but weak, or funds short. Recommend adding a stage below."],
+											["not_viable", "Not viable", "Offer unverifiable, sponsor unlicensed, or funds far short with no route."],
+										] as const).map(([id, title, hint]) => {
+											const gated = id !== "not_viable" && !canConclude;
+											return (
+												<button key={id} type="button" className={`btn ${verdict === id ? "btn--primary" : "btn--ghost"}`} style={{ textAlign: "left", display: "block", padding: "0.7rem 0.8rem", textTransform: "none", letterSpacing: 0, opacity: gated ? 0.45 : 1 }} disabled={gated} title={gated ? "Verify the entry evidence in Documents, or say why you are concluding without it" : undefined} onClick={() => setVerdict(id)} aria-pressed={verdict === id}>
+													<span style={{ display: "block", fontWeight: 700 }}>{title}</span>
+													<span style={{ display: "block", fontSize: "var(--text-xs)", opacity: 0.8, marginTop: "0.2rem", lineHeight: 1.4 }}>{gated ? "Disabled — evidence not yet verified" : hint}</span>
+												</button>
+											);
+										})}
+									</div>
+								</>
+							);
+						})()}
 						<p className="muted text-xs" style={{ marginTop: "0.4rem" }}>
 							The plan can only be widened from what the client chose — narrowing is theirs to do in the builder.
 							{" "}Can't verify the {consultation.entryIntent === "visa" ? "offer" : "visa"}? Don't stall the case: choose <b>Widen</b> and add {consultation.entryIntent === "visa" ? "Admissions — the client enters there instead and the offer is simply not used" : "Visa (and Admissions if the offer is doubtful too) — the client enters earlier"}. <b>Not viable</b> closes the consultation with no case.
@@ -1105,8 +1195,9 @@ export function ConsultationDetail({
 								<option value="MSc Artificial Intelligence" />
 							</datalist>
 						</div>
+						{recStages.includes("admissions") && (
 						<div>
-							<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.35rem" }}>Recommended Package</label>
+							<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.35rem" }}>Recommended Package · prices the Admissions stage</label>
 							<select value={recPackage} onChange={(e) => setRecPackage(e.target.value)} className="input" style={{ width: "100%", padding: "0.6rem" }}>
 								<option value="undecided">Undecided</option>
 								<option value="non_scholarship">Non-Scholarship</option>
@@ -1114,6 +1205,7 @@ export function ConsultationDetail({
 								<option value="hybrid">Hybrid</option>
 							</select>
 						</div>
+						)}
 						<div>
 							<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.35rem" }}>Recommended Plan · {scopeLabel(recStages)}</label>
 							<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>

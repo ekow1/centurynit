@@ -5,7 +5,7 @@ import { applicantsApi } from "century-nit-core/api";
 import { useCases } from "../../../hooks/useCases";
 
 import type { MockApplication, MockConsultation } from "century-nit-core/ops";
-import type { ApplicantProfile } from "century-nit-shared";
+import { SERVICE_STAGE_LABELS, entryStage, scopeLabel, type ApplicantProfile } from "century-nit-shared";
 
 import type { Flash, Fail } from "./types";
 import { branchName } from "century-nit-core/ops";
@@ -138,7 +138,17 @@ export function OverviewTab({ app, consultation, canWork, flash, fail }: { app: 
 							</div>
 							<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
 								<div><p className="muted text-xs">Branch</p><p>{branchName(app.branch)}</p></div>
-								<div><p className="muted text-xs">Funding Track</p><p>{app.fundingTrack || "Not specified"}</p></div>
+								<div>
+									<p className="muted text-xs">Plan</p>
+									<p>
+										{app.scopeStages
+											? `${scopeLabel(app.scopeStages)} · entered at ${SERVICE_STAGE_LABELS[entryStage(app.scopeStages)]}`
+											: app.plannedStages
+												? `Recommended: ${scopeLabel(app.plannedStages)} · not accepted yet`
+												: "Not chosen"}
+									</p>
+								</div>
+								<div><p className="muted text-xs">Funding Track</p><p>{app.fundingTrack === "undecided" ? "None — no Admissions on the plan" : app.fundingTrack || "Not specified"}</p></div>
 								<div><p className="muted text-xs">Target Schools</p><p>{app.targetSchoolCount ? `${app.targetSchoolCount} institution${app.targetSchoolCount === 1 ? "" : "s"}` : "Not specified"}</p></div>
 								<div><p className="muted text-xs">Submitted Date</p><p>{app.submittedDate}</p></div>
 								{app.applicationConsent && <div><p className="muted text-xs">Application Consent</p><p>{app.applicationConsent.decision === "continue" ? "✓ Continuing" : app.applicationConsent.decision}</p></div>}

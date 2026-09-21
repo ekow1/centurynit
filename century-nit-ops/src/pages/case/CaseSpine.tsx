@@ -14,7 +14,7 @@ import type { TabId } from "./tabs/types";
  * is in the Tab order.
  */
 
-type ChapterTab = { id: TabId; numeral: string; label: string; locked: boolean; hint?: string };
+type ChapterTab = { id: TabId; numeral: string; label: string; locked: boolean; hint?: string; /** Not on the client's plan — struck, not locked; opens Enrolment where it can be added. */ off?: boolean };
 type ViewTab = { id: TabId; label: string; note?: string | null };
 
 export function CaseSpine({
@@ -47,7 +47,7 @@ export function CaseSpine({
 	// The selectable tabs, in order — locked chapters are skipped.
 	const selectable: TabId[] = [
 		overview.id,
-		...chapters.filter((c) => !c.locked).map((c) => c.id),
+		...chapters.filter((c) => !c.locked && !c.off).map((c) => c.id),
 		...views.map((v) => v.id),
 	];
 	const onKeyDown = (e: React.KeyboardEvent) => {
@@ -85,11 +85,11 @@ export function CaseSpine({
 			{view(overview)}
 			<span className="cn-spine__gap" aria-hidden />
 			{chapters.map((c, i) => {
-				const isNow = c.id === nowId && !c.locked;
+				const isNow = c.id === nowId && !c.locked && !c.off;
 				const isOn = c.id === current;
 				// A closed case has passed every chapter — all show ✓ even though
 				// `nowId` resolves to a utility cell (payments) rather than V.
-				const passed = done || (!c.locked && nowIdx >= 0 && i < nowIdx);
+				const passed = !c.off && (done || (!c.locked && nowIdx >= 0 && i < nowIdx));
 				const link = i > 0 && <span className={`cn-track__link${passed || (done || (nowIdx >= 0 && i <= nowIdx)) ? " cn-track__link--done" : ""}`} aria-hidden />;
 				return (
 					<span key={c.id} className="cn-track__node">
@@ -98,24 +98,25 @@ export function CaseSpine({
 							type="button"
 							role="tab"
 							aria-selected={isOn}
-							aria-disabled={c.locked}
+							aria-disabled={c.locked && !c.off}
 							tabIndex={isOn ? 0 : -1}
 							ref={setRef(c.id)}
-							title={c.locked ? c.hint : isNow ? "The chapter the case is in" : undefined}
+							title={c.off ? "Not on the client's plan — open Enrolment to add it" : c.locked ? c.hint : isNow ? "The chapter the case is in" : undefined}
 							className={[
 								"cn-chip",
 								passed ? "cn-chip--passed" : "",
 								isNow ? "cn-chip--now" : "",
 								isOn ? "cn-chip--on" : "",
-								c.locked ? "cn-chip--locked" : "",
+								c.locked && !c.off ? "cn-chip--locked" : "",
+								c.off ? "cn-chip--off" : "",
 							]
 								.filter(Boolean)
 								.join(" ")}
-							onClick={() => !c.locked && onChange(c.id)}
+							onClick={() => (c.off ? onChange("enrolment") : !c.locked && onChange(c.id))}
 						>
 							<b>
-								{passed ? "✓ " : isNow ? "■ " : ""}
-								{c.numeral} {c.label}
+								{passed ? "✓ " : isNow ? "■ " : c.off ? "— " : ""}
+								{c.off ? c.label : `${c.numeral} ${c.label}`}
 							</b>
 						</button>
 					</span>

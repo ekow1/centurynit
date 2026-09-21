@@ -1,7 +1,7 @@
 import { schoolApplicationSchema } from "./school.js";
 import { z } from "zod";
 import { STAGE_LABELS } from "../labels.js";
-import { serviceStageSchema } from "../stages.js";
+import { entryJourneyStage, normaliseScope, serviceStageForJourney, serviceStageSchema, type ServiceStage } from "../stages.js";
 
 /**
  * Applicant journey. Consultations (cases), applications, and the applicant
@@ -131,6 +131,63 @@ export function travelBlockReason(status: string | null | undefined, prefix: str
 		default:
 			return `${prefix}: the applicant has not decided on travel assistance.`;
 	}
+}
+
+/**
+ * What a case can do next, given its plan. The server's advance handler,
+ * the ops case's next-action and the portal all ask this — so nobody
+ * offers a button the server refuses.
+ *
+ *  - `advance`  the next journey stage is on the plan and its gate is open
+ *  - `blocked`  it is on the plan but its gate is shut (with the reason)
+ *  - `complete` the plan's exit stage is done and the fee settled
+ *  - `done`     the case is closed
+ *
+ * `offer` names the stage the plan stops short of — the thing to sell —
+ * whenever the case is sitting at its exit.
+ */
+export type NextStep =
+	| { kind: "done" }
+	| { kind: "advance"; to: JourneyStage; offer: ServiceStage | null }
+	| { kind: "blocked"; to: JourneyStage; reason: string; offer: ServiceStage | null }
+	| { kind: "complete"; offer: ServiceStage | null };
+
+export function nextStepFor(input: {
+	scopeStages: readonly string[] | null | undefined;
+	stage: JourneyStage;
+	checks: NonNullable<Parameters<typeof canAdvanceToStage>[2]> & { visaDone?: boolean; agencySettled?: boolean; hasAdmitted?: boolean };
+}): NextStep {
+	const { stage, checks } = input;
+	if (stage === "completed") return { kind: "done" };
+	const scope = normaliseScope(input.scopeStages ?? null);
+	const idx = JOURNEY_STAGES.indexOf(stage);
+	const next = JOURNEY_STAGES[idx + 1];
+	if (!next) return { kind: "done" };
+
+	// A plan that enters after Admissions waits at document_verification for
+	// its first milestone; the payment opens the entry stage, not an advance.
+	if (stage === "document_verification" && !scope.includes("admissions")) {
+		const to = entryJourneyStage(scope);
+		return { kind: "blocked", to, reason: `${JOURNEY_STAGE_LABELS[to]} opens when the plan's first milestone is paid.`, offer: null };
+	}
+
+	const needed = serviceStageForJourney(next);
+	if (needed && !scope.includes(needed)) {
+		// The plan stops here. Its exit is done → complete; the next stage is
+		// the one to offer either way.
+		const exit = scope[scope.length - 1];
+		const exitDone = exit === "visa" ? Boolean(checks.visaDone) : exit === "admissions" ? Boolean(checks.hasAdmitted) : false;
+		if (!exitDone) {
+			return { kind: "blocked", to: "completed", reason: exit === "visa" ? "the visa is not approved yet" : "no offer has been recorded yet", offer: needed };
+		}
+		if (!checks.agencySettled) {
+			return { kind: "blocked", to: "completed", reason: "the service fee is not settled", offer: needed };
+		}
+		return { kind: "complete", offer: needed };
+	}
+
+	const reason = canAdvanceToStage(stage, next, checks);
+	return reason ? { kind: "blocked", to: next, reason: reason.replace(/^Cannot (advance to [^:]+|advance|mark complete): /, ""), offer: null } : { kind: "advance", to: next, offer: null };
 }
 
 export function canAdvanceToStage(
@@ -407,6 +464,11 @@ export const assessmentResultSchema = z.object({
 	 * carries Eligible / Not Eligible for everything that reads it.
 	 */
 	verdict: z.enum(["proceed", "widen", "not_viable"]).optional(),
+	/** A visa entry's findings — facts the verdict can point at, not prose. */
+	sponsorLicensed: z.boolean().optional(),
+	fundsMeetRule: z.boolean().optional(),
+	/** Completing with the entry evidence not yet verified in the vault; goes on the case. */
+	overrideReason: z.string().max(500).optional(),
 });
 export type AssessmentResult = z.infer<typeof assessmentResultSchema>;
 

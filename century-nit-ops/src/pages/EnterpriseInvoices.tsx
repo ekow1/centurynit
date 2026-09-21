@@ -7,6 +7,7 @@ import { ApproveInvoiceSheet } from "./case/ApproveInvoiceSheet";
 import { CaseScaffold } from "./case/CaseScaffold";
 import { getInvoice, type ApiInvoice } from "../lib/api";
 import { fmtBoth, fmtGhs, fmtUsd, money } from "./currency";
+import { coveredLines, lineDue } from "../lib/invoiceLines";
 import {
 	INVOICE_STATUS_LABELS,
 	invoiceAgeDays,
@@ -14,7 +15,6 @@ import {
 	invoicePaid,
 	type Invoice,
 	type InvoiceStatus,
-	type OpsInvoiceLine,
 } from "century-nit-core/ops";
 
 /**
@@ -31,40 +31,6 @@ function scopeOf(inv: Invoice): string | null {
 	if (inv.type !== "Agency") return null;
 	const m = /·\s*(Full journey|Admissions \+ Visa|Admissions only)\s*$/.exec(inv.note ?? "");
 	return m ? m[1] : null;
-}
-
-const TRIGGER_WORDS: Record<string, string> = {
-	acceptance: "on acceptance",
-	offer: "on the first offer",
-	visa_open: "when the visa file opens",
-	visa_approved: "on visa approval",
-	arrival: "on arrival",
-	scheduled: "scheduled",
-};
-
-/** Payments cover lines in position order — a line is covered once the running total up to it is paid. */
-function coveredLines(lines: OpsInvoiceLine[], paid: number): { line: OpsInvoiceLine; covered: boolean }[] {
-	const out: { line: OpsInvoiceLine; covered: boolean }[] = [];
-	let cum = 0;
-	for (const line of lines) {
-		cum += line.amount;
-		out.push({ line, covered: paid >= cum - 0.005 });
-	}
-	return out;
-}
-
-/** What a milestone line is waiting for, or when it fell due, or that it is paid. */
-function lineDue(l: OpsInvoiceLine, covered: boolean): { text: string; tone: "paid" | "late" | "due" | "waiting" } | null {
-	if (!l.dueOn && !l.dueAt) return null;
-	if (covered) return { text: "paid", tone: "paid" };
-	if (l.dueAt) {
-		const at = new Date(l.dueAt);
-		const days = Math.floor((Date.now() - at.getTime()) / 86_400_000);
-		const when = at.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-		if (days > 0) return { text: `due ${when} · ${days} d late`, tone: "late" };
-		return { text: `due ${when}`, tone: "due" };
-	}
-	return { text: `waiting · ${TRIGGER_WORDS[l.dueOn ?? ""] ?? l.dueOn}`, tone: "waiting" };
 }
 
 const STATUS_CHIPS: { id: "all" | InvoiceStatus; label: string; strong?: boolean }[] = [

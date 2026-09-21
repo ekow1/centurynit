@@ -209,12 +209,14 @@ export async function canAccessConversation(
 	}
 	// Consultation-linked: delegate to assigned-officer / coordinator visibility.
 	if (conv.linkedEntityType === "consultation" && conv.linkedEntityId) {
-		// Coarse: managers/coordinators/super_admin see all; consultants must be
-		// a participant. (Refined in a follow-up via canSeeConsultation if needed.)
+		// Coarse: managers/coordinators and the admin tier see all; consultants
+		// must be a participant. (Refined in a follow-up via canSeeConsultation
+		// if needed.)
 		return (
 			staff.role === "manager" ||
 			staff.role === "coordinator" ||
-			staff.role === "super_admin"
+			staff.role === "super_admin" ||
+			staff.role === "admin"
 		);
 	}
 	return false;

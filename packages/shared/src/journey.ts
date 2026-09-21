@@ -317,11 +317,11 @@ export function emptyJourney(): DerivedJourney {
 /* Who may own which stage */
 
 /**
- * Roles allowed to be assigned as the handler of each stage. There are no
- * dedicated visa/travel roles yet, so the service stages are open to the
- * consultant tier; the plan chapter belongs to finance. Roles absent from a
- * list (customer_service, admin, super_admin) never own casework. They
- * triage, invite and configure.
+ * Legacy roster table, kept for reference — the live check is `canOwnStage`,
+ * which reads the `own:*` capability from the role's permission list (the
+ * seeded `ops_roles` row, else the built-in defaults). The admin tier
+ * (super_admin, manager, admin) holds those capabilities and can hold seats
+ * now, alongside the consultant tier.
  */
 export const STAGE_ASSIGNABLE_ROLES: Record<JourneyStage | "consultation", readonly string[]> = {
 	consultation: ["consultant", "coordinator", "manager"],

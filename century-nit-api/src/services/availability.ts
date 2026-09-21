@@ -347,10 +347,11 @@ export async function branchAvailability(input: {
           .where(
             and(
               eq(opsUsers.active, true),
-              // Caseload roles + super_admin: in a small team the super admin
-              // takes consultations too, and excluding them let the whole
-              // calendar grey out when they were the only active staff.
-              inArray(opsUsers.role, ["consultant", "coordinator", "manager", "super_admin"]),
+              // Caseload roles + the admin tier: in a small team the
+              // super_admin/admin take consultations too, and excluding them
+              // let the whole calendar grey out when they were the only
+              // active staff.
+              inArray(opsUsers.role, ["consultant", "coordinator", "manager", "super_admin", "admin"]),
             ),
           )
       ).map((c) => c.id);
@@ -488,9 +489,9 @@ export async function assignableEmployees(input: {
 		.where(
 			and(
 				eq(opsUsers.active, true),
-				// Only roles that carry a caseload; admin and finance do not.
-				// super_admin does — they consult in a small team.
-				inArray(opsUsers.role, ["consultant", "coordinator", "manager", "super_admin"]),
+				// Only roles that carry a caseload; finance does not.
+				// super_admin and admin do — they consult in a small team.
+				inArray(opsUsers.role, ["consultant", "coordinator", "manager", "super_admin", "admin"]),
 			),
 		);
 

@@ -729,6 +729,13 @@
                   "when": 1790400200000,
                   "tag": "0105_stage_fee_items",
                   "breakpoints": true
+            },
+            {
+                  "idx": 106,
+                  "version": "7",
+                  "when": 1790400300000,
+                  "tag": "0106_admin_case_work",
+                  "breakpoints": true
             }
       ]
 }

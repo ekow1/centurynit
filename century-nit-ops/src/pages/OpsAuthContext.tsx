@@ -83,7 +83,7 @@ export const ROLE_DESCRIPTIONS: Record<OpsRole, string> = {
 	finance:
 		"Owns the money. All invoices, balances, revenue tracking, and financial reporting.",
 	admin:
-		"Platform administration only. Users and roles, authentication, CMS and site content, system notifications, and configuration. No access to applicant case data.",
+		"Platform administration plus casework. Users and roles, authentication, CMS and site content, system notifications, and configuration — and like a manager, can take or be assigned a case.",
 };
 
 /* ─── Storage ─── */

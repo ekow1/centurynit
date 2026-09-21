@@ -161,6 +161,10 @@ export const ROLE_PERMISSIONS: Record<SystemRole, OpsModule[]> = {
 	],
 	admin: [
 		"system", "users", "auth", "cms", "lookups", "site", "notifications", "settings", "scheduling", "helpdesk", "chat",
+		// Casework the admin tier can hold: the case list, the applicant record,
+		// documents, consultations, appointments, and the visa/travel chapters.
+		"dashboard", "applications", "consultations", "applicants", "crm",
+		"documents", "visa", "travel", "appointments",
 	],
 };
 
@@ -232,7 +236,7 @@ export const ROLE_CAPABILITIES: Record<SystemRole, Capability[]> = {
 	customer_service: ["assign_work", "see_all_branches"],
 	consultant: ["own:consult", "own:apply", "own:visa", "own:depart", "issue_invoices"],
 	finance: ["see_all_branches", "edit_packages", "issue_invoices", "approve_schedules"],
-	admin: ["see_all_cases", "see_all_branches", "invite_staff", "manage_roles", "manage_clients", "manage_settings"],
+	admin: ["see_all_cases", "see_all_branches", "invite_staff", "manage_roles", "manage_clients", "manage_settings", "assign_work", "own:consult", "own:apply", "own:visa", "own:depart"],
 };
 
 /**

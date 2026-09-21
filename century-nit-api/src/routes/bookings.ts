@@ -962,9 +962,10 @@ bookingsRouter.openapi(
 		if (
 			staff.role !== "manager" &&
 			staff.role !== "coordinator" &&
-			staff.role !== "super_admin"
+			staff.role !== "super_admin" &&
+			staff.role !== "admin"
 		) {
-			throw new HttpError(403, "FORBIDDEN", "Only managers or coordinators can assign bookings");
+			throw new HttpError(403, "FORBIDDEN", "Only managers, coordinators or the admin tier can assign bookings");
 		}
 
 		const updated = await assignBooking({

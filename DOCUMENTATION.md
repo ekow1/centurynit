@@ -41,8 +41,12 @@ never drift apart.
 
 Everything of record is in one PostgreSQL database: cases, invoices,
 documents, messages, marketing, content. Both front ends are thin clients.
-They show what the API says and send back what the user does. The portal
-keeps a little per-browser convenience state (drafts, dismissed hints) and
+They show what the API says and send back what the user does. The fixed
+catalogue (branches, consultation types and durations, the assessment
+sections, the countries list) lives in a shared package all three apps
+quote, so the words and options can never drift between surfaces. The
+portal keeps a little per-browser convenience state (drafts, dismissed
+hints) and
 an offline fallback for the journey view, but nothing there is
 authoritative.
 
@@ -121,10 +125,10 @@ Everything hangs off one ladder: **six chapters**.
 
 | Chapter | What happens |
 |---|---|
-| **1: Consultation** | Client books online or in-person, picks a real slot, pays, meets the consultant, gets an eligibility assessment |
+| **1: Consultation** | Client books online or in-person, picks a real slot, pays, meets the consultant, gets a structured eligibility assessment across nine sections (personal, passport, education, employment, English proficiency, study preferences, finances, documents, review) |
 | **2: Enrolment** | Client confirms they want to proceed (or pauses or declines), picks a service package and payment plan, pays the 10% agency deposit |
 | **3: Applications** | Client chooses schools, pays the application fee, staff submit and track offers, client accepts one |
-| **4: Visa** | Client consents to start, pays the visa fee, the officer files and tracks it to a decision |
+| **4: Visa** | Client consents to start, pays the visa fee, the officer files and tracks it through its ladder (handler assigned, filing pending, biometrics, decision, complete) |
 | **5: Departure** | Travel help (yes, hold or no), the pre-departure fee milestone, a checklist, then official documents released |
 | **6: Complete** | Client departed; post-arrival instalments run as aftercare |
 
@@ -339,14 +343,21 @@ mentions, reactions) serves:
 
 - **The helpdesk**: client-to-staff threads, scoped to a case and chapter,
   with subject, category, priority, who it's waiting on, first-response
-  and resolution times, and a satisfaction rating when it closes.
+  and resolution times, and a satisfaction rating when it closes. Staff
+  can log a request on a client's behalf (a phone call or walk-in becomes
+  a tracked ticket), and a thread can be marked internal so it never
+  appears in the portal at all. Reopened requests are counted.
 - **The staff Communication Hub**: direct messages, group chats,
   mentions, reactions, attachments, presence, typing indicators.
 - **The client's Communication Center**: the portal's thread with their
   assigned staff plus the AI assistant.
 
 Threads can be escalated to managers, and staff keep a library of canned
-replies. When a client is offline, a reply is emailed to them, and their
+replies scoped to a branch or a stage with merge variables filled at send.
+Threads also carry system and action entries, so a status change or an
+assignment shows up in the conversation where it happened, and staff can
+drop internal notes that are filtered out of every client-facing read.
+When a client is offline, a reply is emailed to them, and their
 email reply lands back on the same conversation. Staff presence and typing
 are shown live as they happen.
 
@@ -369,7 +380,11 @@ Clients only ever see client-appropriate event kinds; staff-only signals
 never reach the portal. Each user controls their own matrix of which
 events arrive on which channels, and can set quiet hours in their own
 timezone so nothing pings overnight. Email never sends inside a web
-request; it's queued, so a failed send can never roll back a booking.
+request; it's queued, so a failed send can never roll back a booking. The
+lifecycle emails are a designed set: invitation, verification, one-time
+code, password reset, welcome, booking confirmation, consultant assigned,
+invoice raised, invoice reminder, document reviewed, school offer, and
+the receipts.
 
 The portal is push-driven: a live event stream tells it when stages,
 assignments, invoices or visa states change, so the client sees updates
@@ -476,7 +491,9 @@ minute of publishing.
 
 Every view keeps its state in the address bar (filters, tabs, open
 records), so links survive refresh and notifications deep-link to the
-exact task.
+exact task. A command palette (Ctrl+K, or just "/") jumps to any
+consultation, case or applicant, remembers recent records, and only
+offers what the signed-in role may open.
 
 - **Workspace**: the day's triage. Unassigned consultations, cases
   awaiting a handler, invoices to raise, documents to review, reschedule
@@ -491,10 +508,12 @@ exact task.
 - **Consultations**: booked sessions. Assign, refer to another branch,
   delegate and reclaim, assess, reschedule approvals, no-show and credit,
   comments, document requests, and the full activity history.
-- **Cases**: every engagement, list or board, with the full case file:
-  stages, chapter owners, package and plan, invoices, comments, documents,
-  visa and departure details, release override, post-arrival schedule, and
-  referral to another branch.
+- **Cases**: every engagement, list or board, opening on a per-chapter tab
+  strip (overview, consultation, enrolment, applications, visa, travel,
+  payments, documents) that lands on the chapter the client is in. The
+  case file carries stages, chapter owners, package and plan, invoices,
+  comments, documents, visa and departure details, release override,
+  post-arrival schedule, and referral to another branch.
 - **Clients, Leads**: records and the enquiry pipeline, which moves a
   lead through new, contacted, consultation booked, assessment complete,
   and converted or lost. Leads carry their source, and a lost lead records
@@ -561,8 +580,10 @@ done, current and locked.
   own reference number for chasing, proof that we submitted, and when an
   offer lands its terms are recorded: tuition, deposit and its due date,
   with the offer letter filed into the vault.
-- **Visa**: consent, the invoice, live tracking to the decision (a
-  refusal parks the case with a reapplication path).
+- **Visa**: consent, the invoice, live tracking up the ladder to the
+  decision, with each school's outcome one of admitted, waitlisted,
+  rejected or withdrawn (a refusal parks the case with a reapplication
+  path).
 - **Departure**: travel help (yes, hold or no), the fee milestone, the
   checklist, document release. Choosing travel help assigns a travel
   officer, and only then is the airline fare invoiced, separately: the

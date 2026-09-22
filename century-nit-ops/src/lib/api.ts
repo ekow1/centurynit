@@ -49,6 +49,23 @@ export async function apiFetch<T>(
 		} catch {
 			// non-JSON error body
 		}
+		/*
+		 * The API's MFA gates answer 403 on every business route when the
+		 * session owes enrolment (requireMfa) or a second-factor challenge
+		 * (requireAuth's OAuth gate). OpsRequireAuth normally redirects before
+		 * data calls fire — this catches the ones that slip past it (layout
+		 * hooks, a role changed mid-session), so the user lands on the remedy
+		 * screen instead of watching every request fail. A full navigation
+		 * also drops any stale sessionStorage state. The pathname guard keeps
+		 * the remedy pages' own calls from bouncing them back onto themselves.
+		 */
+		if (res.status === 403 && !location.pathname.startsWith("/mfa-")) {
+			if (code === "MFA_NOT_ENROLLED") {
+				location.assign("/mfa-setup");
+			} else if (code === "MFA_CHALLENGE_REQUIRED") {
+				location.assign("/mfa-challenge");
+			}
+		}
 		throw new ApiError(res.status, code, message);
 	}
 

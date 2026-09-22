@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, staffApi } from "century-nit-core/api";
 import type { InvitationPreview } from "century-nit-shared";
 import { useOpsAuth } from "./OpsAuthContext";
-import { AuthShell } from "./AuthShell";
+import { AuthShell, AuthContextCard, AuthStepper } from "./AuthShell";
 import { PasswordField, PASSWORD_MIN_LENGTH } from "./PasswordField";
 
 /**
@@ -154,19 +154,44 @@ export function AcceptInvite() {
 		);
 	}
 
+	const daysLeft = preview?.expiresAt
+		? Math.max(0, Math.ceil((new Date(preview.expiresAt).getTime() - Date.now()) / 86400000))
+		: null;
+
 	return (
-		<AuthShell>
+		<AuthShell
+			context={
+				<>
+					<AuthStepper
+						steps={[
+							{ label: "Invitation accepted", state: "done" },
+							{ label: preview?.hasExistingLogin ? "Confirm your password" : "Set your password", state: "on" },
+							{ label: "Set up two-factor", state: "todo" },
+							{ label: "You're in", state: "todo" },
+						]}
+					/>
+					<AuthContextCard
+						title="You're joining as"
+						fine={<>Link expires{daysLeft !== null ? ` in ${daysLeft} day${daysLeft === 1 ? "" : "s"}` : ""}.<br />Wrong person? Close the tab.</>}
+					>
+						<p>
+							<strong>{preview?.email}</strong><br />
+							{ROLE_LABEL[preview?.role ?? ""] ?? preview?.role}
+							{preview?.branch ? ` · ${preview.branch}` : ""}
+						</p>
+					</AuthContextCard>
+				</>
+			}
+			copy="Acceptance is recorded in the audit stream."
+		>
 			<div className="ops-login__head">
 				<span className="ops-login__badge">{preview?.organisation ?? "Invitation"}</span>
 				<h1 className="ops-login__title">
 					{preview?.hasExistingLogin ? "Join the team" : "Set your password"}
 				</h1>
 				<p className="ops-login__subtitle">
-					You have been invited as{" "}
-					<strong>{ROLE_LABEL[preview?.role ?? ""] ?? preview?.role}</strong>
-					{preview?.branch ? ` at ${preview.branch}` : ""}.
+					One password, then two-factor — the account activates when both are done.
 				</p>
-				<p className="ops-login__subtitle mono" style={{ fontSize: "var(--text-xs)" }}>{preview?.email}</p>
 			</div>
 
 			<form onSubmit={submit} className="ops-login__form">

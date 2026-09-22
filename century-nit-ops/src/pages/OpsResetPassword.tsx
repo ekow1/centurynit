@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, resetPassword } from "../lib/api";
-import { AuthShell } from "./AuthShell";
+import { AuthShell, AuthContextCard } from "./AuthShell";
 import { PasswordField, PASSWORD_MIN_LENGTH } from "./PasswordField";
 
 const LOCK_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
@@ -58,7 +58,16 @@ export function OpsResetPassword() {
 	}
 
 	return (
-		<AuthShell>
+		<AuthShell
+			context={
+				<AuthContextCard
+					title="Password reset"
+					fine={<>After the reset, sign in with the new<br />password and your usual second factor.</>}
+				>
+					<p>Resetting your password signs out your other sessions. Your two-factor setup is untouched.</p>
+				</AuthContextCard>
+			}
+		>
 			<div className="ops-login__head">
 				<h1 className="ops-login__title">Set a new password</h1>
 				<p className="ops-login__subtitle">

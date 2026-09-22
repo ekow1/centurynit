@@ -10,8 +10,9 @@ import {
 	type MfaEnrollmentStatus,
 } from "../lib/api";
 import { useOpsAuth, ROLE_HOME } from "./OpsAuthContext";
-import { AuthShell } from "./AuthShell";
+import { AuthShell, AuthContextCard, AuthStepper, maskEmail, type AuthStep } from "./AuthShell";
 import { PasswordField } from "./PasswordField";
+import { OtpInput } from "./OtpInput";
 
 /**
  * Two-factor enrolment — supports both TOTP and Email OTP.
@@ -40,6 +41,7 @@ type Step =
 	| "method"
 	| "manage"
 	| "totp-password"
+	| "totp-scan"
 	| "totp-verify"
 	| "totp-codes"
 	| "otp-password"
@@ -155,7 +157,7 @@ export function MfaSetup() {
 			if (result.totpURI) {
 				setTotpUri(result.totpURI);
 				setBackupCodes(result.backupCodes ?? []);
-				setStep("totp-verify");
+				setStep("totp-scan");
 			} else {
 				throw new Error(result.message ?? "Could not start TOTP setup");
 			}
@@ -260,22 +262,90 @@ export function MfaSetup() {
 	const eyebrow =
 		step === "method" ? "Security Setup"
 		: step === "manage" ? "Two-Factor Authentication"
-		: step === "totp-password" ? "Step 1 of 3 · Authenticator Setup"
-		: step === "totp-verify" ? "Step 2 of 3 · Scan & Verify"
-		: step === "totp-codes" ? "Step 3 of 3 · Backup Recovery"
-		: step === "otp-password" ? "Step 1 of 2 · Email OTP Setup"
-		: step === "otp-verify" ? "Step 2 of 2 · Verify Code"
+		: step === "totp-password" ? "Step 1 of 4 · Confirm password"
+		: step === "totp-scan" ? "Step 2 of 4 · Add authenticator"
+		: step === "totp-verify" ? "Step 3 of 4 · Verify it works"
+		: step === "totp-codes" ? "Step 4 of 4 · Backup codes"
+		: step === "otp-password" ? "Step 1 of 2 · Confirm password"
+		: step === "otp-verify" ? "Step 2 of 2 · Verify code"
 		: "Setup Complete";
 
 	const title =
 		step === "method" ? "Choose Your Security Method"
 		: step === "manage" ? "Two-factor is on"
+		: step === "totp-scan" ? "Scan with your app"
+		: step === "totp-verify" ? "Type the first code"
+		: step === "totp-codes" ? "Your only way back in"
 		: step.startsWith("totp") ? "Authenticator App"
 		: step.startsWith("otp") ? "Email One-Time Code"
 		: "You're All Set";
 
+	const stepper: AuthStep[] | null = (() => {
+		const mk = (labels: string[], idx: number): AuthStep[] =>
+			labels.map((label, i) => ({
+				label,
+				state: i < idx ? "done" : i === idx ? "on" : "todo",
+			}));
+		if (step.startsWith("totp")) {
+			const order = ["totp-password", "totp-scan", "totp-verify", "totp-codes"];
+			return mk(
+				["Confirm password", "Scan the code", "Verify it works", "Save backup codes"],
+				order.indexOf(step),
+			);
+		}
+		if (step.startsWith("otp")) {
+			const order = ["otp-password", "otp-verify"];
+			return mk(["Confirm password", "Verify code"], order.indexOf(step));
+		}
+		return null;
+	})();
+
+	function downloadCodes() {
+		const body = [
+			"Century NIT Operations — backup recovery codes",
+			`Account: ${opsUser?.email ?? ""}`,
+			`Generated: ${new Date().toLocaleString()}`,
+			"",
+			"Each code works once. Store this file somewhere safe —",
+			"it is the only copy; we cannot show these codes again.",
+			"",
+			...backupCodes.map((c, i) => `  ${String(i + 1).padStart(2, " ")}. ${c}`),
+		].join("\n");
+		const url = URL.createObjectURL(new Blob([body], { type: "text/plain" }));
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = "century-nit-ops-backup-codes.txt";
+		a.click();
+		URL.revokeObjectURL(url);
+	}
+
 	return (
-		<AuthShell>
+		<AuthShell
+			context={
+				stepper ? (
+					<>
+						<AuthStepper steps={stepper} />
+						<AuthContextCard
+							title="Why this is required"
+							fine={<>Any TOTP app works — 1Password, Google,<br />Microsoft, Authy.</>}
+						>
+							<p>Every staff account signs in with two factors. There is no skip.</p>
+						</AuthContextCard>
+					</>
+				) : (
+					<AuthContextCard
+						title={step === "manage" ? "Already enrolled" : "Two-factor authentication"}
+						fine={<>Enrolment and changes are recorded<br />with your device.</>}
+					>
+						<p>
+							{step === "manage"
+								? "Your second factor is active. Switch methods below — changing it asks for your password again."
+								: "Staff accounts require two factors to protect applicant records and financial data."}
+						</p>
+					</AuthContextCard>
+				)
+			}
+		>
 			<p className="invite-card__eyebrow">{eyebrow}</p>
 			<h1 id="mfa-title" className="ops-login__title" style={{ margin: "0 0 0.5rem" }}>{title}</h1>
 
@@ -376,10 +446,13 @@ export function MfaSetup() {
 				</>
 			)}
 
-			{/* TOTP: Scan & Verify */}
-			{step === "totp-verify" && (
-				<div className="mfa-verify-grid">
-					<div className="mfa-qr-col">
+			{/* TOTP: Scan — QR and manual key side by side */}
+			{step === "totp-scan" && (
+				<div className="mfa-step-content">
+					<p className="invite-card__body">
+						Point your authenticator's camera at the code — or type the key on the right instead.
+					</p>
+					<div className="mfa-enrol">
 						<div className="mfa-qr-frame">
 							{qrDataUrl ? (
 								<img src={qrDataUrl} alt="Scan QR code" className="mfa-qr-image" width={140} height={140} />
@@ -387,54 +460,78 @@ export function MfaSetup() {
 								<div className="mfa-qr-placeholder">Generating...</div>
 							)}
 						</div>
-						<button
-							type="button"
-							className="btn btn--ghost btn--sm mfa-copy-key-btn"
-							onClick={() => {
-								void navigator.clipboard.writeText(secret);
-								setCopied(true);
-								window.setTimeout(() => setCopied(false), 2000);
-							}}
-						>
-							{copied ? "Key Copied!" : "Copy Setup Key"}
+						<div className="mfa-enrol__alt">
+							<p className="mfa-step__title">Manual entry</p>
+							<p className="mfa-step__desc">
+								Choose &ldquo;Enter setup key&rdquo; in your app and type this:
+							</p>
+							<div className="mfa-keybox">
+								<span>{secret.replace(/(.{4})/g, "$1 ").trim()}</span>
+								<button
+									type="button"
+									onClick={() => {
+										void navigator.clipboard.writeText(secret);
+										setCopied(true);
+										window.setTimeout(() => setCopied(false), 2000);
+									}}
+								>
+									{copied ? "Copied" : "Copy"}
+								</button>
+							</div>
+							<p className="mfa-step__desc" style={{ marginTop: "0.6rem" }}>
+								It enrols as <strong>Century NIT Ops &middot; {maskEmail(opsUser?.email)}</strong>
+							</p>
+						</div>
+					</div>
+					<div className="cal-actions" style={{ marginTop: "0.5rem" }}>
+						<button type="button" className="btn btn--ghost btn--sm" onClick={() => setStep("totp-password")}>
+							Back
+						</button>
+						<button type="button" className="btn btn--primary" onClick={() => setStep("totp-verify")}>
+							I've scanned it
 						</button>
 					</div>
-					<form onSubmit={confirmTotp} className="mfa-action-col">
-						<p className="mfa-step__desc">
-							Scan the QR code with your authenticator app, then enter the current 6-digit code.
-						</p>
-						<div className="field">
-							<label htmlFor="mfa-code-input">Six-digit code</label>
-							<input
-								id="mfa-code-input"
-								className="input input--full-border mfa-code"
-								inputMode="numeric"
-								autoComplete="one-time-code"
-								pattern="[0-9]{6}"
-								maxLength={6}
-								placeholder="000000"
-								value={code}
-								onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-								required
-								autoFocus
-							/>
-						</div>
+				</div>
+			)}
+
+			{/* TOTP: Verify it works */}
+			{step === "totp-verify" && (
+				<div className="mfa-step-content">
+					<p className="invite-card__body">
+						Your app now shows a 6-digit code under <strong>Century NIT Ops</strong>. Enter it to confirm the pairing.
+					</p>
+					<form onSubmit={confirmTotp} className="ops-login__form">
+						<OtpInput
+							value={code}
+							onChange={(v) => {
+								if (error) setError(null);
+								setCode(v);
+							}}
+							autoFocus
+							disabled={busy}
+						/>
 						<button type="submit" className="btn btn--primary mfa-submit-btn" disabled={busy || code.length !== 6}>
-							{busy ? "Checking..." : "Verify & Activate"}
+							{busy ? "Checking..." : "Confirm pairing"}
 						</button>
-						<div style={{ fontSize: "var(--text-xs)", color: "var(--muted)" }}>
-							Ensure your device clock is set to Automatic Network Time.
+						<div className="ops-login__foot">
+							<button type="button" className="ops-login__footlink" onClick={() => setStep("totp-scan")}>
+								Back to the code
+							</button>
+							<span style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)" }}>
+								Device clock must be automatic
+							</span>
 						</div>
 					</form>
 				</div>
 			)}
 
-			{/* TOTP: Backup codes */}
+			{/* TOTP: Backup codes — a deliverable, not a copy button */}
 			{step === "totp-codes" && (
 				<div className="mfa-step-content">
-					<p className="invite-card__body">
-						Save these single-use recovery codes. <strong>This is the only time they are shown.</strong>
-					</p>
+					<div className="mfa-warn">
+						Shown once. Each code works once. Without these <em>and</em> your phone,
+						only an admin reset recovers the account.
+					</div>
 					<ul className="mfa-codes">
 						{backupCodes.map((c) => (
 							<li key={c}><code>{c}</code></li>
@@ -450,7 +547,10 @@ export function MfaSetup() {
 								window.setTimeout(() => setCopied(false), 2000);
 							}}
 						>
-							{copied ? "Copied!" : "Copy all codes"}
+							{copied ? "Copied!" : "Copy all"}
+						</button>
+						<button type="button" className="btn btn--ghost btn--sm" onClick={downloadCodes}>
+							Download (.txt)
 						</button>
 						<button type="button" className="btn btn--primary" onClick={() => setStep("done")}>
 							I have saved them — Continue
@@ -493,37 +593,31 @@ export function MfaSetup() {
 				<form className="ops-login__form" onSubmit={confirmOtp}>
 					<p className="invite-card__body">
 						{otpSent
-							? "Enter the 6-digit code we just sent to your email."
+							? `Enter the 6-digit code we just sent to ${maskEmail(opsUser?.email)}.`
 							: "We'll send a code to your email to confirm setup."}
 					</p>
-					<div className="field">
-						<label htmlFor="otp-code-input">Verification code</label>
-						<input
-							id="otp-code-input"
-							className="input input--full-border mfa-code"
-							inputMode="numeric"
-							autoComplete="one-time-code"
-							pattern="[0-9]{6}"
-							maxLength={6}
-							placeholder="000000"
-							value={code}
-							onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-							required
-							autoFocus
-						/>
-					</div>
-					<div className="cal-actions">
-						<button type="submit" className="btn btn--primary" disabled={busy || code.length !== 6}>
-							{busy ? "Verifying..." : "Verify & Activate"}
-						</button>
+					<OtpInput
+						value={code}
+						onChange={(v) => {
+							if (error) setError(null);
+							setCode(v);
+						}}
+						autoFocus
+						disabled={busy}
+					/>
+					<button type="submit" className="btn btn--primary" disabled={busy || code.length !== 6}>
+						{busy ? "Verifying..." : "Verify & Activate"}
+					</button>
+					<div className="ops-login__foot">
 						<button
 							type="button"
-							className="btn btn--ghost btn--sm"
+							className="ops-login__footlink"
 							onClick={() => { setCode(""); setError(null); resendOtp(); }}
 							disabled={busy}
 						>
 							Resend code
 						</button>
+						<span />
 					</div>
 				</form>
 			)}

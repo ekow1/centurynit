@@ -723,42 +723,104 @@
 	opacity: 0.7;
 }
 
-.ops-login__features {
+/* Aside middle slot — per-screen context card + stepper */
+
+.ops-login__aside-mid {
 	display: flex;
 	flex-direction: column;
-	gap: 1.75rem;
+	gap: 1.25rem;
 	padding: 2rem 0;
 }
 
-.ops-login__feature {
-	display: flex;
-	align-items: flex-start;
-	gap: 0.85rem;
+.ops-login__ctx {
+	border: 1px solid rgba(255, 255, 255, 0.16);
+	padding: 1rem 1.1rem;
 }
 
-.ops-login__feature-icon {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 36px;
-	height: 36px;
-	border: 1px solid rgba(255, 255, 255, 0.2);
-	flex-shrink: 0;
-	opacity: 0.85;
-}
-
-.ops-login__feature-title {
+.ops-login__ctx-title {
 	font-family: var(--font-mono);
-	font-size: var(--text-xs);
+	font-size: 0.62rem;
+	letter-spacing: 0.14em;
 	text-transform: uppercase;
-	letter-spacing: 0.1em;
-	margin-bottom: 0.2rem;
+	color: var(--accent, #b97a10);
+	margin-bottom: 0.55rem;
 }
 
-.ops-login__feature-desc {
+.ops-login__ctx-body p {
 	font-size: var(--text-sm);
-	opacity: 0.6;
-	line-height: 1.5;
+	line-height: 1.55;
+	color: #d8d5cc;
+}
+
+.ops-login__ctx-body p + p {
+	margin-top: 0.55rem;
+}
+
+.ops-login__ctx-body strong {
+	color: #fff;
+	font-weight: 400;
+}
+
+.ops-login__ctx-fine {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	line-height: 1.65;
+	color: rgba(255, 255, 255, 0.5);
+	margin-top: 0.7rem;
+}
+
+.ops-login__steps {
+	display: flex;
+	flex-direction: column;
+}
+
+.ops-login__step {
+	display: flex;
+	align-items: baseline;
+	gap: 0.7rem;
+	padding: 0.55rem 0;
+	font-size: var(--text-sm);
+	color: rgba(255, 255, 255, 0.45);
+}
+
+.ops-login__step + .ops-login__step {
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ops-login__step-n {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	width: 18px;
+	height: 18px;
+	border: 1px solid rgba(255, 255, 255, 0.25);
+	display: grid;
+	place-items: center;
+	flex-shrink: 0;
+	transform: translateY(2px);
+}
+
+.ops-login__step--on {
+	color: #fff;
+}
+
+.ops-login__step--on .ops-login__step-n {
+	border-color: var(--accent, #b97a10);
+	color: var(--accent, #b97a10);
+}
+
+.ops-login__step--done {
+	color: #7ea87e;
+}
+
+.ops-login__step--done .ops-login__step-n {
+	border-color: #7ea87e;
+	color: #7ea87e;
+}
+
+.ops-login__step-sub {
+	display: block;
+	font-size: 0.68rem;
+	color: rgba(255, 255, 255, 0.4);
 }
 
 .ops-login__copy {
@@ -1016,6 +1078,150 @@
 	color: var(--foreground);
 }
 
+/* Segmented one-time-code input */
+
+.ops-otp {
+	display: flex;
+	gap: 0.5rem;
+	justify-content: center;
+}
+
+.ops-otp__cell {
+	width: 46px;
+	height: 54px;
+	border: 1px solid var(--border-light);
+	background: var(--background);
+	font-family: var(--font-mono);
+	font-size: 1.25rem;
+	text-align: center;
+	outline: none;
+	transition: border-color var(--t-instant), box-shadow var(--t-instant);
+}
+
+.ops-otp__cell:focus {
+	border-color: var(--foreground);
+	box-shadow: 0 0 0 2px var(--accent, #b97a10);
+}
+
+.ops-otp__cell--filled {
+	border-color: var(--foreground);
+	background: var(--muted);
+}
+
+/* Card footer — secondary actions in one row */
+
+.ops-login__foot {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 0.75rem;
+	padding-top: 0.85rem;
+	border-top: 1px solid var(--border-light);
+	font-size: var(--text-xs);
+}
+
+.ops-login__footlink {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	color: var(--muted-foreground);
+	background: none;
+	border: none;
+	padding: 0;
+	cursor: pointer;
+	text-align: left;
+	transition: color var(--t-instant);
+}
+
+.ops-login__footlink:hover:not(:disabled) {
+	color: var(--foreground);
+}
+
+.ops-login__footlink:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+/* Lockout — a state, not an error line */
+
+.ops-login__lock {
+	border: 1px solid #a33b2e;
+	background: #faf1ef;
+	padding: 0.9rem 1rem;
+}
+
+.ops-login__lock-title {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: #a33b2e;
+	margin-bottom: 0.35rem;
+}
+
+.ops-login__lock-body {
+	font-size: var(--text-sm);
+	color: #5c4038;
+	line-height: 1.55;
+}
+
+/* TOTP enrol — QR and manual key side by side */
+
+.mfa-enrol {
+	display: grid;
+	grid-template-columns: 144px 1fr;
+	gap: 1.25rem;
+	align-items: start;
+}
+
+.mfa-enrol__alt {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+	min-width: 0;
+}
+
+.mfa-keybox {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.6rem;
+	border: 1px dashed var(--border-light);
+	padding: 0.5rem 0.65rem;
+	font-family: var(--font-mono);
+	font-size: var(--text-sm);
+	letter-spacing: 0.05em;
+}
+
+.mfa-keybox button {
+	border: none;
+	background: none;
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	text-transform: uppercase;
+	color: var(--link, #31577a);
+	cursor: pointer;
+	padding: 0;
+}
+
+.mfa-warn {
+	font-size: var(--text-sm);
+	line-height: 1.55;
+	color: #7a5a10;
+	background: var(--amber-soft, #f3e8d2);
+	border: 1px solid var(--border-light);
+	padding: 0.65rem 0.75rem;
+}
+
+@media (max-width: 540px) {
+	.mfa-enrol {
+		grid-template-columns: 1fr;
+	}
+	.ops-otp__cell {
+		width: 40px;
+		height: 48px;
+	}
+}
+
 @media (max-width: 860px) {
 .ops-login {
 		flex-direction: column;
@@ -1025,7 +1231,7 @@
 		padding: 2rem 1.5rem;
 	}
 
-.ops-login__features {
+.ops-login__aside-mid {
 		display: none;
 	}
 

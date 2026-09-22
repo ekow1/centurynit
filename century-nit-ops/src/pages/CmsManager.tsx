@@ -1,31 +1,24 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { API_PREFIX, DEFAULT_BRAND, type Brand, type CmsEntry, type MediaItem, type NavItem, type CopyKey } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
 
 /**
- * Content Management — one identity + one content store + one media library.
+ * Content Management — the public site, organised the way visitors see it.
  *
- * Brand is the flagship tab: the singleton record every surface reads.
- * Entries covers pages/blog/faqs/testimonials/events/stories/services/team/
- * branches as generic draft→review→published records. Media is the library
- * (signed upload → public /media/{key} redirect). Navigation edits the header
- * and footer link lists. Copy is the keyed string table the site, portal,
- * console and emails read.
+ * "Site pages" is the default tab: a site map mirroring the real routes
+ * (Top level / Explore / Services / Company — same groups as the footer and
+ * mobile menu), each row showing what actually drives the page — a CMS
+ * entry, the catalogue DB, or compiled copy — and its publish state.
+ * Structured pages edit payload keys as labelled fields; list pages edit
+ * their collection's entries; catalogue pages only expose the page chrome
+ * (hero + SEO) the CMS owns.
+ *
+ * Brand, Media, Navigation and Copy tabs carry over — Navigation gains the
+ * live header/footer previews, Media gains "used on" badges computed by
+ * scanning entry payloads for media keys.
  */
 
-type Tab = "brand" | "entries" | "media" | "nav" | "copy";
-
-const COLLECTIONS = [
-	{ id: "pages", label: "Pages" },
-	{ id: "posts", label: "Blog posts" },
-	{ id: "faqs", label: "FAQs" },
-	{ id: "testimonials", label: "Testimonials" },
-	{ id: "events", label: "Events" },
-	{ id: "stories", label: "Success stories" },
-	{ id: "services", label: "Services" },
-	{ id: "team", label: "Team" },
-	{ id: "branches", label: "Branches" },
-];
+type Tab = "site" | "brand" | "media" | "nav" | "copy";
 
 const STATUS_STYLE: Record<string, string> = {
 	draft: "cms-status cms-status--draft",
@@ -41,6 +34,7 @@ const btn = (primary = false): CSSProperties => ({
 	color: primary ? "var(--surface,#fff)" : "inherit",
 	fontFamily: "ui-monospace,monospace", letterSpacing: "0.04em", textTransform: "uppercase",
 });
+const btnSm = (primary = false): CSSProperties => ({ ...btn(primary), padding: "0.2rem 0.55rem", fontSize: "0.65rem" });
 
 function contrastRatio(hex: string): number | null {
 	const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
@@ -52,6 +46,475 @@ function contrastRatio(hex: string): number | null {
 	});
 	const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
 	return (Math.max(lum, 1) + 0.05) / (Math.min(lum, 1) + 0.05);
+}
+
+/* ── Shared: all entries, fetched once ───────────────────────────────────── */
+
+function useCmsEntries() {
+	const [entries, setEntries] = useState<CmsEntry[]>([]);
+	const [error, setError] = useState<string | null>(null);
+	const load = useCallback(async () => {
+		const res = await apiFetch<{ entries: CmsEntry[] }>(`${API_PREFIX}/cms/entries`);
+		setEntries(res.entries);
+	}, []);
+	useEffect(() => { void load().catch((e) => setError(e instanceof Error ? e.message : "load failed")); }, [load]);
+	return { entries, error, reload: load };
+}
+
+/** Media keys referenced inside entry payloads — media key → pages using it. */
+function useMediaUsage(entries: CmsEntry[]) {
+	return useMemo(() => {
+		const map = new Map<string, string[]>();
+		for (const e of entries) {
+			const seen = new Set<string>();
+			for (const m of JSON.stringify(e.payload).matchAll(/media\/[\w./-]+/g)) seen.add(m[0]);
+			for (const key of seen) {
+				const list = map.get(key) ?? [];
+				list.push(`${e.collection}/${e.slug}`);
+				map.set(key, list);
+			}
+		}
+		return map;
+	}, [entries]);
+}
+
+/** First image-ish string in a payload — used for site-map + row thumbnails. */
+function payloadImage(payload: Record<string, unknown>): string | null {
+	const keyLike = /image|photo|cover|poster|thumb|hero/i;
+	const stack: unknown[] = [payload];
+	while (stack.length) {
+		const cur = stack.pop();
+		if (!cur || typeof cur !== "object") continue;
+		if (Array.isArray(cur)) { stack.push(...cur); continue; }
+		for (const [k, v] of Object.entries(cur as Record<string, unknown>)) {
+			if (typeof v === "string" && (v.startsWith("media/") || (keyLike.test(k) && v.length > 0 && !v.includes("\n")))) {
+				if (v.startsWith("media/")) return v;
+			}
+			if (v && typeof v === "object") stack.push(v);
+		}
+	}
+	return null;
+}
+
+function mediaSrc(key: string | null): string | null {
+	return key && key.startsWith("media/") ? `${API_PREFIX}/media/${key}` : key;
+}
+
+function entryTitle(e: CmsEntry): string {
+	const p = e.payload as Record<string, unknown>;
+	const v = p.title ?? p.name ?? p.question ?? p.headline ?? p.label;
+	return typeof v === "string" && v.trim() ? v : e.slug;
+}
+
+/* ── Site map registry — the real public routes ─────────────────────────── */
+
+type SitePageDef = {
+	id: string;
+	name: string;
+	route: string;
+	/** page → one `pages/{slug}` entry · list → a whole collection · catalogue → DB-driven, CMS owns hero+SEO only */
+	kind: "page" | "list" | "catalogue";
+	slug?: string;
+	collection?: string;
+	note?: string;
+};
+
+const SITE_GROUPS: { label: string; pages: SitePageDef[] }[] = [
+	{
+		label: "Top level",
+		pages: [
+			{ id: "home", name: "Home", route: "/", kind: "page", slug: "home" },
+			{ id: "about", name: "About", route: "/about", kind: "page", slug: "about" },
+			{ id: "why", name: "Why choose us", route: "/why-choose-us", kind: "page", slug: "why-choose-us" },
+		],
+	},
+	{
+		label: "Explore",
+		pages: [
+			{ id: "dest", name: "Destinations", route: "/destinations", kind: "catalogue", slug: "destinations", note: "List and detail pages read the catalogue DB (ops → Universities/Programmes). CMS owns only this page's hero copy and SEO." },
+			{ id: "uni", name: "Universities", route: "/universities", kind: "catalogue", slug: "universities", note: "100+ partner rows live in the catalogue — covers, names and intakes are edited there, not here." },
+			{ id: "prog", name: "Programs", route: "/programs", kind: "catalogue", slug: "programs", note: "Catalogue-driven like Universities. CMS owns hero copy and SEO only." },
+			{ id: "schol", name: "Scholarships", route: "/scholarships", kind: "catalogue", slug: "scholarships", note: "Scholarship rows are catalogue entries with deadlines — hero copy and SEO live here." },
+		],
+	},
+	{
+		label: "Services",
+		pages: [
+			{ id: "visa", name: "Visa services", route: "/visa-services", kind: "page", slug: "visa-services" },
+			{ id: "svc", name: "Student services", route: "/student-services", kind: "list", collection: "services", slug: "student-services" },
+		],
+	},
+	{
+		label: "Company",
+		pages: [
+			{ id: "red", name: "Success stories", route: "/red-seat", kind: "list", collection: "stories", slug: "red-seat" },
+			{ id: "events", name: "Events", route: "/events", kind: "list", collection: "events" },
+			{ id: "blog", name: "Blog", route: "/blog", kind: "list", collection: "posts" },
+			{ id: "faqs", name: "FAQs", route: "/faqs", kind: "list", collection: "faqs" },
+		],
+	},
+	{
+		label: "Shared collections",
+		pages: [
+			{ id: "testimonials", name: "Testimonials", route: "feeds Home + About", kind: "list", collection: "testimonials" },
+			{ id: "team", name: "Team", route: "feeds About", kind: "list", collection: "team" },
+			{ id: "branches", name: "Branches", route: "feeds Contact strip", kind: "list", collection: "branches" },
+		],
+	},
+];
+
+const PAGE_INDEX = new Map(SITE_GROUPS.flatMap((g) => g.pages.map((p) => [p.id, p])));
+
+/** Worst-case status for the map dot: none < draft < review < published. */
+function groupStatus(def: SitePageDef, entries: CmsEntry[]): "none" | "draft" | "review" | "published" {
+	const rows = def.kind === "list"
+		? entries.filter((e) => e.collection === def.collection)
+		: entries.filter((e) => e.collection === "pages" && e.slug === def.slug);
+	if (rows.length === 0) return def.kind === "catalogue" ? "none" : "none";
+	if (rows.some((e) => e.status === "draft")) return "draft";
+	if (rows.some((e) => e.status === "review")) return "review";
+	return "published";
+}
+
+const DOT: Record<string, CSSProperties> = {
+	published: { background: "var(--success,#2e6b34)" },
+	review: { background: "var(--accent,#b97a10)" },
+	draft: { background: "var(--muted,#6e6a60)" },
+	none: { background: "transparent", border: "1px solid var(--danger,#a33b2e)" },
+};
+
+function StatusDot({ s }: { s: keyof typeof DOT }) {
+	return <span style={{ width: 7, height: 7, borderRadius: "50%", flex: "none", ...DOT[s] }} />;
+}
+
+function StatusPill({ s }: { s: string }) {
+	return <span className={STATUS_STYLE[s] ?? "cms-status"}>{s === "none" ? "no entry" : s}</span>;
+}
+
+function SrcBadge({ kind }: { kind: SitePageDef["kind"] }) {
+	const map = {
+		page: ["CMS", "var(--success,#2e6b34)"],
+		list: ["CMS", "var(--success,#2e6b34)"],
+		catalogue: ["catalogue", "var(--info,#31577a)"],
+	} as const;
+	const [txt, col] = map[kind];
+	return <span style={{ fontFamily: "ui-monospace,monospace", fontSize: "0.55rem", letterSpacing: "0.08em", textTransform: "uppercase", padding: "0.1rem 0.35rem", border: `1px solid ${col}`, color: col }}>{txt}</span>;
+}
+
+/* ── Site-styled hero preview ────────────────────────────────────────────── */
+
+function HeroPreview({ payload }: { payload: Record<string, unknown> }) {
+	const hero = (payload.hero ?? payload) as Record<string, unknown>;
+	const image = payloadImage(payload);
+	const headline = (hero.headline ?? hero.title ?? payload.title) as string | undefined;
+	const sub = (hero.sub ?? hero.subheadline ?? hero.standfirst ?? payload.description) as string | undefined;
+	const cta = (hero.cta ?? hero.ctaLabel) as string | undefined;
+	const src = mediaSrc(image);
+	if (!headline && !src) return null;
+	return (
+		<div style={{ borderBottom: "1px solid var(--border,#d8d5cd)" }}>
+			<div style={{ fontFamily: "ui-monospace,monospace", fontSize: "0.58rem", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--muted,#6e6a60)", padding: "0.45rem 0.9rem 0", display: "flex", gap: "0.45rem", alignItems: "center" }}>
+				<span style={{ color: "var(--success,#2e6b34)", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+					<i style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />Live preview
+				</span>
+				<span>— as rendered on the site</span>
+			</div>
+			<div style={{ margin: "0.5rem 0.9rem 0.9rem", position: "relative", minHeight: 150, display: "flex", alignItems: "flex-end", overflow: "hidden", border: "1px solid var(--border,#d8d5cd)", background: "var(--ink,#17161a)" }}>
+				{src ? <img src={src} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+				<div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(23,22,26,0.15), rgba(23,22,26,0.78))" }} />
+				<div style={{ position: "relative", padding: "1.1rem 1.3rem", color: "#fff" }}>
+					<span style={{ fontFamily: "ui-monospace,monospace", fontSize: "0.55rem", letterSpacing: "0.16em", border: "1px solid rgba(255,255,255,0.7)", padding: "0.15rem 0.45rem" }}>CNIT</span>
+					{headline ? <h3 style={{ fontSize: "1.3rem", margin: "0.4rem 0 0.2rem", maxWidth: "30ch", lineHeight: 1.15 }}>{headline}</h3> : null}
+					{sub ? <p style={{ fontSize: "0.75rem", opacity: 0.85, maxWidth: "52ch", margin: 0 }}>{sub}</p> : null}
+					{cta ? <span style={{ display: "inline-block", marginTop: "0.6rem", background: "var(--accent,#b97a10)", color: "#fff", fontFamily: "ui-monospace,monospace", fontSize: "0.58rem", letterSpacing: "0.1em", textTransform: "uppercase", padding: "0.45rem 0.9rem" }}>{cta} →</span> : null}
+				</div>
+			</div>
+		</div>
+	);
+}
+
+/* ── Field renderer — primitives as inputs, objects one level deep, rest JSON ─ */
+
+const IMG_KEY = /image|photo|cover|poster|thumb/i;
+
+function PayloadFields({ payload, onChange }: { payload: Record<string, unknown>; onChange: (p: Record<string, unknown>) => void }) {
+	const set = (k: string, v: unknown) => onChange({ ...payload, [k]: v });
+	return (
+		<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.7rem" }}>
+			{Object.entries(payload).map(([k, v]) => {
+				const wide = typeof v === "string" && (v.length > 80 || v.includes("\n"));
+				if (typeof v === "string" && (v.startsWith("media/") || IMG_KEY.test(k))) {
+					const src = mediaSrc(v);
+					return (
+						<div key={k} style={{ gridColumn: "1 / -1" }}>
+							<label style={label}>{k}</label>
+							<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+								{v.startsWith("media/") && src ? <img src={src} alt="" style={{ width: 64, height: 44, objectFit: "cover", border: "1px solid var(--border,#d8d5cd)", flex: "none" }} /> : null}
+								<div style={{ flex: 1 }}>
+									<input style={{ ...field, fontFamily: "ui-monospace,monospace", fontSize: "0.72rem" }} value={v} onChange={(e) => set(k, e.target.value)} placeholder="media/…" />
+									<span className="mono" style={{ fontSize: "0.62rem", color: "var(--info,#31577a)" }}>▸ key from the Media tab</span>
+								</div>
+							</div>
+						</div>
+					);
+				}
+				if (typeof v === "string") {
+					return (
+						<div key={k} style={wide ? { gridColumn: "1 / -1" } : undefined}>
+							<label style={label}>{k}</label>
+							{wide
+								? <textarea style={{ ...field, minHeight: 60 }} value={v} onChange={(e) => set(k, e.target.value)} />
+								: <input style={field} value={v} onChange={(e) => set(k, e.target.value)} />}
+						</div>
+					);
+				}
+				if (typeof v === "number" || typeof v === "boolean") {
+					return (
+						<div key={k}>
+							<label style={label}>{k}</label>
+							<input style={field} value={String(v)} onChange={(e) => set(k, typeof v === "number" ? Number(e.target.value) : e.target.value === "true")} />
+						</div>
+					);
+				}
+				return (
+					<div key={k} style={{ gridColumn: "1 / -1" }}>
+						<label style={label}>{k} · structured</label>
+						<textarea
+							style={{ ...field, fontFamily: "ui-monospace,monospace", fontSize: "0.72rem", minHeight: 80 }}
+							defaultValue={JSON.stringify(v, null, 2)}
+							onBlur={(e) => { try { set(k, JSON.parse(e.target.value)); } catch { /* keep editing */ } }}
+						/>
+					</div>
+				);
+			})}
+		</div>
+	);
+}
+
+/* ── Entry editor — shared by page + list kinds ──────────────────────────── */
+
+function EntryEditor({ entry, onSaved, onClose, inline }: { entry: CmsEntry; onSaved: () => void; onClose?: () => void; inline?: boolean }) {
+	const [editing, setEditing] = useState(entry);
+	const [json, setJson] = useState("{}");
+	const [seoJson, setSeoJson] = useState("{}");
+	const [structured, setStructured] = useState(true);
+	const [history, setHistory] = useState<{ id: string; version: number; note: string | null; editorEmail: string | null; createdAt: string }[]>([]);
+	const [error, setError] = useState<string | null>(null);
+	const [flash, setFlash] = useState<string | null>(null);
+
+	useEffect(() => {
+		setJson(JSON.stringify(entry.payload, null, 2));
+		setSeoJson(JSON.stringify(entry.seo ?? {}, null, 2));
+		if (entry.id) {
+			void apiFetch<{ versions: typeof history }>(`${API_PREFIX}/cms/entries/${entry.collection}/${entry.slug}/history`)
+				.then((h) => setHistory(h.versions)).catch(() => {});
+		}
+	}, [entry]);
+
+	async function save(payloadOverride?: Record<string, unknown>) {
+		setError(null);
+		let payload: Record<string, unknown>; let seo: Record<string, unknown>;
+		if (payloadOverride) {
+			payload = payloadOverride;
+			try { seo = JSON.parse(seoJson || "{}"); } catch { setError("SEO is not valid JSON"); return; }
+		} else {
+			try { payload = JSON.parse(json); seo = JSON.parse(seoJson || "{}"); }
+			catch { setError("Payload or SEO is not valid JSON"); return; }
+		}
+		await apiFetch(`${API_PREFIX}/cms/entries`, {
+			method: "POST",
+			body: JSON.stringify({ id: editing.id || undefined, collection: editing.collection, slug: editing.slug, payload, seo }),
+		});
+		setFlash("Saved"); setTimeout(() => setFlash(null), 2500);
+		onSaved();
+	}
+
+	async function setStatus(status: string) {
+		if (!editing.id) return;
+		await apiFetch(`${API_PREFIX}/cms/entries/${editing.id}/status`, { method: "POST", body: JSON.stringify({ status }) });
+		setEditing({ ...editing, status: status as CmsEntry["status"] });
+		onSaved();
+	}
+
+	async function revertTo(versionId: string) {
+		if (!editing.id) return;
+		await apiFetch(`${API_PREFIX}/cms/entries/${editing.id}/revert`, { method: "POST", body: JSON.stringify({ versionId }) });
+		onSaved(); onClose?.();
+	}
+
+	const payloadObj = useMemo(() => {
+		if (!structured) return null;
+		try { return JSON.parse(json) as Record<string, unknown>; } catch { return null; }
+	}, [json, structured]);
+
+	return (
+		<div>
+			<HeroPreview payload={(payloadObj ?? editing.payload) as Record<string, unknown>} />
+			<div style={{ padding: "0.9rem" }}>
+				<div style={{ display: "flex", gap: "1rem", marginBottom: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+					<div><label style={label}>Collection</label><input style={field} value={editing.collection} disabled /></div>
+					<div style={{ flex: 1 }}><label style={label}>Slug</label><input style={{ ...field, fontFamily: "ui-monospace,monospace" }} value={editing.slug} disabled={Boolean(editing.id)} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} placeholder="home-hero" /></div>
+					<StatusPill s={editing.id ? editing.status : "none"} />
+					<button style={btnSm(false)} onClick={() => setStructured(!structured)}>{structured ? "JSON" : "Fields"}</button>
+				</div>
+				{error ? <p style={{ color: "var(--danger,#a33b2e)", fontSize: "0.85rem" }}>{error}</p> : null}
+				{flash ? <p className="mono" style={{ color: "var(--success,#2e6b34)", fontSize: "0.72rem" }}>{flash}</p> : null}
+
+				<label style={label}>Payload</label>
+				{structured && payloadObj ? (
+					<PayloadFields payload={payloadObj} onChange={(p) => setJson(JSON.stringify(p, null, 2))} />
+				) : (
+					<textarea style={{ ...field, fontFamily: "ui-monospace,monospace", minHeight: 200 }} value={json} onChange={(e) => setJson(e.target.value)} />
+				)}
+				<label style={{ ...label, marginTop: "0.75rem" }}>SEO (JSON — title, description, ogImage, canonical, noindex)</label>
+				<textarea style={{ ...field, fontFamily: "ui-monospace,monospace", minHeight: 80 }} value={seoJson} onChange={(e) => setSeoJson(e.target.value)} />
+				{history.length > 0 ? (
+					<div style={{ marginTop: "0.75rem" }}>
+						<label style={label}>Version history</label>
+						<ul style={{ margin: 0, padding: 0, listStyle: "none", fontSize: "0.75rem" }}>
+							{history.slice(0, 6).map((v) => (
+								<li key={v.id} className="mono" style={{ padding: "0.3rem 0", borderBottom: "1px solid var(--border,#eee)", display: "flex", gap: "0.75rem" }}>
+									<span>v{v.version} · {v.note ?? "saved"} · {v.editorEmail ?? "—"}</span>
+									<span style={{ flex: 1 }} />
+									<button style={btnSm(false)} onClick={() => revertTo(v.id)}>revert</button>
+								</li>
+							))}
+						</ul>
+					</div>
+				) : null}
+				<div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem", alignItems: "center" }}>
+					<button style={btn(true)} onClick={() => save()}>Save</button>
+					{editing.id && editing.status !== "published" ? <button style={btn(false)} onClick={() => setStatus("published")}>Publish</button> : null}
+					{editing.id && editing.status === "published" ? <button style={btn(false)} onClick={() => setStatus("draft")}>Unpublish</button> : null}
+					{!inline && onClose ? <button style={btn(false)} onClick={onClose}>Close</button> : null}
+				</div>
+			</div>
+		</div>
+	);
+}
+
+/* ── Site pages tab ──────────────────────────────────────────────────────── */
+
+function SitePagesTab({ entries, reload }: { entries: CmsEntry[]; reload: () => void }) {
+	const [selected, setSelected] = useState("home");
+	const [filter, setFilter] = useState("");
+	const [editing, setEditing] = useState<CmsEntry | null>(null);
+
+	const def = PAGE_INDEX.get(selected)!;
+	const pageEntry = def.slug ? entries.find((e) => e.collection === "pages" && e.slug === def.slug) : undefined;
+	const collectionRows = def.collection ? entries.filter((e) => e.collection === def.collection) : [];
+
+	function newEntry(collection: string, slug = "") {
+		setEditing({
+			id: "", collection, slug, status: "draft", payload: { title: "" }, seo: null,
+			scheduledAt: null, publishedAt: null, publishedBy: null, updatedAt: "", updatedBy: null,
+		});
+	}
+
+	const q = filter.trim().toLowerCase();
+	const match = (p: SitePageDef) => !q || (p.name + " " + p.route).toLowerCase().includes(q);
+
+	return (
+		<div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: "1rem", alignItems: "start" }}>
+			{/* site map */}
+			<div className="card" style={{ padding: 0, overflow: "hidden" }}>
+				<div style={{ padding: "0.55rem 0.8rem", borderBottom: "1px solid var(--border,#d8d5cd)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+					<span className="mono" style={{ fontSize: "0.62rem", letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700 }}>Site map</span>
+					<input style={{ ...field, width: "auto", flex: 1, padding: "0.25rem 0.45rem", fontSize: "0.72rem", fontFamily: "ui-monospace,monospace" }} placeholder="filter…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+				</div>
+				{SITE_GROUPS.map((g) => {
+					const rows = g.pages.filter(match);
+					if (!rows.length) return null;
+					return (
+						<div key={g.label} style={{ borderBottom: "1px solid var(--border,#eae7de)" }}>
+							<div className="mono" style={{ fontSize: "0.55rem", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--muted,#6e6a60)", padding: "0.5rem 0.8rem 0.2rem" }}>{g.label}</div>
+							{rows.map((p) => {
+								const st = groupStatus(p, entries);
+								const thumb = p.kind === "list"
+									? payloadImage((collectionThumb(entries, p.collection!)) ?? {})
+									: payloadImage((pageEntryThumb(entries, p.slug)) ?? {});
+								const thumbSrc = mediaSrc(thumb);
+								return (
+									<button key={p.id} onClick={() => { setSelected(p.id); setEditing(null); }}
+										style={{ display: "flex", alignItems: "center", gap: "0.55rem", width: "100%", textAlign: "left", padding: "0.4rem 0.8rem", border: "none", background: selected === p.id ? "var(--accent-soft,#f3e8d2)" : "none", borderLeft: selected === p.id ? "3px solid var(--accent,#b97a10)" : "3px solid transparent", cursor: "pointer", fontSize: "0.8rem", color: "inherit", fontWeight: selected === p.id ? 700 : 400 }}>
+										{thumbSrc ? <img src={thumbSrc} alt="" style={{ width: 30, height: 22, objectFit: "cover", border: "1px solid var(--border,#d8d5cd)", flex: "none" }} /> : <StatusDot s={st} />}
+										{p.name}
+										<span className="mono" style={{ marginLeft: "auto", fontSize: "0.55rem", color: selected === p.id ? "var(--accent,#b97a10)" : "var(--muted,#6e6a60)" }}>{p.route}</span>
+									</button>
+								);
+							})}
+						</div>
+					);
+				})}
+			</div>
+
+			{/* editor pane */}
+			<div className="card" style={{ padding: 0, overflow: "hidden", minHeight: 420 }}>
+				<div style={{ display: "flex", alignItems: "center", gap: "0.7rem", padding: "0.6rem 0.9rem", borderBottom: "1px solid var(--border,#d8d5cd)", flexWrap: "wrap" }}>
+					<h2 style={{ margin: 0, fontSize: "0.95rem" }}>{def.name}</h2>
+					<span className="mono" style={{ fontSize: "0.62rem", color: "var(--muted,#6e6a60)" }}>{def.route}</span>
+					<span style={{ flex: 1 }} />
+					<SrcBadge kind={def.kind} />
+					<StatusPill s={groupStatus(def, entries)} />
+					{def.route.startsWith("/") ? <a href={def.route} target="_blank" rel="noreferrer" style={{ ...btnSm(false), textDecoration: "none" }}>open live page ↗</a> : null}
+					{def.kind === "list" ? <button style={btnSm(true)} onClick={() => newEntry(def.collection!)}>+ New</button> : null}
+				</div>
+
+				{editing ? (
+					<EntryEditor entry={editing} onSaved={reload} onClose={() => setEditing(null)} />
+				) : def.kind === "list" ? (
+					<div>
+						{collectionRows.map((e) => {
+							const img = mediaSrc(payloadImage(e.payload as Record<string, unknown>));
+							return (
+								<button key={e.id} onClick={() => setEditing(e)} style={{ display: "flex", gap: "0.7rem", alignItems: "center", width: "100%", textAlign: "left", padding: "0.45rem 0.9rem", border: "none", borderBottom: "1px solid var(--border,#eae7de)", background: "none", cursor: "pointer", fontSize: "0.82rem", color: "inherit" }}>
+									{img ? <img src={img} alt="" style={{ width: 46, height: 32, objectFit: "cover", border: "1px solid var(--border,#d8d5cd)", flex: "none" }} /> : <StatusDot s={e.status} />}
+									<span style={{ flex: 1 }}>
+										{entryTitle(e)}
+										<small className="mono" style={{ display: "block", color: "var(--muted,#6e6a60)", fontSize: "0.62rem" }}>{e.slug}</small>
+									</span>
+									<StatusPill s={e.status} />
+								</button>
+							);
+						})}
+						{collectionRows.length === 0 ? (
+							<div style={{ padding: "2.5rem 1rem", textAlign: "center" }}>
+								<p className="muted" style={{ fontSize: "0.82rem" }}>No <code>{def.collection}</code> entries yet — the live page falls back to its compiled content.</p>
+								<button style={{ ...btn(true), marginTop: "0.6rem" }} onClick={() => newEntry(def.collection!)}>Create the first entry</button>
+							</div>
+						) : null}
+					</div>
+				) : (
+					<div>
+						{def.note ? (
+							<div className="mono" style={{ fontSize: "0.62rem", color: "var(--info,#31577a)", background: "var(--info-soft,#e8eef4)", borderBottom: "1px dashed var(--info,#31577a)", padding: "0.55rem 0.9rem", lineHeight: 1.6 }}>{def.note}</div>
+						) : null}
+						{pageEntry ? (
+							<EntryEditor entry={pageEntry} onSaved={reload} inline />
+						) : (
+							<div style={{ padding: "2.5rem 1rem", textAlign: "center" }}>
+								<p className="muted" style={{ fontSize: "0.82rem" }}>
+									No <code>pages/{def.slug}</code> entry yet — the live page uses its compiled copy.
+								</p>
+								<button style={{ ...btn(true), marginTop: "0.6rem" }} onClick={() => newEntry("pages", def.slug!)}>Create the entry</button>
+							</div>
+						)}
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
+/* helpers for map thumbnails — first entry that carries an image */
+function collectionThumb(entries: CmsEntry[], collection: string) {
+	for (const e of entries) if (e.collection === collection) { const p = payloadImage(e.payload as Record<string, unknown>); if (p) return e.payload as Record<string, unknown>; }
+	return null;
+}
+function pageEntryThumb(entries: CmsEntry[], slug?: string) {
+	if (!slug) return null;
+	const e = entries.find((x) => x.collection === "pages" && x.slug === slug);
+	return e ? (e.payload as Record<string, unknown>) : null;
 }
 
 /* ── Brand tab ───────────────────────────────────────────────────────────── */
@@ -200,140 +663,13 @@ function BrandTab() {
 	);
 }
 
-/* ── Entries tab ─────────────────────────────────────────────────────────── */
+/* ── Media tab — grid + "used on" reverse index ──────────────────────────── */
 
-function EntriesTab() {
-	const [collection, setCollection] = useState("pages");
-	const [entries, setEntries] = useState<CmsEntry[]>([]);
-	const [editing, setEditing] = useState<CmsEntry | null>(null);
-	const [json, setJson] = useState("{}");
-	const [seoJson, setSeoJson] = useState("{}");
-	const [history, setHistory] = useState<{ id: string; version: number; note: string | null; editorEmail: string | null; createdAt: string }[]>([]);
-	const [error, setError] = useState<string | null>(null);
-
-	const load = useCallback(async () => {
-		const res = await apiFetch<{ entries: CmsEntry[] }>(`${API_PREFIX}/cms/entries?collection=${collection}`);
-		setEntries(res.entries);
-	}, [collection]);
-	useEffect(() => { void load().catch((e) => setError(e.message)); }, [load]);
-
-	async function openEditor(entry: CmsEntry) {
-		setEditing(entry);
-		setJson(JSON.stringify(entry.payload, null, 2));
-		setSeoJson(JSON.stringify(entry.seo ?? {}, null, 2));
-		const h = await apiFetch<{ versions: typeof history }>(`${API_PREFIX}/cms/entries/${entry.collection}/${entry.slug}/history`);
-		setHistory(h.versions);
-	}
-
-	function newEntry() {
-		setEditing({
-			id: "", collection, slug: "", status: "draft", payload: { title: "" }, seo: null,
-			scheduledAt: null, publishedAt: null, publishedBy: null, updatedAt: "", updatedBy: null,
-		});
-		setJson('{\n  "title": ""\n}'); setSeoJson("{}"); setHistory([]);
-	}
-
-	async function save() {
-		if (!editing) return;
-		setError(null);
-		let payload: Record<string, unknown>; let seo: Record<string, unknown>;
-		try { payload = JSON.parse(json); seo = JSON.parse(seoJson || "{}"); }
-		catch { setError("Payload or SEO is not valid JSON"); return; }
-		await apiFetch(`${API_PREFIX}/cms/entries`, {
-			method: "POST",
-			body: JSON.stringify({ id: editing.id || undefined, collection: editing.collection, slug: editing.slug, payload, seo }),
-		});
-		setEditing(null); void load();
-	}
-
-	async function setStatus(id: string, status: string) {
-		await apiFetch(`${API_PREFIX}/cms/entries/${id}/status`, { method: "POST", body: JSON.stringify({ status }) });
-		void load();
-	}
-
-	async function revertTo(versionId: string) {
-		if (!editing?.id) return;
-		await apiFetch(`${API_PREFIX}/cms/entries/${editing.id}/revert`, { method: "POST", body: JSON.stringify({ versionId }) });
-		setEditing(null); void load();
-	}
-
-	return (
-		<div>
-			<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "1rem" }}>
-				{COLLECTIONS.map((col) => (
-					<button key={col.id} style={{ ...btn(collection === col.id), border: "1px solid var(--ink,#17161a)" }} onClick={() => { setCollection(col.id); setEditing(null); }}>
-						{col.label}
-					</button>
-				))}
-				<span style={{ flex: 1 }} />
-				<button style={btn(true)} onClick={newEntry}>+ New entry</button>
-			</div>
-			{error ? <p style={{ color: "var(--danger,#a33b2e)", fontSize: "0.85rem" }}>{error}</p> : null}
-
-			{editing ? (
-				<div className="card" style={{ padding: "1.25rem", marginBottom: "1rem" }}>
-					<div style={{ display: "flex", gap: "1rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
-						<div><label style={label}>Collection</label><input style={field} value={editing.collection} disabled /></div>
-						<div style={{ flex: 1 }}><label style={label}>Slug</label><input style={{ ...field, fontFamily: "ui-monospace,monospace" }} value={editing.slug} disabled={Boolean(editing.id)} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} placeholder="home-hero" /></div>
-					</div>
-					<label style={label}>Payload (JSON)</label>
-					<textarea style={{ ...field, fontFamily: "ui-monospace,monospace", minHeight: 200 }} value={json} onChange={(e) => setJson(e.target.value)} />
-					<label style={{ ...label, marginTop: "0.75rem" }}>SEO (JSON — title, description, ogImage, canonical, noindex)</label>
-					<textarea style={{ ...field, fontFamily: "ui-monospace,monospace", minHeight: 90 }} value={seoJson} onChange={(e) => setSeoJson(e.target.value)} />
-					{history.length > 0 ? (
-						<div style={{ marginTop: "0.75rem" }}>
-							<label style={label}>Version history</label>
-							<ul style={{ margin: 0, padding: 0, listStyle: "none", fontSize: "0.75rem" }}>
-								{history.slice(0, 6).map((v) => (
-									<li key={v.id} className="mono" style={{ padding: "0.3rem 0", borderBottom: "1px solid var(--border,#eee)", display: "flex", gap: "0.75rem" }}>
-										<span>v{v.version} · {v.note ?? "saved"} · {v.editorEmail ?? "—"}</span>
-										<span style={{ flex: 1 }} />
-										<button style={{ ...btn(false), padding: "0.1rem 0.5rem", fontSize: "0.65rem" }} onClick={() => revertTo(v.id)}>revert</button>
-									</li>
-								))}
-							</ul>
-						</div>
-					) : null}
-					<div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
-						<button style={btn(true)} onClick={save}>Save</button>
-						<button style={btn(false)} onClick={() => setEditing(null)}>Cancel</button>
-					</div>
-				</div>
-			) : null}
-
-			<table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-				<thead>
-					<tr style={{ textAlign: "left", borderBottom: "2px solid var(--ink,#17161a)" }}>
-						<th style={{ padding: "0.5rem" }}>Slug</th><th>Status</th><th>Updated</th><th>By</th><th></th>
-					</tr>
-				</thead>
-				<tbody>
-					{entries.map((e) => (
-						<tr key={e.id} style={{ borderBottom: "1px solid var(--border,#eee)", cursor: "pointer" }} onClick={() => openEditor(e)}>
-							<td className="mono" style={{ padding: "0.55rem" }}>{e.slug}</td>
-							<td><span className={STATUS_STYLE[e.status] ?? "cms-status"}>{e.status}</span></td>
-							<td className="muted">{e.updatedAt ? new Date(e.updatedAt).toLocaleDateString() : "—"}</td>
-							<td className="muted">{e.updatedBy ?? "—"}</td>
-							<td onClick={(ev) => ev.stopPropagation()}>
-								{e.status !== "published"
-									? <button style={{ ...btn(false), padding: "0.2rem 0.6rem", fontSize: "0.65rem" }} onClick={() => setStatus(e.id, "published")}>publish</button>
-									: <button style={{ ...btn(false), padding: "0.2rem 0.6rem", fontSize: "0.65rem" }} onClick={() => setStatus(e.id, "draft")}>unpublish</button>}
-							</td>
-						</tr>
-					))}
-					{entries.length === 0 ? <tr><td colSpan={5} className="muted" style={{ padding: "2rem", textAlign: "center" }}>No {collection} entries yet — create the first one.</td></tr> : null}
-				</tbody>
-			</table>
-		</div>
-	);
-}
-
-/* ── Media tab ───────────────────────────────────────────────────────────── */
-
-function MediaTab() {
+function MediaTab({ usage }: { usage: Map<string, string[]> }) {
 	const [items, setItems] = useState<MediaItem[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
+	const [filter, setFilter] = useState("");
 
 	const load = useCallback(async () => {
 		const res = await apiFetch<{ media: MediaItem[] }>(`${API_PREFIX}/cms/media`);
@@ -363,6 +699,9 @@ function MediaTab() {
 		void load();
 	}
 
+	const q = filter.trim().toLowerCase();
+	const shown = q ? items.filter((m) => (m.key + " " + m.alt + " " + m.fileName).toLowerCase().includes(q)) : items;
+
 	return (
 		<div>
 			<div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1rem" }}>
@@ -370,27 +709,59 @@ function MediaTab() {
 					{busy ? "Uploading…" : "Upload image"}
 					<input type="file" accept="image/*" style={{ display: "none" }} disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
 				</label>
-				<span className="mono muted" style={{ fontSize: "0.7rem" }}>public URL: {API_PREFIX}/media/{"{key}"}</span>
+				<input style={{ ...field, width: 220 }} placeholder="filter by key or alt…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+				<span className="mono muted" style={{ fontSize: "0.7rem", marginLeft: "auto" }}>public URL: {API_PREFIX}/media/{"{key}"}</span>
 			</div>
 			{error ? <p style={{ color: "var(--danger,#a33b2e)", fontSize: "0.85rem" }}>{error}</p> : null}
 			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: "0.75rem" }}>
-				{items.map((m) => (
-					<div key={m.id} className="card" style={{ padding: "0.75rem" }}>
-						<div style={{ height: 110, background: "var(--surface-alt,#eee)", marginBottom: "0.5rem", overflow: "hidden", position: "relative" }}>
-							<img src={`${API_PREFIX}/media/${m.key}`} alt={m.alt} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${m.focalX}% ${m.focalY}%` }} />
+				{shown.map((m) => {
+					const used = usage.get(m.key);
+					return (
+						<div key={m.id} className="card" style={{ padding: "0.75rem" }}>
+							<div style={{ height: 110, background: "var(--surface-alt,#eee)", marginBottom: "0.5rem", overflow: "hidden", position: "relative" }}>
+								<img src={`${API_PREFIX}/media/${m.key}`} alt={m.alt} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${m.focalX}% ${m.focalY}%` }} />
+								{used?.length ? (
+									<span className="mono" title={used.join("\n")} style={{ position: "absolute", top: "0.35rem", right: "0.35rem", fontSize: "0.55rem", letterSpacing: "0.05em", background: "rgba(23,22,26,0.82)", color: "#fff", padding: "0.1rem 0.35rem" }}>
+										used on {used.length}
+									</span>
+								) : null}
+							</div>
+							<p className="mono" style={{ fontSize: "0.68rem", margin: "0 0 0.3rem", wordBreak: "break-all" }}>{m.key}</p>
+							<input style={{ ...field, fontSize: "0.75rem" }} defaultValue={m.alt} placeholder="alt text" onBlur={(e) => { if (e.target.value !== m.alt) void patch(m.id, { alt: e.target.value }); }} />
+							<p className="muted" style={{ fontSize: "0.68rem", margin: "0.3rem 0 0" }}>
+								{m.fileName} · {m.sizeBytes ? `${Math.round(m.sizeBytes / 1024)} KB` : "—"}
+								{used?.length ? <span className="mono" style={{ color: "var(--info,#31577a)" }}> · {used.slice(0, 2).join(", ")}{used.length > 2 ? ` +${used.length - 2}` : ""}</span> : null}
+							</p>
 						</div>
-						<p className="mono" style={{ fontSize: "0.68rem", margin: "0 0 0.3rem", wordBreak: "break-all" }}>{m.key}</p>
-						<input style={{ ...field, fontSize: "0.75rem" }} defaultValue={m.alt} placeholder="alt text" onBlur={(e) => { if (e.target.value !== m.alt) void patch(m.id, { alt: e.target.value }); }} />
-						<p className="muted" style={{ fontSize: "0.68rem", margin: "0.3rem 0 0" }}>{m.fileName} · {m.sizeBytes ? `${Math.round(m.sizeBytes / 1024)} KB` : "—"}</p>
-					</div>
-				))}
+					);
+				})}
 			</div>
-			{items.length === 0 ? <p className="muted" style={{ textAlign: "center", padding: "2rem" }}>No media yet — uploads land under the <code>media/</code> prefix and serve at <code>/media/{"{key}"}</code>.</p> : null}
+			{shown.length === 0 ? <p className="muted" style={{ textAlign: "center", padding: "2rem" }}>No media yet — uploads land under the <code>media/</code> prefix and serve at <code>/media/{"{key}"}</code>.</p> : null}
 		</div>
 	);
 }
 
-/* ── Navigation tab ──────────────────────────────────────────────────────── */
+/* ── Navigation tab — live previews + grouped footer ─────────────────────── */
+
+function NavPreview({ items }: { items: NavItem[] }) {
+	const top = items.filter((i) => i.kind === "top");
+	const secondary = items.filter((i) => i.kind === "secondary");
+	return (
+		<div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: "0.9rem" }}>
+			<div className="mono" style={{ fontSize: "0.55rem", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--muted,#6e6a60)", padding: "0.4rem 0.7rem", borderBottom: "1px solid var(--border,#eae7de)", background: "var(--surface-alt,#fbfaf7)" }}>
+				Header — live preview
+			</div>
+			<div style={{ display: "flex", alignItems: "center", gap: "1.1rem", padding: "0.65rem 1rem", flexWrap: "wrap" }}>
+				<span className="mono" style={{ fontSize: "0.6rem", letterSpacing: "0.16em", border: "1px solid var(--ink,#17161a)", padding: "0.25rem 0.5rem" }}>CENTURY NIT</span>
+				{top.map((l) => (
+					<span key={l.href + l.label} style={{ fontSize: "0.78rem", opacity: l.visible === false ? 0.35 : 1, textDecoration: l.visible === false ? "line-through" : "none" }}>{l.label}</span>
+				))}
+				{secondary.length ? <span className="mono" style={{ fontSize: "0.55rem", color: "var(--muted,#6e6a60)" }}>+{secondary.length} more in mobile sheet</span> : null}
+				<span className="mono" style={{ marginLeft: "auto", background: "var(--ink,#17161a)", color: "#fff", fontSize: "0.58rem", letterSpacing: "0.08em", textTransform: "uppercase", padding: "0.4rem 0.8rem" }}>Portal sign-in</span>
+			</div>
+		</div>
+	);
+}
 
 function NavTab() {
 	const [surface, setSurface] = useState<"header" | "footer">("header");
@@ -406,6 +777,13 @@ function NavTab() {
 
 	function patchItem(i: number, p: Partial<NavItem>) {
 		setItems((list) => list.map((it, ix) => (ix === i ? { ...it, ...p } : it)));
+	}
+	function patchChild(i: number, ci: number, p: Partial<{ label: string; href: string }>) {
+		setItems((list) => list.map((it, ix) => {
+			if (ix !== i) return it;
+			const children = (it.children ?? []).map((ch, cx) => (cx === ci ? { ...ch, ...p } : ch));
+			return { ...it, children };
+		}));
 	}
 	function move(i: number, dir: -1 | 1) {
 		setItems((list) => {
@@ -423,6 +801,10 @@ function NavTab() {
 		setFlash(true); setTimeout(() => setFlash(false), 2500);
 	}
 
+	const isFooter = surface === "footer";
+	const footerCols = items.filter((i) => i.children?.length);
+	const footerFlat = items.filter((i) => !i.children?.length);
+
 	return (
 		<div>
 			<div style={{ display: "flex", gap: "0.4rem", marginBottom: "1rem" }}>
@@ -432,31 +814,64 @@ function NavTab() {
 				<span style={{ flex: 1 }} />
 				{flash ? <span className="mono" style={{ fontSize: "0.72rem", color: "var(--success,#2e6b34)" }}>saved</span> : null}
 				<button style={btn(true)} onClick={save}>Save order</button>
-				<button style={btn(false)} onClick={() => setItems([...items, { label: "New link", href: "/", kind: surface === "footer" ? "footer-link" : "secondary", visible: true }])}>+ Add link</button>
+				<button style={btn(false)} onClick={() => setItems([...items, isFooter ? { label: "New column", href: "", kind: "footer-col", visible: true, children: [] } : { label: "New link", href: "/", kind: "secondary", visible: true }])}>+ Add {isFooter ? "column" : "link"}</button>
 			</div>
 			{error ? <p style={{ color: "var(--danger,#a33b2e)", fontSize: "0.85rem" }}>{error}</p> : null}
+
+			{!isFooter ? <NavPreview items={items} /> : null}
+
+			{isFooter && footerCols.length ? (
+				<div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(footerCols.length, 4)}, 1fr)`, gap: 0, border: "1px solid var(--border,#d8d5cd)", marginBottom: "0.9rem" }}>
+					{footerCols.map((col) => {
+						const i = items.indexOf(col);
+						return (
+							<div key={i} style={{ borderRight: "1px solid var(--border,#eae7de)" }}>
+								<div style={{ background: "var(--surface-alt,#fbfaf7)", borderBottom: "1px solid var(--border,#d8d5cd)", padding: "0.45rem 0.7rem", display: "flex", gap: "0.4rem", alignItems: "center" }}>
+									<input style={{ ...field, border: "1px solid transparent", background: "none", fontSize: "0.68rem", fontFamily: "ui-monospace,monospace", letterSpacing: "0.12em", textTransform: "uppercase", padding: "0.15rem 0.25rem" }} value={col.label} onChange={(e) => patchItem(i, { label: e.target.value })} />
+									<button style={{ ...btnSm(false), padding: "0 0.35rem" }} onClick={() => setItems(items.filter((_, ix) => ix !== i))}>✕</button>
+								</div>
+								{(col.children ?? []).map((ch, ci) => (
+									<div key={ci} style={{ display: "flex", gap: "0.4rem", alignItems: "center", padding: "0.35rem 0.7rem", borderBottom: "1px solid var(--border,#eae7de)", fontSize: "0.75rem" }}>
+										<input style={{ ...field, border: "1px solid transparent", background: "none", fontSize: "0.75rem", padding: "0.15rem 0.25rem" }} value={ch.label} onChange={(e) => patchChild(i, ci, { label: e.target.value })} />
+										<input style={{ ...field, border: "1px solid transparent", background: "none", fontSize: "0.68rem", fontFamily: "ui-monospace,monospace", padding: "0.15rem 0.25rem", color: "var(--muted,#6e6a60)" }} value={ch.href} onChange={(e) => patchChild(i, ci, { href: e.target.value })} />
+										<button style={{ ...btnSm(false), padding: "0 0.3rem", fontSize: "0.6rem" }} onClick={() => patchItem(i, { children: (col.children ?? []).filter((_, cx) => cx !== ci) })}>✕</button>
+									</div>
+								))}
+								<div style={{ padding: "0.35rem 0.7rem" }}>
+									<button style={{ ...btnSm(false), fontSize: "0.58rem" }} onClick={() => patchItem(i, { children: [...(col.children ?? []), { label: "New link", href: "/" }] })}>+ link</button>
+								</div>
+							</div>
+						);
+					})}
+				</div>
+			) : null}
+
 			<div className="card" style={{ padding: "0.5rem" }}>
-				{items.map((it, i) => (
-					<div key={i} style={{ display: "flex", gap: "0.5rem", alignItems: "center", padding: "0.45rem", borderBottom: "1px solid var(--border,#eee)", opacity: it.visible === false ? 0.45 : 1 }}>
-						<span style={{ display: "flex", flexDirection: "column" }}>
-							<button style={{ ...btn(false), padding: "0 0.4rem", fontSize: "0.6rem" }} onClick={() => move(i, -1)}>▲</button>
-							<button style={{ ...btn(false), padding: "0 0.4rem", fontSize: "0.6rem" }} onClick={() => move(i, 1)}>▼</button>
-						</span>
-						<input style={{ ...field, width: 180 }} value={it.label} onChange={(e) => patchItem(i, { label: e.target.value })} />
-						<input style={{ ...field, flex: 1, fontFamily: "ui-monospace,monospace" }} value={it.href} onChange={(e) => patchItem(i, { href: e.target.value })} />
-						<select style={{ ...field, width: 130 }} value={it.kind} onChange={(e) => patchItem(i, { kind: e.target.value })}>
-							<option value="top">top</option>
-							<option value="secondary">secondary</option>
-							<option value="footer-link">footer-link</option>
-							<option value="footer-col">footer-col</option>
-						</select>
-						<label style={{ fontSize: "0.7rem", display: "flex", gap: "0.3rem", alignItems: "center" }}>
-							<input type="checkbox" checked={it.visible !== false} onChange={(e) => patchItem(i, { visible: e.target.checked })} /> visible
-						</label>
-						<button style={{ ...btn(false), padding: "0.2rem 0.5rem", fontSize: "0.65rem" }} onClick={() => setItems(items.filter((_, ix) => ix !== i))}>✕</button>
-					</div>
-				))}
-				{items.length === 0 ? <p className="muted" style={{ padding: "1.5rem", textAlign: "center", margin: 0 }}>No links — the site falls back to its compiled nav.</p> : null}
+				{(isFooter ? footerFlat : items).map((it) => {
+					const i = items.indexOf(it);
+					if (it.children?.length) return null;
+					return (
+						<div key={i} style={{ display: "flex", gap: "0.5rem", alignItems: "center", padding: "0.45rem", borderBottom: "1px solid var(--border,#eee)", opacity: it.visible === false ? 0.45 : 1 }}>
+							<span style={{ display: "flex", flexDirection: "column" }}>
+								<button style={{ ...btn(false), padding: "0 0.4rem", fontSize: "0.6rem" }} onClick={() => move(i, -1)}>▲</button>
+								<button style={{ ...btn(false), padding: "0 0.4rem", fontSize: "0.6rem" }} onClick={() => move(i, 1)}>▼</button>
+							</span>
+							<input style={{ ...field, width: 180 }} value={it.label} onChange={(e) => patchItem(i, { label: e.target.value })} />
+							<input style={{ ...field, flex: 1, fontFamily: "ui-monospace,monospace" }} value={it.href} onChange={(e) => patchItem(i, { href: e.target.value })} />
+							<select style={{ ...field, width: 130 }} value={it.kind} onChange={(e) => patchItem(i, { kind: e.target.value })}>
+								<option value="top">top</option>
+								<option value="secondary">secondary</option>
+								<option value="footer-link">footer-link</option>
+								<option value="footer-col">footer-col</option>
+							</select>
+							<label style={{ fontSize: "0.7rem", display: "flex", gap: "0.3rem", alignItems: "center" }}>
+								<input type="checkbox" checked={it.visible !== false} onChange={(e) => patchItem(i, { visible: e.target.checked })} /> visible
+							</label>
+							<button style={{ ...btn(false), padding: "0.2rem 0.5rem", fontSize: "0.65rem" }} onClick={() => setItems(items.filter((_, ix) => ix !== i))}>✕</button>
+						</div>
+					);
+				})}
+				{(isFooter ? footerFlat : items).filter((it) => !it.children?.length).length === 0 ? <p className="muted" style={{ padding: "1.5rem", textAlign: "center", margin: 0 }}>No links — the site falls back to its compiled nav.</p> : null}
 			</div>
 		</div>
 	);
@@ -515,10 +930,12 @@ function CopyTab() {
 /* ── Page ────────────────────────────────────────────────────────────────── */
 
 export function CmsManager() {
-	const [tab, setTab] = useState<Tab>("brand");
-	const tabs = useMemo<{ id: Tab; label: string }[]>(() => [
+	const [tab, setTab] = useState<Tab>("site");
+	const { entries, error: entriesError, reload } = useCmsEntries();
+	const mediaUsage = useMediaUsage(entries);
+	const tabs = useMemo<{ id: Tab; label: ReactNode }[]>(() => [
+		{ id: "site", label: <>Site pages <span style={{ color: "var(--accent,#b97a10)" }}>{SITE_GROUPS.flatMap((g) => g.pages).length}</span></> },
 		{ id: "brand", label: "Brand" },
-		{ id: "entries", label: "Pages & Collections" },
 		{ id: "media", label: "Media" },
 		{ id: "nav", label: "Navigation" },
 		{ id: "copy", label: "Copy" },
@@ -526,18 +943,19 @@ export function CmsManager() {
 
 	return (
 		<div className="page-content fade-in">
-			<div style={{ marginBottom: "1.5rem" }}>
-				<h1 className="page-title">Content Management</h1>
-				<p className="lead mt-2">
-					One identity, one content store, one media library — read by the site, the portal, the console and every email.
-				</p>
-			</div>
-			<div style={{ display: "flex", gap: "0.4rem", marginBottom: "1.5rem", borderBottom: "2px solid var(--ink,#17161a)", paddingBottom: "0.75rem" }}>
+			{/* No page header here — EnterpriseAdministration renders the section
+			    title/blurb above this component; a second one doubled it. */}
+			<div style={{ display: "flex", gap: "0.4rem", marginBottom: "1.5rem", borderBottom: "2px solid var(--ink,#17161a)", paddingBottom: "0.75rem", flexWrap: "wrap" }}>
 				{tabs.map((t) => (
 					<button key={t.id} style={btn(tab === t.id)} onClick={() => setTab(t.id)}>{t.label}</button>
 				))}
 			</div>
-			{tab === "brand" ? <BrandTab /> : tab === "entries" ? <EntriesTab /> : tab === "media" ? <MediaTab /> : tab === "nav" ? <NavTab /> : <CopyTab />}
+			{tab === "site" && entriesError ? <p style={{ color: "var(--danger,#a33b2e)", fontSize: "0.85rem" }}>{entriesError}</p> : null}
+			{tab === "site" ? <SitePagesTab entries={entries} reload={reload} />
+				: tab === "brand" ? <BrandTab />
+				: tab === "media" ? <MediaTab usage={mediaUsage} />
+				: tab === "nav" ? <NavTab />
+				: <CopyTab />}
 		</div>
 	);
 }

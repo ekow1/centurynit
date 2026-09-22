@@ -24,6 +24,7 @@ import {
 	videoTestimonials,
 } from "century-nit-core";
 import { useCatalog } from "../data/useCatalog";
+import { useContentEntries, useContentEntry, contentImage } from "../data/useContent";
 
 function PageHeader({
 	eyebrow,
@@ -1328,10 +1329,34 @@ export function Events() {
 
 export function Blog() {
 	const [category, setCategory] = useState("all");
-	const categories = ["all", "Admissions", "Destinations", "Funding"];
+	// Published `posts` CMS entries win when they exist; the compiled
+	// `articles` stay as fallback and first-paint.
+	const { entries, live } = useContentEntries("posts");
+	const cmsPosts = useMemo(
+		() =>
+			live
+				? entries
+						.map((e) => ({
+							id: e.slug,
+							title: String(e.payload.title ?? e.slug),
+							category: String(e.payload.category ?? "Journal"),
+							readTime: String(e.payload.readTime ?? ""),
+							date: e.publishedAt ? new Date(e.publishedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "",
+							image: contentImage(e.payload.image),
+							excerpt: String(e.payload.excerpt ?? ""),
+						}))
+						.filter((a) => a.title && a.excerpt)
+				: [],
+		[entries, live],
+	);
+	const source = cmsPosts.length ? cmsPosts : articles;
+	const categories = useMemo(
+		() => ["all", ...new Set(source.map((a) => a.category).filter(Boolean))],
+		[source],
+	);
 	const list = useMemo(
-		() => (category === "all" ? articles : articles.filter((a) => a.category === category)),
-		[category],
+		() => (category === "all" ? source : source.filter((a) => a.category === category)),
+		[category, source],
 	);
 	return (
 		<>
@@ -1389,8 +1414,25 @@ export function Blog() {
 
 export function BlogPost() {
 	const { id } = useParams();
-	const a = articles.find((x) => x.id === id);
-	if (!a) return <Navigate to="/blog" replace />;
+	// CMS `posts/{slug}` first; the compiled article set is the fallback.
+	const { entry, loaded } = useContentEntry("posts", id);
+	const compiled = articles.find((x) => x.id === id);
+	const cms = entry
+		? {
+				id: entry.slug,
+				title: String(entry.payload.title ?? entry.slug),
+				category: String(entry.payload.category ?? "Journal"),
+				readTime: String(entry.payload.readTime ?? ""),
+				date: entry.publishedAt ? new Date(entry.publishedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "",
+				image: contentImage(entry.payload.image),
+				excerpt: String(entry.payload.excerpt ?? ""),
+				body: typeof entry.payload.body === "string" ? entry.payload.body : "",
+			}
+		: null;
+	const a = cms ?? compiled;
+	const body = cms?.body ?? "";
+	if (!a && (loaded || compiled)) return <Navigate to="/blog" replace />;
+	if (!a) return null;
 	return (
 		<>
 			<header className="page-header">
@@ -1403,15 +1445,25 @@ export function BlogPost() {
 			</header>
 			<section className="section">
 				<div className="container" style={{ maxWidth: "48rem" }}>
-					<div className="blog-img mb-4">
-						<img src={a.image} alt="" />
-					</div>
+					{a.image ? (
+						<div className="blog-img mb-4">
+							<img src={a.image} alt="" />
+						</div>
+					) : null}
 					<p className="drop-cap">{a.excerpt}</p>
-					<p className="mt-3 muted">
-						This prototype article demonstrates editorial layout. In production, full long-form content
-						would expand on frameworks, checklists, and counselor insights for {a.category.toLowerCase()}{" "}
-						topics.
-					</p>
+					{body
+						? body.split(/\n{2,}/).map((para, i) => (
+								<p key={i} className="mt-3">
+									{para}
+								</p>
+							))
+						: (
+							<p className="mt-3 muted">
+								This prototype article demonstrates editorial layout. In production, full long-form content
+								would expand on frameworks, checklists, and counselor insights for {a.category.toLowerCase()}{" "}
+								topics.
+							</p>
+						)}
 					<div className="row mt-4">
 						<JourneyButton />
 						<Button to="/blog" variant="secondary">
@@ -1425,6 +1477,16 @@ export function BlogPost() {
 }
 
 export function FAQs() {
+	// Published `faqs` CMS entries win when they exist — ops edits them in
+	// Content Management → Site pages → FAQs. Empty collection or a failed
+	// fetch keeps the compiled list, so the page never goes blank.
+	const { entries, live } = useContentEntries("faqs");
+	const cmsFaqs = live
+		? entries
+				.map((e) => ({ q: e.payload.question, a: e.payload.answer }))
+				.filter((f): f is { q: string; a: string } => typeof f.q === "string" && typeof f.a === "string")
+		: [];
+	const list = cmsFaqs.length ? cmsFaqs : faqs;
 	return (
 		<>
 			<PageHeader
@@ -1434,7 +1496,7 @@ export function FAQs() {
 			/>
 			<section className="section">
 				<div className="container" style={{ maxWidth: "48rem" }}>
-					{faqs.map((f) => (
+					{list.map((f) => (
 						<details key={f.q} className="faq-item">
 							<summary>{f.q}</summary>
 							<p>{f.a}</p>

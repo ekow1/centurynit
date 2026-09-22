@@ -64,6 +64,24 @@ export async function apiFetch<T>(
 				location.assign("/mfa-setup");
 			} else if (code === "MFA_CHALLENGE_REQUIRED") {
 				location.assign("/mfa-challenge");
+			} else if (
+				(code === "STAFF_ACCESS_REQUIRED" || message === "Staff access required") &&
+				path.startsWith("/api/v1/") &&
+				location.pathname !== "/login"
+			) {
+				/*
+				 * The session cookie belongs to a non-staff account — a portal
+				 * sign-in minted through this origin overwrote the staff
+				 * session. Any v1 route answers this way, so clear the stale
+				 * opsUser cache, sign the foreign session out server-side,
+				 * and land on /login. Same catch-all idea as the MFA gates
+				 * above: don't leave a dead session rendering walls of 403s.
+				 */
+				sessionStorage.removeItem("century-nit-ops-auth");
+				void fetch("/api/auth/sign-out", {
+					method: "POST",
+					credentials: "include",
+				}).finally(() => location.assign("/login"));
 			}
 		}
 		throw new ApiError(res.status, code, message);

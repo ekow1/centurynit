@@ -105,10 +105,11 @@ function createAuth(config: GoogleSocialConfig) {
 		before: createAuthMiddleware(async (ctx) => {
 			const isEmailSignIn = ctx.path === "/sign-in/email";
 			const isPhoneSignIn = ctx.path === "/sign-in/phone-number";
-			if (!isEmailSignIn && !isPhoneSignIn) return;
+			const isEmailSignUp = ctx.path === "/sign-up/email";
+			if (!isEmailSignIn && !isPhoneSignIn && !isEmailSignUp) return;
 
 			let email = "";
-			if (isEmailSignIn) {
+			if (isEmailSignIn || isEmailSignUp) {
 				email =
 					typeof (ctx.body as { email?: unknown } | undefined)?.email === "string"
 						? (ctx.body as { email: string }).email.trim().toLowerCase()
@@ -136,6 +137,25 @@ function createAuth(config: GoogleSocialConfig) {
 				.where(eq(schema.opsUsers.email, email))
 				.limit(1);
 			/*
+			 * The ops console is staff-only at mint time, not just at render.
+			 * Its Worker stamps every proxied call with x-centry-surface, so a
+			 * client credential sign-in through the console is refused here —
+			 * otherwise it mints a session cookie on the console host that
+			 * shadows the staff cookie and 403s every route the staff member
+			 * opens next. Portal and direct API sign-ins carry no marker and
+			 * are untouched.
+			 */
+			if (
+				!staff?.active &&
+				ctx.headers?.get("x-centry-surface") === "ops"
+			) {
+				throw APIError.from("FORBIDDEN", {
+					code: "STAFF_ONLY",
+					message:
+						"This console is for staff accounts. Clients sign in through the applicant portal.",
+				});
+			}
+			/*
 			 * Staff answer a second factor on every sign-in — it is not an
 			 * option. The twoFactor plugin's trust_device cookie would let a
 			 * previously "trusted" browser skip the challenge entirely, so the
@@ -154,9 +174,10 @@ function createAuth(config: GoogleSocialConfig) {
 					else ctx.headers.delete("cookie");
 				}
 			}
-			// Everything below governs the password path: the staff/portal
-			// password toggles and the email-keyed lockout counter.
-			if (isPhoneSignIn) return;
+			// Everything below governs the password sign-in path: the
+			// staff/portal toggles and the email-keyed lockout counter.
+			// Sign-ups and phone sign-ins stop at the surface check above.
+			if (isPhoneSignIn || isEmailSignUp) return;
 			const settings = await getAuthSettings();
 			if (staff?.active) {
 				if (!settings["ops.email_password"]) {

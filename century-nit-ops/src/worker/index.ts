@@ -268,6 +268,12 @@ app.all("/api/*", async (c) => {
 	}
 	headers.set("x-forwarded-proto", source.protocol.replace(":", ""));
 	headers.set("x-forwarded-host", source.host);
+	// Marks the request as arriving through the ops console. The API uses it to
+	// keep the console staff-only at sign-in: a client credential sign-in here
+	// would mint a session cookie on the console host that shadows the staff
+	// cookie and 403s every route. Server-set, so a client cannot fake it —
+	// the header is overwritten on every proxied call.
+	headers.set("x-centry-surface", "ops");
 
 	const upstream = await fetch(
 		new Request(target, {

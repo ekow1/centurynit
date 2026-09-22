@@ -22,6 +22,9 @@ export default defineConfig({
 				target: "http://localhost:3000",
 				changeOrigin: true,
 				secure: false,
+				// Same surface marker the ops Worker sets — keeps dev sign-in
+				// behaviour identical to production (console is staff-only).
+				headers: { "x-centry-surface": "ops" },
 			},
 		},
 	},

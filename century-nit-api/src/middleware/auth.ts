@@ -176,7 +176,7 @@ export const requireAuth: MiddlewareHandler<{ Variables: AuthVariables }> = asyn
 /** Any active staff member. Applicants get 403. */
 export const requireStaff: MiddlewareHandler<{ Variables: AuthVariables }> = async (c, next) => {
 	if (!c.get("staff")) {
-		throw new HttpError(403, "FORBIDDEN", "Staff access required");
+		throw new HttpError(403, "STAFF_ACCESS_REQUIRED", "Staff access required");
 	}
 	await next();
 };
@@ -240,7 +240,7 @@ export function requireRole(
 	return async (c, next) => {
 		const staff = c.get("staff");
 		if (!staff) {
-			throw new HttpError(403, "FORBIDDEN", "Staff access required");
+			throw new HttpError(403, "STAFF_ACCESS_REQUIRED", "Staff access required");
 		}
 		if (!roles.includes(staff.role)) {
 			throw new HttpError(
@@ -274,7 +274,7 @@ export function requireCapability(
 	return async (c, next) => {
 		const staff = c.get("staff");
 		if (!staff) {
-			throw new HttpError(403, "FORBIDDEN", "Staff access required");
+			throw new HttpError(403, "STAFF_ACCESS_REQUIRED", "Staff access required");
 		}
 		if (!(await checkRoleCapability(staff.role, capability))) {
 			throw new HttpError(403, "FORBIDDEN", `Your role cannot ${CAPABILITY_VERBS[capability] ?? capability}`);
@@ -303,7 +303,7 @@ export function requireModule(
 	return async (c, next) => {
 		const staff = c.get("staff");
 		if (!staff) {
-			throw new HttpError(403, "FORBIDDEN", "Staff access required");
+			throw new HttpError(403, "STAFF_ACCESS_REQUIRED", "Staff access required");
 		}
 		const allowed = await checkRolePermission(staff.role, module);
 		if (!allowed) {
@@ -328,7 +328,7 @@ export function requireAnyModule(
 	return async (c, next) => {
 		const staff = c.get("staff");
 		if (!staff) {
-			throw new HttpError(403, "FORBIDDEN", "Staff access required");
+			throw new HttpError(403, "STAFF_ACCESS_REQUIRED", "Staff access required");
 		}
 		for (const module of modules) {
 			if (await checkRolePermission(staff.role, module)) {

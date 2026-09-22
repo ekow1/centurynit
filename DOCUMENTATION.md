@@ -529,5 +529,174 @@ reasons are written down in the migration discipline notes.
 
 ---
 
+## Part 14: Under the hood, the flows that matter
+
+Features above; mechanics here. These are the paths worth understanding
+before changing anything.
+
+### Every request, in order
+
+A call reaches the API, gets security headers, passes the origin check,
+passes rate limiting, then meets the guard chain in a fixed order: prove
+you're signed in, prove you're staff (if the route needs it), prove you've
+enrolled a second factor (staff), prove your role may see the module,
+prove your role may do the action. A branch-scoped role gets its branch
+constraint applied last. The permission check reads the live roles table,
+so a role edit takes effect without a deploy; the built-in matrix is only
+a fallback. Inputs are validated by the same schema that generates the
+public API reference, so docs and enforcement can't disagree.
+
+### How the journey step is decided
+
+Nothing stores "step 7 of 14". Each time the portal asks, the API collects
+the facts about the client's newest case: does a consultation exist and
+what was its outcome, what did the client consent to, which package and
+plan, which invoices are paid, which handler is assigned, which schools
+are locked, which offers arrived, what the visa record says, what travel
+help was chosen, what checklist items are done. A single shared function
+turns those facts into the step list. Because it's computed fresh, the
+two apps can never disagree, and a fact that appears out of order (a visa
+paid before schools locked) marks the earlier steps "skipped" rather than
+pretending they were done.
+
+### How a booking becomes a consultation
+
+The client picks a slot, the API creates a payment, Paystack collects the
+money, and only then do the records land: the booking, the consultation,
+the invoice marked paid, the event history, and queued notifications.
+The double-booking guard is a database rule, not application hope: the
+column ranges physically cannot overlap, so two simultaneous checkouts
+can't both win the slot. Everything that can fail after the commit (the
+email, the meeting link, the push) is queued, so a provider outage can
+never roll back a paid booking.
+
+### How a payment settles, twice, safely
+
+Two paths can settle a payment. The fast path is the client returning
+from checkout and the portal asking the API to verify. The authority path
+is the signed webhook arriving from Paystack on its own schedule. Both
+run the same settlement, keyed on the gateway reference: the first one to
+arrive writes the payment, the ledger entry, the event history, and the
+journey side effects (a deposit fires the handler handoff exactly once).
+The second arrival sees the reference already recorded and becomes a
+no-op. Retries, replays and double submissions cannot charge or advance
+twice. If neither lands, staff reconcile against the gateway to close the
+gap.
+
+### How invoices are numbered and tracked
+
+Drafts (proformas) and issued invoices draw from separate number
+sequences, each allocated inside the same transaction as the insert, so
+there are no duplicate numbers under concurrency and no gaps from
+abandoned drafts. Paid totals are never stored as a number that can
+drift; they're summed from the payment records each time, and the next
+uncovered instalment due date is derived from how much has been covered.
+The ledger views are projections over the invoice event history, which is
+why they can't disagree with the payments table.
+
+### How a document moves
+
+Upload is three steps: the API mints a short-lived upload link, the file
+goes straight from the browser to private storage, then the client tells
+the API it's complete and the record lands. Review changes the record's
+state (verified, or rejected with a note the client sees) and that state
+feeds the checklist and the journey. Downloads are minted per request.
+Rejected files are deleted by a daily sweep after a retention window, so
+rejected personal documents don't accumulate in storage.
+
+### How marketing actually sends
+
+When a campaign is sent, the audience is frozen into a recipient ledger:
+opted-in and unsuppressed people become pending rows, everyone else
+becomes a skipped row with its reason recorded. The worker then walks
+pending rows only, which is why a retry after a crash can never re-mail
+someone already delivered. Per recipient it builds the merge context from
+the real case (officer name, branch, next due), wraps every link for
+click tracking, sends through the provider, and stamps the outcome plus
+the provider's message id back on the row. As delivery events return
+through the signed webhook (open, bounce, complaint), the recipient row
+is updated and a bounce or complaint also writes the global suppression,
+so the address is protected everywhere from then on. The report is a
+read of the ledger, so numbers can never drift from what actually sent.
+
+Automations work the opposite direction: a domain moment (visa approved,
+offer received, assessment complete, no-show, milestone overdue) fires an
+event into an intake check, which writes a scheduled send per matching
+person. A sweep every minute delivers whatever's due; a daily scan inside
+the same sweep handles date triggers like thirty-days-to-departure. Every
+firing is logged, including the skip reason.
+
+### How consent follows an address
+
+Consent lives on the address, not on a list row. A confirmation click, an
+offline-consent note, a re-opt-in on the preferences page, an unsubscribe,
+a bounce: all of it lands in one consent ledger keyed by address. Any
+surface that asks "may we email this person" reads that ledger plus the
+global suppression list, so consent granted in the portal and a
+suppression caused by a bounce protect every list and every campaign at
+once.
+
+### How staff permission resolves
+
+A staff sign-in produces the same session as a client sign-in; what makes
+it staff is the staff record attached to the account, carrying role and
+branch. When a guarded route runs, the role's permission list is read
+from the roles table (a custom role's list is exactly what the permission
+matrix saved), falling back to the built-in defaults only when the role
+has no row. Seeing and doing are separate entries in that same list:
+"invoices" the module opens the page, "issue invoices" the capability
+enables the action. Ownership of a chapter is a capability too, which is
+why the visa-officer picker can only offer staff who may own visa work.
+
+### How chat stays live
+
+Each participant holds a read cursor on a conversation; unread counts are
+the distance between that cursor and the latest message. Typing
+indicators and staff presence ride on lightweight heartbeats rather than
+sockets. When a client is offline, a reply is emailed; when they answer
+the email, the reply is threaded back onto the same conversation by the
+token in the subject, so a thread started in the portal can continue in
+an inbox without forking.
+
+### The audit chain, mechanically
+
+Every audited write computes a fingerprint over the entry's content plus
+the previous entry's fingerprint, and stores both. Verification replays
+the whole chain: if any entry was edited or deleted, every fingerprint
+after it stops matching. It proves tampering happened, not just that data
+changed, which is why the console shows the chain status as a badge
+rather than trusting the rows.
+
+### The sweeps and their clocks
+
+- Every minute: due automation sends are delivered; inside the same run,
+  a daily pass handles date triggers.
+- Every fifteen minutes: unclaimed helpdesk requests are auto-assigned so
+  nothing sits unanswered.
+- Every sixty seconds: meetings are marked live or ended.
+- Daily: rejected documents are purged; date-based automation triggers
+  evaluated.
+- On a schedule: staff calendar feeds are mirrored into busy blocks.
+
+Every queued job carries an idempotency key; a duplicate key is a silent
+no-op, failed jobs retry with growing backoff, and finished jobs are
+kept only briefly, so the queue can't fill with history.
+
+### How the records relate
+
+One account (`users`) may be a client, a staff member, or both shapes at
+once (a staff record attaches to the account). A client has a profile;
+each engagement is a case; a case owns school submissions, invoices,
+documents, comments, chapter seats and handoffs. An invoice owns lines,
+payments and events; payments point at gateway transactions; stored
+authorizations power instalment charges. A conversation owns members,
+messages, attachments and reactions. A campaign owns a recipient ledger
+and tracked links; the consent ledger and suppression list stand beside
+all of it, keyed by address rather than by list. People in marketing are
+assembled at read time from three sources (list contacts, applicants,
+leads), which is why one person can never appear as two rows.
+
+---
+
 *Covers the three deployables (public site + portal, Operations Center,
 API + worker) and the shared packages, as of the current codebase.*

@@ -172,6 +172,16 @@ for the school-submission handler. Entering departure or the final payment
 stage hard-gates the same way until a manager resolves the handoff or
 defers it.
 
+### The pre-departure checklist
+
+The checklist is seeded from a template the platform admins edit, plus
+country-specific items the destination adds automatically. Items are
+split by owner: some the client ticks, some only staff can close ("Century
+NIT closes this item"), and some demand proof, meaning they close only
+when an uploaded document is verified. Staff may tick a client item on a
+phone call, and the record says who did it; waiving a required item needs
+a written reason.
+
 ### Flexible entry and exit
 
 Service packages are priced per stage. A client can enter at different
@@ -223,7 +233,15 @@ or ended, feeding the console's "what's happening now" view.
 
 Staff calendars connect both ways: they can pull their personal calendar's
 busy times in so clients can't book over them, and publish their Century
-bookings out to their personal calendar as a subscribeable feed.
+bookings out to their personal calendar as a subscribeable feed. A shared
+company calendar connection mirrors the branch's bookings to one Google
+calendar the whole team can watch.
+
+Beyond the paid consultation, handlers can schedule **check-ins** on an
+active case: free sessions like a document review, an offer decision call,
+a visa mock interview or a pre-departure briefing. The client is emailed
+and joins through the portal exactly like a booking, but no fee is ever
+raised for one.
 
 ---
 
@@ -258,7 +276,9 @@ Clients can pay in instalments: full payment or a plan at enrolment, and a
 post-arrival schedule they propose and a manager or finance approves. With
 the client's consent, a saved payment authorization lets the system charge
 each instalment automatically; every attempt is logged so failures are
-visible, never silent.
+visible, never silent. Post-arrival plans carry real late-payment rules:
+a grace window, reminder emails ahead of each due date, and an interest
+percentage on overdue amounts, all tunable in settings.
 
 ### Fees and packages
 
@@ -289,7 +309,8 @@ note. Verification progress feeds the client's checklist and the journey on
 both sides. Staff can request a specific document by name ("passport data
 page"), which appears as a task in the portal. Rejected files are purged
 after a retention period. Nothing is publicly reachable; every download
-goes through a short-lived signed link the API mints.
+goes through a short-lived signed link the API mints. Uploads accept PDF
+only, up to fifteen megabytes.
 
 One deliberate hold: the documents the agency produces as the client's
 agent, the admission letter and the visa outcome, are visible in the vault
@@ -463,7 +484,9 @@ exact task.
   stages, chapter owners, package and plan, invoices, comments, documents,
   visa and departure details, release override, post-arrival schedule, and
   referral to another branch.
-- **Clients, Leads**: records and the enquiry pipeline.
+- **Clients, Leads**: records and the enquiry pipeline, which moves a
+  lead through new, contacted, consultation booked, assessment complete,
+  and converted or lost.
 - **Appointments, Live meetings**: the week and rooms in progress.
 - **Universities, Programmes, Scholarships, Packages, Departure
   checklist**: the catalogue editors. Scholarships can also be awarded to
@@ -478,6 +501,12 @@ exact task.
   Content (CMS), Lookups, Notifications, Settings**: platform
   administration. Health, the permission matrix, sign-in policy, the audit
   feed, content, form dropdowns, notification templates and integrations.
+  Settings is deeper than a preferences page: integration credentials
+  (email, storage, Google, the payment gateways, push keys) are entered
+  here, stored encrypted, shown masked, and every change is audited. So
+  are the business rules: the deposit percentage, each milestone split,
+  post-arrival grace and interest, officer capacity, booking buffer,
+  slots per day, branch hours and timezone.
 
 ---
 
@@ -806,6 +835,15 @@ sockets. When a client is offline, a reply is emailed; when they answer
 the email, the reply is threaded back onto the same conversation by the
 token in the subject, so a thread started in the portal can continue in
 an inbox without forking.
+
+### How screens stay fresh
+
+The server emits typed domain events over a live stream whenever a fact
+changes: a payment recorded, a booking assigned, a document uploaded. Each
+event carries just the entity ids, and each is addressed to an audience:
+the client's own channel, or every connected console. The apps react by
+refetching only the affected slice, never the whole screen, so a payment
+settling mid-conversation updates the ledger without a reload.
 
 ### The audit chain, mechanically
 

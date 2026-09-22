@@ -299,21 +299,113 @@ Stripe card gateway exists alongside it and activates when a key is
 configured, so the payments log shows records from both gateways plus
 staff-recorded bank and cash entries. There is deliberately no way for a
 client to claim "I paid"; cash and bank payments are recorded by staff.
+Checkout is opened in cedis at the live exchange rate — if the merchant
+account isn't GHS-enabled the gateway call falls back to dollars — and a
+proforma can't be paid at all until staff review and issue it (an agency
+proforma auto-issues the moment the client goes to pay it).
 Mobile-money charges with an OTP step are also supported. Receipts and
 invoices print as PDFs.
 
-### Instalments
+Settlement is deliberately paranoid. The invoice is credited *before* the
+transaction is marked successful, so a crash mid-settle leaves the
+transaction pending and a retry can still act — never the other way
+round, where a retry would have seen "success" on an unpaid invoice
+forever. A payment larger than the outstanding balance is refused
+outright. And one payment is also a *decision*: settling the visa invoice
+records the client's consent to proceed with visa processing and fires
+the handler handoff in the same stroke — paying the bill is the
+signature.
 
-Clients can pay in instalments: full payment or a plan at enrolment, and a
-post-arrival schedule they propose and a manager or finance approves. With
-the client's consent, a saved payment authorization lets the system charge
-each instalment automatically; every attempt is logged so failures are
-visible, never silent. Post-arrival plans carry real late-payment rules:
-a grace window, reminder emails ahead of each due date, and an interest
-percentage on overdue amounts, all tunable in settings. A client can
-switch between the full and instalment plans from the portal, and schools
-added after the first application invoice went out are billed on a
-supplementary invoice, never by rewriting the original.
+Every settled payment triggers a receipt email carrying two PDF
+attachments — the invoice and a receipt — that itemise the actual lines
+paid for (visa fee, ticket, consultation) rather than a generic label,
+show both currencies, and state the remaining balance. The email is
+queued rather than sent inline, so a mail-provider outage retries on its
+own schedule instead of losing the client's proof of payment.
+
+### Milestones: when money falls due
+
+A full-journey instalment invoice is not a list of dates invented at
+enrolment — its lines carry *triggers*: the deposit falls due on
+acceptance, the admissions balance on the first offer, the pre-departure
+milestone when the visa file opens, and the post-arrival remainder once
+the client lands. When a case event fires its trigger, the matching line
+is stamped with a due date — once — and the invoice's own due date moves
+to the earliest unpaid dated line. That earliest date is what "overdue"
+reads; overdue is derived, never stored.
+
+The moment a milestone falls due the client is told — in-app and by email —
+which line, how much, and *why* in their own words ("Your first offer
+letter has been recorded"), with a link to pay. No silent billing. And
+because a milestone depends on the case event being recorded through the
+right path, a daily reconciliation reads the case state itself and dates
+any line whose event plainly happened — a stage moved by hand or a missed
+hook can never leave money owed but unbilled; every such stamp is audited.
+
+Payments cover the invoice's lines in order, like water filling a row of
+glasses — the client's "next payment" is always the first line the money
+hasn't yet reached, never a vague balance. A client can switch between
+the full and instalment plans from the portal, but only while nothing
+beyond the deposit has been paid: after that the lines are the record and
+the plan cannot move. Schools added after the first application invoice
+went out are billed on a supplementary invoice, never by rewriting the
+original.
+
+### Auto-pay
+
+Auto-pay is documented here fully because it is the piece clients ask
+about most.
+
+- **The card on file.** A successful card payment returns a reusable
+  gateway authorization, which is stored — card brand, last four digits
+  and bank, never the number. Mobile-money authorizations are not
+  reusable and are never stored, so auto-pay is card-only.
+- **Consent is a real switch.** Nothing is charged while it is off.
+  Turning it on requires a card already on file, stamps the consent
+  timestamp, and can be withdrawn from the portal at any time.
+- **A daily sweep does the charging.** Once a day a worker walks every
+  unpaid, past-due line on issued invoices where the client opted in, and
+  charges the saved authorization — but only after the milestone
+  reconciliation above has run, so nothing stays owed-but-unbilled.
+- **Success is indistinguishable from a manual payment.** A successful
+  auto-debit settles through the exact same path a checkout payment
+  takes — same verification, same receipt email, same live updates. The
+  ledger simply labels it `auto-pay · Visa ····4283`.
+- **Failures are loud, never silent.** Every attempt is logged with its
+  gateway response. A declined debit emails the client once — what was
+  due, what the card said, when it will be retried — with a "pay now or
+  another way" link, and surfaces a banner in the portal showing the
+  amount, the reason and the next retry date.
+- **Retries and escalation.** A failed line retries every three days. If
+  it is still unpaid ten days after the first failure, the client *and*
+  the case handler are both emailed once — the handler gets a follow-up
+  notice — while retries continue in the background.
+- **It follows the schedule, not a fixed amount.** The sweep charges each
+  line's outstanding share, capped at the invoice's remaining balance; a
+  line already covered by another payment is never re-charged. When the
+  last line is covered there is simply no work, and a new invoice starts
+  a fresh schedule.
+
+### Post-arrival plans
+
+The post-arrival remainder has its own lifecycle. The client (or staff on
+their behalf, with a recorded reason) picks a schedule — a number of
+months and a frequency — from a catalogue finance controls in settings.
+The pick is a *request*: it does not touch the invoice, and a pending
+request shows as a single undated line so nothing looks payable on a
+schedule nobody has approved. Finance or a manager then enters the start
+date and approves; only then does the remainder become one dated
+instalment line per payment, with the catalogue's flat interest priced
+in and frozen on the case. A declined request comes back with a reason
+and the client can pick again; once an instalment has been paid the
+schedule is locked — paid money is never reshaped.
+
+Each dated, unpaid instalment gets a reminder email ahead of its due date
+(the lead time is a setting); when a schedule is rewritten, stale
+reminders are cancelled and replaced. Plans approved before the
+start-date flow existed anchor on the recorded arrival date — or, failing
+that, the booked flight's departure plus a day — with a grace window
+before the first instalment.
 
 ### Fees and packages
 
@@ -335,10 +427,30 @@ package and shape the quotation.
 ### The ledger
 
 Every case and every client has a ledger view: a chapter-numbered journal
-of invoices and payments. Underneath sits the invoice event history,
-immutable and append-only, the substrate the views are built from. A paid
-invoice can't be voided (it must be credited), and settlement is idempotent,
-so a replayed webhook or retried verification can never charge twice.
+of invoices and payments, numbered `INV-2026-0007` (and `PRO-` for
+proformas) from collision-proof sequences. The ledger is a *read model* —
+it stores nothing of its own. It reads three sources and merges them into
+one timeline: settled and manually recorded payments, every auto-pay
+attempt including declines, and checkout attempts. Scheduled rows come
+from the invoice's own unpaid dated lines.
+
+The same ledger serves two audiences honestly: the portal trims it to
+face value — settlements, upcoming instalments, declined auto-debits —
+while staff see everything: gateway references, decline reasons, which
+staff member recorded a cash payment, and even failed checkout attempts
+the client abandoned. Each row names what the money was for (the invoice
+line it landed on), the channel ("Paystack · Mobile Money", "auto-pay ·
+Visa ····4283", "Cash"), and the invoice's outstanding balance right
+after it.
+
+Underneath sits the invoice event history, immutable and append-only —
+the substrate the views are built from — and the application's "paid"
+flags are not written by code at all: a database trigger derives them
+from the ledger on every invoice, line or payment change, so a flag can
+never disagree with the money. A paid invoice can't be voided — it must
+be credited with a reason, capped at the outstanding balance — while a
+proforma can still be voided, which sends it back to whoever raised it
+with the reason attached.
 
 ---
 

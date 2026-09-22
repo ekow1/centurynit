@@ -3,31 +3,31 @@
 <style>
 @page {
 	size: A4;
-	margin: 20mm 18mm 20mm;
-	@top-left {
-		content: "CENTURY NIT CONSULT";
-		font-family: "Segoe UI", sans-serif; font-size: 7.5pt;
-		letter-spacing: 0.18em; color: #999;
+	margin: 23mm 21mm 24mm;
+	@bottom-center {
+		content: "—  " counter(page) "  —";
+		font-family: Georgia, "Times New Roman", serif;
+		font-size: 8.5pt; color: #8a8a8a; letter-spacing: 0.08em;
 	}
+}
+@page :left {
+	@top-left {
+		content: "Century NIT Consult";
+		font-family: Georgia, "Times New Roman", serif;
+		font-style: italic; font-size: 8pt; color: #999;
+	}
+}
+@page :right {
 	@top-right {
 		content: "Complete Platform Documentation";
 		font-family: Georgia, "Times New Roman", serif;
-		font-style: italic; font-size: 8.5pt; color: #777;
-	}
-	@bottom-left {
-		content: "Century NIT Consult · Internal documentation";
-		font-size: 8pt; color: #999; letter-spacing: 0.06em;
-	}
-	@bottom-right {
-		content: "Page " counter(page) " of " counter(pages);
-		font-family: Georgia, serif; font-size: 9pt; color: #555;
+		font-style: italic; font-size: 8pt; color: #999;
 	}
 }
 @page cover {
 	@top-left { content: none; }
 	@top-right { content: none; }
-	@bottom-left { content: none; }
-	@bottom-right { content: none; }
+	@bottom-center { content: none; }
 }
 @page toc {
 	@top-left { content: none; }
@@ -36,46 +36,54 @@
 * { box-sizing: border-box; }
 html { -webkit-print-color-adjust: exact; }
 body {
-	font-family: "Segoe UI", Calibri, "Helvetica Neue", Arial, sans-serif;
-	font-size: 9.8pt; line-height: 1.55; color: #1c1c1c; margin: 0;
+	font-family: Georgia, "Times New Roman", serif;
+	font-size: 10.2pt; line-height: 1.62; color: #211d19; margin: 0;
 	hyphens: auto;
 }
 
 /* — Cover — */
-.cover { page: cover; break-after: page; height: 250mm;
-	display: flex; flex-direction: column; justify-content: center; }
-.cover .brand { font-size: 9pt; letter-spacing: 0.34em; text-transform: uppercase;
-	color: #777; margin-bottom: 30pt; }
-.cover .rule { width: 42pt; border-top: 2.5pt solid #1c1c1c; margin-bottom: 24pt; }
-.cover h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400;
-	font-size: 34pt; line-height: 1.22; margin: 0 0 18pt; color: #1c1c1c; }
-.cover .sub { font-size: 12pt; color: #444; max-width: 128mm; line-height: 1.6;
-	margin: 0 0 48pt; }
-.cover .meta { font-size: 9pt; color: #777; letter-spacing: 0.08em;
-	border-top: 0.6pt solid #bbb; padding-top: 12pt; width: 128mm;
-	display: flex; justify-content: space-between; }
-.cover .control { margin-top: 46pt; width: 128mm; border-collapse: collapse;
-	font-size: 8.5pt; }
-.cover .control td { border-top: 0.5pt solid #ccc; padding: 6pt 10pt 6pt 0;
-	color: #555; vertical-align: top; }
-.cover .control td:first-child { color: #999; text-transform: uppercase;
-	letter-spacing: 0.1em; font-size: 7.5pt; width: 34mm; padding-top: 7pt; }
+.cover { page: cover; break-after: page; height: 244mm;
+	border: 0.75pt solid #2a2620; outline: 0.4pt solid #2a2620;
+	outline-offset: 4pt; padding: 0 18mm;
+	display: flex; flex-direction: column; }
+.cover .top { padding-top: 26mm; text-align: center; }
+.cover .brand { font-family: "Segoe UI", Calibri, sans-serif;
+	font-size: 9.5pt; letter-spacing: 0.42em; text-transform: uppercase;
+	color: #211d19; }
+.cover .brand::before, .cover .brand::after { content: "—";
+	color: #b8b2a6; margin: 0 12pt; font-family: Georgia, serif; }
+.cover .doc { margin-top: 3.5pt; font-family: "Segoe UI", sans-serif;
+	font-size: 7pt; letter-spacing: 0.22em; text-transform: uppercase;
+	color: #9a948a; }
+.cover .mid { flex: 1; display: flex; flex-direction: column;
+	justify-content: center; text-align: center; }
+.cover h1 { font-weight: 400; font-size: 33pt; line-height: 1.28;
+	margin: 0; color: #211d19; }
+.cover .rule { width: 46pt; margin: 22pt auto; border-top: 0.6pt solid #2a2620; }
+.cover .sub { font-style: italic; font-size: 11.5pt; color: #57514a;
+	line-height: 1.7; max-width: 118mm; margin: 0 auto; }
+.cover .bottom { padding-bottom: 24mm; text-align: center;
+	font-family: "Segoe UI", sans-serif; font-size: 8pt; color: #7d776e;
+	letter-spacing: 0.14em; text-transform: uppercase; }
+.cover .bottom .sep { color: #c9c3b8; margin: 0 8pt; }
 
 /* — Contents — */
 .toc { page: toc; break-after: page; }
-.toc .toc-title { font-family: Georgia, serif; font-weight: 400; font-size: 21pt;
-	margin: 0 0 22pt; }
+.toc .toc-title { font-weight: 400; font-size: 20pt; text-align: center;
+	margin: 8mm 0 6mm; }
+.toc .toc-rule { width: 46pt; margin: 0 auto 10mm;
+	border-top: 0.6pt solid #2a2620; }
 .toc ol { list-style: none; margin: 0; padding: 0; }
-.toc li { display: flex; align-items: baseline; margin: 0 0 7pt; }
-.toc .n { font-family: Georgia, serif; font-size: 9pt; color: #999;
-	flex: 0 0 38pt; white-space: nowrap; }
-.toc .t { font-size: 10.5pt; white-space: nowrap; }
-.toc .dots { flex: 1; border-bottom: 0.6pt dotted #aaa; margin: 0 6pt 2.5pt; }
+.toc li { display: flex; align-items: baseline; margin: 0 0 8.5pt; }
+.toc .n { font-size: 9.5pt; color: #8a857c; font-variant: small-caps;
+	letter-spacing: 0.06em; flex: 0 0 40pt; white-space: nowrap; }
+.toc .t { font-size: 11pt; white-space: nowrap; }
+.toc .dots { flex: 1; border-bottom: 0.6pt dotted #b8b2a6; margin: 0 7pt 3pt; }
 .toc a { text-decoration: none; color: inherit; }
-.toc a.pg { font-family: Georgia, serif; font-size: 10pt; color: #555; }
-.toc .note { margin-top: 26pt; border-top: 0.6pt solid #bbb; padding-top: 10pt;
-	font-size: 9pt; color: #666; font-style: italic; max-width: 130mm;
-	line-height: 1.55; }
+.toc a.pg { font-size: 10pt; color: #57514a; }
+.toc .note { margin-top: 12mm; border-top: 0.6pt solid #d8d3c8;
+	padding-top: 5mm; font-size: 9.5pt; color: #6b655c;
+	font-style: italic; max-width: 140mm; line-height: 1.65; }
 
 /* — Body — */
 main { text-align: left; }
@@ -83,69 +91,78 @@ main { text-align: left; }
    stretch headings, table cells or list items */
 h2, h3, th, td, li, .toc .t { text-align-last: left !important; }
 h2 {
-	font-family: Georgia, "Times New Roman", serif; font-weight: 400;
-	font-size: 18pt; color: #1c1c1c;
-	margin: 30pt 0 4pt; text-align: left;
-	padding: 12pt 0 9pt; border-top: 2.5pt solid #1c1c1c;
+	font-weight: 400; font-size: 19pt; color: #211d19;
+	margin: 32pt 0 6pt; text-align: left;
+	padding: 12pt 0 10pt; border-top: 3pt double #2a2620;
 	break-after: avoid; break-inside: avoid;
 }
 h2 .kicker { display: block; font-family: "Segoe UI", sans-serif;
-	font-size: 8pt; letter-spacing: 0.3em; text-transform: uppercase;
-	color: #999; margin-bottom: 8pt; }
+	font-size: 8pt; letter-spacing: 0.32em; text-transform: uppercase;
+	color: #9a948a; margin-bottom: 9pt; }
 h3 {
-	font-family: Georgia, serif; font-weight: 400; font-size: 12pt;
-	margin: 17pt 0 5pt; break-after: avoid; color: #1c1c1c;
+	font-weight: 400; font-size: 12.5pt; margin: 18pt 0 6pt;
+	break-after: avoid; color: #211d19;
 	font-variant: small-caps; letter-spacing: 0.05em; text-align: left;
 }
-p { margin: 5pt 0; orphans: 3; widows: 3; }
-ul, ol { margin: 5pt 0 9pt; padding-left: 17pt; }
-li { margin: 3pt 0; padding-left: 2pt; }
-li::marker { color: #999; }
-strong { font-weight: 600; }
+p { margin: 0; orphans: 3; widows: 3; }
+p + p { text-indent: 1.5em; }
+h2 + p, h3 + p, table + p, ul + p, ol + p { text-indent: 0; }
+ul, ol { margin: 7pt 0 10pt; padding-left: 20pt; }
+li { margin: 3.5pt 0; padding-left: 3pt; }
+li::marker { color: #9a948a; }
+strong { font-weight: 700; }
 em { font-style: italic; }
-code { font-family: Consolas, "Courier New", monospace; background: #f2f2f2;
-	padding: 0 3pt; font-size: 9pt; }
+code { font-family: Consolas, "Courier New", monospace;
+	font-size: 8.8pt; color: #4a443c; }
 
 /* Tables: booktabs style — rules only, no boxes */
-table { border-collapse: collapse; width: 100%; margin: 14pt 0;
-	font-size: 8.8pt; line-height: 1.45; }
+table { border-collapse: collapse; width: 100%; margin: 15pt 0;
+	font-size: 9pt; line-height: 1.5; }
 thead { display: table-header-group; }
 tr { break-inside: avoid; }
-th, td { padding: 5pt 8pt 5pt 0; text-align: left; vertical-align: top;
+th, td { padding: 5pt 9pt 5pt 0; text-align: left; vertical-align: top;
 	border: none; }
-th { font-size: 8.2pt; text-transform: uppercase; letter-spacing: 0.06em;
-	color: #1c1c1c; font-weight: 600;
-	border-bottom: 1pt solid #1c1c1c; }
-tbody tr { border-bottom: 0.5pt solid #d8d8d8; }
-tbody tr:last-child { border-bottom: 1pt solid #1c1c1c; }
-td { color: #333; }
+th { font-family: "Segoe UI", sans-serif; font-size: 7.8pt;
+	text-transform: uppercase; letter-spacing: 0.07em;
+	color: #211d19; font-weight: 600;
+	border-bottom: 0.9pt solid #2a2620; }
+tbody tr { border-bottom: 0.45pt solid #d8d3c8; }
+tbody tr:last-child { border-bottom: 0.9pt solid #2a2620; }
+td { color: #3a352f; }
 
-.closing { margin-top: 40pt; border-top: 0.6pt solid #bbb; padding-top: 10pt;
-	font-size: 8pt; color: #999; letter-spacing: 0.06em;
-	display: flex; justify-content: space-between; }
+.closing { margin-top: 36pt; text-align: center; }
+.closing .ornament { color: #b8b2a6; letter-spacing: 1.2em;
+	font-size: 9pt; margin-bottom: 8pt; }
+.closing .line { font-family: "Segoe UI", sans-serif; font-size: 7.5pt;
+	color: #9a948a; letter-spacing: 0.16em; text-transform: uppercase; }
 </style></head><body>
 <div class="cover">
-	<div class="brand">Century NIT Consult</div>
-	<div class="rule"></div>
-	<h1>Complete Platform<br>Documentation</h1>
-	<p class="sub">The study-abroad platform end to end. What it does,
-	how it is built, how the client journey works, and how it runs in
-	production.</p>
-	<div class="meta"><span>Client portal · Operations Center · API</span><span>2026-09-22</span></div>
-	<table class="control">
-		<tr><td>Document</td><td>Complete Platform Documentation</td></tr>
-		<tr><td>Applies to</td><td>Public website, client portal, Operations Center, API and workers</td></tr>
-		<tr><td>Status</td><td>Current — generated from DOCUMENTATION.md</td></tr>
-		<tr><td>Audience</td><td>Internal, partners, technical stakeholders</td></tr>
-	</table>
+	<div class="top">
+		<div class="brand">Century NIT Consult</div>
+		<div class="doc">Platform Documentation</div>
+	</div>
+	<div class="mid">
+		<h1>Complete Platform<br>Documentation</h1>
+		<div class="rule"></div>
+		<p class="sub">The study-abroad platform end to end &mdash; what it
+		does, how it is built, how the client journey works, and how it
+		runs in production.</p>
+	</div>
+	<div class="bottom">
+		<span>Client Portal</span><span class="sep">·</span>
+		<span>Operations Center</span><span class="sep">·</span>
+		<span>API &amp; Workers</span><br><br>
+		<span style="letter-spacing: 0.08em; text-transform: none; font-family: Georgia, serif; font-style: italic;">2026-09-22</span>
+	</div>
 </div>
 <nav class="toc">
 	<div class="toc-title">Contents</div>
-	<ol><li><span class="n">Part 1</span><span class="t">What the platform is</span><span class="dots"></span><a class="pg" href="#part-1-what-the-platform-is"></a></li><li><span class="n">Part 2</span><span class="t">Signing in</span><span class="dots"></span><a class="pg" href="#part-2-signing-in"></a></li><li><span class="n">Part 3</span><span class="t">Who can do what</span><span class="dots"></span><a class="pg" href="#part-3-who-can-do-what"></a></li><li><span class="n">Part 4</span><span class="t">The client journey</span><span class="dots"></span><a class="pg" href="#part-4-the-client-journey"></a></li><li><span class="n">Part 5</span><span class="t">Consultations, scheduling and meetings</span><span class="dots"></span><a class="pg" href="#part-5-consultations-scheduling-and-meetings"></a></li><li><span class="n">Part 6</span><span class="t">Money</span><span class="dots"></span><a class="pg" href="#part-6-money"></a></li><li><span class="n">Part 7</span><span class="t">Documents</span><span class="dots"></span><a class="pg" href="#part-7-documents"></a></li><li><span class="n">Part 8</span><span class="t">Communication</span><span class="dots"></span><a class="pg" href="#part-8-communication"></a></li><li><span class="n">Part 9</span><span class="t">Marketing</span><span class="dots"></span><a class="pg" href="#part-9-marketing"></a></li><li><span class="n">Part 10</span><span class="t">Content management</span><span class="dots"></span><a class="pg" href="#part-10-content-management"></a></li><li><span class="n">Part 11</span><span class="t">The Operations Center, page by page</span><span class="dots"></span><a class="pg" href="#part-11-the-operations-center-page-by-page"></a></li><li><span class="n">Part 12</span><span class="t">The website and portal, page by page</span><span class="dots"></span><a class="pg" href="#part-12-the-website-and-portal-page-by-page"></a></li><li><span class="n">Part 13</span><span class="t">Data, security and the background engine</span><span class="dots"></span><a class="pg" href="#part-13-data-security-and-the-background-engine"></a></li><li><span class="n">Part 14</span><span class="t">Under the hood, the flows that matter</span><span class="dots"></span><a class="pg" href="#part-14-under-the-hood-the-flows-that-matter"></a></li></ol>
+	<div class="toc-rule"></div>
+	<ol><li><span class="n">Part I</span><span class="t">What the platform is</span><span class="dots"></span><a class="pg" href="#part-1-what-the-platform-is"></a></li><li><span class="n">Part II</span><span class="t">Signing in</span><span class="dots"></span><a class="pg" href="#part-2-signing-in"></a></li><li><span class="n">Part III</span><span class="t">Who can do what</span><span class="dots"></span><a class="pg" href="#part-3-who-can-do-what"></a></li><li><span class="n">Part IV</span><span class="t">The client journey</span><span class="dots"></span><a class="pg" href="#part-4-the-client-journey"></a></li><li><span class="n">Part V</span><span class="t">Consultations, scheduling and meetings</span><span class="dots"></span><a class="pg" href="#part-5-consultations-scheduling-and-meetings"></a></li><li><span class="n">Part VI</span><span class="t">Money</span><span class="dots"></span><a class="pg" href="#part-6-money"></a></li><li><span class="n">Part VII</span><span class="t">Documents</span><span class="dots"></span><a class="pg" href="#part-7-documents"></a></li><li><span class="n">Part VIII</span><span class="t">Communication</span><span class="dots"></span><a class="pg" href="#part-8-communication"></a></li><li><span class="n">Part IX</span><span class="t">Marketing</span><span class="dots"></span><a class="pg" href="#part-9-marketing"></a></li><li><span class="n">Part X</span><span class="t">Content management</span><span class="dots"></span><a class="pg" href="#part-10-content-management"></a></li><li><span class="n">Part XI</span><span class="t">The Operations Center, page by page</span><span class="dots"></span><a class="pg" href="#part-11-the-operations-center-page-by-page"></a></li><li><span class="n">Part XII</span><span class="t">The website and portal, page by page</span><span class="dots"></span><a class="pg" href="#part-12-the-website-and-portal-page-by-page"></a></li><li><span class="n">Part XIII</span><span class="t">Data, security and the background engine</span><span class="dots"></span><a class="pg" href="#part-13-data-security-and-the-background-engine"></a></li><li><span class="n">Part XIV</span><span class="t">Under the hood, the flows that matter</span><span class="dots"></span><a class="pg" href="#part-14-under-the-hood-the-flows-that-matter"></a></li></ol>
 	<div class="note"><p>Everything about the platform in one document, in plain language. It covers what the system is, how it's built, what each part does, how the client journey works end to end, and how it runs in production.</p></div>
 </nav>
 <main>
-<h2 id="part-1-what-the-platform-is"><span class="kicker">Part 1</span>What the platform is</h2>
+<h2 id="part-1-what-the-platform-is"><span class="kicker">Part I</span>What the platform is</h2>
 <p>Century NIT is a study-abroad consultancy platform. A client signs up, books a paid consultation, and is then guided step by step, by real staff, through enrolment, university applications, visa processing, and departure. Staff run the whole operation from a separate console.</p>
 <p>The product is <strong>three deployable pieces</strong>:</p>
 <ol><li><strong>The public website and client portal</strong>, where visitors browse and where clients live their journey.</li><li><strong>The Operations Center</strong>, the staff-only console for consultations, cases, finance, marketing, content, and administration.</li><li><strong>The API</strong>, the single backend that both front ends talk to. It holds all data and all business rules. It also publishes an interactive reference (every endpoint, its inputs, and a working "try it" button) for anyone integrating against it.</li></ol>
@@ -154,7 +171,7 @@ td { color: #333; }
 <p>Each front end sits behind its own Cloudflare Worker. The Worker serves the app's files and forwards every API call to the backend. Because of that forwarding, the browser sees one origin per app, the login cookie is first-party, and sign-in just works. The API keeps a strict list of allowed origins for the rare calls that are genuinely cross-origin; the same list feeds both the browser security layer and the sign-in system so they can never drift apart.</p>
 <h3>Where the truth lives</h3>
 <p>Everything of record is in one PostgreSQL database: cases, invoices, documents, messages, marketing, content. Both front ends are thin clients. They show what the API says and send back what the user does. The fixed catalogue (branches, consultation types and durations, the assessment sections, the countries list) lives in a shared package all three apps quote, so the words and options can never drift between surfaces. The portal keeps a little per-browser convenience state (drafts, dismissed hints) and an offline fallback for the journey view, but nothing there is authoritative.</p>
-<h2 id="part-2-signing-in"><span class="kicker">Part 2</span>Signing in</h2>
+<h2 id="part-2-signing-in"><span class="kicker">Part II</span>Signing in</h2>
 <p>One identity system serves both audiences. A staff member is simply a user account that also has a staff record attached; that record is where their role and branch live.</p>
 <h3>Clients</h3>
 <p>Clients register themselves. They can sign in with:</p>
@@ -163,14 +180,14 @@ td { color: #333; }
 <h3>Staff</h3>
 <p><strong>Staff can never register themselves.</strong> There is no staff sign-up anywhere. An account exists only because someone senior invited it, and the invitee sets their own password; nobody else ever knows it. Invitations and one-time codes go out by email; in development they print to the server console instead so everything can be tested without email accounts.</p>
 <p>Two-factor is <strong>required for every staff role</strong>, enforced by the server: either an authenticator app or enrolled email codes. The very first administrator is created once with a server-side setup token; the moment any staff member exists, that door closes permanently.</p>
-<h2 id="part-3-who-can-do-what"><span class="kicker">Part 3</span>Who can do what</h2>
+<h2 id="part-3-who-can-do-what"><span class="kicker">Part III</span>Who can do what</h2>
 <p>Two separate ideas, both checked on the server (the console interface only hides buttons; the backend is the real authority):</p>
 <ul><li><strong>Modules</strong> decide what a role can <em>see</em>: which pages and API areas open to them.</li><li><strong>Capabilities</strong> decide what a role can <em>do</em>: assign work, issue invoices, invite staff, own a chapter of a case.</li></ul>
 <p>Both live in one shared definition used by the console and the API, so they can never disagree. Administrators can build custom roles in a permission matrix; a custom role gets a rank, and you can only grant roles ranked below your own.</p>
 <h3>The built-in roles</h3>
 <table><thead><tr><th>Role</th><th>Sees</th><th>Can do</th></tr></thead><tbody><tr><td><strong>Super Admin</strong></td><td>Everything</td><td>Everything</td></tr><tr><td><strong>Admin</strong></td><td>Platform administration (staff, sign-in policy, content, settings) plus read access to casework</td><td>Invite and manage staff, manage roles and client accounts, change platform settings; does not work case files</td></tr><tr><td><strong>Manager</strong></td><td>All branches, all cases</td><td>Assign work, invite staff, issue invoices, approve payment schedules, own any chapter, edit packages and the university catalogue</td></tr><tr><td><strong>Coordinator</strong></td><td>All cases and branches</td><td>Assign and route work, own any chapter; the front-desk role</td></tr><tr><td><strong>Customer Service</strong></td><td>Cases at their branch, leads, helpdesk</td><td>Route work, first-line support</td></tr><tr><td><strong>Consultant</strong></td><td>Their own caseload</td><td>Own chapters (consultations, applications, visa, departure), comment, request documents, update stages, raise draft invoices</td></tr><tr><td><strong>Finance</strong></td><td>Invoices, ledger, payments, packages</td><td>Issue, void and credit invoices, edit packages, approve payment schedules</td></tr></tbody></table>
 <p>Branch scoping is real: a role without "see every branch" is confined to its own branch, enforced by the API.</p>
-<h2 id="part-4-the-client-journey"><span class="kicker">Part 4</span>The client journey</h2>
+<h2 id="part-4-the-client-journey"><span class="kicker">Part IV</span>The client journey</h2>
 <p>Everything hangs off one ladder: <strong>six chapters</strong>.</p>
 <table><thead><tr><th>Chapter</th><th>What happens</th></tr></thead><tbody><tr><td><strong>1: Consultation</strong></td><td>Client books online or in-person, picks a real slot, pays, meets the consultant, gets a structured eligibility assessment across nine sections (personal, passport, education, employment, English proficiency, study preferences, finances, documents, review)</td></tr><tr><td><strong>2: Enrolment</strong></td><td>Client confirms they want to proceed (or pauses or declines), picks a service package and payment plan, pays the 10% agency deposit</td></tr><tr><td><strong>3: Applications</strong></td><td>Client chooses schools, pays the application fee, staff submit and track offers, client accepts one</td></tr><tr><td><strong>4: Visa</strong></td><td>Client consents to start, pays the visa fee, the officer files and tracks it through its ladder (handler assigned, filing pending, biometrics, decision, complete)</td></tr><tr><td><strong>5: Departure</strong></td><td>Travel help (yes, hold or no), the pre-departure fee milestone, a checklist, then official documents released</td></tr><tr><td><strong>6: Complete</strong></td><td>Client departed; post-arrival instalments run as aftercare</td></tr></tbody></table>
 <p>Inside the chapters the portal walks the client through about fourteen finer steps. A step is never silently skipped: if later evidence exists (an admission, a paid visa), earlier un-ticked steps show as "skipped", not done.</p>
@@ -194,13 +211,13 @@ td { color: #333; }
 <p>Service packages are priced per stage. A client can enter at different service stages, select only what they need, stop after any reached stage, and later request to continue. A continuation is a real flow, not just a flag: staff propose the next stage and attach a quotation for it, the client accepts, pauses or declines from the portal, and a lapsed or declined offer can be re-invited. Accepting opens the next chapter under its own pricing, so a client who stopped after applications can resume at visa without buying a new package.</p>
 <h3>Who does what, when</h3>
 <table><thead><tr><th>Moment</th><th>Actor</th><th>Action</th><th>Client sees</th></tr></thead><tbody><tr><td>Booking lands</td><td>Coordinator or manager</td><td>Assign a consultant (or the duty roster covers it)</td><td>"Consultant being assigned"</td></tr><tr><td>Session held</td><td>Consultant</td><td>Complete the assessment (outcome, recommendations, verdict for visa entries)</td><td>Assessment outcome and recommendations</td></tr><tr><td>Enrolment open</td><td>Client</td><td>Confirm, hold or decline; pick package and plan; pay the deposit</td><td>Journey advances</td></tr><tr><td>Deposit settled</td><td>Manager</td><td>Resolve the handler handoff, assign the case consultant</td><td>Named consultant</td></tr><tr><td>Schools chosen</td><td>Chapter owner, then finance</td><td>Raise the draft invoice, approve and issue it</td><td>"Fee being prepared" then a payable invoice</td></tr><tr><td>Offers in</td><td>Consultant</td><td>Record each school's outcome</td><td>Live tracking; client accepts an offer</td></tr><tr><td>Visa start</td><td>Client, visa officer, finance</td><td>Client consents; officer raises the draft, finance issues, client pays</td><td>"Pay the visa fee"</td></tr><tr><td>Visa work</td><td>Visa officer</td><td>Embassy filing, biometrics, decision</td><td>Visa tracking</td></tr><tr><td>Departure boundary</td><td>Manager</td><td>Resolve the handoff, assign the travel officer</td><td>Departure chapter opens</td></tr><tr><td>Travel settled</td><td>Client and finance</td><td>Flight choice; fee milestone paid</td><td>Documents on the unlock path</td></tr><tr><td>Pre-departure</td><td>Client and staff</td><td>Checklist items verified or waived</td><td>Official documents released</td></tr><tr><td>Any time</td><td>Finance</td><td>Issue, void, credit invoices; edit packages</td><td>Ledger and receipts</td></tr><tr><td>Any time</td><td>Admin</td><td>Staff invites, roles, sign-in policy, content</td><td>(No client-visible step)</td></tr></tbody></table>
-<h2 id="part-5-consultations-scheduling-and-meetings"><span class="kicker">Part 5</span>Consultations, scheduling and meetings</h2>
+<h2 id="part-5-consultations-scheduling-and-meetings"><span class="kicker">Part V</span>Consultations, scheduling and meetings</h2>
 <p>What a client can book comes from three inputs: the branch's weekly hours and slot settings, each consultant's own working hours, and everything already booked, including busy times mirrored in from staff personal calendars. A database-level rule makes double-booking impossible even if two people click at the same instant.</p>
 <p>Bookings have a full lifecycle (cancel, reschedule, reassign, confirm, complete, no-show, rebook credit), and every transition is written to an append-only history. Reschedules a client requests go to staff for approval; staff-side reschedules are direct.</p>
 <p>Online sessions run in video rooms the client joins <strong>inside the portal</strong>, no external link needed. A join window is enforced (opens a few minutes early, closes after). A background check every minute marks meetings live or ended, feeding the console's "what's happening now" view.</p>
 <p>Staff calendars connect both ways: they can pull their personal calendar's busy times in so clients can't book over them, and publish their Century bookings out to their personal calendar as a subscribeable feed. A shared company calendar connection mirrors the branch's bookings to one Google calendar the whole team can watch.</p>
 <p>Beyond the paid consultation, handlers can schedule <strong>check-ins</strong> on an active case: free sessions like a document review, an offer decision call, a visa mock interview or a pre-departure briefing. The client is emailed and joins through the portal exactly like a booking, but no fee is ever raised for one.</p>
-<h2 id="part-6-money"><span class="kicker">Part 6</span>Money</h2>
+<h2 id="part-6-money"><span class="kicker">Part VI</span>Money</h2>
 <p>All amounts are stored as integer cents. The invoice pipeline is a two-step approval chain that drives the journey:</p>
 <ol><li>The <strong>chapter owner</strong> (the consultant or visa officer doing the work) raises a draft estimate, a proforma, on the case.</li><li><strong>Finance</strong> approves and issues it. Now it's a real, payable invoice.</li><li>The client pays; partial payments count; when the balance reaches zero the invoice settles.</li><li>Corrections happen by voiding or crediting. Every action lands in the invoice's permanent event history, never by editing the past.</li></ol>
 <h3>How clients pay</h3>
@@ -212,10 +229,10 @@ td { color: #333; }
 <p>A package is a contract, not just a price: it sets a price per stage, lists which catalogue fees it covers, caps how many school applications it includes, and can require verified documents before applications start. The client's funding track and target school count are chosen with the package and shape the quotation.</p>
 <h3>The ledger</h3>
 <p>Every case and every client has a ledger view: a chapter-numbered journal of invoices and payments. Underneath sits the invoice event history, immutable and append-only, the substrate the views are built from. A paid invoice can't be voided (it must be credited), and settlement is idempotent, so a replayed webhook or retried verification can never charge twice.</p>
-<h2 id="part-7-documents"><span class="kicker">Part 7</span>Documents</h2>
+<h2 id="part-7-documents"><span class="kicker">Part VII</span>Documents</h2>
 <p>Clients upload through a vault: the file goes straight to private storage via a temporary signed link, then staff verify it or reject it with a note. Verification progress feeds the client's checklist and the journey on both sides. Staff can request a specific document by name ("passport data page"), which appears as a task in the portal. Rejected files are purged after a retention period. Nothing is publicly reachable; every download goes through a short-lived signed link the API mints. Uploads accept PDF only, up to fifteen megabytes.</p>
 <p>One deliberate hold: the documents the agency produces as the client's agent, the admission letter and the visa outcome, are visible in the vault but locked from download until the pre-departure fee milestone is paid. A manager can release them early, and that release records a reason on the case. Staff downloads are never held; the lock is a client-side gate only.</p>
-<h2 id="part-8-communication"><span class="kicker">Part 8</span>Communication</h2>
+<h2 id="part-8-communication"><span class="kicker">Part VIII</span>Communication</h2>
 <h3>One conversation system, three surfaces</h3>
 <p>A single thread model (conversations, members, messages, attachments, mentions, reactions) serves:</p>
 <ul><li><strong>The helpdesk</strong>: client-to-staff threads, scoped to a case and chapter, with subject, category, priority, who it's waiting on, first-response and resolution times, and a satisfaction rating when it closes. Staff can log a request on a client's behalf (a phone call or walk-in becomes a tracked ticket), and a thread can be marked internal so it never appears in the portal at all. Reopened requests are counted.</li><li><strong>The staff Communication Hub</strong>: direct messages, group chats, mentions, reactions, attachments, presence, typing indicators.</li><li><strong>The client's Communication Center</strong>: the portal's thread with their assigned staff plus the AI assistant.</li></ul>
@@ -227,7 +244,7 @@ td { color: #333; }
 <p>The portal is push-driven: a live event stream tells it when stages, assignments, invoices or visa states change, so the client sees updates without refreshing. Polling exists only as a fallback for a dropped stream.</p>
 <h3>The audit trail</h3>
 <p>Administrative actions land in an append-only audit trail: who, what, on which record, from which address. Every entry seals the previous entry's fingerprint, so altering or deleting any row breaks the chain and a verification check proves it. The trail is browsable by day, filterable, exportable, and alert rules can watch it (for example, a burst of failed sign-ins or a role change). Settings changes have their own parallel trail.</p>
-<h2 id="part-9-marketing"><span class="kicker">Part 9</span>Marketing</h2>
+<h2 id="part-9-marketing"><span class="kicker">Part IX</span>Marketing</h2>
 <p>Production email marketing built on the suite's own data, in five console tabs: Campaigns, Audiences, Contacts, Templates, Automations.</p>
 <h3>People, not address books</h3>
 <p>The <strong>person</strong> is the record; a list is a membership. The contacts view gathers everyone the suite knows (mailing-list subscribers, applicants, leads), each with their real identity (an applicant shows their case and chapter, a lead their stage), their consent state, and their memberships. One person with two memberships appears once, never as two rows.</p>
@@ -241,21 +258,21 @@ td { color: #333; }
 <p>Composed from blocks (headings, paragraphs, buttons, dividers, two columns) with merge fields that pull real data: the person's name, case reference, stage, officer, branch, next due date, portal link. Senders get a preheader, a from-name, and a reply-to (the branch mailbox by default). Preview is the actual server-rendered email, and a test send goes through the real pipeline. Reports show delivered, open, click, bounce and unsubscribe rates, an hourly timeline, top links, and the per-recipient ledger with retry for failures. Every footer carries working unsubscribe and preferences links.</p>
 <h3>Templates and automations</h3>
 <p>Templates render as live miniatures; presets are read-only starters you fork. Automations are rules (when this happens, to people matching this segment, send this template after this delay) covering moments like a no-show follow-up, an assessment completed but no enrolment, an offer received, a visa approval, thirty days to departure, or an overdue milestone. Starters ship as drafts; staff turn them on deliberately. Every firing is logged, including why a person was skipped.</p>
-<h2 id="part-10-content-management"><span class="kicker">Part 10</span>Content management</h2>
+<h2 id="part-10-content-management"><span class="kicker">Part X</span>Content management</h2>
 <p>One identity record, one content store, one media library, read by the website, the portal, the console, and the email layout.</p>
 <ul><li><strong>Brand</strong>: the identity record (names, logos, colours, contacts, socials) has a draft and a published copy. Edits save to the draft; publishing makes it live and records who published, with full version history and revert.</li><li><strong>Entries</strong>: content collections keyed by name and slug, moving through draft, review, then published; schedulable and fully versioned.</li><li><strong>Navigation</strong>: the site's header and footer link lists.</li><li><strong>Copy</strong>: every label that's content rather than code, per surface (site, portal, console, email).</li><li><strong>Media</strong>: the image library. Uploads go straight to private storage, alt text and focal points are editable, and public reads pass through a short-lived signed link so nothing is openly reachable.</li></ul>
 <p>Public content reads are edge-cached: fast for visitors, fresh within a minute of publishing.</p>
-<h2 id="part-11-the-operations-center-page-by-page"><span class="kicker">Part 11</span>The Operations Center, page by page</h2>
+<h2 id="part-11-the-operations-center-page-by-page"><span class="kicker">Part XI</span>The Operations Center, page by page</h2>
 <p>Every view keeps its state in the address bar (filters, tabs, open records), so links survive refresh and notifications deep-link to the exact task. A command palette (Ctrl+K, or just "/") jumps to any consultation, case or applicant, remembers recent records, and only offers what the signed-in role may open.</p>
 <ul><li><strong>Workspace</strong>: the day's triage. Unassigned consultations, cases awaiting a handler, invoices to raise, documents to review, reschedule requests, banded overdue / today / later, with inline assignment. A caseload view shows who is carrying what across the team. Alongside the derived work, staff keep their own task list: follow-ups with due dates, pinned to a lead or a case or neither, each reminding its owner exactly once when it falls due.</li><li><strong>Inbox, Dashboard, Now</strong>: what happened, the numbers, what's live.</li><li><strong>Helpdesk</strong>: the client conversation queue with its full lifecycle.</li><li><strong>Chat</strong>: staff messaging.</li><li><strong>Consultations</strong>: booked sessions. Assign, refer to another branch, delegate and reclaim, assess, reschedule approvals, no-show and credit, comments, document requests, and the full activity history.</li><li><strong>Cases</strong>: every engagement, list or board, opening on a per-chapter tab strip (overview, consultation, enrolment, applications, visa, travel, payments, documents) that lands on the chapter the client is in. The case file carries stages, chapter owners, package and plan, invoices, comments, documents, visa and departure details, release override, post-arrival schedule, and referral to another branch.</li><li><strong>Clients, Leads</strong>: records and the enquiry pipeline, which moves a lead through new, contacted, consultation booked, assessment complete, and converted or lost. Leads carry their source, and a lost lead records a fixed reason so reports can group them. A "last real touch" timestamp tracks when a human actually reached the person, set only by real contact, never by an edit, so stale leads are easy to spot.</li><li><strong>Appointments, Live meetings</strong>: the week and rooms in progress.</li><li><strong>Universities, Programmes, Scholarships, Packages, Departure checklist</strong>: the catalogue editors. Scholarships can also be awarded to a specific applicant from their record.</li><li><strong>Invoices, Ledger, Payments, Fee schedule, Payment plans</strong>: the finance suite.</li><li><strong>Reports</strong>: revenue and operations analytics, including invoice aging buckets driven by each invoice's due date.</li><li><strong>Scheduling, My availability</strong>: the week the branch offers, and each person's own hours and calendar connections.</li><li><strong>Marketing</strong>: campaigns, audiences, contacts, templates, automations.</li><li><strong>System, Staff &amp; roles, Clients directory, Authentication, Audit, Content (CMS), Lookups, Notifications, Settings</strong>: platform administration. Health, the permission matrix, sign-in policy, the audit feed, content, form dropdowns, notification templates and integrations. Settings is deeper than a preferences page: integration credentials (email, storage, Google, the payment gateways, push keys) are entered here, stored encrypted, shown masked, and every change is audited. So are the business rules: the deposit percentage, each milestone split, post-arrival grace and interest, officer capacity, booking buffer, slots per day, branch hours and timezone.</li></ul>
-<h2 id="part-12-the-website-and-portal-page-by-page"><span class="kicker">Part 12</span>The website and portal, page by page</h2>
+<h2 id="part-12-the-website-and-portal-page-by-page"><span class="kicker">Part XII</span>The website and portal, page by page</h2>
 <h3>The public website</h3>
 <p>Open to everyone, no sign-in:</p>
 <ul><li><strong>Marketing pages</strong>: home, about, why choose us, services, visa services, student services, success stories ("Red Seat"), FAQs, blog, events, contact.</li><li><strong>The catalogue</strong>: destinations, universities, programmes and scholarships, each browsable down to a detail page and served live from the same database the staff edit.</li><li><strong>The enquiry widget</strong>: a floating door on every page where a visitor leaves their details and becomes a lead in the CRM.</li><li><strong>The newsletter</strong>: a subscribe prompt, double opt-in confirmation, and unsubscribe/preferences pages.</li><li><strong>"Start your journey"</strong>: the doorway that turns a visitor into a registered client and drops them into chapter one.</li><li><strong>The AI assistant and a newsletter popup</strong> float on every public page; first-time assistant use passes a bot check.</li></ul>
 <h3>The portal</h3>
 <p>The sidebar is the journey itself, the six chapters as the spine, showing done, current and locked.</p>
 <ul><li><strong>Home / Journey</strong>: the spine, the current step, the next unlock, and the consultant's client-facing updates: a kind-coded timeline (status, note, document needed, decision, handover) with a "new since your last visit" divider.</li><li><strong>Consultation</strong>: choose online or in-person, pick a live slot, pay, join the call in-app, reschedule or cancel within policy.</li><li><strong>Enrolment</strong>: the assessment outcome, the decision, package and plan, the deposit.</li><li><strong>Applications</strong>: school choices, the fee invoice, per-school tracking, accepting an offer. Each school track keeps its own history, the school's own reference number for chasing, proof that we submitted, and when an offer lands its terms are recorded: tuition, deposit and its due date, with the offer letter filed into the vault. A list holds up to five schools, subject to the package's own cap.</li><li><strong>Visa</strong>: consent, the invoice, live tracking up the ladder to the decision, with each school's outcome one of admitted, waitlisted, rejected or withdrawn (a refusal parks the case with a reapplication path).</li><li><strong>Departure</strong>: travel help (yes, hold or no), the fee milestone, the checklist, document release. Choosing travel help assigns a travel officer, and only then is the airline fare invoiced, separately: the service fee was already collected in the package, and no ticket is ever billed before someone owns the booking. The chapter also keeps the logistics record: the report-by date, the briefing, airport pickup, accommodation, an emergency contact, and the arrival confirmation.</li><li><strong>Complete</strong>: the post-arrival instalment schedule, paid-invoice receipts and official-document downloads, and the door to continue: the client can ask for the next stage's services from here.</li><li><strong>Appointments, Documents, Fees, Security</strong>: bookings, the vault, the ledger and receipts, and the security page: profile fields, a two-step verified email change, MFA setup, session list, and avatar upload with crop.</li><li><strong>The Communication Center</strong>: a floating support channel inside the portal, the staff thread plus the AI assistant.</li><li><strong>Newsletter pages</strong>: confirm, unsubscribe, and preferences.</li></ul>
-<h2 id="part-13-data-security-and-the-background-engine"><span class="kicker">Part 13</span>Data, security and the background engine</h2>
+<h2 id="part-13-data-security-and-the-background-engine"><span class="kicker">Part XIII</span>Data, security and the background engine</h2>
 <h3>Data posture</h3>
 <p>Every table is behind row-level security. The app connects as owner, but any future non-owner path is denied by default rather than silently open. Anything that's evidence is append-only: audit entries, invoice events, booking events, assignment history, activity feeds. Corrections append; history is never edited.</p>
 <h3>Security posture</h3>
@@ -281,7 +298,7 @@ td { color: #333; }
 <p>Paystack for all payments, Resend for all email (delivery, open, bounce and complaint events flow back through a signed webhook), LiveKit for video rooms (with Daily kept as an alternative provider), Supabase for private file storage, Google for client sign-in and staff calendars, web push for browser notifications, and a pluggable text provider for phone sign-in (unconfigured by default; the feature refuses rather than pretending).</p>
 <h3>Configuration and deployment</h3>
 <p>Production refuses to boot without its database, queue, signing secret and the browser-facing addresses. Misconfiguration fails loudly at startup, not silently at runtime. The API ships as a Docker image; the front ends deploy as Cloudflare Workers. The database is migrated by numbered files; new databases are built directly from the schema because the historical migration chain doesn't replay cleanly from zero. The rules and the reasons are written down in the migration discipline notes.</p>
-<h2 id="part-14-under-the-hood-the-flows-that-matter"><span class="kicker">Part 14</span>Under the hood, the flows that matter</h2>
+<h2 id="part-14-under-the-hood-the-flows-that-matter"><span class="kicker">Part XIV</span>Under the hood, the flows that matter</h2>
 <p>Features above; mechanics here. These are the paths worth understanding before changing anything.</p>
 <h3>Every request, in order</h3>
 <p>A call reaches the API, gets security headers, passes the origin check, passes rate limiting, then meets the guard chain in a fixed order: prove you're signed in, prove you're staff (if the route needs it), prove you've enrolled a second factor (staff), prove your role may see the module, prove your role may do the action. A branch-scoped role gets its branch constraint applied last. The permission check reads the live roles table, so a role edit takes effect without a deploy; the built-in matrix is only a fallback. Inputs are validated by the same schema that generates the public API reference, so docs and enforcement can't disagree.</p>
@@ -316,7 +333,7 @@ td { color: #333; }
 <h3>How the records relate</h3>
 <p>One account (<code>users</code>) may be a client, a staff member, or both shapes at once (a staff record attaches to the account). A client has a profile; each engagement is a case; a case owns school submissions, invoices, documents, comments, chapter seats and handoffs. An invoice owns lines, payments and events; payments point at gateway transactions; stored authorizations power instalment charges. A conversation owns members, messages, attachments and reactions. A campaign owns a recipient ledger and tracked links; the consent ledger and suppression list stand beside all of it, keyed by address rather than by list. People in marketing are assembled at read time from three sources (list contacts, applicants, leads), which is why one person can never appear as two rows.</p>
 <p><em>Covers the three deployables (public site + portal, Operations Center, API + worker) and the shared packages, as of the current codebase.</em></p>
-<div class="closing"><span>Century NIT Consult · Complete Documentation</span><span>Generated from DOCUMENTATION.md</span></div>
+<div class="closing"><div class="ornament">·&nbsp;·&nbsp;·</div><div class="line">Century NIT Consult &nbsp;·&nbsp; Generated from DOCUMENTATION.md</div></div>
 </main>
 <script src="./vendor/paged.polyfill.js"></script>
 </body></html>

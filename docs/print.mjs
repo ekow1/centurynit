@@ -16,6 +16,13 @@ function inline(s) {
 		.replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
+const roman = (n) => {
+	const t = [[1000,"M"],[900,"CM"],[500,"D"],[400,"CD"],[100,"C"],[90,"XC"],[50,"L"],[40,"XL"],[10,"X"],[9,"IX"],[5,"V"],[4,"IV"],[1,"I"]];
+	let s = "";
+	for (const [v, r] of t) while (n >= v) { s += r; n -= v; }
+	return s;
+};
+
 const lines = md.split(/\r?\n/);
 const out = [];
 const front = []; // paragraphs before Part 1 → rendered on the contents page
@@ -37,9 +44,9 @@ while (i < lines.length) {
 		const t = line.slice(3).trim();
 		const id = t.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 		const m = t.match(/^Part (\d+):\s*(.*)$/);
-		const kicker = m ? `<span class="kicker">Part ${m[1]}</span>` : "";
+		const kicker = m ? `<span class="kicker">Part ${roman(+m[1])}</span>` : "";
 		const title = m ? m[2] : t;
-		toc.push({ id, part: m ? m[1] : "", title });
+		toc.push({ id, part: m ? roman(+m[1]) : "", title });
 		seenH2 = true;
 		out.push(`<h2 id="${id}">${kicker}${inline(title)}</h2>`);
 		i++; continue;
@@ -110,31 +117,31 @@ const html = `<!DOCTYPE html>
 <style>
 @page {
 	size: A4;
-	margin: 20mm 18mm 20mm;
-	@top-left {
-		content: "CENTURY NIT CONSULT";
-		font-family: "Segoe UI", sans-serif; font-size: 7.5pt;
-		letter-spacing: 0.18em; color: #999;
+	margin: 23mm 21mm 24mm;
+	@bottom-center {
+		content: "—  " counter(page) "  —";
+		font-family: Georgia, "Times New Roman", serif;
+		font-size: 8.5pt; color: #8a8a8a; letter-spacing: 0.08em;
 	}
+}
+@page :left {
+	@top-left {
+		content: "Century NIT Consult";
+		font-family: Georgia, "Times New Roman", serif;
+		font-style: italic; font-size: 8pt; color: #999;
+	}
+}
+@page :right {
 	@top-right {
 		content: "Complete Platform Documentation";
 		font-family: Georgia, "Times New Roman", serif;
-		font-style: italic; font-size: 8.5pt; color: #777;
-	}
-	@bottom-left {
-		content: "Century NIT Consult · Internal documentation";
-		font-size: 8pt; color: #999; letter-spacing: 0.06em;
-	}
-	@bottom-right {
-		content: "Page " counter(page) " of " counter(pages);
-		font-family: Georgia, serif; font-size: 9pt; color: #555;
+		font-style: italic; font-size: 8pt; color: #999;
 	}
 }
 @page cover {
 	@top-left { content: none; }
 	@top-right { content: none; }
-	@bottom-left { content: none; }
-	@bottom-right { content: none; }
+	@bottom-center { content: none; }
 }
 @page toc {
 	@top-left { content: none; }
@@ -143,46 +150,54 @@ const html = `<!DOCTYPE html>
 * { box-sizing: border-box; }
 html { -webkit-print-color-adjust: exact; }
 body {
-	font-family: "Segoe UI", Calibri, "Helvetica Neue", Arial, sans-serif;
-	font-size: 9.8pt; line-height: 1.55; color: #1c1c1c; margin: 0;
+	font-family: Georgia, "Times New Roman", serif;
+	font-size: 10.2pt; line-height: 1.62; color: #211d19; margin: 0;
 	hyphens: auto;
 }
 
 /* — Cover — */
-.cover { page: cover; break-after: page; height: 250mm;
-	display: flex; flex-direction: column; justify-content: center; }
-.cover .brand { font-size: 9pt; letter-spacing: 0.34em; text-transform: uppercase;
-	color: #777; margin-bottom: 30pt; }
-.cover .rule { width: 42pt; border-top: 2.5pt solid #1c1c1c; margin-bottom: 24pt; }
-.cover h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400;
-	font-size: 34pt; line-height: 1.22; margin: 0 0 18pt; color: #1c1c1c; }
-.cover .sub { font-size: 12pt; color: #444; max-width: 128mm; line-height: 1.6;
-	margin: 0 0 48pt; }
-.cover .meta { font-size: 9pt; color: #777; letter-spacing: 0.08em;
-	border-top: 0.6pt solid #bbb; padding-top: 12pt; width: 128mm;
-	display: flex; justify-content: space-between; }
-.cover .control { margin-top: 46pt; width: 128mm; border-collapse: collapse;
-	font-size: 8.5pt; }
-.cover .control td { border-top: 0.5pt solid #ccc; padding: 6pt 10pt 6pt 0;
-	color: #555; vertical-align: top; }
-.cover .control td:first-child { color: #999; text-transform: uppercase;
-	letter-spacing: 0.1em; font-size: 7.5pt; width: 34mm; padding-top: 7pt; }
+.cover { page: cover; break-after: page; height: 244mm;
+	border: 0.75pt solid #2a2620; outline: 0.4pt solid #2a2620;
+	outline-offset: 4pt; padding: 0 18mm;
+	display: flex; flex-direction: column; }
+.cover .top { padding-top: 26mm; text-align: center; }
+.cover .brand { font-family: "Segoe UI", Calibri, sans-serif;
+	font-size: 9.5pt; letter-spacing: 0.42em; text-transform: uppercase;
+	color: #211d19; }
+.cover .brand::before, .cover .brand::after { content: "—";
+	color: #b8b2a6; margin: 0 12pt; font-family: Georgia, serif; }
+.cover .doc { margin-top: 3.5pt; font-family: "Segoe UI", sans-serif;
+	font-size: 7pt; letter-spacing: 0.22em; text-transform: uppercase;
+	color: #9a948a; }
+.cover .mid { flex: 1; display: flex; flex-direction: column;
+	justify-content: center; text-align: center; }
+.cover h1 { font-weight: 400; font-size: 33pt; line-height: 1.28;
+	margin: 0; color: #211d19; }
+.cover .rule { width: 46pt; margin: 22pt auto; border-top: 0.6pt solid #2a2620; }
+.cover .sub { font-style: italic; font-size: 11.5pt; color: #57514a;
+	line-height: 1.7; max-width: 118mm; margin: 0 auto; }
+.cover .bottom { padding-bottom: 24mm; text-align: center;
+	font-family: "Segoe UI", sans-serif; font-size: 8pt; color: #7d776e;
+	letter-spacing: 0.14em; text-transform: uppercase; }
+.cover .bottom .sep { color: #c9c3b8; margin: 0 8pt; }
 
 /* — Contents — */
 .toc { page: toc; break-after: page; }
-.toc .toc-title { font-family: Georgia, serif; font-weight: 400; font-size: 21pt;
-	margin: 0 0 22pt; }
+.toc .toc-title { font-weight: 400; font-size: 20pt; text-align: center;
+	margin: 8mm 0 6mm; }
+.toc .toc-rule { width: 46pt; margin: 0 auto 10mm;
+	border-top: 0.6pt solid #2a2620; }
 .toc ol { list-style: none; margin: 0; padding: 0; }
-.toc li { display: flex; align-items: baseline; margin: 0 0 7pt; }
-.toc .n { font-family: Georgia, serif; font-size: 9pt; color: #999;
-	flex: 0 0 38pt; white-space: nowrap; }
-.toc .t { font-size: 10.5pt; white-space: nowrap; }
-.toc .dots { flex: 1; border-bottom: 0.6pt dotted #aaa; margin: 0 6pt 2.5pt; }
+.toc li { display: flex; align-items: baseline; margin: 0 0 8.5pt; }
+.toc .n { font-size: 9.5pt; color: #8a857c; font-variant: small-caps;
+	letter-spacing: 0.06em; flex: 0 0 40pt; white-space: nowrap; }
+.toc .t { font-size: 11pt; white-space: nowrap; }
+.toc .dots { flex: 1; border-bottom: 0.6pt dotted #b8b2a6; margin: 0 7pt 3pt; }
 .toc a { text-decoration: none; color: inherit; }
-.toc a.pg { font-family: Georgia, serif; font-size: 10pt; color: #555; }
-.toc .note { margin-top: 26pt; border-top: 0.6pt solid #bbb; padding-top: 10pt;
-	font-size: 9pt; color: #666; font-style: italic; max-width: 130mm;
-	line-height: 1.55; }
+.toc a.pg { font-size: 10pt; color: #57514a; }
+.toc .note { margin-top: 12mm; border-top: 0.6pt solid #d8d3c8;
+	padding-top: 5mm; font-size: 9.5pt; color: #6b655c;
+	font-style: italic; max-width: 140mm; line-height: 1.65; }
 
 /* — Body — */
 main { text-align: left; }
@@ -190,70 +205,79 @@ main { text-align: left; }
    stretch headings, table cells or list items */
 h2, h3, th, td, li, .toc .t { text-align-last: left !important; }
 h2 {
-	font-family: Georgia, "Times New Roman", serif; font-weight: 400;
-	font-size: 18pt; color: #1c1c1c;
-	margin: 30pt 0 4pt; text-align: left;
-	padding: 12pt 0 9pt; border-top: 2.5pt solid #1c1c1c;
+	font-weight: 400; font-size: 19pt; color: #211d19;
+	margin: 32pt 0 6pt; text-align: left;
+	padding: 12pt 0 10pt; border-top: 3pt double #2a2620;
 	break-after: avoid; break-inside: avoid;
 }
 h2 .kicker { display: block; font-family: "Segoe UI", sans-serif;
-	font-size: 8pt; letter-spacing: 0.3em; text-transform: uppercase;
-	color: #999; margin-bottom: 8pt; }
+	font-size: 8pt; letter-spacing: 0.32em; text-transform: uppercase;
+	color: #9a948a; margin-bottom: 9pt; }
 h3 {
-	font-family: Georgia, serif; font-weight: 400; font-size: 12pt;
-	margin: 17pt 0 5pt; break-after: avoid; color: #1c1c1c;
+	font-weight: 400; font-size: 12.5pt; margin: 18pt 0 6pt;
+	break-after: avoid; color: #211d19;
 	font-variant: small-caps; letter-spacing: 0.05em; text-align: left;
 }
-p { margin: 5pt 0; orphans: 3; widows: 3; }
-ul, ol { margin: 5pt 0 9pt; padding-left: 17pt; }
-li { margin: 3pt 0; padding-left: 2pt; }
-li::marker { color: #999; }
-strong { font-weight: 600; }
+p { margin: 0; orphans: 3; widows: 3; }
+p + p { text-indent: 1.5em; }
+h2 + p, h3 + p, table + p, ul + p, ol + p { text-indent: 0; }
+ul, ol { margin: 7pt 0 10pt; padding-left: 20pt; }
+li { margin: 3.5pt 0; padding-left: 3pt; }
+li::marker { color: #9a948a; }
+strong { font-weight: 700; }
 em { font-style: italic; }
-code { font-family: Consolas, "Courier New", monospace; background: #f2f2f2;
-	padding: 0 3pt; font-size: 9pt; }
+code { font-family: Consolas, "Courier New", monospace;
+	font-size: 8.8pt; color: #4a443c; }
 
 /* Tables: booktabs style — rules only, no boxes */
-table { border-collapse: collapse; width: 100%; margin: 14pt 0;
-	font-size: 8.8pt; line-height: 1.45; }
+table { border-collapse: collapse; width: 100%; margin: 15pt 0;
+	font-size: 9pt; line-height: 1.5; }
 thead { display: table-header-group; }
 tr { break-inside: avoid; }
-th, td { padding: 5pt 8pt 5pt 0; text-align: left; vertical-align: top;
+th, td { padding: 5pt 9pt 5pt 0; text-align: left; vertical-align: top;
 	border: none; }
-th { font-size: 8.2pt; text-transform: uppercase; letter-spacing: 0.06em;
-	color: #1c1c1c; font-weight: 600;
-	border-bottom: 1pt solid #1c1c1c; }
-tbody tr { border-bottom: 0.5pt solid #d8d8d8; }
-tbody tr:last-child { border-bottom: 1pt solid #1c1c1c; }
-td { color: #333; }
+th { font-family: "Segoe UI", sans-serif; font-size: 7.8pt;
+	text-transform: uppercase; letter-spacing: 0.07em;
+	color: #211d19; font-weight: 600;
+	border-bottom: 0.9pt solid #2a2620; }
+tbody tr { border-bottom: 0.45pt solid #d8d3c8; }
+tbody tr:last-child { border-bottom: 0.9pt solid #2a2620; }
+td { color: #3a352f; }
 
-.closing { margin-top: 40pt; border-top: 0.6pt solid #bbb; padding-top: 10pt;
-	font-size: 8pt; color: #999; letter-spacing: 0.06em;
-	display: flex; justify-content: space-between; }
+.closing { margin-top: 36pt; text-align: center; }
+.closing .ornament { color: #b8b2a6; letter-spacing: 1.2em;
+	font-size: 9pt; margin-bottom: 8pt; }
+.closing .line { font-family: "Segoe UI", sans-serif; font-size: 7.5pt;
+	color: #9a948a; letter-spacing: 0.16em; text-transform: uppercase; }
 </style></head><body>
 <div class="cover">
-	<div class="brand">Century NIT Consult</div>
-	<div class="rule"></div>
-	<h1>Complete Platform<br>Documentation</h1>
-	<p class="sub">The study-abroad platform end to end. What it does,
-	how it is built, how the client journey works, and how it runs in
-	production.</p>
-	<div class="meta"><span>Client portal · Operations Center · API</span><span>${new Date().toISOString().slice(0, 10)}</span></div>
-	<table class="control">
-		<tr><td>Document</td><td>Complete Platform Documentation</td></tr>
-		<tr><td>Applies to</td><td>Public website, client portal, Operations Center, API and workers</td></tr>
-		<tr><td>Status</td><td>Current — generated from DOCUMENTATION.md</td></tr>
-		<tr><td>Audience</td><td>Internal, partners, technical stakeholders</td></tr>
-	</table>
+	<div class="top">
+		<div class="brand">Century NIT Consult</div>
+		<div class="doc">Platform Documentation</div>
+	</div>
+	<div class="mid">
+		<h1>Complete Platform<br>Documentation</h1>
+		<div class="rule"></div>
+		<p class="sub">The study-abroad platform end to end &mdash; what it
+		does, how it is built, how the client journey works, and how it
+		runs in production.</p>
+	</div>
+	<div class="bottom">
+		<span>Client Portal</span><span class="sep">·</span>
+		<span>Operations Center</span><span class="sep">·</span>
+		<span>API &amp; Workers</span><br><br>
+		<span style="letter-spacing: 0.08em; text-transform: none; font-family: Georgia, serif; font-style: italic;">${new Date().toISOString().slice(0, 10)}</span>
+	</div>
 </div>
 <nav class="toc">
 	<div class="toc-title">Contents</div>
+	<div class="toc-rule"></div>
 	<ol>${toc.map((t) => `<li><span class="n">${t.part ? "Part " + t.part : ""}</span><span class="t">${t.title}</span><span class="dots"></span><a class="pg" href="#${t.id}"></a></li>`).join("")}</ol>
 	<div class="note">${front.join(" ")}</div>
 </nav>
 <main>
 ${out.join("\n")}
-<div class="closing"><span>Century NIT Consult · Complete Documentation</span><span>Generated from DOCUMENTATION.md</span></div>
+<div class="closing"><div class="ornament">·&nbsp;·&nbsp;·</div><div class="line">Century NIT Consult &nbsp;·&nbsp; Generated from DOCUMENTATION.md</div></div>
 </main>
 <script src="./vendor/paged.polyfill.js"></script>
 </body></html>`;

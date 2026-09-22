@@ -259,7 +259,7 @@ td:first-child, th:first-child { padding-left: 8pt; }
 	<div class="mid">
 		<h1>Complete Platform<br>Documentation</h1>
 		<div class="rule"></div>
-		<p class="sub">The study-abroad platform end to end &mdash; what it
+		<p class="sub">The study-abroad platform end to end. What it
 		does, how it is built, how the client journey works, and how it
 		runs in production.</p>
 	</div>

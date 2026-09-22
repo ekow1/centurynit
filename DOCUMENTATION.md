@@ -251,38 +251,38 @@ What a client can book comes from three inputs: the branch's weekly hours
 and slot settings, each consultant's own working hours, and everything
 already booked, including busy times mirrored in from staff personal
 calendars. A database-level rule makes double-booking impossible even if
-two people click at the same instant — availability is re-checked inside
+two people click at the same instant. Availability is re-checked inside
 the transaction *and* a unique index decides the race, so a pre-check
 alone can never let two requests both read "free".
 
-Every booking is born **unassigned** — assigning a consultant is always a
+Every booking is born **unassigned**: assigning a consultant is always a
 manager's decision, never automatic and never round-robin. One deliberate
 exception to the slot check: when a booking arrives already paid, the
-capacity check is skipped and the booking lands regardless — money in
+capacity check is skipped and the booking lands regardless. Money in
 hand takes priority, and ops decides afterwards whether a consultant can
 take it or the appointment needs rescheduling.
 
 ### The consultation's own lifecycle
 
 The booking and the consultation are two records kept in lock-step. The
-consultation runs a real state machine — assigned, confirmed, in
-assessment, completed — and the transitions carry meaning:
+consultation runs a real state machine, assigned, confirmed, in
+assessment, completed, and the transitions carry meaning:
 
 - **Confirming is a state, not a message.** A slot is confirmed only once
   a consultant is assigned and the time is still ahead; confirmation
   moves both records to confirmed together, and the client is told the
   slot is locked (with the meeting link if one is set).
 - **A moved slot voids the confirmation.** If a confirmed consultation's
-  booking is rescheduled, the consultation rolls back to *assigned* — the
+  booking is rescheduled, the consultation rolls back to *assigned*, the
   consultant must confirm the new time before the assessment can start.
 - **An undo exists for a misclick.** "Start assessment" can be rolled
-  back to confirmed — but completed outcomes stay locked forever.
+  back to confirmed, but completed outcomes stay locked forever.
 - **Cancelling cascades.** Force-cancelling the consultation pulls the
-  booking off the calendar, kills its reminders, and emails both sides —
+  booking off the calendar, kills its reminders, and emails both sides,
   ending the engagement, not just the appointment.
 - **A cancellation can carry a credit.** Staff can issue a free-rebooking
   credit on a cancelled case: the client's next consultation checkout
-  skips payment entirely, and they're told in-app and by email — a credit
+  skips payment entirely, and they're told in-app and by email, a credit
   nobody hears about is no credit.
 
 Reschedules a client requests go to staff for approval; staff-side
@@ -292,39 +292,39 @@ timeline.
 ### Coordination: who steers a case
 
 Consultations carry a steering layer of their own. A manager (or owner)
-can delegate a case to a **coordinator** — and while a case is
+can delegate a case to a **coordinator**, and while a case is
 coordinated, only the coordinator may place handlers or move the file
 between branches; everyone else, managers included, watches until they
-take the case back. That take-back is always available — the built-in
+take the case back. That take-back is always available, the built-in
 break-glass, so a delegated case can never strand.
 
 Two refinements shape who may steer:
 
 - **Grants.** A manager can give a staff member *standing* coordination
-  authority that lasts until it's retracted or lapses — so a trusted
+  authority that lasts until it's retracted or lapses, so a trusted
   coordinator doesn't need per-case delegation. Retracting a grant is
   deliberately aggressive: it also pulls every case they currently steer
   back into the management pool, because access can't linger past its
   welcome.
 - **Journey scope.** A coordinator can be attached to the *applicant*
-  rather than the case — every case that client opens inherits them, and
+  rather than the case, every case that client opens inherits them, and
   their live cases are stamped now. Releasing clears future cases only;
   in-flight cases keep whoever holds them.
 
 A daily **duty coordinator** is set per branch, and the delegation picker
-is fed by a live workload read — each active staff member's open and
+is fed by a live workload read, each active staff member's open and
 overdue counts and a capacity percentage, so work goes to the desk that
 can take it. A consultation can also be **referred to another branch**
-without naming a handler — the receiving desk staffs it from their own
+without naming a handler, the receiving desk staffs it from their own
 queue, because the branch owns the file, not the client's location.
 
 ### Meetings
 
 Online sessions run in video rooms the client joins **inside the
 portal**, no external link needed. Staff can paste any meeting link
-(Zoom, Meet, Teams — any https address) onto a booking, or generate a
+(Zoom, Meet, Teams, any https address) onto a booking, or generate a
 Google Meet space on demand through the company's connected Google
-account — either way the client just sees "join". Join windows differ by
+account, either way the client just sees "join". Join windows differ by
 side: the host gets in thirty minutes early to prep, the client fifteen,
 and the room dies two hours after the end. A background check every
 minute marks meetings live or ended, feeding the console's "what's
@@ -366,8 +366,8 @@ Stripe card gateway exists alongside it and activates when a key is
 configured, so the payments log shows records from both gateways plus
 staff-recorded bank and cash entries. There is deliberately no way for a
 client to claim "I paid"; cash and bank payments are recorded by staff.
-Checkout is opened in cedis at the live exchange rate — if the merchant
-account isn't GHS-enabled the gateway call falls back to dollars — and a
+Checkout is opened in cedis at the live exchange rate, if the merchant
+account isn't GHS-enabled the gateway call falls back to dollars, and a
 proforma can't be paid at all until staff review and issue it (an agency
 proforma auto-issues the moment the client goes to pay it).
 Mobile-money charges with an OTP step are also supported. Receipts and
@@ -375,16 +375,16 @@ invoices print as PDFs.
 
 Settlement is deliberately paranoid. The invoice is credited *before* the
 transaction is marked successful, so a crash mid-settle leaves the
-transaction pending and a retry can still act — never the other way
+transaction pending and a retry can still act, never the other way
 round, where a retry would have seen "success" on an unpaid invoice
 forever. A payment larger than the outstanding balance is refused
 outright. And one payment is also a *decision*: settling the visa invoice
 records the client's consent to proceed with visa processing and fires
-the handler handoff in the same stroke — paying the bill is the
+the handler handoff in the same stroke, paying the bill is the
 signature.
 
 Every settled payment triggers a receipt email carrying two PDF
-attachments — the invoice and a receipt — that itemise the actual lines
+attachments, the invoice and a receipt, that itemise the actual lines
 paid for (visa fee, ticket, consultation) rather than a generic label,
 show both currencies, and state the remaining balance. The email is
 queued rather than sent inline, so a mail-provider outage retries on its
@@ -393,24 +393,24 @@ own schedule instead of losing the client's proof of payment.
 ### Milestones: when money falls due
 
 A full-journey instalment invoice is not a list of dates invented at
-enrolment — its lines carry *triggers*: the deposit falls due on
+enrolment, its lines carry *triggers*: the deposit falls due on
 acceptance, the admissions balance on the first offer, the pre-departure
 milestone when the visa file opens, and the post-arrival remainder once
 the client lands. When a case event fires its trigger, the matching line
-is stamped with a due date — once — and the invoice's own due date moves
+is stamped with a due date, once, and the invoice's own due date moves
 to the earliest unpaid dated line. That earliest date is what "overdue"
 reads; overdue is derived, never stored.
 
-The moment a milestone falls due the client is told — in-app and by email —
+The moment a milestone falls due the client is told, in-app and by email,
 which line, how much, and *why* in their own words ("Your first offer
 letter has been recorded"), with a link to pay. No silent billing. And
 because a milestone depends on the case event being recorded through the
 right path, a daily reconciliation reads the case state itself and dates
-any line whose event plainly happened — a stage moved by hand or a missed
+any line whose event plainly happened, a stage moved by hand or a missed
 hook can never leave money owed but unbilled; every such stamp is audited.
 
 Payments cover the invoice's lines in order, like water filling a row of
-glasses — the client's "next payment" is always the first line the money
+glasses, the client's "next payment" is always the first line the money
 hasn't yet reached, never a vague balance. A client can switch between
 the full and instalment plans from the portal, but only while nothing
 beyond the deposit has been paid: after that the lines are the record and
@@ -424,7 +424,7 @@ Auto-pay is documented here fully because it is the piece clients ask
 about most.
 
 - **The card on file.** A successful card payment returns a reusable
-  gateway authorization, which is stored — card brand, last four digits
+  gateway authorization, which is stored, card brand, last four digits
   and bank, never the number. Mobile-money authorizations are not
   reusable and are never stored, so auto-pay is card-only.
 - **Consent is a real switch.** Nothing is charged while it is off.
@@ -432,21 +432,21 @@ about most.
   timestamp, and can be withdrawn from the portal at any time.
 - **A daily sweep does the charging.** Once a day a worker walks every
   unpaid, past-due line on issued invoices where the client opted in, and
-  charges the saved authorization — but only after the milestone
+  charges the saved authorization, but only after the milestone
   reconciliation above has run, so nothing stays owed-but-unbilled.
 - **Success is indistinguishable from a manual payment.** A successful
   auto-debit settles through the exact same path a checkout payment
-  takes — same verification, same receipt email, same live updates. The
+  takes, same verification, same receipt email, same live updates. The
   ledger simply labels it `auto-pay · Visa ····4283`.
 - **Failures are loud, never silent.** Every attempt is logged with its
-  gateway response. A declined debit emails the client once — what was
-  due, what the card said, when it will be retried — with a "pay now or
+  gateway response. A declined debit emails the client once: what was
+  due, what the card said, when it will be retried, with a "pay now or
   another way" link, and surfaces a banner in the portal showing the
   amount, the reason and the next retry date.
 - **Retries and escalation.** A failed line retries every three days. If
   it is still unpaid ten days after the first failure, the client *and*
-  the case handler are both emailed once — the handler gets a follow-up
-  notice — while retries continue in the background.
+  the case handler are both emailed once. The handler gets a follow-up
+  notice, while retries continue in the background.
 - **It follows the schedule, not a fixed amount.** The sweep charges each
   line's outstanding share, capped at the invoice's remaining balance; a
   line already covered by another payment is never re-charged. When the
@@ -456,8 +456,8 @@ about most.
 ### Post-arrival plans
 
 The post-arrival remainder has its own lifecycle. The client (or staff on
-their behalf, with a recorded reason) picks a schedule — a number of
-months and a frequency — from a catalogue finance controls in settings.
+their behalf, with a recorded reason) picks a schedule, a number of
+months and a frequency, from a catalogue finance controls in settings.
 The pick is a *request*: it does not touch the invoice, and a pending
 request shows as a single undated line so nothing looks payable on a
 schedule nobody has approved. Finance or a manager then enters the start
@@ -465,13 +465,13 @@ date and approves; only then does the remainder become one dated
 instalment line per payment, with the catalogue's flat interest priced
 in and frozen on the case. A declined request comes back with a reason
 and the client can pick again; once an instalment has been paid the
-schedule is locked — paid money is never reshaped.
+schedule is locked, paid money is never reshaped.
 
 Each dated, unpaid instalment gets a reminder email ahead of its due date
 (the lead time is a setting); when a schedule is rewritten, stale
 reminders are cancelled and replaced. Plans approved before the
-start-date flow existed anchor on the recorded arrival date — or, failing
-that, the booked flight's departure plus a day — with a grace window
+start-date flow existed anchor on the recorded arrival date, or, failing
+that, the booked flight's departure plus a day, with a grace window
 before the first instalment.
 
 ### Fees and packages
@@ -495,14 +495,14 @@ package and shape the quotation.
 
 Every case and every client has a ledger view: a chapter-numbered journal
 of invoices and payments, numbered `INV-2026-0007` (and `PRO-` for
-proformas) from collision-proof sequences. The ledger is a *read model* —
+proformas) from collision-proof sequences. The ledger is a *read model*:
 it stores nothing of its own. It reads three sources and merges them into
 one timeline: settled and manually recorded payments, every auto-pay
 attempt including declines, and checkout attempts. Scheduled rows come
 from the invoice's own unpaid dated lines.
 
 The same ledger serves two audiences honestly: the portal trims it to
-face value — settlements, upcoming instalments, declined auto-debits —
+face value (settlements, upcoming instalments, declined auto-debits),
 while staff see everything: gateway references, decline reasons, which
 staff member recorded a cash payment, and even failed checkout attempts
 the client abandoned. Each row names what the money was for (the invoice
@@ -510,12 +510,12 @@ line it landed on), the channel ("Paystack · Mobile Money", "auto-pay ·
 Visa ····4283", "Cash"), and the invoice's outstanding balance right
 after it.
 
-Underneath sits the invoice event history, immutable and append-only —
-the substrate the views are built from — and the application's "paid"
+Underneath sits the invoice event history, immutable and append-only,
+the substrate the views are built from, and the application's "paid"
 flags are not written by code at all: a database trigger derives them
 from the ledger on every invoice, line or payment change, so a flag can
-never disagree with the money. A paid invoice can't be voided — it must
-be credited with a reason, capped at the outstanding balance — while a
+never disagree with the money. A paid invoice can't be voided: it must
+be credited with a reason, capped at the outstanding balance, while a
 proforma can still be voided, which sends it back to whoever raised it
 with the reason attached.
 
@@ -569,19 +569,19 @@ are shown live as they happen.
 
 The message mechanics are carefully chosen, not incidental:
 
-- **Edits happen in place** — a corrected message never spawns a new row,
+- **Edits happen in place**: a corrected message never spawns a new row,
   so replies quoting it and forwards descending from it stay attached.
-- **Forwards credit the original** — forwarding a forward still points at
+- **Forwards credit the original**: forwarding a forward still points at
   the true author rather than building a chain.
-- **Deletes are tombstones** — the row survives so quotes don't dangle;
+- **Deletes are tombstones**: the row survives so quotes don't dangle;
   only the body is withheld. Messages are never hard-deleted.
-- **Reactions toggle** — applying an emoji you already used removes it.
-- **Typing is deliberately ephemeral** — never written to the database,
+- **Reactions toggle**: applying an emoji you already used removes it.
+- **Typing is deliberately ephemeral**: never written to the database,
   because a keystroke's worth of state is worthless a second later.
-- **The support queue auto-joins** — a support-role staff member who can
+- **The support queue auto-joins**: a support-role staff member who can
   *see* a client thread in the queue is quietly made a member when they
   open it, so list visibility and detail access never disagree.
-- **Live events respect the same walls as history** — internal notes are
+- **Live events respect the same walls as history**: internal notes are
   published only on staff channels; a note pushed to the client's live
   stream would leak even though it never appears in their history, so the
   two paths resolve recipients separately.
@@ -818,8 +818,8 @@ done, current and locked.
   officer, and only then is the airline fare invoiced, separately: the
   service fee was already collected in the package, and no ticket is ever
   billed before someone owns the booking. The ticket invoice follows the
-  same two-step as every other invoice — raised as a proforma, issued by
-  finance — and once the ticket is paid and the booking confirmation is
+  same two-step as every other invoice, raised as a proforma, issued by
+  finance. And once the ticket is paid and the booking confirmation is
   recorded, the case leaves the departure chapter the way it entered: on
   its own. The chapter also keeps the logistics record: the report-by
   date, the briefing, airport pickup, accommodation, an emergency

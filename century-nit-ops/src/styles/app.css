@@ -3293,16 +3293,18 @@
 .hd-split {
 	display: flex;
 	gap: 1rem;
-	align-items: flex-start;
+	align-items: stretch;
+	/* One bound for every column: the queue, the thread and the context
+	   rail all fill this height and scroll internally — the page itself
+	   never grows with message count, so the composer stays pinned. */
+	height: calc(100vh - 220px);
+	min-height: 480px;
 }
 
 .hd-list {
 	flex: 0 0 300px;
 	min-width: 240px;
 	max-width: 320px;
-	max-height: calc(100vh - 220px);
-	position: sticky;
-	top: 1.5rem;
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
@@ -3506,7 +3508,8 @@
 	min-width: 0;
 	display: flex;
 	flex-direction: column;
-	border: 1px solid var(--border);
+	/* No box around the chat — the queue's border and the context rail's
+	   left rule carry the separation. */
 	background: var(--background);
 }
 

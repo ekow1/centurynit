@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI first point of support — three access tiers</title>
+<style>
+	:root {
+		--ink: #18181b;
+		--paper: #faf9f7;
+		--amber: #e8a33d;
+		--amber-deep: #b45309;
+		--line: #d9d4cc;
+		--mut: #6b6b66;
+	}
+	* { box-sizing: border-box; margin: 0; padding: 0; border-radius: 0 !important; }
+	body {
+		font-family: "Segoe UI", system-ui, sans-serif;
+		background: #ece9e3;
+		color: var(--ink);
+		padding: 2.5rem 2rem 4rem;
+	}
+	.mono { font-family: "Cascadia Code", Consolas, monospace; }
+
+	header.page { max-width: 1280px; margin: 0 auto 2rem; }
+	header.page .kick {
+		font-family: Consolas, monospace; font-size: 0.62rem; font-weight: 700;
+		letter-spacing: 0.18em; text-transform: uppercase; color: var(--amber-deep);
+	}
+	header.page h1 { font-family: Georgia, serif; font-size: 2.1rem; font-weight: 600; margin-top: 0.35rem; }
+	header.page p.sub { color: var(--mut); font-size: 0.92rem; margin-top: 0.5rem; max-width: 46rem; }
+
+	/* The tier rule strip */
+	.tiers { max-width: 1280px; margin: 0 auto 2.5rem; display: grid; grid-template-columns: repeat(3, 1fr); border: 1.5px solid var(--ink); }
+	.tier { padding: 0.9rem 1.1rem; border-right: 1px solid var(--line); background: var(--paper); }
+	.tier:last-child { border-right: 0; }
+	.tier .t-k { font-family: Consolas, monospace; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; }
+	.tier .t-t { font-weight: 700; font-size: 0.9rem; margin-top: 0.2rem; }
+	.tier .t-d { font-size: 0.76rem; color: var(--mut); margin-top: 0.25rem; line-height: 1.45; }
+	.tier--public .t-k { color: var(--mut); }
+	.tier--portal .t-k { color: var(--amber-deep); }
+	.tier--ops .t-k { color: var(--ink); }
+	.tier--ops { background: var(--ink); color: #fff; }
+	.tier--ops .t-d { color: rgba(255,255,255,0.65); }
+
+	/* Three chat frames */
+	.frames { max-width: 1280px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; align-items: start; }
+	.frame { background: var(--paper); border: 1.5px solid var(--ink); display: flex; flex-direction: column; min-height: 640px; }
+	.frame--dark { background: #111113; border-color: #000; color: #f4f2ee; }
+
+	.fhead { padding: 0.85rem 1rem; border-bottom: 1.5px solid var(--ink); display: flex; align-items: center; gap: 0.7rem; }
+	.frame--dark .fhead { border-bottom-color: rgba(255,255,255,0.18); }
+	.fhead .mark {
+		width: 2rem; height: 2rem; background: var(--ink); color: #fff;
+		display: grid; place-items: center; font-family: Georgia, serif; font-size: 0.85rem; flex-shrink: 0;
+	}
+	.frame--dark .fhead .mark { background: var(--amber); color: #000; }
+	.fhead .who { flex: 1; min-width: 0; }
+	.fhead .who .n { font-weight: 700; font-size: 0.85rem; }
+	.fhead .who .s { font-family: Consolas, monospace; font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mut); margin-top: 0.1rem; }
+	.frame--dark .fhead .who .s { color: rgba(255,255,255,0.5); }
+	.fhead .tag {
+		font-family: Consolas, monospace; font-size: 0.56rem; font-weight: 700; letter-spacing: 0.12em;
+		text-transform: uppercase; padding: 0.25rem 0.5rem; border: 1px solid var(--line); color: var(--mut);
+	}
+	.fhead .tag--amber { border-color: var(--amber); color: var(--amber-deep); }
+	.frame--dark .fhead .tag { border-color: rgba(255,255,255,0.3); color: rgba(255,255,255,0.7); }
+
+	.ftabs { display: flex; border-bottom: 1px solid var(--line); }
+	.frame--dark .ftabs { border-bottom-color: rgba(255,255,255,0.12); }
+	.ftabs span {
+		font-family: Consolas, monospace; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.12em;
+		text-transform: uppercase; padding: 0.55rem 0.8rem; color: var(--mut); border-right: 1px solid var(--line);
+	}
+	.frame--dark .ftabs span { border-right-color: rgba(255,255,255,0.12); color: rgba(255,255,255,0.45); }
+	.ftabs span.on { background: var(--ink); color: #fff; }
+	.ftabs span.on--amber { background: var(--amber); color: #000; }
+
+	.fbody { flex: 1; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
+	.msg { max-width: 88%; font-size: 0.8rem; line-height: 1.55; }
+	.msg--u { align-self: flex-end; background: var(--ink); color: #fff; padding: 0.55rem 0.8rem; }
+	.frame--dark .msg--u { background: var(--amber); color: #000; }
+	.msg--a { align-self: flex-start; padding: 0.55rem 0.8rem; border: 1px solid var(--line); background: #fff; }
+	.frame--dark .msg--a { background: #1c1c1f; border-color: rgba(255,255,255,0.14); }
+	.msg .who {
+		display: block; font-family: Consolas, monospace; font-size: 0.55rem; font-weight: 700;
+		letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber-deep); margin-bottom: 0.3rem;
+	}
+	.frame--dark .msg .who { color: var(--amber); }
+	.msg ol, .msg ul { margin: 0.35rem 0 0; padding-left: 1.15rem; }
+	.msg li + li { margin-top: 0.25rem; }
+	.msg .lnk {
+		display: inline-flex; align-items: center; gap: 0.3rem; margin-top: 0.45rem;
+		font-family: Consolas, monospace; font-size: 0.66rem; font-weight: 700;
+		color: var(--amber-deep); border-bottom: 1px solid var(--amber);
+	}
+	.frame--dark .msg .lnk { color: var(--amber); }
+	.msg .nolink {
+		display: block; margin-top: 0.45rem; font-family: Consolas, monospace; font-size: 0.6rem;
+		letter-spacing: 0.06em; color: var(--mut); border-top: 1px dashed var(--line); padding-top: 0.4rem;
+	}
+	.msg .ctx {
+		display: block; margin-top: 0.45rem; font-family: Consolas, monospace; font-size: 0.58rem;
+		letter-spacing: 0.06em; color: var(--mut); border-top: 1px solid var(--line); padding-top: 0.4rem;
+	}
+	.frame--dark .msg .ctx { border-top-color: rgba(255,255,255,0.14); color: rgba(255,255,255,0.5); }
+	.msg code {
+		font-family: Consolas, monospace; font-size: 0.72rem; background: rgba(0,0,0,0.06); padding: 0 0.25rem;
+	}
+	.frame--dark .msg code { background: rgba(255,255,255,0.1); }
+
+	.esc {
+		align-self: stretch; border: 1px dashed var(--amber-deep); padding: 0.55rem 0.8rem;
+		font-size: 0.72rem; color: var(--mut); display: flex; justify-content: space-between; align-items: center;
+	}
+	.esc b { color: var(--amber-deep); font-family: Consolas, monospace; font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; }
+
+	.finput { border-top: 1.5px solid var(--ink); display: flex; }
+	.frame--dark .finput { border-top-color: rgba(255,255,255,0.18); }
+	.finput .ph { flex: 1; padding: 0.7rem 1rem; font-size: 0.78rem; color: var(--mut); }
+	.finput .go {
+		font-family: Consolas, monospace; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.12em;
+		text-transform: uppercase; padding: 0.7rem 1.1rem; background: var(--ink); color: #fff;
+		border-left: 1.5px solid var(--ink);
+	}
+	.frame--dark .finput .go { background: var(--amber); color: #000; border-left-color: var(--amber); }
+
+	/* annotations */
+	.notes { max-width: 1280px; margin: 2.5rem auto 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+	.note { font-size: 0.78rem; color: var(--mut); line-height: 1.6; border-top: 3px solid var(--ink); padding-top: 0.7rem; }
+	.note b { display: block; color: var(--ink); font-family: Consolas, monospace; font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 0.35rem; }
+	.note em { color: var(--amber-deep); font-style: normal; font-weight: 700; }
+	.note--amber { border-top-color: var(--amber); }
+</style>
+</head>
+<body>
+
+<header class="page">
+	<p class="kick">Mock · Century NIT Suite</p>
+	<h1>AI as the first point of support</h1>
+	<p class="sub">One assistant, three truths. What it knows and what it may hand out depends entirely on who is asking — verified server-side, not by what the client claims.</p>
+</header>
+
+<!-- The access contract -->
+<div class="tiers">
+	<div class="tier tier--public">
+		<p class="t-k">Tier 0 · Not signed in</p>
+		<p class="t-t">Public site · EnquiryWidget</p>
+		<p class="t-d">General guidance only. Describes the process in plain words. <b>Never emits links, prices, or account specifics.</b> Points at "start your journey" and the WhatsApp/email tabs.</p>
+	</div>
+	<div class="tier tier--portal">
+		<p class="t-k">Tier 1 · Signed in</p>
+		<p class="t-t">Portal · Communication Center AI</p>
+		<p class="t-d">Knows the portal's pages and the client's journey stage. <b>May link to portal pages</b> and name their ref, stage, and next step. Hands off to a human with transcript.</p>
+	</div>
+	<div class="tier tier--ops">
+		<p class="t-k">Tier 2 · Staff signed in</p>
+		<p class="t-t">Ops console · AI in the staff hub</p>
+		<p class="t-d">Knows the console's modules, workflows, and the codebase vocabulary. <b>May link to console routes</b> and name fields, queues, and where a setting lives.</p>
+	</div>
+</div>
+
+<div class="frames">
+
+	<!-- ══ TIER 0 · PUBLIC ══ -->
+	<div class="frame">
+		<div class="fhead">
+			<span class="mark">C</span>
+			<div class="who">
+				<p class="n">Century NIT assistant</p>
+				<p class="s">Public site · not signed in</p>
+			</div>
+			<span class="tag">Tier 0</span>
+		</div>
+		<div class="ftabs"><span class="on">Chat</span><span>WhatsApp</span><span>Email</span></div>
+		<div class="fbody">
+			<div class="msg msg--u">How do I upload my passport for my application?</div>
+			<div class="msg msg--a">
+				<span class="who">AI · tier 0</span>
+				Passport upload happens inside the client portal. The short version:
+				<ol>
+					<li>Start your journey and create your portal account.</li>
+					<li>A consultation confirms your service plan first.</li>
+					<li>Your portal then opens a Documents section with a checklist — passport is usually the first item.</li>
+					<li>Our team reviews each upload and marks it verified or asks for a clearer copy.</li>
+				</ol>
+				<span class="nolink">No links while signed out — sign in and ask again, I'll take you straight there.</span>
+			</div>
+			<div class="msg msg--u">ok but just send me the upload link</div>
+			<div class="msg msg--a">
+				<span class="who">AI · tier 0</span>
+				I can't share portal links here — upload pages only exist inside your account, and a link would land you on the sign-in screen anyway. Start your journey or sign in first, then ask me again and I'll link you directly.
+			</div>
+			<div class="esc"><span>Needs a person?</span><b>WhatsApp · Email tabs →</b></div>
+		</div>
+		<div class="finput"><span class="ph">Ask a question…</span><span class="go">Send</span></div>
+	</div>
+
+	<!-- ══ TIER 1 · PORTAL ══ -->
+	<div class="frame">
+		<div class="fhead">
+			<span class="mark">AI</span>
+			<div class="who">
+				<p class="n">Century AI</p>
+				<p class="s">Portal · signed in · knows your journey</p>
+			</div>
+			<span class="tag tag--amber">Tier 1</span>
+		</div>
+		<div class="ftabs"><span class="on on--amber">AI</span><span>Support</span><span>Officer</span></div>
+		<div class="fbody">
+			<div class="msg msg--u">How do I upload my passport?</div>
+			<div class="msg msg--a">
+				<span class="who">AI · tier 1</span>
+				You're on <strong>case CN-2026-0147</strong>, currently at <strong>Stage II · Applications</strong> — documents are open for you. Passport is item 1 on your checklist, still marked "awaiting upload".
+				<ol>
+					<li>Open your Documents vault.</li>
+					<li>Pick "Passport — bio page" and upload a clear colour scan.</li>
+					<li>Akosua's team verifies it, usually within a working day.</li>
+				</ol>
+				<span class="lnk">Open Documents → /portal/documents</span>
+				<span class="ctx">Context sent: stage II · ref CN-2026-0147 · consultant Akosua</span>
+			</div>
+			<div class="msg msg--u">can I pay the visa fee in parts?</div>
+			<div class="msg msg--a">
+				<span class="who">AI · tier 1</span>
+				Your plan already allows it — invoice INV-0092 (GHS 4,800) is open with instalments. Pick the plan on your Payments page and it splits automatically.
+				<span class="lnk">Open Payments → /portal/financial</span>
+			</div>
+			<div class="esc"><span>AI transcript goes with the handoff</span><b>Talk to the desk →</b></div>
+		</div>
+		<div class="finput"><span class="ph">Ask the AI…</span><span class="go">Send</span></div>
+	</div>
+
+	<!-- ══ TIER 2 · OPS ══ -->
+	<div class="frame frame--dark">
+		<div class="fhead">
+			<span class="mark">AI</span>
+			<div class="who">
+				<p class="n">Ops AI</p>
+				<p class="s">Console · staff · codebase-aware</p>
+			</div>
+			<span class="tag">Tier 2</span>
+		</div>
+		<div class="ftabs"><span class="on on--amber">AI</span><span>Queue</span><span>Team</span></div>
+		<div class="fbody">
+			<div class="msg msg--u">where do I change how long before idle sessions sign staff out?</div>
+			<div class="msg msg--a">
+				<span class="who">AI · tier 2</span>
+				That's the <code>idleHours</code> auth policy — Administration → Authentication → "Idle timeout (hours)". The console reads it from <code>/api/auth/me</code> and the guard warns 5 minutes before expiry. Portal stays fixed at 12h.
+				<span class="lnk">Open → /administration · authentication</span>
+				<span class="ctx">codebase: services/audit.ts · components/IdleTimeout.tsx</span>
+			</div>
+			<div class="msg msg--u">a client says they were sent to the MFA page after their session expired</div>
+			<div class="msg msg--a">
+				<span class="who">AI · tier 2</span>
+				Known bug — fixed in <code>8ba7828</code>. The session probe left a stale sessionStorage user, and the MFA check's 401 was read as "not enrolled". Expired sessions now drop to <code>/login</code>. If they're on an old bundle, one reload clears it.
+			</div>
+			<div class="esc"><span>Escalates to the helpdesk with context</span><b>Flag to a manager →</b></div>
+		</div>
+		<div class="finput"><span class="ph">Ask about the console, a workflow, the code…</span><span class="go">Send</span></div>
+	</div>
+
+</div>
+
+<!-- Annotations -->
+<div class="notes">
+	<div class="note">
+		<b>Tier 0 — the honest wall</b>
+		Same question, deliberately thinner answer. It <em>describes the process</em> — the steps exist, in order — but it cannot hand out a link, quote a fee, or touch anything behind sign-in. Asking twice doesn't help: it explains why instead of leaking the path.
+	</div>
+	<div class="note note--amber">
+		<b>Tier 1 — journey-aware, link-allowed</b>
+		The moment the session cookie is present the assistant gets the client's stage, ref, consultant, and open items as context — so it answers <em>their</em> question, not the generic one, and links straight into the portal. The existing AI → human handoff carries the transcript up.
+	</div>
+	<div class="note">
+		<b>Tier 2 — codebase-aware</b>
+		Staff get a different brain: it knows the console's modules, the auth policy names, file paths, and recent fixes — so "where does X live" and "is this a known bug" are answerable without leaving the desk. Links point at console routes.
+	</div>
+</div>
+
+</body>
+</html>

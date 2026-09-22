@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ops · Helpdesk height fix + floating chat in portal language</title>
+<style>
+	:root {
+		--ink: #17161a;
+		--paper: #f5f4f0;
+		--card: #ffffff;
+		--line: #ddd9cd;
+		--line-light: #e8e5dc;
+		--muted: #6e6a60;
+		--amber: #b45309;
+		--amber-ink: #8a5a0a;
+		--amber-soft: #f4ead3;
+		--red: #b91c1c;
+		--purple: #5b21b6;
+	}
+	* { box-sizing: border-box; margin: 0; padding: 0; border-radius: 0 !important; }
+	html { font-size: 14px; }
+	body { font-family: Georgia, "Times New Roman", serif; background: var(--paper); color: var(--ink); }
+	.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+	button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; text-align: left; }
+
+	.doc { max-width: 1160px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+	.doc h1 { font-size: 1.7rem; letter-spacing: -0.01em; }
+	.doc .lede { color: var(--muted); font-size: 0.82rem; margin-top: 0.4rem; max-width: 62ch; line-height: 1.55; }
+	.eyebrow { font-family: ui-monospace, monospace; font-size: 0.56rem; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--amber-ink); margin-bottom: 0.6rem; }
+	.case { margin-top: 2.4rem; }
+	.case h2 { font-size: 1.05rem; display: flex; align-items: baseline; gap: 0.6rem; }
+	.case h2 .tag { font-family: ui-monospace, monospace; font-size: 0.55rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; padding: 0.15rem 0.5rem; border: 1px solid var(--line); color: var(--muted); }
+	.case h2 .tag.good { color: var(--amber-ink); border-color: var(--amber); background: var(--amber-soft); }
+	.case .note { font-size: 0.75rem; color: var(--muted); margin: 0.5rem 0 0.9rem; line-height: 1.55; max-width: 72ch; }
+	.case .note b { color: var(--ink); }
+	.case .note code { font-family: ui-monospace, monospace; font-size: 0.68rem; background: #eceae2; padding: 0 0.3rem; }
+
+	/* ═══ fake viewport so internal scrolling is real ═══ */
+	.vp { height: 560px; border: 1.5px solid var(--ink); background: var(--card); display: flex; flex-direction: column; position: relative; }
+	.vp__chrome { height: 34px; flex: 0 0 34px; background: var(--ink); color: #d8d5cb; display: flex; align-items: center; gap: 0.5rem; padding: 0 0.8rem; font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.08em; }
+	.vp__chrome .dot { width: 7px; height: 7px; border: 1px solid rgba(255,255,255,.4); }
+	.vp__chrome .url { margin-left: 0.4rem; color: rgba(255,255,255,.5); }
+	.vp__chrome .scrollcue { margin-left: auto; color: var(--amber); }
+	.topnav { height: 40px; flex: 0 0 40px; background: var(--card); border-bottom: 1.5px solid var(--ink); display: flex; align-items: center; gap: 1rem; padding: 0 1rem; font-family: ui-monospace, monospace; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+	.topnav .lnk { color: var(--muted); }
+	.topnav .on { color: var(--amber-ink); }
+	.topnav .who { margin-left: auto; color: var(--muted); font-weight: 400; }
+	.phead { flex: 0 0 auto; padding: 0.7rem 1rem 0.6rem; border-bottom: 1px solid var(--line-light); display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+	.phead h3 { font-size: 0.95rem; }
+	.phead .stats { font-family: ui-monospace, monospace; font-size: 0.58rem; color: var(--muted); letter-spacing: 0.06em; }
+	.phead .stats b { color: var(--ink); }
+
+	/* helpdesk split — FIXED version only */
+	.page { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+	.split { flex: 1; min-height: 0; display: flex; }
+	.queue { flex: 0 0 250px; border-right: 1.5px solid var(--ink); background: var(--card); display: flex; flex-direction: column; min-height: 0; }
+	.queue .qbody { flex: 1; min-height: 0; overflow-y: auto; }
+	.thread { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; background: var(--card); }
+	.msgs { flex: 1; min-height: 0; overflow-y: auto; }
+
+	/* context rail — client info, right of the chat, inside the same bound */
+	.rail { flex: 0 0 205px; border-left: 1px solid var(--line-light); background: #efece4; overflow-y: auto; min-height: 0; padding: 0.7rem 0.75rem; display: flex; flex-direction: column; gap: 0.9rem; }
+	.rail .sect h4 { font-family: ui-monospace, monospace; font-size: 0.52rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line-light); padding-bottom: 0.25rem; margin-bottom: 0.4rem; }
+	.rail .ttl { font-size: 0.74rem; font-weight: 700; }
+	.rail .kv { font-size: 0.64rem; color: var(--muted); line-height: 1.5; }
+	.rail .kv b { color: var(--ink); font-weight: 600; }
+	.rail .jrow { display: block; font-family: ui-monospace, monospace; font-size: 0.58rem; padding: 0.2rem 0; color: var(--ink); }
+	.rail .st { font-family: ui-monospace, monospace; font-size: 0.52rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.04rem 0.3rem; border: 1px solid var(--line); color: var(--muted); }
+	.rail .st.ok { color: #2e6b34; border-color: #2e6b34; }
+	.rail .st.bad { color: var(--red); border-color: var(--red); }
+
+	.qhead { padding: 0.45rem 0.6rem; background: #efece4; border-bottom: 1px solid var(--line-light); font-family: ui-monospace, monospace; font-size: 0.55rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+	.qrow { display: block; width: 100%; padding: 0.55rem 0.7rem; border-bottom: 1px solid var(--line-light); border-left: 3px solid transparent; }
+	.qrow .k { display: block; font-family: ui-monospace, monospace; font-size: 0.5rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+	.qrow .n { display: flex; justify-content: space-between; font-size: 0.76rem; font-weight: 600; }
+	.qrow .n .t { font-family: ui-monospace, monospace; font-size: 0.55rem; color: var(--muted); font-weight: 400; }
+	.qrow .s { display: block; font-size: 0.66rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.qrow.on { background: var(--ink); color: var(--card); border-left-color: var(--amber); }
+	.qrow.on .k, .qrow.on .s, .qrow.on .n .t { color: rgba(255,255,255,.6); }
+	.qrow .wait { display: inline-block; margin-top: 0.25rem; font-family: ui-monospace, monospace; font-size: 0.5rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid var(--line); color: var(--muted); padding: 0.06rem 0.35rem; }
+	.qrow .wait.red { color: var(--red); border-color: var(--red); }
+
+	.thead { padding: 0.55rem 0.8rem; background: #efece4; border-bottom: 1px solid var(--line-light); display: flex; align-items: center; gap: 0.7rem; flex: 0 0 auto; }
+	.thead .kick { font-family: ui-monospace, monospace; font-size: 0.5rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+	.thead .who { font-size: 0.85rem; font-weight: 600; }
+	.thead .acts { margin-left: auto; display: flex; gap: 0.35rem; }
+	.btn { font-family: ui-monospace, monospace; font-size: 0.55rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; border: 1px solid var(--ink); padding: 0.3rem 0.6rem; background: var(--card); }
+	.btn.pri { background: var(--ink); color: var(--card); border-top: 2px solid var(--amber); }
+
+	.msg { padding: 0.45rem 0.8rem; display: flex; }
+	.msg .b { max-width: 72%; padding: 0.4rem 0.6rem; font-size: 0.72rem; line-height: 1.45; background: #f1efe9; border: 1px solid var(--line-light); }
+	.msg .a { display: block; font-family: ui-monospace, monospace; font-size: 0.5rem; font-weight: 700; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 0.15rem; }
+	.msg.me { justify-content: flex-end; }
+	.msg.me .b { background: var(--ink); color: var(--card); border-color: var(--ink); }
+	.msg.me .a { color: rgba(255,255,255,.55); }
+	.daydiv { text-align: center; font-family: ui-monospace, monospace; font-size: 0.52rem; letter-spacing: 0.12em; color: var(--muted); padding: 0.4rem 0; }
+
+	.composer { border-top: 1.5px solid var(--ink); background: var(--card); flex: 0 0 auto; }
+	.composer .tabs { display: flex; border-bottom: 1px solid var(--line-light); }
+	.composer .tabs span { font-family: ui-monospace, monospace; font-size: 0.52rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.3rem 0.6rem; color: var(--muted); border-right: 1px solid var(--line-light); }
+	.composer .tabs span.on { color: var(--ink); background: #efece4; }
+	.composer .row { display: flex; gap: 0.45rem; align-items: flex-end; padding: 0.5rem 0.7rem; }
+	.composer .in { flex: 1; border: 1.5px solid var(--ink); padding: 0.45rem 0.6rem; font-size: 0.72rem; font-family: inherit; color: var(--muted); background: var(--card); }
+	.composer .go { width: 34px; height: 34px; background: var(--ink); color: var(--card); display: flex; align-items: center; justify-content: center; font-family: ui-monospace, monospace; }
+
+	.pin { position: absolute; font-family: ui-monospace, monospace; font-size: 0.55rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--ink); color: var(--card); padding: 0.2rem 0.5rem; z-index: 5; }
+	.pin.good { background: var(--amber-ink); }
+	.pin .arr { color: var(--amber); }
+
+	/* ═══ floating chat — portal design language ═══ */
+	.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 1.4rem; align-items: start; }
+	.stage { position: relative; height: 660px; border: 1.5px solid var(--ink); background: var(--paper); overflow: hidden; }
+	.stage .fakewall { position: absolute; inset: 0; padding: 1rem; }
+	.stage .fakewall .fakecard { border: 1px solid var(--line); background: var(--card); padding: 0.7rem 0.9rem; margin-bottom: 0.7rem; font-size: 0.7rem; color: var(--muted); max-width: 60%; }
+	.stage .fakewall .fakecard b { display: block; color: var(--ink); font-size: 0.78rem; }
+	.stage .cap { position: absolute; top: 10px; left: 10px; font-family: ui-monospace, monospace; font-size: 0.55rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; background: var(--ink); color: var(--card); padding: 0.2rem 0.55rem; z-index: 10; }
+	.stage .cap.p { background: var(--purple); }
+	.stage .cap.o { background: var(--amber-ink); }
+
+	/* launcher cluster — portal grammar: hard offset shadow, ink square */
+	.launcher { position: absolute; right: 14px; bottom: 14px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+	.fab { position: relative; width: 52px; height: 52px; background: var(--ink); color: var(--card); border: 1.5px solid var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 3px 3px 0 rgba(0,0,0,0.2); font-size: 18px; }
+	.fab .bdg { position: absolute; top: -7px; right: -7px; min-width: 18px; height: 18px; background: var(--red); color: #fff; font-family: ui-monospace, monospace; font-size: 9.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 4px; border: 1.5px solid var(--card); }
+	.peek { position: relative; max-width: 15rem; text-align: left; background: var(--ink); color: var(--card); font-size: 0.68rem; line-height: 1.45; padding: 0.55rem 1.6rem 0.55rem 0.8rem; box-shadow: 3px 3px 0 rgba(0,0,0,0.2); }
+	.peek b { display: block; font-family: ui-monospace, monospace; font-size: 0.54rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.6; margin-bottom: 0.15rem; }
+	.peek .x { position: absolute; top: 0.25rem; right: 0.35rem; font-size: 0.6rem; opacity: 0.55; }
+
+	/* the window — portal grammar: 1.5px ink border, 5px offset shadow */
+	.fwin { position: absolute; right: 14px; bottom: 14px; width: 320px; height: 560px; background: var(--card); border: 1.5px solid var(--ink); box-shadow: 5px 5px 0 rgba(0,0,0,0.15); display: flex; flex-direction: column; overflow: hidden; }
+	.fwin__head { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.9rem; border-bottom: 1.5px solid var(--ink); flex: 0 0 auto; }
+	.fava { width: 1.8rem; height: 1.8rem; flex-shrink: 0; background: var(--ink); color: var(--card); display: flex; align-items: center; justify-content: center; font-family: ui-monospace, monospace; font-size: 0.6rem; font-weight: 700; }
+	.fava.ai { background: var(--amber); }
+	.fwin__who { flex: 1; min-width: 0; }
+	.fwin__name { font-size: 0.78rem; font-weight: 700; line-height: 1.15; }
+	.fwin__sub { font-family: ui-monospace, monospace; font-size: 0.55rem; color: var(--muted); margin-top: 0.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.fwin__sub .pdot { display: inline-block; width: 6px; height: 6px; background: #2e6b34; margin-right: 3px; }
+	.fwin__ctl { display: flex; gap: 2px; }
+	.fwin__ctl button { width: 24px; height: 24px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+	.fwin__ctl button:hover { color: var(--ink); background: #efece4; }
+
+	.ftabs { display: flex; border-bottom: 1.5px solid var(--ink); flex: 0 0 auto; }
+	.ftabs button { flex: 1; padding: 0.55rem 0.2rem; background: none; border: 0; border-right: 1px solid var(--line-light); font-family: ui-monospace, monospace; font-size: 0.56rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.35rem; }
+	.ftabs button:last-child { border-right: 0; }
+	.ftabs button.on { color: var(--ink); font-weight: 700; box-shadow: inset 0 -2.5px 0 var(--ink); }
+	.ftabs .u { min-width: 14px; height: 14px; background: var(--red); color: #fff; font-size: 8px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 3px; }
+
+	.fstrip { padding: 0.4rem 0.9rem; background: #efece4; border-bottom: 1px solid var(--line-light); font-family: ui-monospace, monospace; font-size: 0.54rem; color: var(--muted); letter-spacing: 0.05em; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex: 0 0 auto; }
+	.fstrip .lnk { color: var(--ink); text-decoration: underline; cursor: pointer; flex-shrink: 0; }
+	.fstrip select { font-family: ui-monospace, monospace; font-size: 0.54rem; border: 1px solid var(--line); background: var(--card); padding: 0.05rem 0.2rem; color: var(--ink); }
+
+	.fbody { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+	.fband { font-family: ui-monospace, monospace; font-size: 0.52rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding: 0.5rem 0.8rem 0.2rem; }
+	.frow { display: flex; align-items: center; gap: 0.55rem; padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--line-light); cursor: pointer; }
+	.frow:hover { background: #efece4; }
+	.frow .fa { width: 1.6rem; height: 1.6rem; flex-shrink: 0; background: var(--ink); color: var(--card); font-family: ui-monospace, monospace; font-size: 0.55rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+	.frow .fa.pu { background: var(--purple); }
+	.frow .fa.am { background: var(--amber); }
+	.frow .fm { flex: 1; min-width: 0; }
+	.frow .fn { font-size: 0.74rem; font-weight: 600; }
+	.frow .fs { font-size: 0.62rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.frow .fu { min-width: 15px; height: 15px; background: var(--red); color: #fff; font-family: ui-monospace, monospace; font-size: 8.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+	.frow .ft { font-family: ui-monospace, monospace; font-size: 0.52rem; color: var(--muted); }
+
+	/* old ops style — for contrast */
+	.fwin--old { border: 1px solid var(--ink); box-shadow: 0 12px 48px rgba(0,0,0,0.22); }
+	.fwin--old .fwin__head { border-bottom: 1px solid var(--line-light); }
+	.fwin--old .odot { width: 6px; height: 6px; background: #2e6b34; flex-shrink: 0; }
+	.fwin--old .otitle { font-size: 13px; font-weight: 700; font-family: system-ui, sans-serif; }
+	.fwin--old .osel { font-family: system-ui, sans-serif; font-size: 11px; font-weight: 600; border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px; }
+	.fwin--old .ftabs { border-bottom: 1px solid var(--line-light); background: #f5f5f5; }
+	.fwin--old .ftabs button { font-family: system-ui, sans-serif; font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0; padding: 11px 4px; box-shadow: none; border-bottom: 2px solid transparent; }
+	.fwin--old .ftabs button.on { box-shadow: none; border-bottom-color: var(--ink); }
+	.fwin--old .ftabs .u { min-width: 4px; width: 4px; height: 4px; padding: 0; }
+	.fwin--old .frow .fa { display: none; }
+	.fwin--old .fab { box-shadow: 0 8px 30px rgba(0,0,0,0.3); border-width: 1px; }
+
+	/* diff table */
+	.diff { margin-top: 2.6rem; border: 1.5px solid var(--ink); background: var(--card); }
+	.diff h3 { font-family: ui-monospace, monospace; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--line-light); background: #efece4; }
+	.diff table { width: 100%; border-collapse: collapse; font-size: 0.74rem; }
+	.diff td, .diff th { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--line-light); text-align: left; vertical-align: top; }
+	.diff th { font-family: ui-monospace, monospace; font-size: 0.55rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+	.diff td code { font-family: ui-monospace, monospace; font-size: 0.66rem; background: #eceae2; padding: 0 0.25rem; }
+	.diff td .no { color: var(--red); font-weight: 700; }
+	.diff td .yes { color: var(--amber-ink); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="doc">
+
+	<p class="eyebrow">Century NIT · Ops Console</p>
+	<h1>Helpdesk height fix + floating chat in the portal's language</h1>
+	<p class="lede">Two changes, same grammar. The helpdesk keeps its existing design — only the column bound and the chat border move. Then the floating hub borrows the portal's look: hard-shadow window, avatar header, mono tabs with count chips, context strip, peek card.</p>
+
+	<!-- ═══════════ 1 · HELPDESK ═══════════ -->
+	<div class="case">
+		<h2>1 · Helpdesk — same design, bounded height <span class="tag good">css only</span></h2>
+		<p class="note">The frame below is a real viewport — scroll inside each column. One bound on the split (<code>calc(100vh − chrome)</code>), all three columns fill it: the queue scrolls internally, the message list is the only scroller in the thread, and the <b>client context rail stays open on the right</b> — it already has <code>overflow-y: auto</code>, the bound just makes it actually work. The chat column loses its border — the queue's right rule and the rail's left rule do the separating. Composer, tabs and thread header stay pinned under every thread length.</p>
+
+		<div class="vp">
+			<span class="pin good" style="bottom: 10px; right: 10px;">Composer pinned <span class="arr">▲</span> never moves</span>
+			<div class="vp__chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">console…/helpdesk</span><span class="scrollcue">↕ only the column scrolls</span></div>
+			<div class="topnav"><span style="color:var(--ink)">CENTURY NIT</span><span class="lnk">Worklist</span><span class="on">Helpdesk</span><span class="lnk">Inbox</span><span class="who">Efua · coordinator</span></div>
+			<div class="page">
+				<div class="phead"><h3>Helpdesk</h3><span class="stats"><b>14</b> open · <b>5</b> awaiting · <b>3</b> unclaimed · <b>2</b> breaching</span></div>
+				<div class="split">
+					<div class="queue">
+						<div class="qhead">All · 14 · Filters ▾ · Search…</div>
+						<div class="qbody">
+							<div class="qrow on"><span class="k">Support · APP-2026-0142</span><span class="n">Ama Serwaa <span class="t">12:04</span></span><span class="s">You: Send the police report when…</span></div>
+							<div class="qrow"><span class="k">Stage · Visa</span><span class="n">Kofi Boateng <span class="t">11:32</span></span><span class="s">The bank statement is uploaded…</span><span class="wait red">waiting 26h</span></div>
+							<div class="qrow"><span class="k">Support · new</span><span class="n">Efua Mensah <span class="t">10:15</span></span><span class="s">Do you offer payment plans?</span><span class="wait">unclaimed</span></div>
+							<div class="qrow"><span class="k">Stage · Consultation</span><span class="n">Yaw Darko <span class="t">09:02</span></span><span class="s">Can we reschedule Friday?</span></div>
+							<div class="qrow"><span class="k">Support · APP-2026-0139</span><span class="n">Abena Owusu <span class="t">Yesterday</span></span><span class="s">Receipt for the deposit?</span></div>
+							<div class="qrow"><span class="k">Stage · Application</span><span class="n">Kwame Asante <span class="t">Yesterday</span></span><span class="s">Two offers came in — Leeds and…</span></div>
+							<div class="qrow"><span class="k">Support · APP-2026-0136</span><span class="n">Akosua Frimpong <span class="t">Mon</span></span><span class="s">My passport expires in June…</span></div>
+							<div class="qrow"><span class="k">Stage · Departure</span><span class="n">Kojo Annan <span class="t">Mon</span></span><span class="s">Flight booked for the 28th.</span></div>
+							<div class="qrow"><span class="k">Support · APP-2026-0131</span><span class="n">Esi Quaye <span class="t">Sun</span></span><span class="s">Can my brother pick up the…</span></div>
+							<div class="qrow"><span class="k">Stage · Visa</span><span class="n">Nana Adjei <span class="t">Sun</span></span><span class="s">CAS letter received!</span></div>
+							<div class="qrow"><span class="k">Support · APP-2026-0128</span><span class="n">Adjoa Baiden <span class="t">Fri</span></span><span class="s">Is the deposit refundable if…</span></div>
+							<div class="qrow"><span class="k">Closed · 21</span><span class="n" style="color:var(--muted);font-weight:400">tap to expand ▾</span></div>
+						</div>
+					</div>
+					<div class="thread">
+						<div class="thead"><div><span class="kick">Support · APP-2026-0142 · you · replies go to the portal</span><div class="who">Ama Serwaa</div></div><div class="acts"><button class="btn">Details</button><button class="btn">Escalate</button><button class="btn pri">Resolve ✓</button></div></div>
+						<div class="msgs">
+							<div class="daydiv">— TODAY —</div>
+							<div class="msg"><div class="b"><span class="a">AMA · 11:58</span>Hello, the police report for my visa file — where do I send it?</div></div>
+							<div class="msg me"><div class="b"><span class="a">YOU · 12:04</span>Send it straight to this thread — it lands in your document vault.</div></div>
+							<div class="msg"><div class="b"><span class="a">AMA · 12:06</span>And do I still need the affidavit translated?</div></div>
+							<div class="msg me"><div class="b"><span class="a">YOU · 12:07</span>Yes — certified translation, both pages.</div></div>
+							<div class="msg"><div class="b"><span class="a">AMA · 12:11</span>Okay. Also the interview date changed to the 14th.</div></div>
+							<div class="msg me"><div class="b"><span class="a">YOU · 12:12</span>Noted, I'll move the prep session to the 12th.</div></div>
+							<div class="msg"><div class="b"><span class="a">AMA · 12:15</span>Perfect. One more thing — the receipt for the second instalment hasn't shown up.</div></div>
+							<div class="msg me"><div class="b"><span class="a">YOU · 12:16</span>Checking the ledger now, give me a moment.</div></div>
+							<div class="msg"><div class="b"><span class="a">AMA · 12:19</span>No rush — thank you!</div></div>
+							<div class="msg me"><div class="b"><span class="a">YOU · 12:21</span>Found it — receipt posted to your Financial page.</div></div>
+							<div class="msg"><div class="b"><span class="a">AMA · 12:22</span>You're the best 🙌</div></div>
+							<div class="msg me"><div class="b"><span class="a">YOU · 12:23</span>Anytime — ping us when the translation lands.</div></div>
+						</div>
+						<div class="composer">
+							<div class="tabs"><span class="on">Reply</span><span>Note</span><span>Snippets ▾</span><span style="margin-left:auto;border-right:none">Attach</span></div>
+							<div class="row"><div class="in">Reply to the client…</div><div class="go">➤</div></div>
+						</div>
+					</div>
+					<!-- context rail — client info, maintained, scrolls inside the bound -->
+					<aside class="rail">
+						<div class="sect"><h4>Client</h4>
+							<p class="ttl">Ama Serwaa</p>
+							<p class="kv">ama.serwaa@mail.com<br>Kumasi → UK · client since Mar 2025</p>
+						</div>
+						<div class="sect"><h4>Journey</h4>
+							<a class="jrow">APP-2026-0142<br><span class="st">Visa · in progress</span></a>
+						</div>
+						<div class="sect"><h4>Money</h4>
+							<p class="kv"><b>CN-1042</b> <span class="st ok">deposit · paid</span><br><b>CN-1057</b> <span class="st">balance · open</span></p>
+						</div>
+						<div class="sect"><h4>Next appointment</h4>
+							<p class="kv">Visa prep — Fri, Mar 14, 10:00</p>
+						</div>
+						<div class="sect"><h4>Thread</h4>
+							<p class="kv"><b>Owner</b> you<br><b>Messages</b> 12<br><b>Status</b> <span class="st">open</span><br><b>Waiting on</b> client</p>
+						</div>
+					</aside>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- ═══════════ 2 · FLOATING CHAT ═══════════ -->
+	<div class="case">
+		<h2>2 · Ops floating chat — portal design language <span class="tag good">restyle</span></h2>
+		<p class="note"><b>Design only — contents stay ops.</b> Left is today's hub; right is the same hub speaking the portal's <code>cchat-*</code> grammar: hard offset shadow, 1.5px ink frame, avatar + who header, mono tabs with red count chips, a context strip, and the peek card over the FAB. Scroll inside each.</p>
+
+		<div class="duo">
+			<!-- current ops -->
+			<div class="stage">
+				<span class="cap o">Ops hub · today</span>
+				<div class="fakewall">
+					<div class="fakecard"><b>Worklist</b>3 items due today · SLA check 14:00</div>
+					<div class="fakecard"><b>Cases</b>Consultation → Visa pipeline</div>
+				</div>
+				<div class="fwin fwin--old">
+					<div class="fwin__head">
+						<span class="odot"></span><span class="otitle">OPS CHAT</span>
+						<div class="fwin__ctl" style="margin-left:auto">
+							<select class="osel"><option>ONLINE</option></select>
+							<button>⤢</button><button>↗</button><button>✕</button>
+						</div>
+					</div>
+					<div class="ftabs">
+						<button class="on">STAFF DMs</button>
+						<button>CLIENTS <span class="u"></span></button>
+						<button>AI</button>
+					</div>
+					<div class="fbody">
+						<div class="fband">Directory — search…</div>
+						<div class="frow"><div class="fm"><div class="fn">Yaw Darko <span class="ft">· consultant</span></div><div class="fs">About the Darko file — passport scan is in</div></div><span class="fu">2</span></div>
+						<div class="frow"><div class="fm"><div class="fn">Esi Quaye <span class="ft">· finance</span></div><div class="fs">Invoice CN-1042 approved</div></div><span class="ft">09:41</span></div>
+						<div class="frow"><div class="fm"><div class="fn">Kwame Asante <span class="ft">· consultant</span></div><div class="fs">Can you cover my 3pm consult?</div></div><span class="ft">Mon</span></div>
+						<div class="frow"><div class="fm"><div class="fn"># visa-team <span class="ft">· group</span></div><div class="fs">Nana: CAS letters batch is out</div></div><span class="ft">Fri</span></div>
+						<div class="fband">Online now</div>
+						<div class="frow"><div class="fm"><div class="fn">Abena Owusu <span class="ft">· coordinator</span></div><div class="fs">Available — Kumasi branch</div></div></div>
+						<div class="frow"><div class="fm"><div class="fn">Kojo Annan <span class="ft">· manager</span></div><div class="fs">Busy — in review</div></div></div>
+					</div>
+				</div>
+			</div>
+
+			<!-- ops in portal language -->
+			<div class="stage">
+				<span class="cap o">Ops hub · proposed</span>
+				<div class="fakewall">
+					<div class="fakecard"><b>Worklist</b>3 items due today · SLA check 14:00</div>
+					<div class="fakecard"><b>Cases</b>Consultation → Visa pipeline</div>
+				</div>
+				<div class="fwin">
+					<div class="fwin__head">
+						<span class="fava">ED</span>
+						<div class="fwin__who">
+							<p class="fwin__name">Efua Dankwa</p>
+							<p class="fwin__sub"><span class="pdot"></span>ONLINE · COORDINATOR · KUMASI</p>
+						</div>
+						<div class="fwin__ctl"><button title="Minimize">—</button><button title="Expand">⤢</button><button title="Close">✕</button></div>
+					</div>
+					<div class="ftabs">
+						<button class="on">Staff</button>
+						<button>Clients <span class="u">3</span></button>
+						<button>AI</button>
+					</div>
+					<div class="fstrip"><span>DIRECTORY · WHO TO REACH NOW</span><span><select><option>ONLINE ▾</option></select></span></div>
+					<div class="fbody">
+						<div class="fband">Waiting on you</div>
+						<div class="frow"><span class="fa">YD</span><div class="fm"><div class="fn">Yaw Darko <span class="ft">· consultant</span></div><div class="fs">About the Darko file — passport scan is in</div></div><span class="fu">2</span></div>
+						<div class="frow"><span class="fa pu">NT</span><div class="fm"><div class="fn"># visa-team <span class="ft">· group</span></div><div class="fs">Nana: CAS letters batch is out</div></div><span class="fu">5</span></div>
+						<div class="fband">Recent</div>
+						<div class="frow"><span class="fa">EQ</span><div class="fm"><div class="fn">Esi Quaye <span class="ft">· finance</span></div><div class="fs">Invoice CN-1042 approved</div></div><span class="ft">09:41</span></div>
+						<div class="frow"><span class="fa">KA</span><div class="fm"><div class="fn">Kwame Asante <span class="ft">· consultant</span></div><div class="fs">Can you cover my 3pm consult?</div></div><span class="ft">Mon</span></div>
+						<div class="fband">Online now</div>
+						<div class="frow"><span class="fa" style="outline:2px solid #2e6b34;outline-offset:1px">AO</span><div class="fm"><div class="fn">Abena Owusu <span class="ft">· coordinator</span></div><div class="fs">Kumasi branch</div></div></div>
+						<div class="frow"><span class="fa" style="opacity:.4">KA</span><div class="fm"><div class="fn">Kojo Annan <span class="ft">· manager</span></div><div class="fs">Busy — in review</div></div></div>
+					</div>
+				</div>
+				<!-- the closed state: peek + fab -->
+				<div class="launcher" style="bottom:auto; top:290px; right:360px;">
+					<div class="peek"><b>YAW DARKO · 12:04</b>About the Darko file — passport scan is in the vault…<span class="x">✕</span></div>
+					<div class="fab">✉<span class="bdg">7</span></div>
+				</div>
+			</div>
+		</div>
+		<p class="note" style="margin-top:0.7rem">The proposed frame also shows the <b>closed state</b> (top-right of its stage): a peek card of the latest inbound message above the FAB — same as the portal — so a new client message is visible without opening the hub. Presence moves from a rounded select in the header to the avatar outline + the strip select; <code>↗ open-in-helpdesk</code> keeps its job on client threads.</p>
+	</div>
+
+	<!-- ═══════════ DIFF ═══════════ -->
+	<div class="diff">
+		<h3>What changes in the code</h3>
+		<table>
+			<tr><th style="width:20%">Piece</th><th style="width:40%">Now</th><th>After</th></tr>
+			<tr>
+				<td><code>.hd-split</code> / <code>.hd-list</code> / <code>.hd-detail</code></td>
+				<td><span class="no">✗</span> <code>align-items:flex-start</code>; list guesses <code>max-height: calc(100vh-220px)</code> + sticky; detail has <b>no bound</b> and a <code>1px border</code> → page scrolls, composer drifts</td>
+				<td><span class="yes">✓</span> split gets the bound, both columns fill it; list drops max-height/sticky; detail drops the border; composer pinned</td>
+			</tr>
+			<tr>
+				<td>Context rail</td>
+				<td><code>.hd-rail</code> — <code>overflow-y:auto</code> set but inside an unbounded parent it never actually scrolled</td>
+				<td><span class="yes">✓</span> <b>maintained</b> right of the chat — scrolls internally once the split is bounded; collapses via the existing "Details" toggle</td>
+			</tr>
+			<tr>
+				<td>Hub window</td>
+				<td><code>border:1px</code> + <code>0 12px 48px</code> soft shadow · 430×620</td>
+				<td><span class="yes">✓</span> <code>border:1.5px</code> + <code>5px 5px 0</code> hard shadow · 370×600 (portal size, expands to 800)</td>
+			</tr>
+			<tr>
+				<td>Hub header</td>
+				<td>dot + "OPS CHAT" + rounded presence <code>&lt;select&gt;</code></td>
+				<td><span class="yes">✓</span> avatar square (initials, presence-colored outline) + name + mono sub <code>● ONLINE · ROLE · BRANCH</code> + —/⤢/✕; presence select moves to the strip</td>
+			</tr>
+			<tr>
+				<td>Channel tabs</td>
+				<td>sans 12px, 2px underline, 4px dot badge</td>
+				<td><span class="yes">✓</span> mono 0.56rem uppercase, <code>inset 0 -2.5px</code> underline, red count chips (<code>3</code>, not a dot)</td>
+			</tr>
+			<tr>
+				<td>Context strip</td>
+				<td><span class="no">✗</span> none</td>
+				<td><span class="yes">✓</span> muted mono band under tabs — directory context, presence select, or the open thread's "replies go to the portal / open in helpdesk →" link</td>
+			</tr>
+			<tr>
+				<td>Directory rows</td>
+				<td>plain name + snippet + time</td>
+				<td><span class="yes">✓</span> avatar square (amber for groups, purple accent variant) + band labels (<code>WAITING ON YOU</code> / <code>RECENT</code> / <code>ONLINE NOW</code>) + red unread chips — portal row grammar</td>
+			</tr>
+			<tr>
+				<td>FAB + peek</td>
+				<td><code>0 8px 30px</code> soft shadow, badge, no preview</td>
+				<td><span class="yes">✓</span> <code>3px 3px 0</code> hard shadow, badge, amber pulse on inbound, dismissible peek card of the latest message</td>
+			</tr>
+		</table>
+	</div>
+
+	<p class="note" style="margin-top:1.6rem">Implementation: the helpdesk part is ~6 CSS declarations in <code>app.css</code>. The hub part ports the portal's <code>cchat-*</code> rules into ops as a scoped <code>ochat-*</code> block — markup changes are shallow (header gains an avatar + who block, tabs gain count chips, a strip element appears, directory rows gain avatar squares). Message bubbles, Composer and MessageList already match — shared <code>chat-ui</code> with radius 0. Say <b>proceed</b>.</p>
+
+</div>
+</body>
+</html>

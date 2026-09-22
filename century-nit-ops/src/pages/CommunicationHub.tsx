@@ -41,6 +41,15 @@ const HEARTBEAT_MS = 60_000;
 
 type Mode = "internal" | "external" | "ai";
 
+const EXTERNAL_TYPES = new Set(["applicant", "support", "case", "stage", "entity"]);
+
+const PRESENCE_COLORS: Record<string, string> = {
+	available: "#10b981",
+	busy: "#ef4444",
+	on_leave: "#f59e0b",
+	offline: "#71717a",
+};
+
 export function CommunicationHub() {
 	const { opsRole, opsUser } = useOpsAuth();
 	const navigate = useNavigate();
@@ -198,6 +207,29 @@ export function CommunicationHub() {
 		[conversations],
 	);
 
+	/* Peek card + FAB pulse — the portal launcher's grammar. The newest
+	   inbound message previews above the FAB without opening the hub, and
+	   the button pulses amber once when a fresh message lands closed. */
+	const latestInbound = useMemo(() => {
+		const candidates = [...internalConversations, ...externalConversations]
+			.filter((c) => c.unreadCount > 0 && c.lastMessage?.createdAt)
+			.sort((a, b) => Date.parse(b.lastMessage!.createdAt) - Date.parse(a.lastMessage!.createdAt));
+		return candidates[0] ?? null;
+	}, [internalConversations, externalConversations]);
+	const [peekDismissed, setPeekDismissed] = useState<string | null>(null);
+	const peek = !open && latestInbound && latestInbound.lastMessage?.id !== peekDismissed ? latestInbound : null;
+	const [pulse, setPulse] = useState(false);
+	const lastUnreadRef = useRef(0);
+	useEffect(() => {
+		if (!open && totalUnread > lastUnreadRef.current) setPulse(true);
+		lastUnreadRef.current = totalUnread;
+	}, [totalUnread, open]);
+	useEffect(() => {
+		if (!pulse) return;
+		const t = setTimeout(() => setPulse(false), 3600);
+		return () => clearTimeout(t);
+	}, [pulse]);
+
 	/* ── Open conversation ── */
 	const openConversation = useCallback(
 		(conv: ChatConversation) => {
@@ -208,6 +240,14 @@ export function CommunicationHub() {
 		},
 		[],
 	);
+
+	/* Peek card click — open the hub straight into that conversation's
+	   channel (staff DMs vs client threads). */
+	const openPeek = useCallback((conv: ChatConversation) => {
+		setMode(EXTERNAL_TYPES.has(conv.type) ? "external" : "internal");
+		openConversation(conv);
+		setOpen(true);
+	}, [openConversation]);
 
 	useEffect(() => {
 		if (activeConvId) {
@@ -370,89 +410,162 @@ export function CommunicationHub() {
 		},
 	}), [actionsConfig, isOwn, deleteMessage]);
 
+	/* Header + strip content — the portal hub's grammar: the header says
+	   who you're talking to (or who you are at the directory), and the
+	   strip under the tabs says what this surface is for right now. */
+	const presenceLabel = presenceStatus.replace("_", " ").toUpperCase();
+	const internalUnread = internalConversations.reduce((s, c) => s + (c.unreadCount || 0), 0);
+	const externalUnread = externalConversations.reduce((s, c) => s + (c.unreadCount || 0), 0);
+	const headerIni = mode === "ai"
+		? "AI"
+		: activeConv
+			? activeConv.title.slice(0, 2).toUpperCase()
+			: (opsUser?.name ?? "OC").split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+	const headerName = mode === "ai" ? "Ops AI" : activeConv ? activeConv.title : "OPS CHAT";
+	const headerSub = mode === "ai"
+		? "CONSOLE-AWARE · STAFF ONLY"
+		: activeConv
+			? (EXTERNAL_TYPES.has(activeConv.type) ? "CLIENT THREAD" : "STAFF THREAD")
+			: `${presenceLabel} · ${(opsUser?.role ?? "").toUpperCase()}${opsUser?.branch ? ` · ${opsUser.branch.toUpperCase()}` : ""}`;
+	const stripText = mode === "ai"
+		? "KNOWS THE CONSOLE · LINKS OPEN REAL PAGES"
+		: activeConvId
+			? (EXTERNAL_TYPES.has(activeConv?.type ?? "") ? "REPLIES GO TO THE PORTAL" : "STAFF DIRECT MESSAGE")
+			: mode === "internal"
+				? "DIRECTORY · WHO TO REACH NOW"
+				: "CLIENT THREADS · REPLIES GO TO THE PORTAL";
+
 	return (
 		<>
-			{/* Floating Square Launcher Button */}
-			<button
-				type="button"
-				onClick={() => setOpen((prev) => !prev)}
-				style={launcherSquareBtnStyle}
-				aria-label="Open OPS Chat"
-			>
-				<svg
-					width="20"
-					height="20"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					strokeWidth="2"
-					strokeLinecap="square"
-					strokeLinejoin="miter"
+			{/* FAB pulse keyframes — injected once, portal's amber ring on inbound. */}
+			<style>{`@keyframes ochatPulse{0%{box-shadow:0 0 0 0 #b45309}70%{box-shadow:0 0 0 10px rgba(180,83,9,0)}100%{box-shadow:0 0 0 0 rgba(180,83,9,0)}}.ochat-fab--pulse{animation:ochatPulse 1.6s ease-out 2}`}</style>
+
+			{/* Launcher cluster — peek card over the FAB, portal grammar. */}
+			<div style={launcherDockStyle}>
+				{peek && peek.lastMessage && (
+					<button
+						type="button"
+						style={peekStyle}
+						onClick={() => openPeek(peek)}
+					>
+						<b style={peekWhoStyle}>
+							{(peek.lastMessage.senderName || peek.title).toUpperCase()}
+							{peek.lastMessage.createdAt ? ` · ${formatConvTime(peek.lastMessage.createdAt)}` : ""}
+						</b>
+						{peek.lastMessage.content.slice(0, 90)}{peek.lastMessage.content.length > 90 ? "…" : ""}
+						<span
+							style={peekCloseStyle}
+							role="button"
+							tabIndex={0}
+							aria-label="Dismiss preview"
+							onClick={(e) => {
+								e.stopPropagation();
+								setPeekDismissed(peek.lastMessage?.id ?? null);
+							}}
+							onKeyDown={(e) => {
+								if (e.key === "Enter" || e.key === " ") {
+									e.stopPropagation();
+									setPeekDismissed(peek.lastMessage?.id ?? null);
+								}
+							}}
+						>
+							✕
+						</span>
+					</button>
+				)}
+				<button
+					type="button"
+					onClick={() => setOpen((prev) => !prev)}
+					style={launcherSquareBtnStyle}
+					className={pulse && !open ? "ochat-fab--pulse" : undefined}
+					aria-label={open ? "Close OPS Chat" : "Open OPS Chat"}
 				>
-					<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-				</svg>
-				{totalUnread > 0 && <span style={unreadSquareBadgeStyle}>{totalUnread}</span>}
-			</button>
+					{open ? (
+						<span style={{ fontSize: "14px", lineHeight: 1 }}>✕</span>
+					) : (
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="square"
+							strokeLinejoin="miter"
+						>
+							<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+						</svg>
+					)}
+					{totalUnread > 0 && !open && <span style={unreadSquareBadgeStyle}>{totalUnread}</span>}
+				</button>
+			</div>
 
 			{/* Floating Hub Window */}
 			{open && (
 				<div style={{ ...windowContainerStyle, ...(expanded ? windowExpandedStyle : {}) }} className="cn-chat">
-					{/* Header */}
+					{/* Header — who you're talking to (or who you are), portal grammar */}
 					<header style={headerStyle}>
-						<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-							<span style={{ ...indicatorDotStyle, background: presenceStatus === "available" ? "#10b981" : presenceStatus === "busy" ? "#ef4444" : presenceStatus === "on_leave" ? "#f59e0b" : "#71717a" }} />
-							<span style={headerTitleStyle}>OPS CHAT</span>
+						<span style={{ ...hubAvatarStyle, ...(mode === "ai" ? { background: "#b45309" } : {}) }}>
+							{headerIni}
+						</span>
+						<div style={{ flex: 1, minWidth: 0 }}>
+							<p style={hubNameStyle}>{headerName}</p>
+							<p style={hubSubStyle}>
+								{!activeConv && mode !== "ai" && (
+									<span style={{ ...presenceSqStyle, background: PRESENCE_COLORS[presenceStatus] ?? "#71717a" }} />
+								)}
+								{headerSub}
+							</p>
 						</div>
-						<div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-							<select
-								value={presenceStatus}
-								onChange={(e) => changePresence(e.target.value as StaffPresence)}
-								style={presenceSelectStyle}
-								aria-label="Set presence"
+						<div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+							<button
+								type="button"
+								onClick={() => setOpen(false)}
+								style={controlBtnStyle}
+								title="Minimize"
+								aria-label="Minimize"
 							>
-								<option value="available">ONLINE</option>
-								<option value="busy">BUSY</option>
-								<option value="on_leave">ON LEAVE</option>
-								<option value="offline">OFFLINE</option>
-							</select>
+								—
+							</button>
 							<button
 								type="button"
 								onClick={() => setExpanded((prev) => !prev)}
 								style={controlBtnStyle}
 								title={expanded ? "Restore" : "Expand"}
+								aria-label={expanded ? "Restore" : "Expand"}
 							>
 								{expanded ? "⤡" : "⤢"}
 							</button>
-							<button
-								type="button"
-								onClick={() => {
-									// Client threads get the full Helpdesk page; staff DMs
-									// just expand the hub — the /chat page is retired.
-									if (mode === "external" && activeConvId) {
+							{mode === "external" && activeConvId && (
+								<button
+									type="button"
+									onClick={() => {
+										// Client threads get the full Helpdesk page; staff DMs
+										// just expand the hub — the /chat page is retired.
 										setOpen(false);
 										navigate(`/helpdesk?id=${activeConvId}`);
-									} else {
-										setExpanded(true);
-									}
-								}}
-								style={controlBtnStyle}
-								title={mode === "external" ? "Open in Helpdesk" : "Expand"}
-							>
-								↗
-							</button>
+									}}
+									style={controlBtnStyle}
+									title="Open in Helpdesk"
+									aria-label="Open in Helpdesk"
+								>
+									↗
+								</button>
+							)}
 							<button
 								type="button"
 								onClick={() => setOpen(false)}
 								style={controlBtnStyle}
 								title="Close"
+								aria-label="Close"
 							>
 								✕
 							</button>
 						</div>
 					</header>
 
-					{/* Navigation Switcher */}
-					<nav style={channelNavStyle}>
+					{/* Channel tabs — mono caps, inset underline, red count chips */}
+					<nav style={channelNavStyle} aria-label="Chat channels">
 						<button
 							type="button"
 							onClick={() => {
@@ -464,7 +577,8 @@ export function CommunicationHub() {
 								...(mode === "internal" ? activeChannelBtnStyle : {}),
 							}}
 						>
-							<span>STAFF DMs</span>
+							<span>Staff</span>
+							{internalUnread > 0 && <span style={tabCountChipStyle}>{internalUnread}</span>}
 						</button>
 						<button
 							type="button"
@@ -477,10 +591,8 @@ export function CommunicationHub() {
 								...(mode === "external" ? activeChannelBtnStyle : {}),
 							}}
 						>
-							<span>CLIENTS</span>
-							{externalConversations.some((c) => c.unreadCount > 0) && (
-								<span style={tabDotBadgeStyle} />
-							)}
+							<span>Clients</span>
+							{externalUnread > 0 && <span style={tabCountChipStyle}>{externalUnread}</span>}
 						</button>
 						<button
 							type="button"
@@ -496,6 +608,36 @@ export function CommunicationHub() {
 							<span>AI</span>
 						</button>
 					</nav>
+
+					{/* Context strip — what this surface is for right now. Presence
+					    lives here now that the header carries the "who". */}
+					<div style={stripStyle}>
+						<span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{stripText}</span>
+						{!activeConvId && mode !== "ai" ? (
+							<select
+								value={presenceStatus}
+								onChange={(e) => changePresence(e.target.value as StaffPresence)}
+								style={presenceSelectStyle}
+								aria-label="Set presence"
+							>
+								<option value="available">ONLINE</option>
+								<option value="busy">BUSY</option>
+								<option value="on_leave">ON LEAVE</option>
+								<option value="offline">OFFLINE</option>
+							</select>
+						) : mode === "external" && activeConvId ? (
+							<button
+								type="button"
+								style={stripLinkStyle}
+								onClick={() => {
+									setOpen(false);
+									navigate(`/helpdesk?id=${activeConvId}`);
+								}}
+							>
+								Open in Helpdesk →
+							</button>
+						) : null}
+					</div>
 
 					{/* Error Banner */}
 					{error && (
@@ -602,7 +744,7 @@ export function CommunicationHub() {
 																	right: "0",
 																	width: "8px",
 																	height: "8px",
-																	borderRadius: "50%",
+																	borderRadius: "0px",
 																	background:
 																		staff.presence === "available" ? "#10b981" :
 																		staff.presence === "busy" ? "#ef4444" :
@@ -678,7 +820,7 @@ export function CommunicationHub() {
 																				right: "0",
 																				width: "8px",
 																				height: "8px",
-																				borderRadius: "50%",
+																				borderRadius: "0px",
 																				background:
 																					presence === "available" ? "#10b981" :
 																					presence === "busy" ? "#ef4444" :
@@ -782,7 +924,7 @@ export function CommunicationHub() {
 																			right: "0",
 																			width: "8px",
 																			height: "8px",
-																			borderRadius: "50%",
+																			borderRadius: "0px",
 																			background:
 																				presence === "available" ? "#10b981" :
 																				presence === "busy" ? "#ef4444" :
@@ -1108,18 +1250,63 @@ function ConversationThread({
 /* Only the shell styles remain here; message bubbles + composer use the    */
 /* shared chat-ui components which style themselves via --cn-chat-* tokens. */
 
-const launcherSquareBtnStyle: CSSProperties = {
+/* Launcher cluster — the portal hub's grammar: the FAB sits in a dock
+   with a dismissible peek card of the latest inbound message above it. */
+const launcherDockStyle: CSSProperties = {
 	position: "fixed",
 	bottom: "24px",
 	right: "24px",
 	zIndex: 9999,
+	display: "flex",
+	flexDirection: "column",
+	alignItems: "flex-end",
+	gap: "10px",
+};
+
+const peekStyle: CSSProperties = {
+	position: "relative",
+	maxWidth: "15rem",
+	textAlign: "left",
+	background: "#18181b",
+	color: "#ffffff",
+	fontSize: "11px",
+	lineHeight: 1.45,
+	padding: "9px 26px 9px 13px",
+	border: "none",
+	cursor: "pointer",
+	boxShadow: "3px 3px 0 rgba(0,0,0,0.2)",
+};
+
+const peekWhoStyle: CSSProperties = {
+	display: "block",
+	fontFamily: "monospace",
+	fontSize: "9px",
+	fontWeight: 700,
+	textTransform: "uppercase",
+	letterSpacing: "0.1em",
+	opacity: 0.6,
+	marginBottom: "3px",
+};
+
+const peekCloseStyle: CSSProperties = {
+	position: "absolute",
+	top: "4px",
+	right: "6px",
+	fontSize: "10px",
+	opacity: 0.55,
+	cursor: "pointer",
+	padding: "2px",
+};
+
+const launcherSquareBtnStyle: CSSProperties = {
+	position: "relative",
 	width: "52px",
 	height: "52px",
 	background: "#18181b",
 	color: "#ffffff",
-	border: "1px solid #000000",
+	border: "1.5px solid #18181b",
 	borderRadius: "0px",
-	boxShadow: "0 8px 30px rgba(0,0,0,0.3)",
+	boxShadow: "3px 3px 0 rgba(0,0,0,0.2)",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
@@ -1129,15 +1316,20 @@ const launcherSquareBtnStyle: CSSProperties = {
 
 const unreadSquareBadgeStyle: CSSProperties = {
 	position: "absolute",
-	top: "-6px",
-	right: "-6px",
+	top: "-7px",
+	right: "-7px",
+	minWidth: "18px",
+	height: "18px",
 	background: "#dc2626",
 	color: "#ffffff",
-	fontSize: "10px",
+	fontSize: "9.5px",
 	fontWeight: 800,
 	fontFamily: "monospace",
-	padding: "1px 5px",
-	border: "1px solid #000000",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	padding: "0 4px",
+	border: "1.5px solid #ffffff",
 	borderRadius: "0px",
 };
 
@@ -1146,13 +1338,12 @@ const windowContainerStyle: CSSProperties = {
 	bottom: "24px",
 	right: "24px",
 	zIndex: 9999,
-	width: "430px",
-	height: "620px",
-	maxHeight: "calc(100vh - 48px)",
+	width: "370px",
+	height: "min(600px, calc(100dvh - 48px))",
 	background: "#ffffff",
-	border: "1px solid #18181b",
+	border: "1.5px solid #18181b",
 	borderRadius: "0px",
-	boxShadow: "0 12px 48px rgba(0,0,0,0.22)",
+	boxShadow: "5px 5px 0 rgba(0,0,0,0.15)",
 	display: "flex",
 	flexDirection: "column",
 	overflow: "hidden",
@@ -1161,77 +1352,143 @@ const windowContainerStyle: CSSProperties = {
 };
 
 const windowExpandedStyle: CSSProperties = {
-	width: "880px",
-	maxHeight: "calc(100vh - 48px)",
+	width: "min(800px, calc(100vw - 48px))",
 	maxWidth: "calc(100vw - 48px)",
 };
 
 const headerStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
-	justifyContent: "space-between",
-	padding: "12px 16px",
+	gap: "10px",
+	padding: "10px 14px",
 	background: "#ffffff",
-	borderBottom: "1px solid #f4f4f5",
+	borderBottom: "1.5px solid #18181b",
+	flexShrink: 0,
 };
 
-const indicatorDotStyle: CSSProperties = {
-	width: "6px",
-	height: "6px",
-	background: "#10b981",
-	borderRadius: "0px",
+/* Avatar square + who block — the portal header's "who you're talking to". */
+const hubAvatarStyle: CSSProperties = {
+	width: "30px",
+	height: "30px",
+	flexShrink: 0,
+	background: "#18181b",
+	color: "#ffffff",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	fontFamily: "monospace",
+	fontSize: "10px",
+	fontWeight: 700,
 };
 
-const headerTitleStyle: CSSProperties = {
+const hubNameStyle: CSSProperties = {
 	fontSize: "13px",
 	fontWeight: 700,
+	lineHeight: 1.15,
 	fontFamily: "system-ui, -apple-system, sans-serif",
+};
+
+const hubSubStyle: CSSProperties = {
+	fontFamily: "monospace",
+	fontSize: "9px",
+	fontWeight: 700,
+	letterSpacing: "0.08em",
+	color: "#71717a",
+	marginTop: "2px",
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+	display: "flex",
+	alignItems: "center",
+	gap: "4px",
+};
+
+const presenceSqStyle: CSSProperties = {
+	display: "inline-block",
+	width: "6px",
+	height: "6px",
+	flexShrink: 0,
+};
+
+/* Context strip — the muted mono band under the channel tabs. */
+const stripStyle: CSSProperties = {
+	padding: "6px 14px",
+	background: "#f4f4f5",
+	borderBottom: "1px solid #e4e4e7",
+	fontFamily: "monospace",
+	fontSize: "9px",
+	fontWeight: 700,
+	color: "#71717a",
+	letterSpacing: "0.08em",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: "8px",
+	flexShrink: 0,
+};
+
+const stripLinkStyle: CSSProperties = {
+	background: "none",
+	border: "none",
+	padding: 0,
+	flexShrink: 0,
+	fontFamily: "monospace",
+	fontSize: "9px",
+	fontWeight: 700,
+	letterSpacing: "0.08em",
 	color: "#18181b",
+	textDecoration: "underline",
+	cursor: "pointer",
 };
 
 const presenceSelectStyle: CSSProperties = {
 	background: "#ffffff",
 	color: "#18181b",
 	border: "1px solid #e4e4e7",
-	borderRadius: "6px",
-	fontSize: "11px",
-	fontWeight: 600,
-	fontFamily: "system-ui, -apple-system, sans-serif",
-	padding: "4px 8px",
+	borderRadius: "0px",
+	fontSize: "9px",
+	fontWeight: 700,
+	fontFamily: "monospace",
+	letterSpacing: "0.08em",
+	padding: "3px 5px",
 	outline: "none",
+	flexShrink: 0,
 };
 
 const controlBtnStyle: CSSProperties = {
 	background: "transparent",
 	border: "none",
 	color: "#52525b",
-	width: "28px",
-	height: "28px",
-	borderRadius: "50%",
+	width: "26px",
+	height: "26px",
+	borderRadius: "0px",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
 	cursor: "pointer",
-	fontSize: "14px",
+	fontSize: "13px",
 	transition: "background 0.2s ease, color 0.2s ease",
 };
 
 const channelNavStyle: CSSProperties = {
-	display: "grid",
-	gridTemplateColumns: "1fr 1fr",
-	borderBottom: "1px solid #f4f4f5",
-	background: "#f5f5f5",
+	display: "flex",
+	borderBottom: "1.5px solid #18181b",
+	background: "#ffffff",
+	flexShrink: 0,
 };
 
 const channelBtnStyle: CSSProperties = {
-	padding: "12px 8px",
+	flex: 1,
+	padding: "10px 4px",
 	background: "transparent",
 	border: "none",
-	borderBottom: "2px solid transparent",
-	color: "#52525b",
-	fontSize: "12px",
-	fontWeight: 600,
-	fontFamily: "system-ui, -apple-system, sans-serif",
+	borderRight: "1px solid #f4f4f5",
+	color: "#71717a",
+	fontSize: "10px",
+	fontWeight: 700,
+	fontFamily: "monospace",
+	textTransform: "uppercase",
+	letterSpacing: "0.09em",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
@@ -1242,14 +1499,21 @@ const channelBtnStyle: CSSProperties = {
 
 const activeChannelBtnStyle: CSSProperties = {
 	color: "#18181b",
-	borderBottomColor: "#18181b",
+	boxShadow: "inset 0 -2.5px 0 #18181b",
 };
 
-const tabDotBadgeStyle: CSSProperties = {
-	width: "4px",
-	height: "4px",
+const tabCountChipStyle: CSSProperties = {
+	minWidth: "15px",
+	height: "15px",
 	background: "#dc2626",
-	borderRadius: "0px",
+	color: "#ffffff",
+	fontSize: "8.5px",
+	fontWeight: 800,
+	fontFamily: "monospace",
+	display: "inline-flex",
+	alignItems: "center",
+	justifyContent: "center",
+	padding: "0 3px",
 };
 
 const workspaceStandardStyle: CSSProperties = {
@@ -1276,12 +1540,12 @@ const directoryContainerStyle: CSSProperties = {
 const searchInputStyle: CSSProperties = {
 	width: "calc(100% - 24px)",
 	margin: "12px",
-	background: "#f4f4f5",
-	border: "1px solid transparent",
-	borderRadius: "8px",
+	background: "#ffffff",
+	border: "1px solid #e4e4e7",
+	borderRadius: "0px",
 	color: "#18181b",
-	padding: "10px 14px",
-	fontSize: "13px",
+	padding: "8px 10px",
+	fontSize: "12px",
 	fontFamily: "system-ui, -apple-system, sans-serif",
 	outline: "none",
 	boxSizing: "border-box",
@@ -1289,15 +1553,14 @@ const searchInputStyle: CSSProperties = {
 };
 
 const sectionHeaderStyle: CSSProperties = {
-	padding: "8px 16px",
+	padding: "9px 14px 3px",
 	background: "#ffffff",
-	color: "#52525b",
-	fontSize: "11px",
-	fontWeight: 600,
+	color: "#71717a",
+	fontSize: "9px",
+	fontWeight: 700,
 	textTransform: "uppercase",
-	letterSpacing: "0.05em",
-	fontFamily: "system-ui, -apple-system, sans-serif",
-	borderBottom: "1px solid #f4f4f5",
+	letterSpacing: "0.12em",
+	fontFamily: "monospace",
 };
 
 const activeChatRowStyle: CSSProperties = {
@@ -1343,31 +1606,31 @@ const clientChatCardBtnStyle: CSSProperties = {
 };
 
 const avatarPillStyle: CSSProperties = {
-	width: "36px",
-	height: "36px",
-	borderRadius: "50%",
-	background: "#f4f4f5",
-	color: "#18181b",
-	fontWeight: 600,
-	fontSize: "12px",
-	fontFamily: "system-ui, -apple-system, sans-serif",
+	width: "34px",
+	height: "34px",
+	borderRadius: "0px",
+	background: "#18181b",
+	color: "#ffffff",
+	fontWeight: 700,
+	fontSize: "10px",
+	fontFamily: "monospace",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
-	border: "1px solid #e4e4e7",
+	border: "none",
+	flexShrink: 0,
 };
 
-
-
 const presenceBadgeStyle: CSSProperties = {
-	fontSize: "10px",
-	fontFamily: "system-ui, -apple-system, sans-serif",
-	fontWeight: 600,
+	fontSize: "9px",
+	fontFamily: "monospace",
+	fontWeight: 700,
+	letterSpacing: "0.05em",
 	color: "#52525b",
 	background: "#f4f4f5",
 	border: "none",
-	padding: "2px 8px",
-	borderRadius: "12px",
+	padding: "2px 6px",
+	borderRadius: "0px",
 };
 
 const stagePillMiniStyle: CSSProperties = {
@@ -1383,15 +1646,19 @@ const stagePillMiniStyle: CSSProperties = {
 };
 
 const unreadSquareBadgeInlineStyle: CSSProperties = {
+	minWidth: "15px",
+	height: "15px",
 	background: "#dc2626",
 	color: "#ffffff",
-	fontSize: "9px",
+	fontSize: "8.5px",
 	fontWeight: 800,
 	fontFamily: "monospace",
-	padding: "1px 5px",
-	border: "1px solid #000000",
-	borderRadius: "0px",
+	display: "inline-flex",
+	alignItems: "center",
+	justifyContent: "center",
+	padding: "0 3px",
 	marginLeft: 6,
+	flexShrink: 0,
 };
 
 const streamContainerStyle: CSSProperties = {

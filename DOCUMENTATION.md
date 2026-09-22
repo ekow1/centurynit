@@ -251,17 +251,84 @@ What a client can book comes from three inputs: the branch's weekly hours
 and slot settings, each consultant's own working hours, and everything
 already booked, including busy times mirrored in from staff personal
 calendars. A database-level rule makes double-booking impossible even if
-two people click at the same instant.
+two people click at the same instant — availability is re-checked inside
+the transaction *and* a unique index decides the race, so a pre-check
+alone can never let two requests both read "free".
 
-Bookings have a full lifecycle (cancel, reschedule, reassign, confirm,
-complete, no-show, rebook credit), and every transition is written to an
-append-only history. Reschedules a client requests go to staff for
-approval; staff-side reschedules are direct.
+Every booking is born **unassigned** — assigning a consultant is always a
+manager's decision, never automatic and never round-robin. One deliberate
+exception to the slot check: when a booking arrives already paid, the
+capacity check is skipped and the booking lands regardless — money in
+hand takes priority, and ops decides afterwards whether a consultant can
+take it or the appointment needs rescheduling.
 
-Online sessions run in video rooms the client joins **inside the portal**,
-no external link needed. A join window is enforced (opens a few minutes
-early, closes after). A background check every minute marks meetings live
-or ended, feeding the console's "what's happening now" view.
+### The consultation's own lifecycle
+
+The booking and the consultation are two records kept in lock-step. The
+consultation runs a real state machine — assigned, confirmed, in
+assessment, completed — and the transitions carry meaning:
+
+- **Confirming is a state, not a message.** A slot is confirmed only once
+  a consultant is assigned and the time is still ahead; confirmation
+  moves both records to confirmed together, and the client is told the
+  slot is locked (with the meeting link if one is set).
+- **A moved slot voids the confirmation.** If a confirmed consultation's
+  booking is rescheduled, the consultation rolls back to *assigned* — the
+  consultant must confirm the new time before the assessment can start.
+- **An undo exists for a misclick.** "Start assessment" can be rolled
+  back to confirmed — but completed outcomes stay locked forever.
+- **Cancelling cascades.** Force-cancelling the consultation pulls the
+  booking off the calendar, kills its reminders, and emails both sides —
+  ending the engagement, not just the appointment.
+- **A cancellation can carry a credit.** Staff can issue a free-rebooking
+  credit on a cancelled case: the client's next consultation checkout
+  skips payment entirely, and they're told in-app and by email — a credit
+  nobody hears about is no credit.
+
+Reschedules a client requests go to staff for approval; staff-side
+reschedules are direct. Every transition lands on an append-only activity
+timeline.
+
+### Coordination: who steers a case
+
+Consultations carry a steering layer of their own. A manager (or owner)
+can delegate a case to a **coordinator** — and while a case is
+coordinated, only the coordinator may place handlers or move the file
+between branches; everyone else, managers included, watches until they
+take the case back. That take-back is always available — the built-in
+break-glass, so a delegated case can never strand.
+
+Two refinements shape who may steer:
+
+- **Grants.** A manager can give a staff member *standing* coordination
+  authority that lasts until it's retracted or lapses — so a trusted
+  coordinator doesn't need per-case delegation. Retracting a grant is
+  deliberately aggressive: it also pulls every case they currently steer
+  back into the management pool, because access can't linger past its
+  welcome.
+- **Journey scope.** A coordinator can be attached to the *applicant*
+  rather than the case — every case that client opens inherits them, and
+  their live cases are stamped now. Releasing clears future cases only;
+  in-flight cases keep whoever holds them.
+
+A daily **duty coordinator** is set per branch, and the delegation picker
+is fed by a live workload read — each active staff member's open and
+overdue counts and a capacity percentage, so work goes to the desk that
+can take it. A consultation can also be **referred to another branch**
+without naming a handler — the receiving desk staffs it from their own
+queue, because the branch owns the file, not the client's location.
+
+### Meetings
+
+Online sessions run in video rooms the client joins **inside the
+portal**, no external link needed. Staff can paste any meeting link
+(Zoom, Meet, Teams — any https address) onto a booking, or generate a
+Google Meet space on demand through the company's connected Google
+account — either way the client just sees "join". Join windows differ by
+side: the host gets in thirty minutes early to prep, the client fifteen,
+and the room dies two hours after the end. A background check every
+minute marks meetings live or ended, feeding the console's "what's
+happening now" view.
 
 Staff calendars connect both ways: they can pull their personal calendar's
 busy times in so clients can't book over them, and publish their Century
@@ -500,6 +567,25 @@ When a client is offline, a reply is emailed to them, and their
 email reply lands back on the same conversation. Staff presence and typing
 are shown live as they happen.
 
+The message mechanics are carefully chosen, not incidental:
+
+- **Edits happen in place** — a corrected message never spawns a new row,
+  so replies quoting it and forwards descending from it stay attached.
+- **Forwards credit the original** — forwarding a forward still points at
+  the true author rather than building a chain.
+- **Deletes are tombstones** — the row survives so quotes don't dangle;
+  only the body is withheld. Messages are never hard-deleted.
+- **Reactions toggle** — applying an emoji you already used removes it.
+- **Typing is deliberately ephemeral** — never written to the database,
+  because a keystroke's worth of state is worthless a second later.
+- **The support queue auto-joins** — a support-role staff member who can
+  *see* a client thread in the queue is quietly made a member when they
+  open it, so list visibility and detail access never disagree.
+- **Live events respect the same walls as history** — internal notes are
+  published only on staff channels; a note pushed to the client's live
+  stream would leak even though it never appears in their history, so the
+  two paths resolve recipients separately.
+
 ### The AI assistant
 
 A knowledge assistant runs at the edge on Cloudflare's Workers AI (a
@@ -731,9 +817,13 @@ done, current and locked.
   checklist, document release. Choosing travel help assigns a travel
   officer, and only then is the airline fare invoiced, separately: the
   service fee was already collected in the package, and no ticket is ever
-  billed before someone owns the booking. The chapter also keeps the
-  logistics record: the report-by date, the briefing, airport pickup,
-  accommodation, an emergency contact, and the arrival confirmation.
+  billed before someone owns the booking. The ticket invoice follows the
+  same two-step as every other invoice — raised as a proforma, issued by
+  finance — and once the ticket is paid and the booking confirmation is
+  recorded, the case leaves the departure chapter the way it entered: on
+  its own. The chapter also keeps the logistics record: the report-by
+  date, the briefing, airport pickup, accommodation, an emergency
+  contact, and the arrival confirmation.
 - **Complete**: the post-arrival instalment schedule, paid-invoice
   receipts and official-document downloads, and the door to continue:
   the client can ask for the next stage's services from here.

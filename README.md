@@ -2,9 +2,10 @@
 
 Monorepo for Century NIT Consult.
 
-- **`docs/`** — the engineering reference: architecture, database, API
-  surface, auth, journey, money, communications, marketing, CMS,
-  scheduling, frontends, operations. Start at
+- **`DOCUMENTATION.md`** — the complete reference in one plain-English
+  document: every part of the platform, no code jargon.
+- **`docs/`** — the same material split per topic for engineers, with
+  route, table and configuration detail. Start at
   [docs/README.md](docs/README.md).
 - **`FEATURES.md`** — stakeholder walkthrough of what the product does.
 

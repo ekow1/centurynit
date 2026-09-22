@@ -42,8 +42,9 @@ never drift apart.
 Everything of record is in one PostgreSQL database: cases, invoices,
 documents, messages, marketing, content. Both front ends are thin clients.
 They show what the API says and send back what the user does. The portal
-keeps a little per-browser convenience state (drafts, dismissed hints), but
-nothing there is authoritative.
+keeps a little per-browser convenience state (drafts, dismissed hints) and
+an offline fallback for the journey view, but nothing there is
+authoritative.
 
 ---
 
@@ -121,7 +122,7 @@ Everything hangs off one ladder: **six chapters**.
 | Chapter | What happens |
 |---|---|
 | **1: Consultation** | Client books online or in-person, picks a real slot, pays, meets the consultant, gets an eligibility assessment |
-| **2: Enrolment** | Client confirms they want to proceed (or pauses or declines), picks a service package and payment plan, pays the deposit |
+| **2: Enrolment** | Client confirms they want to proceed (or pauses or declines), picks a service package and payment plan, pays the 10% agency deposit |
 | **3: Applications** | Client chooses schools, pays the application fee, staff submit and track offers, client accepts one |
 | **4: Visa** | Client consents to start, pays the visa fee, the officer files and tracks it to a decision |
 | **5: Departure** | Travel help, the pre-departure fee milestone, a checklist, then official documents released |
@@ -177,6 +178,24 @@ Service packages are priced per stage. A client can enter at different
 service stages, select only what they need, stop after any reached stage,
 and later request to continue. Staff approve the continuation.
 
+### Who does what, when
+
+| Moment | Actor | Action | Client sees |
+|---|---|---|---|
+| Booking lands | Coordinator or manager | Assign a consultant (or the duty roster covers it) | "Consultant being assigned" |
+| Session held | Consultant | Complete the assessment (eligible / conditional / not eligible, with a note) | Assessment outcome |
+| Enrolment open | Client | Confirm, hold or decline; pick package and plan; pay the deposit | Journey advances |
+| Deposit settled | Manager | Resolve the handler handoff, assign the case consultant | Named consultant |
+| Schools chosen | Chapter owner, then finance | Raise the draft invoice, approve and issue it | "Fee being prepared" then a payable invoice |
+| Offers in | Consultant | Record each school's outcome | Live tracking; client accepts an offer |
+| Visa start | Client, visa officer, finance | Client consents; officer raises the draft, finance issues, client pays | "Pay the visa fee" |
+| Visa work | Visa officer | Embassy filing, biometrics, decision | Visa tracking |
+| Departure boundary | Manager | Resolve the handoff, assign the travel officer | Departure chapter opens |
+| Travel settled | Client and finance | Flight choice; fee milestone paid | Documents on the unlock path |
+| Pre-departure | Client and staff | Checklist items verified or waived | Official documents released |
+| Any time | Finance | Issue, void, credit invoices; edit packages | Ledger and receipts |
+| Any time | Admin | Staff invites, roles, sign-in policy, content | (No client-visible step) |
+
 ---
 
 ## Part 5: Consultations, scheduling and meetings
@@ -218,12 +237,15 @@ approval chain that drives the journey:
 
 ### How clients pay
 
-Paystack is the only client-side rail: checkout, then verification, then a
-signed webhook settles the payment on the server. The webhook is the
-authority; if it's slow, staff can reconcile against the gateway. There is
-deliberately no way for a client to claim "I paid"; cash and bank payments
-are recorded by staff. Mobile-money charges with an OTP step are also
-supported. Receipts and invoices print as PDFs.
+Paystack is the primary client-side rail: checkout, then verification,
+then a signed webhook settles the payment on the server. The webhook is
+the authority; if it's slow, staff can reconcile against the gateway. A
+Stripe card gateway exists alongside it and activates when a key is
+configured, so the payments log shows records from both gateways plus
+staff-recorded bank and cash entries. There is deliberately no way for a
+client to claim "I paid"; cash and bank payments are recorded by staff.
+Mobile-money charges with an OTP step are also supported. Receipts and
+invoices print as PDFs.
 
 ### Instalments
 
@@ -284,7 +306,8 @@ are shown live as they happen.
 
 ### The AI assistant
 
-A knowledge assistant runs at the edge (not on the main API), with three
+A knowledge assistant runs at the edge on Cloudflare's Workers AI (a
+Llama 3.1 model, streaming its replies as they're generated), with three
 personas: a **website assistant** for prospective students on public pages,
 a **portal assistant** inside the client's communication hub, and an
 **enquiry** path for visitors. It answers general questions only, says so
@@ -415,11 +438,13 @@ exact task.
 - **Inbox, Dashboard, Now**: what happened, the numbers, what's live.
 - **Helpdesk**: the client conversation queue with its full lifecycle.
 - **Chat**: staff messaging.
-- **Consultations**: booked sessions. Assign, refer, delegate, assess,
-  reschedule approvals, no-show and credit.
+- **Consultations**: booked sessions. Assign, refer to another branch,
+  delegate and reclaim, assess, reschedule approvals, no-show and credit,
+  comments, document requests, and the full activity history.
 - **Cases**: every engagement, list or board, with the full case file:
   stages, chapter owners, package and plan, invoices, comments, documents,
-  visa and departure details, release override, post-arrival schedule.
+  visa and departure details, release override, post-arrival schedule, and
+  referral to another branch.
 - **Clients, Leads**: records and the enquiry pipeline.
 - **Appointments, Live meetings**: the week and rooms in progress.
 - **Universities, Programmes, Scholarships, Packages, Departure
@@ -445,8 +470,8 @@ exact task.
 Open to everyone, no sign-in:
 
 - **Marketing pages**: home, about, why choose us, services, visa
-  services, student services, success stories, FAQs, blog, events,
-  contact.
+  services, student services, success stories ("Red Seat"), FAQs, blog,
+  events, contact.
 - **The catalogue**: destinations, universities, programmes and
   scholarships, each browsable down to a detail page and served live from
   the same database the staff edit.
@@ -477,7 +502,9 @@ done, current and locked.
   document release.
 - **Complete**: the post-arrival instalment schedule.
 - **Appointments, Documents, Fees, Security**: bookings, the
-  vault, the ledger and receipts, and profile/MFA/sessions.
+  vault, the ledger and receipts, and the security page: profile fields,
+  a two-step verified email change, MFA setup, session list, and avatar
+  upload with crop.
 - **The Communication Center**: a floating support channel inside the
   portal, the staff thread plus the AI assistant.
 - **Newsletter pages**: confirm, unsubscribe, and preferences.
@@ -551,7 +578,8 @@ optional in production.
 
 Paystack for all payments, Resend for all email (delivery, open, bounce and
 complaint events flow back through a signed webhook), LiveKit for video
-rooms, Supabase for private file storage, Google for client sign-in and
+rooms (with Daily kept as an alternative provider), Supabase for private
+file storage, Google for client sign-in and
 staff calendars, web push for browser notifications, and a pluggable text
 provider for phone sign-in (unconfigured by default; the feature refuses
 rather than pretending).

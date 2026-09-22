@@ -20,7 +20,9 @@ The product is **three deployable pieces**:
 2. **The Operations Center**, the staff-only console for consultations,
    cases, finance, marketing, content, and administration.
 3. **The API**, the single backend that both front ends talk to. It holds
-   all data and all business rules.
+   all data and all business rules. It also publishes an interactive
+   reference (every endpoint, its inputs, and a working "try it" button)
+   for anyone integrating against it.
 
 A visitor to the website never downloads a byte of the staff console. They
 are separate applications with separate builds.
@@ -280,6 +282,16 @@ replies. When a client is offline, a reply is emailed to them, and their
 email reply lands back on the same conversation. Staff presence and typing
 are shown live as they happen.
 
+### The AI assistant
+
+A knowledge assistant runs at the edge (not on the main API), with three
+personas: a **website assistant** for prospective students on public pages,
+a **portal assistant** inside the client's communication hub, and an
+**enquiry** path for visitors. It answers general questions only, says so
+when it isn't certain of a Century-specific detail, and points people to a
+human for anything account-specific. First-time public use is gated by a
+bot check so the widget can't be farmed.
+
 ### Notifications
 
 One notification service fans out to three channels (in-app, email, and
@@ -398,7 +410,8 @@ exact task.
 
 - **Workspace**: the day's triage. Unassigned consultations, cases
   awaiting a handler, invoices to raise, documents to review, reschedule
-  requests, banded overdue / today / later, with inline assignment.
+  requests, banded overdue / today / later, with inline assignment. A
+  caseload view shows who is carrying what across the team.
 - **Inbox, Dashboard, Now**: what happened, the numbers, what's live.
 - **Helpdesk**: the client conversation queue with its full lifecycle.
 - **Chat**: staff messaging.
@@ -409,8 +422,9 @@ exact task.
   visa and departure details, release override, post-arrival schedule.
 - **Clients, Leads**: records and the enquiry pipeline.
 - **Appointments, Live meetings**: the week and rooms in progress.
-- **Universities, Programmes, Packages, Departure checklist**: the
-  catalogue editors.
+- **Universities, Programmes, Scholarships, Packages, Departure
+  checklist**: the catalogue editors. Scholarships can also be awarded to
+  a specific applicant from their record.
 - **Invoices, Ledger, Payments, Fee schedule, Payment plans**: the
   finance suite.
 - **Reports**: revenue and operations analytics.
@@ -424,7 +438,28 @@ exact task.
 
 ---
 
-## Part 12: The portal, page by page
+## Part 12: The website and portal, page by page
+
+### The public website
+
+Open to everyone, no sign-in:
+
+- **Marketing pages**: home, about, why choose us, services, visa
+  services, student services, success stories, FAQs, blog, events,
+  contact.
+- **The catalogue**: destinations, universities, programmes and
+  scholarships, each browsable down to a detail page and served live from
+  the same database the staff edit.
+- **The enquiry widget**: a floating door on every page where a visitor
+  leaves their details and becomes a lead in the CRM.
+- **The newsletter**: a subscribe prompt, double opt-in confirmation, and
+  unsubscribe/preferences pages.
+- **"Start your journey"**: the doorway that turns a visitor into a
+  registered client and drops them into chapter one.
+- **The AI assistant and a newsletter popup** float on every public page;
+  first-time assistant use passes a bot check.
+
+### The portal
 
 The sidebar is the journey itself, the six chapters as the spine, showing
 done, current and locked.
@@ -441,9 +476,10 @@ done, current and locked.
 - **Departure**: travel choice, the fee milestone, the checklist,
   document release.
 - **Complete**: the post-arrival instalment schedule.
-- **Appointments, Documents, Fees, Messages, Security**: bookings, the
-  vault, the ledger and receipts, the staff thread plus AI assistant, and
-  profile/MFA/sessions.
+- **Appointments, Documents, Fees, Security**: bookings, the
+  vault, the ledger and receipts, and profile/MFA/sessions.
+- **The Communication Center**: a floating support channel inside the
+  portal, the staff thread plus the AI assistant.
 - **Newsletter pages**: confirm, unsubscribe, and preferences.
 
 ---
@@ -457,6 +493,11 @@ any future non-owner path is denied by default rather than silently open.
 Anything that's evidence is append-only: audit entries, invoice events,
 booking events, assignment history, activity feeds. Corrections append;
 history is never edited.
+
+Around the edges: requests are rate-limited and carry strict security
+headers, the origin allowlist is exact-match, public forms pass a bot
+check, sensitive staff actions can demand a fresh sign-in, and every
+account (client or staff) can list and revoke its own sessions.
 
 ### Background jobs
 

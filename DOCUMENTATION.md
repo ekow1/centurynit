@@ -499,6 +499,45 @@ headers, the origin allowlist is exact-match, public forms pass a bot
 check, sensitive staff actions can demand a fresh sign-in, and every
 account (client or staff) can list and revoke its own sessions.
 
+### Deletion, expiry and retention
+
+Different kinds of data leave the system in different, deliberate ways.
+
+**Removing a client account** is a super-admin action, always audited,
+with three modes:
+
+- **Disconnect** removes the login only. The applicant record, the cases
+  and the files stay; the person simply can't sign in anymore.
+- **Archive** marks the applicant record archived and removes the login.
+  The history is kept but the person is closed out.
+- **Purge** is the full removal: the person's conversations, comments,
+  activity events and leads go, the applicant record and its cases are
+  deleted, and every file they uploaded is cleaned from storage
+  best-effort afterwards. One deliberate exception: **invoices are never
+  deleted.** Journey invoices belonging to the purged case are detached
+  and re-labelled as one-off charges, because financial records must
+  outlive the case they came from.
+
+**Everyday removal** follows the same spirit. Staff can remove leads,
+documents, canned replies, roles, packages, and marketing entities (draft
+campaigns, lists, templates, segments, individual suppressions, list
+members). Clients can withdraw a reschedule request, cancel autopay
+consent, remove a school choice, disconnect a calendar feed, or
+unsubscribe a device from push. Chat messages are never truly deleted:
+they're marked deleted and shown as a tombstone, because replies and
+forwards quoting them must not dangle. Open invitations can be revoked.
+
+**Things that expire on their own**: staff invitations, one-time codes and
+verification links, sessions, signed file links (minutes for an upload,
+under an hour for a read), temporary consultation delegations, and a
+meeting's join window.
+
+**Things kept on a clock**: rejected documents are purged by a daily
+sweep after a retention window; finished queue jobs are kept only briefly.
+**Things kept forever**: the audit trail, invoice events, booking events,
+assignment history and activity feeds are append-only and are never
+purged by anything.
+
 ### Background jobs
 
 Work that shouldn't block a request runs on a separate worker process:

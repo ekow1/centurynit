@@ -171,3 +171,17 @@ export async function createMeetingToken(input: {
 	if (!res?.token) throw new MeetUnavailableError("Daily returned no meeting token");
 	return res.token;
 }
+
+/**
+ * Live credential probe for the ops settings page — proves the stored API
+ * key authenticates against api.daily.co. `GET /rooms?limit=1` is the
+ * cheapest authenticated read; a wrong key answers 401.
+ */
+export async function probeDaily(): Promise<{ ok: boolean; error: string | null }> {
+	try {
+		await dailyFetch("/rooms?limit=1");
+		return { ok: true, error: null };
+	} catch (err) {
+		return { ok: false, error: err instanceof Error ? err.message : String(err) };
+	}
+}

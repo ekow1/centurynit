@@ -306,11 +306,12 @@ export {
 	type MeetingSpace,
 	type MeetingStatus,
 } from "./types.js";
-export { createMeetingToken, dailyConnected, setDailyFetchForTests, type DailyFetch } from "./daily.js";
+export { createMeetingToken, dailyConnected, probeDaily, setDailyFetchForTests, type DailyFetch } from "./daily.js";
 export {
 	createLivekitToken,
 	livekitConnected,
 	livekitWsUrl,
+	probeLivekit,
 	setLivekitServiceForTests,
 	type LivekitService,
 } from "./livekit.js";

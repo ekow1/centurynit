@@ -29,6 +29,7 @@ import {
 /** Narrow slice of RoomServiceClient — keeps the test seam identical to the other providers. */
 export type LivekitService = {
 	listParticipants(room: string): Promise<Array<{ joinedAt?: number | bigint }>>;
+	listRooms?(): Promise<unknown>;
 	deleteRoom(room: string): Promise<void>;
 };
 
@@ -162,4 +163,22 @@ export async function getLivekitPresence(roomName: string): Promise<MeetingStatu
 export async function deleteLivekitRoom(roomName: string): Promise<void> {
 	const svc = await service();
 	await svc.deleteRoom(roomName);
+}
+
+/**
+ * Live credential probe for the ops settings page. `listRooms` is the
+ * cheapest authenticated call the RoomService offers — it proves the stored
+ * URL, API key and API secret actually authenticate against the project,
+ * which the settings table alone cannot (a masked value can exist and still
+ * be wrong, as a stale or rotated secret demonstrates only at join time).
+ */
+export async function probeLivekit(): Promise<{ ok: boolean; error: string | null }> {
+	try {
+		const svc = await service();
+		if (svc.listRooms) await svc.listRooms();
+		else await svc.listParticipants("__settings-probe__");
+		return { ok: true, error: null };
+	} catch (err) {
+		return { ok: false, error: err instanceof Error ? err.message : String(err) };
+	}
 }

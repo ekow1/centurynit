@@ -10,6 +10,13 @@ import {
 } from "../services/settings.js";
 import { getDocumentStorage } from "../services/storage/index.js";
 import {
+	activeProvider,
+	dailyConnected,
+	livekitConnected,
+	probeDaily,
+	probeLivekit,
+} from "../services/meet/index.js";
+import {
 	getUnifiedAuditLog,
 	queryAuditEvents,
 	exportAuditEventsCsv,
@@ -523,6 +530,110 @@ settingsRouter.openapi(
 			},
 			reachable,
 			probeError,
+		});
+	},
+);
+
+/* ── GET /api/v1/settings/video-check ────────────────────────────────────────
+ *
+ * Same idea as storage-check, for meeting providers. A saved LiveKit or
+ * Daily credential can be present, decryptable and masked correctly yet
+ * still be wrong — a rotated key, a secret pasted with a missing character —
+ * and the failure only surfaces when someone tries to join a consultation.
+ * This endpoint authenticates against each configured provider with the
+ * cheapest call it offers, so the settings screen can show the truth next
+ * to the fields instead of discovering it in a broken call.
+ */
+settingsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/video-check",
+		tags: ["Settings"],
+		summary: "Probe meeting provider credentials and connectivity",
+		middleware: [requireAuth, requireMfa, requireModule("settings")] as const,
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							activeProvider: z.string().nullable(),
+							livekit: z.object({
+								configured: z.boolean(),
+								url: z.string().nullable(),
+								apiKey: z.string().nullable(),
+								sources: z.record(z.string(), z.string()),
+								reachable: z.boolean().nullable(),
+								probeError: z.string().nullable(),
+							}),
+							daily: z.object({
+								configured: z.boolean(),
+								domain: z.string().nullable(),
+								sources: z.record(z.string(), z.string()),
+								reachable: z.boolean().nullable(),
+								probeError: z.string().nullable(),
+							}),
+						}),
+					},
+				},
+				description: "Video provider configuration + connectivity probe",
+			},
+		},
+	}),
+	async (c) => {
+		const display = await listSettingsForDisplay();
+		const sourceOf = (key: string) =>
+			display.find((s) => s.key === key)?.source ?? "unset";
+
+		const [lkUrl, lkKey, lkConfigured, dyDomain, dyConfigured, provider] =
+			await Promise.all([
+				getSetting("LIVEKIT_URL"),
+				getSetting("LIVEKIT_API_KEY"),
+				livekitConnected(),
+				getSetting("DAILY_DOMAIN"),
+				dailyConnected(),
+				activeProvider(),
+			]);
+
+		let lkReachable: boolean | null = null;
+		let lkProbeError: string | null = null;
+		if (lkConfigured) {
+			const probe = await probeLivekit();
+			lkReachable = probe.ok;
+			lkProbeError = probe.error;
+		}
+
+		let dyReachable: boolean | null = null;
+		let dyProbeError: string | null = null;
+		if (dyConfigured) {
+			const probe = await probeDaily();
+			dyReachable = probe.ok;
+			dyProbeError = probe.error;
+		}
+
+		return c.json({
+			activeProvider: provider,
+			livekit: {
+				configured: lkConfigured,
+				url: lkUrl ?? null,
+				apiKey: lkKey ?? null,
+				sources: {
+					LIVEKIT_URL: sourceOf("LIVEKIT_URL"),
+					LIVEKIT_API_KEY: sourceOf("LIVEKIT_API_KEY"),
+					LIVEKIT_API_SECRET: sourceOf("LIVEKIT_API_SECRET"),
+				},
+				reachable: lkReachable,
+				probeError: lkProbeError,
+			},
+			daily: {
+				configured: dyConfigured,
+				domain: dyDomain ?? null,
+				sources: {
+					DAILY_API_KEY: sourceOf("DAILY_API_KEY"),
+					DAILY_DOMAIN: sourceOf("DAILY_DOMAIN"),
+				},
+				reachable: dyReachable,
+				probeError: dyProbeError,
+			},
 		});
 	},
 );

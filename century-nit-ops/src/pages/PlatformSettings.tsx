@@ -3,6 +3,7 @@ import { API_PREFIX } from "century-nit-shared";
 import { apiFetch, ApiError } from "../lib/api";
 import { CompanyConnectRow } from "./CompanyGoogleCalendarCard";
 import { StorageCheckRow } from "./StorageCheckRow";
+import { VideoMeetingsCheckRow } from "./VideoMeetingsCheckRow";
 
 /**
  * Platform Settings — integration credentials and fee schedule.
@@ -417,6 +418,7 @@ export function PlatformSettings() {
 
 							{group === "Google Calendar" && <CompanyConnectRow />}
 							{group === "Storage" && <StorageCheckRow />}
+							{group === "Video Meetings" && <VideoMeetingsCheckRow />}
 
 							<div className="admin-table-wrap">
 								<table className="admin-table">

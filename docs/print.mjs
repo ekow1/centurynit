@@ -294,7 +294,7 @@ if (process.argv.includes("--pdf")) {
 	];
 	const executablePath = candidates.find(existsSync);
 	if (!executablePath) throw new Error("no chrome/edge found");
-	const pdfPath = htmlPath.replace(/print\.html$/, "../DOCUMENTATION.pdf");
+	const pdfPath = htmlPath.replace(/print\.html$/, "../CenturyNIT-Documentation.pdf");
 
 	const puppeteer = await import("puppeteer-core");
 	const browser = await puppeteer.launch({ executablePath, headless: true });

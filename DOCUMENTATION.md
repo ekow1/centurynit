@@ -85,6 +85,11 @@ either an authenticator app or enrolled email codes. The very first
 administrator is created once with a server-side setup token; the moment
 any staff member exists, that door closes permanently.
 
+Both apps also sign idle users out. A portal session that goes untouched
+for twelve hours ends itself; a console session ends after an
+administrator-set window (two hours by default). Each warns with a
+five-minute countdown first, and one click stays signed in.
+
 ---
 
 ## Part 3: Who can do what
@@ -758,8 +763,12 @@ offers what the signed-in role may open.
 - **Marketing**: campaigns, audiences, contacts, templates, automations.
 - **System, Staff & roles, Clients directory, Authentication, Audit,
   Content (CMS), Lookups, Notifications, Settings**: platform
-  administration. Health, the permission matrix, sign-in policy, the audit
-  feed, content, form dropdowns, notification templates and integrations.
+  administration. Health, the permission matrix, the audit feed,
+  content, form dropdowns, notification templates and integrations. The
+  sign-in policy is edited here: session lifetime, the staff idle
+  sign-out, lockout thresholds, password rules, breached-password
+  checking, staff rotation age, and the second-factor windows, each
+  bounded and audited.
   Settings is deeper than a preferences page: integration credentials
   (email, storage, Google, the payment gateways, push keys) are entered
   here, stored encrypted, shown masked, and every change is audited. So
@@ -864,13 +873,36 @@ on the caller's address; if Redis is ever unreachable the limiter waits
 two seconds then lets the request through, so a cache outage can never
 lock everyone out.
 
-**Credentials have real rules.** Staff passwords require twelve
-characters. One-time codes are six digits and die after ten minutes.
+**Credentials have real rules, and the rules are a policy, not
+constants.** An authentication policy lives in the console's
+Administration page, every field bounded and every change audited:
+
+- **Session lifetime** — how long a sign-in lasts at all: fourteen days
+  by default, settable from one to ninety.
+- **Idle sign-out** — a staff session that sees no input ends itself.
+  The console learns the limit from the session itself (two hours by
+  default, settable from one to seventy-two), warns with a countdown five
+  minutes before the end, and "stay signed in" re-validates the session
+  and resets the clock. A changed limit reaches open tabs on the next
+  permission sync, and the signed-out login screen quotes the real
+  number. The portal applies the same pattern with a fixed twelve-hour
+  window for clients.
+- **Account lockout** — five failed sign-ins inside ten minutes locks
+  the account for fifteen minutes (all three numbers tunable). The lock
+  is derived from the audit stream, not a flag, and only an audited
+  unlock event or the clock clears it.
+- **Passwords** — a minimum length (twelve by default), a
+  breached-password check that can be toggled, and a rotation age for
+  staff passwords (six months by default).
+- **Second-factor windows** — a grace period before a staff account must
+  have enrolled (seven days), and how long a trusted device skips the
+  second factor (thirty days).
+
+One-time codes are six digits and die after ten minutes.
 Email-verification links, staff invitations and signed file links all
-expire on their own. Sessions expire too, and every account, client or
-staff, can list its active sessions and revoke them one by one; staff can
-also suspend a client account or revoke all of a client's sessions at
-once.
+expire on their own. Every account, client or staff, can list its active
+sessions and revoke them one by one; staff can also suspend a client
+account or revoke all of a client's sessions at once.
 
 **Second factors are enforced per session.** A Google sign-in mints the
 session with the second factor still owed, and the API holds that session

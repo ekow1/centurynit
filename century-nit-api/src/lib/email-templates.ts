@@ -667,6 +667,120 @@ export function renderInvoiceRaisedEmail(data: {
 	};
 }
 
+/**
+ * A reminder on an open invoice — the balance, not the total, and how the
+ * due date stands: "due in 3 days", "due today", "12 days overdue". Sent by
+ * hand from the Invoices page; the same words whether the client is early
+ * or late, so a reminder never reads as a threat.
+ */
+export function renderInvoiceReminderEmail(data: {
+	clientName: string;
+	invoiceNumber: string;
+	invoiceType: string;
+	balanceFormatted: string;
+	balanceGhsFormatted: string;
+	/** Positive = days overdue, zero = due today, negative = days until due, null = no due date. */
+	overdueDays: number | null;
+	dueAtFormatted?: string | null;
+	payUrl: string;
+	/** A line from the finance officer, shown as-is under the summary. */
+	note?: string | null;
+}): { html: string; text: string } {
+	const safeClient = escapeHtml(data.clientName.trim());
+	const safeInvoice = escapeHtml(data.invoiceNumber.trim());
+	const safeType = escapeHtml(data.invoiceType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));
+	const standing =
+		data.overdueDays == null
+			? "is still open"
+			: data.overdueDays > 0
+				? `was due ${data.overdueDays} day${data.overdueDays === 1 ? "" : "s"} ago`
+				: data.overdueDays === 0
+					? "is due today"
+					: `is due in ${-data.overdueDays} day${data.overdueDays === -1 ? "" : "s"}`;
+	const safeNote = data.note?.trim() ? escapeHtml(data.note.trim()) : null;
+
+	const bodyHtml = `
+		<p style="margin:0 0 18px 0;font-size:16px;color:#000000;">
+			Hello <strong>${safeClient}</strong>,
+		</p>
+
+		<p style="margin:0 0 20px 0;color:#000000;">
+			A friendly reminder that invoice <strong>${safeInvoice}</strong> ${standing}. The balance below can be paid in your Century NIT portal.
+		</p>
+
+		<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;background-color:#f5f5f5;border:2px solid #000000;padding:16px 20px;">
+			<tr>
+				<td>
+					<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+						<tr>
+							<td style="padding:4px 0;font-size:13px;color:#666666;width:110px;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Invoice</td>
+							<td style="padding:4px 0;font-size:14px;font-weight:700;color:#000000;">${safeInvoice}</td>
+						</tr>
+						<tr>
+							<td style="padding:4px 0;font-size:13px;color:#666666;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Type</td>
+							<td style="padding:4px 0;font-size:14px;font-weight:600;color:#000000;">${safeType}</td>
+						</tr>
+						<tr>
+							<td style="padding:4px 0;font-size:13px;color:#666666;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Balance</td>
+							<td style="padding:4px 0;font-size:14px;font-weight:600;color:#000000;">${data.balanceGhsFormatted} (${data.balanceFormatted})</td>
+						</tr>
+						${data.dueAtFormatted ? `
+						<tr>
+							<td style="padding:4px 0;font-size:13px;color:#666666;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Due</td>
+							<td style="padding:4px 0;font-size:14px;font-weight:600;color:#000000;">${escapeHtml(data.dueAtFormatted)}</td>
+						</tr>` : ""}
+					</table>
+				</td>
+			</tr>
+		</table>
+
+		${safeNote ? `<p style="margin:0 0 24px 0;color:#000000;">${safeNote}</p>` : ""}
+
+		<p style="margin:0 0 24px 0;color:#000000;">
+			If you have already paid, thank you — a transfer can take a day to show. Otherwise you can pay securely through your portal, or reply to your consultant if something needs sorting out first.
+		</p>
+
+		<table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;">
+			<tr>
+				<td align="center" style="background-color:#000000;">
+					<a href="${data.payUrl}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;background-color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.5px;text-transform:uppercase;">
+						Pay Now
+					</a>
+				</td>
+			</tr>
+		</table>
+
+		<div style="padding:14px 18px;background-color:#f5f5f5;border:1px dashed #999999;font-size:12px;color:#666666;word-break:break-all;">
+			<p style="margin:0 0 6px 0;font-weight:600;color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;font-size:11px;letter-spacing:0.3px;">Direct link:</p>
+			<a href="${data.payUrl}" style="color:#000000;text-decoration:underline;">${data.payUrl}</a>
+		</div>
+	`;
+
+	const text = [
+		`Hello ${data.clientName.trim()},`,
+		``,
+		`A friendly reminder that invoice ${safeInvoice} ${standing}.`,
+		``,
+		`Invoice: ${safeInvoice}`,
+		`Type: ${safeType}`,
+		`Balance: ${data.balanceGhsFormatted} (${data.balanceFormatted})`,
+		...(data.dueAtFormatted ? [`Due: ${data.dueAtFormatted}`] : []),
+		...(data.note?.trim() ? [``, data.note.trim()] : []),
+		``,
+		`Pay securely through your portal:`,
+		data.payUrl,
+	].join("\n");
+
+	return {
+		html: emailLayout({
+			title: "Payment Reminder",
+			preheader: `Invoice ${safeInvoice} ${standing} · ${data.balanceGhsFormatted}`,
+			bodyHtml,
+		}),
+		text,
+	};
+}
+
 /* ── 8. Document Reviewed Email Template (client) ───────────────────────── */
 
 export function renderDocumentReviewedEmail(data: {

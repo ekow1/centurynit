@@ -51,3 +51,9 @@ century-nit-api/test-*.pdf
 
 # Windows reserved-name artifact accidentally created inside .preview
 .preview/NUL
+
+.dev.vars*
+
+# Local database dumps — production data must never enter git
+*.dump
+prod.dump

@@ -3296,9 +3296,26 @@
 	align-items: stretch;
 	/* One bound for every column: the queue, the thread and the context
 	   rail all fill this height and scroll internally — the page itself
-	   never grows with message count, so the composer stays pinned. */
-	height: calc(100vh - 220px);
-	min-height: 480px;
+	   never grows with message count, so the composer stays pinned. The
+	   bound comes from the flex chain below, not a guessed px offset. */
+	flex: 1;
+	min-height: 0;
+}
+
+/* Helpdesk owns the viewport on desktop: .portal__content stops scrolling
+   itself and hands a bounded box to .hd-page, so .hd-split's flex bound is
+   exactly "what the chrome leaves" — queue and rail can never extend below
+   the fold where their internal scrollbars would sit off-screen. */
+@media (min-width: 960px) {
+	.portal__content:has(> .hd-page) {
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+	.hd-page {
+		flex: 1;
+		min-height: 0;
+	}
 }
 
 .hd-list {

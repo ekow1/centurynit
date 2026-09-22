@@ -18,9 +18,15 @@
  *  synthetic 503 Response that can never throw.
  */
 
-const VERSION = "v5";
+const VERSION = "v6";
 const CACHE = `century-nit-${VERSION}`;
-const PRECACHE = ["/", "/manifest.webmanifest", "/favicon.svg"];
+const PRECACHE = [
+	"/",
+	"/manifest.webmanifest",
+	"/favicon.svg",
+	"/icons/icon-192.png",
+	"/icons/icon-512.png",
+];
 
 /** Paths the service worker must never read from or write to the cache. */
 function isBypassed(url) {
@@ -129,8 +135,8 @@ self.addEventListener("push", (event) => {
 	const title = payload.title || "Century NIT";
 	const options = {
 		body: payload.body || "",
-		icon: "/favicon.svg",
-		badge: "/favicon.svg",
+		icon: "/icons/icon-192.png",
+		badge: "/icons/icon-192.png",
 		tag: payload.id || undefined,
 		data: {
 			link: payload.link || "/",

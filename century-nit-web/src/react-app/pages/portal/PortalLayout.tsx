@@ -28,6 +28,7 @@ import { PortalAppBar, PortalTabBar } from "./PortalMobileNav";
 import { OnboardingModal } from "../../components/portal/OnboardingModal";
 import { MfaPrompt } from "../../components/portal/MfaPrompt";
 import { IdleTimeout } from "../../components/portal/IdleTimeout";
+import { InstallAppButton } from "../../components/portal/InstallAppButton";
 import { getCurrentSession } from "../../context/authStore";
 import { useBrand } from "../../data/useBrand";
 
@@ -239,6 +240,12 @@ export function PortalLayout() {
 						/>
 					))}
 				</nav>
+
+				{/* The install affordance lives with the account block: the one
+				    place a returning client always looks. Hides itself once the
+				    app is installed, and on iOS expands into the Add to Home
+				    Screen steps instead of a dead button. */}
+				<InstallAppButton />
 
 				<div className="portal__user ops-shell__user">
 					{authUser && (

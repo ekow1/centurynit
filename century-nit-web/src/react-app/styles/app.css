@@ -11728,3 +11728,90 @@ a.portal-ch--on:hover {
 	line-height: 1.5;
 	color: var(--muted-foreground);
 }
+
+/* ========== Install app affordance ==========
+   Sits at the foot of the dark portal aside, above the account row. The iOS
+   steps card is deliberately a light surface so it reads identically inside
+   the aside and the (light) phone account menu. */
+
+.install-app {
+	margin-top: 1rem;
+}
+
+.install-app__btn {
+	display: flex;
+	align-items: center;
+	gap: 0.7rem;
+	width: 100%;
+	padding: 0.6rem 0.65rem;
+	background: transparent;
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	color: rgba(255, 255, 255, 0.92);
+	cursor: pointer;
+	text-align: left;
+	font: inherit;
+	transition: border-color 0.15s ease, background 0.15s ease;
+}
+.install-app__btn:hover {
+	border-color: rgba(255, 255, 255, 0.55);
+	background: rgba(255, 255, 255, 0.05);
+}
+.install-app__btn:disabled {
+	opacity: 0.55;
+	cursor: wait;
+}
+
+.install-app__icon {
+	display: grid;
+	place-items: center;
+	width: 1.9rem;
+	height: 1.9rem;
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	color: #e8a33d;
+	flex-shrink: 0;
+}
+
+.install-app__meta {
+	display: flex;
+	flex-direction: column;
+	gap: 0.1rem;
+	min-width: 0;
+}
+.install-app__label {
+	font-size: 0.82rem;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+}
+.install-app__hint {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: rgba(255, 255, 255, 0.55);
+}
+
+.install-app__steps {
+	margin-top: 0.5rem;
+	padding: 0.85rem 1rem;
+	background: var(--background);
+	border: 1px solid var(--border);
+	border-top: 3px solid #e8a33d;
+	color: var(--foreground);
+	font-size: 0.8rem;
+	line-height: 1.55;
+}
+.install-app__steps-title {
+	margin: 0 0 0.4rem;
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+.install-app__steps ol {
+	margin: 0;
+	padding-left: 1.15rem;
+}
+.install-app__steps li + li {
+	margin-top: 0.3rem;
+}

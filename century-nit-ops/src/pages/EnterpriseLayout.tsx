@@ -4,6 +4,7 @@ import { useOpsAuth, ROLE_LABELS, ROLE_HOME, type OpsModule } from "./OpsAuthCon
 import { useOpsState } from "./OpsStateContext";
 
 import { usePushNotifications } from "../hooks/usePushNotifications";
+import { useInstallPrompt } from "../hooks/useInstallPrompt";
 import { CasesProvider } from "../hooks/useCases";
 import { OpsCommandPalette } from "./OpsCommandPalette";
 import { CommunicationHub } from "./CommunicationHub";
@@ -28,6 +29,46 @@ type NavEntry = NavItem | NavGroup;
 
 function isGroup(entry: NavEntry): entry is NavGroup {
 	return "group" in entry;
+}
+
+/** The user menu's install row. Chromium defers the native prompt to our
+ *  click; iOS Safari has no prompt at all, so the row expands into the
+ *  Share → Add to Home Screen steps. Renders nothing once installed or on
+ *  browsers with no install path. */
+function InstallMenuRow() {
+	const { installed, promptable, ios, available, prompt } = useInstallPrompt();
+	const [steps, setSteps] = useState(false);
+	const [busy, setBusy] = useState(false);
+	if (installed || !available) return null;
+	return (
+		<>
+			<button
+				type="button"
+				className="ops-menu__row"
+				role="menuitem"
+				disabled={busy}
+				onClick={async () => {
+					if (promptable) {
+						setBusy(true);
+						await prompt();
+						setBusy(false);
+						return;
+					}
+					if (ios) setSteps((v) => !v);
+				}}
+			>
+				<span>{busy ? "Installing…" : "Install console"}</span>
+				<span className="ops-menu__k">{ios ? "how" : "app"}</span>
+			</button>
+			{steps && ios && (
+				<div className="ops-menu__row" style={{ cursor: "default" }} role="note">
+					<span className="ops-menu__k" style={{ textTransform: "none", letterSpacing: "0.02em", fontSize: "0.72rem" }}>
+						In Safari: Share → Add to Home Screen
+					</span>
+				</div>
+			)}
+		</>
+	);
 }
 
 function flattenNav(entries: NavEntry[]): OpsNavItem[] {
@@ -371,6 +412,7 @@ function OpsShell() {
 									: "off"}
 					</span>
 				</button>
+				<InstallMenuRow />
 				<a href={publicSiteUrl()} className="ops-menu__row" role="menuitem">
 					<span>Public site</span>
 					<span className="ops-menu__k">↗</span>

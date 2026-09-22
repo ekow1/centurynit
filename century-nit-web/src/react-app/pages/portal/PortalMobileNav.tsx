@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAppState } from "../../context/AppState";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { NotificationBell } from "./NotificationBell";
+import { InstallAppButton } from "../../components/portal/InstallAppButton";
 import {
 	IconChevronLeft,
 	IconDoc,
@@ -134,6 +135,7 @@ export function PortalAppBar({
 								<Link to="/" className="nav__dropdown-link" onClick={() => setProfileOpen(false)}>
 									Public site
 								</Link>
+								<InstallAppButton variant="link" />
 								<hr className="nav__dropdown-rule" />
 								<button
 									type="button"

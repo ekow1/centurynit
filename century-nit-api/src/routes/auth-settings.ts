@@ -165,10 +165,18 @@ authSettings.get(
 			? (settings["ops.mfa_methods"] as string[])
 			: (settings["portal.mfa_methods"] as string[]);
 
-		// Determine the effective enrolled state
-		// For TOTP users: twoFactorEnabled is true
-		// For email_otp users: mfaEnrolled is true
-		const enrolled = Boolean(dbUser?.mfaEnrolled || dbUser?.twoFactorEnabled);
+		/*
+		 * "Enrolled" must mean what requireMfa enforces, or the answer lies:
+		 * mfaEnrolled is written at arm time, and a TOTP enrolment abandoned
+		 * before the first code verifies leaves mfaEnrolled=true with
+		 * twoFactorEnabled=false — status would call that enrolled while
+		 * every data route answers MFA_NOT_ENROLLED. TOTP only counts once
+		 * the plugin marks the account enabled; an armed-but-unverified
+		 * secret is setup-in-progress, not a second factor.
+		 */
+		const enrolled = Boolean(
+			dbUser?.twoFactorEnabled || (dbUser?.mfaEnrolled && dbUser?.mfaMethod === "email_otp"),
+		);
 		const method = dbUser?.mfaMethod ?? (dbUser?.twoFactorEnabled ? "totp" : null);
 
 		/*
@@ -288,6 +296,16 @@ authSettings.post(
 		}
 
 		if (method === "totp") {
+			/*
+			 * An abandoned earlier attempt can leave an armed-but-unverified
+			 * secret behind. Enable would fail on the stale row, so clear
+			 * anything never proven — a verified row is a live factor and is
+			 * never touched here.
+			 */
+			await db
+				.delete(twoFactors)
+				.where(and(eq(twoFactors.userId, user.id), eq(twoFactors.verified, false)));
+
 			// Enable TOTP via Better Auth's twoFactor plugin
 			// First verify password by enabling 2FA (it requires password)
 			const result = await authInstance.api.enableTwoFactor({

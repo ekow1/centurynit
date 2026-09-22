@@ -137,6 +137,30 @@ finer steps. A step is never silently skipped: if later evidence exists
 (an admission, a paid visa), earlier un-ticked steps show as "skipped",
 not done.
 
+### The intake adapts to where you enter
+
+A client who only needs visa help is asked different facts than one
+starting from scratch. The booking intake branches on entry intent: a
+study entrant gives ranked study choices (up to three country, university,
+programme, field and intake picks); a visa entrant declares the offer they
+already hold, plus prior refusals and travel history, the risk inputs the
+file is built around; a departure entrant declares the visa they hold and
+their arrival logistics: window, airport, accommodation, pickup,
+dependants. The profile that results is a real dossier: passport,
+education and employment history, English test scores, funding source and
+sponsor.
+
+### The assessment recommends, not just verdicts
+
+Completing a consultation records more than eligible or not. The
+consultant files a recommended country, university, programme, package
+and the exact stages to buy, which is how the package offer on the
+client's enrolment step is shaped. For a visa or departure entry the
+verdict is one of proceed, widen the plan, or not viable, backed by
+structured findings like licensed sponsor and funds meet the rule.
+Closing an assessment while required evidence is still unverified needs a
+written override reason on the case.
+
 ### How "where the client is" is decided
 
 Two representations, deliberately different:
@@ -206,7 +230,7 @@ visa without buying a new package.
 | Moment | Actor | Action | Client sees |
 |---|---|---|---|
 | Booking lands | Coordinator or manager | Assign a consultant (or the duty roster covers it) | "Consultant being assigned" |
-| Session held | Consultant | Complete the assessment (eligible / conditional / not eligible, with a note) | Assessment outcome |
+| Session held | Consultant | Complete the assessment (outcome, recommendations, verdict for visa entries) | Assessment outcome and recommendations |
 | Enrolment open | Client | Confirm, hold or decline; pick package and plan; pay the deposit | Journey advances |
 | Deposit settled | Manager | Resolve the handler handoff, assign the case consultant | Named consultant |
 | Schools chosen | Chapter owner, then finance | Raise the draft invoice, approve and issue it | "Fee being prepared" then a payable invoice |
@@ -286,7 +310,10 @@ the client's consent, a saved payment authorization lets the system charge
 each instalment automatically; every attempt is logged so failures are
 visible, never silent. Post-arrival plans carry real late-payment rules:
 a grace window, reminder emails ahead of each due date, and an interest
-percentage on overdue amounts, all tunable in settings.
+percentage on overdue amounts, all tunable in settings. A client can
+switch between the full and instalment plans from the portal, and schools
+added after the first application invoice went out are billed on a
+supplementary invoice, never by rewriting the original.
 
 ### Fees and packages
 
@@ -570,7 +597,10 @@ Open to everyone, no sign-in:
 The sidebar is the journey itself, the six chapters as the spine, showing
 done, current and locked.
 
-- **Home / Journey**: the spine, the current step, the next unlock.
+- **Home / Journey**: the spine, the current step, the next unlock, and
+  the consultant's client-facing updates: a kind-coded timeline (status,
+  note, document needed, decision, handover) with a "new since your last
+  visit" divider.
 - **Consultation**: choose online or in-person, pick a live slot, pay,
   join the call in-app, reschedule or cancel within policy.
 - **Enrolment**: the assessment outcome, the decision, package and plan,
@@ -579,7 +609,8 @@ done, current and locked.
   accepting an offer. Each school track keeps its own history, the school's
   own reference number for chasing, proof that we submitted, and when an
   offer lands its terms are recorded: tuition, deposit and its due date,
-  with the offer letter filed into the vault.
+  with the offer letter filed into the vault. A list holds up to five
+  schools, subject to the package's own cap.
 - **Visa**: consent, the invoice, live tracking up the ladder to the
   decision, with each school's outcome one of admitted, waitlisted,
   rejected or withdrawn (a refusal parks the case with a reapplication
@@ -591,7 +622,9 @@ done, current and locked.
   billed before someone owns the booking. The chapter also keeps the
   logistics record: the report-by date, the briefing, airport pickup,
   accommodation, an emergency contact, and the arrival confirmation.
-- **Complete**: the post-arrival instalment schedule.
+- **Complete**: the post-arrival instalment schedule, paid-invoice
+  receipts and official-document downloads, and the door to continue:
+  the client can ask for the next stage's services from here.
 - **Appointments, Documents, Fees, Security**: bookings, the
   vault, the ledger and receipts, and the security page: profile fields,
   a two-step verified email change, MFA setup, session list, and avatar

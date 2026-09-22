@@ -125,7 +125,7 @@ Everything hangs off one ladder: **six chapters**.
 | **2: Enrolment** | Client confirms they want to proceed (or pauses or declines), picks a service package and payment plan, pays the 10% agency deposit |
 | **3: Applications** | Client chooses schools, pays the application fee, staff submit and track offers, client accepts one |
 | **4: Visa** | Client consents to start, pays the visa fee, the officer files and tracks it to a decision |
-| **5: Departure** | Travel help, the pre-departure fee milestone, a checklist, then official documents released |
+| **5: Departure** | Travel help (yes, hold or no), the pre-departure fee milestone, a checklist, then official documents released |
 | **6: Complete** | Client departed; post-arrival instalments run as aftercare |
 
 Inside the chapters the portal walks the client through about fourteen
@@ -176,7 +176,12 @@ defers it.
 
 Service packages are priced per stage. A client can enter at different
 service stages, select only what they need, stop after any reached stage,
-and later request to continue. Staff approve the continuation.
+and later request to continue. A continuation is a real flow, not just a
+flag: staff propose the next stage and attach a quotation for it, the
+client accepts, pauses or declines from the portal, and a lapsed or
+declined offer can be re-invited. Accepting opens the next chapter under
+its own pricing, so a client who stopped after applications can resume at
+visa without buying a new package.
 
 ### Who does what, when
 
@@ -260,7 +265,11 @@ visible, never silent.
 The fee catalogue defines what each charge is (agency service fees, plus
 third-party fees like embassy and school application charges), with tariffs
 per destination. Service packages are priced per stage so clients buy only
-the chapters they need.
+the chapters they need. Charges are priced in dollars and charged in
+cedis: a configurable exchange rate converts them, so the amount a client
+actually pays tracks a rate finance controls. A post-arrival catalogue
+carries the charges that only become relevant after the client lands,
+each with its own trigger and instalment rules.
 
 ### The ledger
 
@@ -281,6 +290,12 @@ both sides. Staff can request a specific document by name ("passport data
 page"), which appears as a task in the portal. Rejected files are purged
 after a retention period. Nothing is publicly reachable; every download
 goes through a short-lived signed link the API mints.
+
+One deliberate hold: the documents the agency produces as the client's
+agent, the admission letter and the visa outcome, are visible in the vault
+but locked from download until the pre-departure fee milestone is paid. A
+manager can release them early, and that release records a reason on the
+case. Staff downloads are never held; the lock is a client-side gate only.
 
 ---
 
@@ -434,7 +449,10 @@ exact task.
 - **Workspace**: the day's triage. Unassigned consultations, cases
   awaiting a handler, invoices to raise, documents to review, reschedule
   requests, banded overdue / today / later, with inline assignment. A
-  caseload view shows who is carrying what across the team.
+  caseload view shows who is carrying what across the team. Alongside the
+  derived work, staff keep their own task list: follow-ups with due
+  dates, pinned to a lead or a case or neither, each reminding its owner
+  exactly once when it falls due.
 - **Inbox, Dashboard, Now**: what happened, the numbers, what's live.
 - **Helpdesk**: the client conversation queue with its full lifecycle.
 - **Chat**: staff messaging.
@@ -498,8 +516,11 @@ done, current and locked.
   accepting an offer.
 - **Visa**: consent, the invoice, live tracking to the decision (a
   refusal parks the case with a reapplication path).
-- **Departure**: travel choice, the fee milestone, the checklist,
-  document release.
+- **Departure**: travel help (yes, hold or no), the fee milestone, the
+  checklist, document release. Choosing travel help assigns a travel
+  officer, and only then is the airline fare invoiced, separately: the
+  service fee was already collected in the package, and no ticket is ever
+  billed before someone owns the booking.
 - **Complete**: the post-arrival instalment schedule.
 - **Appointments, Documents, Fees, Security**: bookings, the
   vault, the ledger and receipts, and the security page: profile fields,

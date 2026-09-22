@@ -1,4 +1,4 @@
-import { useEffect, type CSSProperties } from "react";
+import { Fragment, useEffect, type CSSProperties } from "react";
 import type { ChatMessage } from "century-nit-shared";
 import { ensureChatUiStyles } from "./tokens.js";
 import { MessageBubble, type MessageBubbleProps } from "./MessageBubble.js";
@@ -20,6 +20,8 @@ export interface MessageListProps {
 	onQuoteClick?: (messageId: string) => void;
 	/** Optional header shown above the list (e.g. "Load older messages" button). */
 	header?: React.ReactNode;
+	/** Render a "NEW MESSAGES" divider before this message id (read-cursor marker). */
+	unreadFromId?: string | null;
 	style?: CSSProperties;
 }
 
@@ -40,6 +42,7 @@ export function MessageList({
 	bubbleProps,
 	onQuoteClick,
 	header,
+	unreadFromId,
 	style,
 }: MessageListProps) {
 	ensureChatUiStyles();
@@ -108,14 +111,39 @@ export function MessageList({
 						</span>
 					</div>
 					{g.items.map((m) => (
-						<MessageBubble
-							key={m.id}
-							message={m}
-							isOwn={isOwn(m)}
-							showAuthor={showAuthor?.(m)}
-							onQuoteClick={onQuoteClick}
-							{...bubbleProps}
-						/>
+						<Fragment key={m.id}>
+							{m.id === unreadFromId && (
+								<div
+									style={{
+										display: "flex",
+										alignItems: "center",
+										gap: 8,
+										margin: "6px 0",
+									}}
+								>
+									<span style={{ flex: 1, height: 1, background: "var(--accent, #b45309)" }} />
+									<span
+										style={{
+											fontSize: 9,
+											fontWeight: 700,
+											letterSpacing: "0.12em",
+											color: "var(--accent, #b45309)",
+											fontFamily: "var(--cn-chat-font-mono)",
+										}}
+									>
+										NEW MESSAGES
+									</span>
+									<span style={{ flex: 1, height: 1, background: "var(--accent, #b45309)" }} />
+								</div>
+							)}
+							<MessageBubble
+								message={m}
+								isOwn={isOwn(m)}
+								showAuthor={showAuthor?.(m)}
+								onQuoteClick={onQuoteClick}
+								{...bubbleProps}
+							/>
+						</Fragment>
 					))}
 				</div>
 			))}

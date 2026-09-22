@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Portal chat — inbox-first mock</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+	:root {
+		--ink: #000;
+		--mut: #52525b;
+		--line: #000;
+		--amber: #d97706;
+		--paper: #fff;
+		--wash: #f5f5f5;
+	}
+	* { box-sizing: border-box; margin: 0; }
+	body {
+		font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+		background: #e7e7e7;
+		min-height: 100vh;
+		position: relative;
+		color: var(--ink);
+	}
+	.mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+	.note {
+		position: fixed; top: 16px; left: 16px; max-width: 340px;
+		background: var(--paper); border: 2px solid var(--line); padding: 12px 14px;
+		font-size: 12px; line-height: 1.5; color: var(--mut); z-index: 5;
+	}
+	.note b { color: var(--ink); }
+	.note .mono { font-size: 10px; letter-spacing: .06em; }
+
+	/* ── Launcher zone ─────────────────────────────── */
+	.cchat-launch {
+		position: fixed; right: 20px; bottom: 20px; z-index: 20;
+		display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+	}
+	.cchat-fab {
+		width: 52px; height: 52px; border: 2px solid var(--line);
+		background: var(--ink); color: #fff; cursor: pointer; position: relative;
+		display: flex; align-items: center; justify-content: center;
+	}
+	.cchat-fab--pulse { animation: pulse 1s ease-in-out 3; }
+	@keyframes pulse {
+		0%,100% { box-shadow: 0 0 0 0 rgba(217,119,6,.55); }
+		50% { box-shadow: 0 0 0 10px rgba(217,119,6,0); }
+	}
+	.cchat-fab__badge {
+		position: absolute; top: -7px; right: -7px; min-width: 18px; height: 18px;
+		background: var(--amber); color: #fff; border: 2px solid var(--line);
+		font-size: 10px; font-weight: 700; display: flex; align-items: center;
+		justify-content: center; padding: 0 3px;
+	}
+	.cchat-peek {
+		background: var(--paper); border: 2px solid var(--line); padding: 9px 11px;
+		max-width: 240px; text-align: left; font-size: 11px; color: var(--mut);
+		cursor: pointer; line-height: 1.4; position: relative;
+	}
+	.cchat-peek b { display: block; color: var(--ink); font-size: 11px; margin-bottom: 2px; }
+	.cchat-peek__x {
+		position: absolute; top: 4px; right: 6px; font-size: 10px; color: var(--mut);
+	}
+
+	/* ── Window ────────────────────────────────────── */
+	.cchat-win {
+		position: fixed; right: 20px; bottom: 84px; width: 360px; height: 520px;
+		background: var(--paper); border: 2px solid var(--line); z-index: 19;
+		display: flex; flex-direction: column; overflow: hidden;
+		box-shadow: 6px 6px 0 rgba(0,0,0,.15);
+	}
+	.cchat-win--xl { width: 560px; height: 640px; }
+
+	.cchat-win__head {
+		display: flex; align-items: center; gap: 9px;
+		border-bottom: 2px solid var(--line); padding: 9px 11px; background: var(--paper);
+	}
+	.cchat-ava {
+		width: 32px; height: 32px; border: 2px solid var(--line); flex: none;
+		display: flex; align-items: center; justify-content: center;
+		font-size: 11px; font-weight: 700; background: var(--wash);
+	}
+	.cchat-ava--ai { background: var(--ink); color: #fff; }
+	.cchat-win__who { flex: 1; min-width: 0; }
+	.cchat-win__name { font-size: 12px; font-weight: 700; letter-spacing: .02em; }
+	.cchat-win__sub { font-size: 10px; color: var(--mut); margin-top: 1px;
+		white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.cchat-win__ctl { display: flex; gap: 2px; }
+	.cchat-win__ctl button {
+		width: 24px; height: 24px; border: 1px solid var(--line); background: var(--paper);
+		font-size: 11px; cursor: pointer;
+	}
+	.cchat-win__ctl button:hover { background: var(--wash); }
+
+	/* inbox list */
+	.inbox { flex: 1; overflow-y: auto; }
+	.band {
+		font-size: 9px; font-weight: 700; letter-spacing: .12em; color: var(--mut);
+		padding: 10px 12px 5px; border-bottom: 1px solid #e4e4e7;
+	}
+	.row {
+		display: flex; gap: 9px; width: 100%; text-align: left; align-items: flex-start;
+		padding: 10px 12px; background: var(--paper); border: none;
+		border-bottom: 1px solid #e4e4e7; cursor: pointer;
+	}
+	.row:hover { background: var(--wash); }
+	.row__ava {
+		width: 30px; height: 30px; border: 1.5px solid var(--line); flex: none;
+		display: flex; align-items: center; justify-content: center;
+		font-size: 10px; font-weight: 700; background: var(--wash);
+	}
+	.row__ava--ai { background: var(--ink); color: #fff; }
+	.row__body { flex: 1; min-width: 0; }
+	.row__top { display: flex; align-items: baseline; gap: 6px; }
+	.row__name { font-size: 11px; font-weight: 600; flex: 1; min-width: 0;
+		white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.row__name--unread { font-weight: 800; }
+	.row__time { font-size: 9px; color: var(--mut); flex: none; }
+	.row__prev { font-size: 10px; color: var(--mut); margin-top: 2px;
+		white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.row__prev--unread { color: var(--ink); font-weight: 600; }
+	.row__meta { display: flex; align-items: center; gap: 5px; margin-top: 4px; }
+	.tag {
+		font-size: 8px; font-weight: 700; letter-spacing: .08em; padding: 1px 4px;
+		border: 1px solid var(--line); color: var(--mut); flex: none;
+	}
+	.tag--wait { background: var(--amber); border-color: var(--amber); color: #fff; }
+	.tag--res { border-color: #d4d4d8; color: #a1a1aa; }
+	.unread-n {
+		margin-left: auto; min-width: 16px; height: 16px; padding: 0 4px;
+		background: var(--amber); color: #fff; font-size: 9px; font-weight: 700;
+		display: flex; align-items: center; justify-content: center; flex: none;
+	}
+	.dot { width: 7px; height: 7px; background: var(--amber); border-radius: 50%; flex: none; align-self: center; }
+
+	/* strip */
+	.cchat-strip {
+		display: flex; justify-content: space-between; align-items: center;
+		padding: 6px 11px; border-bottom: 1px solid #e4e4e7; background: var(--wash);
+		font-size: 9px; font-weight: 700; letter-spacing: .1em; color: var(--mut);
+	}
+	.cchat-strip__link {
+		border: none; background: none; font-size: 9px; font-weight: 700;
+		letter-spacing: .08em; color: var(--ink); cursor: pointer; text-decoration: underline;
+	}
+
+	/* thread view */
+	.thread { flex: 1; overflow-y: auto; padding: 12px; display: none; flex-direction: column; gap: 8px; background: var(--paper); }
+	.msg { max-width: 82%; padding: 8px 10px; font-size: 11px; line-height: 1.45; }
+	.msg--them { align-self: flex-start; background: var(--wash); border: 1.5px solid var(--line); }
+	.msg--me { align-self: flex-end; background: var(--ink); color: #fff; }
+	.msg__who { font-size: 8px; font-weight: 700; letter-spacing: .1em; margin-bottom: 3px; opacity: .7; }
+	.msg__time { font-size: 8px; margin-top: 4px; opacity: .55; }
+	.newline {
+		display: flex; align-items: center; gap: 8px; margin: 4px 0;
+		font-size: 8px; font-weight: 700; letter-spacing: .12em; color: var(--amber);
+	}
+	.newline::before, .newline::after { content: ""; flex: 1; height: 1px; background: var(--amber); }
+
+	.composer {
+		display: flex; gap: 6px; padding: 8px; border-top: 2px solid var(--line);
+		display: none;
+	}
+	.composer input {
+		flex: 1; border: 1.5px solid var(--line); padding: 8px 10px; font-size: 11px;
+		font-family: inherit;
+	}
+	.composer button {
+		border: 2px solid var(--line); background: var(--ink); color: #fff;
+		font-size: 10px; font-weight: 700; letter-spacing: .08em; padding: 0 14px; cursor: pointer;
+	}
+
+	.newbtn {
+		border-top: 2px solid var(--line); background: var(--ink); color: #fff;
+		padding: 10px; font-size: 10px; font-weight: 700; letter-spacing: .12em;
+		cursor: pointer; width: 100%; border-left: none; border-right: none; border-bottom: none;
+	}
+	.backbtn {
+		border: none; background: none; font-size: 10px; font-weight: 700;
+		cursor: pointer; color: var(--ink); padding: 0 6px 0 0;
+	}
+	.sim {
+		position: fixed; left: 16px; bottom: 20px; border: 2px solid var(--line);
+		background: var(--ink); color: #fff; font-size: 10px; font-weight: 700;
+		letter-spacing: .08em; padding: 8px 12px; cursor: pointer; z-index: 5;
+	}
+	[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="note">
+	<b>Mock — inbox-first portal chat.</b><br/>
+	① Open the FAB → <b>Messages list</b> (all threads, newest activity first).<br/>
+	② Click a row → that thread; <b>← MESSAGES</b> returns.<br/>
+	③ Unread = amber count per row + bold preview. Inside a thread, an amber
+	<b>NEW MESSAGES</b> divider marks where you left off.<br/>
+	④ <span class="mono">SIMULATE STAFF REPLY</span> bottom-left pushes an inbound
+	message — watch the peek card, FAB badge + pulse, and row badge.
+</div>
+
+<button class="sim" id="sim">SIMULATE STAFF REPLY</button>
+
+<!-- Launcher -->
+<div class="cchat-launch">
+	<button class="cchat-peek" id="peek" hidden>
+		<b id="peekWho">Ama · Support</b>
+		<span id="peekText">Your visa documents are approved — check the checklist.</span>
+		<span class="cchat-peek__x" id="peekX">✕</span>
+	</button>
+	<button class="cchat-fab" id="fab" aria-label="Open chat">
+		<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+			stroke-width="2" stroke-linecap="square" stroke-linejoin="miter">
+			<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+		</svg>
+		<span class="cchat-fab__badge" id="fabBadge" hidden>3</span>
+	</button>
+</div>
+
+<!-- Window -->
+<div class="cchat-win" id="win" hidden>
+
+	<!-- Header: in list mode it's the hub identity; in thread mode, the party -->
+	<header class="cchat-win__head">
+		<button class="backbtn" id="back" hidden>← MESSAGES</button>
+		<span class="cchat-ava" id="headAva">CN</span>
+		<div class="cchat-win__who">
+			<p class="cchat-win__name" id="headName">Messages</p>
+			<p class="cchat-win__sub" id="headSub">Support · your officer · Century AI</p>
+		</div>
+		<div class="cchat-win__ctl">
+			<button title="Minimize">—</button>
+			<button title="Expand" id="xl">⤢</button>
+			<button title="Close" id="close">✕</button>
+		</div>
+	</header>
+
+	<!-- LIST PANE -->
+	<div class="inbox" id="list">
+		<p class="band">NEEDS YOUR REPLY</p>
+
+		<button class="row" data-thread="visa">
+			<span class="row__ava">AS</span>
+			<span class="row__body">
+				<span class="row__top">
+					<span class="row__name row__name--unread">REQ-2026-0042 · Visa documents</span>
+					<span class="row__time">2m</span>
+				</span>
+				<span class="row__prev row__prev--unread">Ama: Your police clearance is approved — one document left…</span>
+				<span class="row__meta">
+					<span class="tag tag--wait">WAITING ON YOU</span>
+					<span class="tag">VISA</span>
+					<span class="unread-n">3</span>
+				</span>
+			</span>
+		</button>
+
+		<p class="band">OPEN</p>
+
+		<button class="row" data-thread="officer">
+			<span class="row__ava">EK</span>
+			<span class="row__body">
+				<span class="row__top">
+					<span class="row__name row__name--unread">Ekow · Visa officer</span>
+					<span class="row__time">18m</span>
+				</span>
+				<span class="row__prev row__prev--unread">Ekow: I've submitted your file to the embassy queue.</span>
+				<span class="row__meta">
+					<span class="tag">OFFICER</span>
+					<span class="tag">STAGE: VISA</span>
+					<span class="unread-n">1</span>
+				</span>
+			</span>
+		</button>
+
+		<button class="row" data-thread="pay">
+			<span class="row__ava">CS</span>
+			<span class="row__body">
+				<span class="row__top">
+					<span class="row__name">REQ-2026-0039 · Payment plan</span>
+					<span class="row__time">1h</span>
+				</span>
+				<span class="row__prev">You: Can I split the second instalment?</span>
+				<span class="row__meta">
+					<span class="tag">PAYMENT</span>
+					<span class="tag">WITH DESK</span>
+				</span>
+			</span>
+		</button>
+
+		<p class="band">ALWAYS ON</p>
+
+		<button class="row" data-thread="ai">
+			<span class="row__ava row__ava--ai">AI</span>
+			<span class="row__body">
+				<span class="row__top">
+					<span class="row__name">Century AI</span>
+					<span class="row__time">now</span>
+				</span>
+				<span class="row__prev">Instant answers — knows your journey stage.</span>
+				<span class="row__meta"><span class="tag">ASSISTANT</span></span>
+			</span>
+		</button>
+
+		<p class="band">RESOLVED</p>
+
+		<button class="row" data-thread="old" style="opacity:.6">
+			<span class="row__ava">CS</span>
+			<span class="row__body">
+				<span class="row__top">
+					<span class="row__name">REQ-2026-0031 · Account access</span>
+					<span class="row__time">Sep 14</span>
+				</span>
+				<span class="row__prev">Resolved Sep 14 · rated 👍</span>
+				<span class="row__meta"><span class="tag tag--res">RESOLVED</span></span>
+			</span>
+		</button>
+	</div>
+	<button class="newbtn" id="newreq">+ NEW REQUEST</button>
+
+	<!-- THREAD PANE -->
+	<div class="thread" id="thread">
+		<div class="msg msg--me">
+			<div class="msg__who">YOU</div>
+			Hi — uploading my police clearance now, is the format ok?
+			<div class="msg__time">14:02</div>
+		</div>
+		<div class="newline">NEW MESSAGES</div>
+		<div class="msg msg--them">
+			<div class="msg__who">AMA · SUPPORT</div>
+			Yes, PDF is perfect. Received and verified.
+			<div class="msg__time">14:31</div>
+		</div>
+		<div class="msg msg--them">
+			<div class="msg__who">AMA · SUPPORT</div>
+			Your police clearance is approved — one document left on the checklist: the bank statement.
+			<div class="msg__time">14:32</div>
+		</div>
+		<div class="msg msg--them">
+			<div class="msg__who">AMA · SUPPORT</div>
+			Once that's in, Ekow submits your file to the embassy queue 🎉
+			<div class="msg__time">14:33</div>
+		</div>
+	</div>
+	<div class="composer" id="composer">
+		<input placeholder="Type a message…" />
+		<button>SEND</button>
+	</div>
+</div>
+
+<script>
+	const fab = document.getElementById("fab");
+	const badge = document.getElementById("fabBadge");
+	const peek = document.getElementById("peek");
+	const win = document.getElementById("win");
+	const list = document.getElementById("list");
+	const newbtn = document.getElementById("newreq");
+	const thread = document.getElementById("thread");
+	const composer = document.getElementById("composer");
+	const back = document.getElementById("back");
+	const headAva = document.getElementById("headAva");
+	const headName = document.getElementById("headName");
+	const headSub = document.getElementById("headSub");
+
+	let unread = 3;
+	const names = {
+		visa: ["AS", "REQ-2026-0042 · Visa documents", "Ama · Support desk · open"],
+		officer: ["EK", "Ekow · Visa officer", "● online · Visa stage · Accra"],
+		pay: ["CS", "REQ-2026-0039 · Payment plan", "Support desk · waiting on desk"],
+		ai: ["AI", "Century AI", "Instant · knows your journey stage"],
+		old: ["CS", "REQ-2026-0031 · Account access", "Resolved Sep 14"],
+	};
+
+	function setBadge(n) {
+		unread = n;
+		badge.hidden = n <= 0;
+		badge.textContent = n;
+	}
+	setBadge(3);
+
+	fab.onclick = () => {
+		if (!win.hidden) { win.hidden = true; return; }
+		win.hidden = false;
+		peek.hidden = true;
+		showList();
+	};
+	document.getElementById("close").onclick = () => (win.hidden = true);
+	document.getElementById("xl").onclick = () => win.classList.toggle("cchat-win--xl");
+	document.getElementById("peekX").onclick = (e) => { e.stopPropagation(); peek.hidden = true; };
+	peek.onclick = () => { win.hidden = false; peek.hidden = true; showList(); };
+
+	function showList() {
+		list.hidden = false; newbtn.hidden = false;
+		thread.style.display = "none"; composer.style.display = "none";
+		back.hidden = true;
+		headAva.textContent = "CN"; headAva.classList.remove("cchat-ava--ai");
+		headName.textContent = "Messages";
+		headSub.textContent = "Support · your officer · Century AI";
+	}
+	function showThread(key) {
+		const [ini, name, sub] = names[key];
+		list.hidden = true; newbtn.hidden = true;
+		thread.style.display = "flex"; composer.style.display = "flex";
+		back.hidden = false;
+		headAva.textContent = ini;
+		headAva.classList.toggle("cchat-ava--ai", key === "ai");
+		headName.textContent = name;
+		headSub.textContent = sub;
+		setBadge(Math.max(0, unread - 3)); // opened thread clears its unread
+	}
+	document.querySelectorAll(".row").forEach(r =>
+		r.addEventListener("click", () => showThread(r.dataset.thread)));
+	back.onclick = showList;
+
+	// Simulated inbound staff message
+	document.getElementById("sim").onclick = () => {
+		setBadge(unread + 1);
+		if (win.hidden) {
+			peek.hidden = false;
+			fab.classList.remove("cchat-fab--pulse");
+			void fab.offsetWidth;
+			fab.classList.add("cchat-fab--pulse");
+		}
+	};
+</script>
+</body>
+</html>

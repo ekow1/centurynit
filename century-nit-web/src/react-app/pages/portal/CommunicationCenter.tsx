@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { meApi } from "century-nit-core";
-import type { CommunicationContext, ChatMessage, QuotedMessage } from "century-nit-shared";
+import type { CommunicationContext, ChatConversation, ChatMessage, QuotedMessage } from "century-nit-shared";
 import {
 	ensureChatUiStyles,
 	MessageList,
@@ -31,8 +31,8 @@ import { useAppState } from "../../context/AppState";
 
 type ActiveChannel = "ai" | "support" | "officer";
 
-/** Pane inside the window: the thread, the request list, or new-request intake. */
-type PaneView = "chat" | "requests" | "new-request";
+/** Pane inside the window: the inbox list is home; chat/new-request drill in. */
+type PaneView = "list" | "chat" | "new-request";
 
 const REQUEST_CATEGORIES: { key: string; label: string }[] = [
 	{ key: "payment", label: "Payment" },
@@ -85,7 +85,7 @@ export function CommunicationCenter() {
 		return () => window.removeEventListener("century:open-chat", openChat);
 	}, []);
 	const [activeChannel, setActiveChannel] = useState<ActiveChannel>("ai");
-	const [pane, setPane] = useState<PaneView>("chat");
+	const [pane, setPane] = useState<PaneView>("list");
 	const [context, setContext] = useState<CommunicationContext | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
@@ -169,7 +169,8 @@ export function CommunicationCenter() {
 
 	// Peek card: the last inbound staff message floats above the launcher
 	// while the window is closed. Dismissed ids are remembered for the session.
-	const [peek, setPeek] = useState<{ id: string; who: string; text: string } | null>(null);
+	// Clicking it opens the thread it came from, not just the widget.
+	const [peek, setPeek] = useState<{ id: string; convId: string | null; who: string; text: string } | null>(null);
 	const peekDismissed = useRef<Set<string>>(new Set());
 
 	useChatStream(useCallback((ev) => {
@@ -179,13 +180,16 @@ export function CommunicationCenter() {
 		if (!open) {
 			void loadContext();
 			if (!peekDismissed.current.has(m.id)) {
-				setPeek({ id: m.id, who: m.senderName ?? "Century NIT", text: m.content });
+				setPeek({ id: m.id, convId: ev.conversationId ?? null, who: m.senderName ?? "Century NIT", text: m.content });
 			}
 			// Amber pulse for ~3s so a fresh reply is visible even with the peek dismissed.
 			setPulse(true);
 			setTimeout(() => setPulse(false), 3200);
+		} else if (pane === "list") {
+			// Sitting on the inbox — a new message should re-band/rebadge the row now.
+			void loadContext();
 		}
-	}, [open, loadContext]));
+	}, [open, pane, loadContext]));
 
 	useEffect(() => {
 		if (open) setPeek(null);
@@ -224,39 +228,56 @@ export function CommunicationCenter() {
 		() => context?.conversations.reduce((sum, c) => sum + c.unreadCount, 0) ?? 0,
 		[context],
 	);
-	// Per-channel badges: support threads type "support"; the officer's thread is
-	// the stage/case/applicant thread — everything that isn't the support desk.
-	const channelUnread = useMemo(() => {
-		const convs = context?.conversations ?? [];
-		return {
-			support: convs.filter((c) => c.type === "support").reduce((s, c) => s + c.unreadCount, 0),
-			officer: convs.filter((c) => c.type !== "support").reduce((s, c) => s + c.unreadCount, 0),
-		};
-	}, [context]);
-
 	const officer = useMemo(() => officerCard(context), [context]);
 	const isOfficerAssigned = officer !== null;
 
-	/* Requests = the client's support threads, banded by who owes the next move.
-	   Case/stage threads are "case conversations" — they're infrastructure, not
-	   requests, but the applicant should still reach them after the stage moves on. */
-	const requestLists = useMemo(() => {
-		const convs = context?.conversations ?? [];
-		const requests = convs.filter((c) => c.type === "support" && c.audience !== "internal");
+	/* The inbox: every client-facing conversation in one list, newest activity
+	   first, banded by who owes the next move. An unread thread always sits in
+	   NEEDS YOUR REPLY regardless of its request status — the badge means the
+	   ball is with the applicant. */
+	const inboxBands = useMemo(() => {
+		const convs = (context?.conversations ?? []).filter((c) => c.audience !== "internal");
+		const sorted = [...convs].sort(
+			(a, b) =>
+				new Date(b.lastMessageAt ?? b.updatedAt).getTime() -
+				new Date(a.lastMessageAt ?? a.updatedAt).getTime(),
+		);
 		return {
-			waiting: requests.filter((c) => c.status === "open" && c.waitingOn === "client"),
-			open: requests.filter((c) => c.status === "open" && c.waitingOn !== "client"),
-			resolved: requests.filter((c) => c.status !== "open"),
-			caseThreads: convs.filter((c) => c.type !== "support" && c.audience !== "internal"),
+			waiting: sorted.filter((c) => c.status === "open" && (c.waitingOn === "client" || c.unreadCount > 0)),
+			open: sorted.filter((c) => c.status === "open" && c.waitingOn !== "client" && c.unreadCount === 0),
+			resolved: sorted.filter((c) => c.status !== "open"),
 		};
 	}, [context]);
 
-	/* Open a request (or a past case thread) inside the window. */
+	/* Read-cursor marker: the unread count at the moment a thread was opened.
+	   The divider sits above the first of those trailing inbound messages. */
+	const [unreadSeed, setUnreadSeed] = useState<{ convId: string; count: number } | null>(null);
+	const seedUnread = useCallback(
+		(convId: string) => {
+			const conv = context?.conversations.find((c) => c.id === convId);
+			setUnreadSeed({ convId, count: conv?.unreadCount ?? 0 });
+		},
+		[context],
+	);
+	const firstUnreadId = useMemo(() => {
+		if (!unreadSeed || unreadSeed.convId !== chat.conversationId || unreadSeed.count <= 0) return null;
+		let remaining = unreadSeed.count;
+		for (let i = chat.messages.length - 1; i >= 0; i--) {
+			const m = chat.messages[i];
+			if (m.senderOpsUserId == null || m.deletedAt) continue;
+			remaining -= 1;
+			if (remaining === 0) return m.id;
+		}
+		return chat.messages[0]?.id ?? null;
+	}, [unreadSeed, chat.conversationId, chat.messages]);
+
+	/* Open a thread inside the window — the rightful session for any row. */
 	const openThread = useCallback(async (convId: string, type: string) => {
 		setPane("chat");
 		setActiveChannel(type === "support" ? "support" : "officer");
+		seedUnread(convId);
 		await chat.openConversation(convId);
-	}, [chat]);
+	}, [chat, seedUnread]);
 
 	/* New-request intake — same window, one POST. */
 	const submitRequest = useCallback(async () => {
@@ -328,7 +349,7 @@ export function CommunicationCenter() {
 		return seen?.name ?? null;
 	}, [context, chat.conversationId, chat.messages]);
 
-	/* Switch channel */
+	/* Switch channel — the direct-line rows route to (or create) their thread. */
 	const handleSelectChannel = useCallback(async (channel: ActiveChannel) => {
 		setActiveChannel(channel);
 		setPane("chat");
@@ -337,49 +358,60 @@ export function CommunicationCenter() {
 		setDraft("");
 
 		if (channel === "support") {
-			await chat.route();
+			const id = await chat.route();
+			if (id) seedUnread(id);
 		} else if (channel === "officer") {
 			if (!context || !isOfficerAssigned) return;
-			await chat.route({ stageKey: context.activeStageKey ?? undefined });
+			const id = await chat.route({ stageKey: context.activeStageKey ?? undefined });
+			if (id) seedUnread(id);
 		}
-	}, [chat, context, isOfficerAssigned]);
+	}, [chat, context, isOfficerAssigned, seedUnread]);
 
-	// Initialize default support conversation on first open of the support tab
+	// Initialize the support conversation when a routed support view opens empty.
 	useEffect(() => {
 		if (open && activeChannel === "support" && !chat.conversationId && pane === "chat") {
 			void handleSelectChannel("support");
 		}
 	}, [open, activeChannel, chat.conversationId, pane, handleSelectChannel]);
 
-	// Opening the launcher picks the channel that needs attention: an unread
-	// officer thread wins over support, and AI is the default when nothing
-	// is waiting — the AI answers instantly, the desk takes a while.
+	// Opening the launcher lands on the inbox — the list itself shows which
+	// thread needs attention (unread pill + WAITING ON YOU band).
 	const openLauncher = useCallback(() => {
 		setOpen((prev) => {
 			if (prev) return false;
-			if (channelUnread.officer > 0) void handleSelectChannel("officer");
-			else if (channelUnread.support > 0) void handleSelectChannel("support");
-			else void handleSelectChannel("ai");
+			setPane("list");
 			return true;
 		});
-	}, [channelUnread, handleSelectChannel]);
+	}, []);
 
 	useEffect(() => {
 		const handler = (e: CustomEvent<{ channel?: ActiveChannel }>) => {
 			setOpen(true);
 			if (e.detail?.channel) {
 				void handleSelectChannel(e.detail.channel);
+			} else {
+				setPane("list");
 			}
 		};
 		window.addEventListener("open-chat", handler as EventListener);
 		return () => window.removeEventListener("open-chat", handler as EventListener);
 	}, [handleSelectChannel]);
 
+	// Unread count rides the browser tab title — `(3) Century NIT — …`. Reads
+	// the live title each run so a late-arriving brand title isn't clobbered;
+	// our own "(n) " prefix is stripped before re-prepending.
+	useEffect(() => {
+		const base = document.title.replace(/^\(\d+\)\s*/, "");
+		document.title = totalUnread > 0 ? `(${totalUnread}) ${base}` : base;
+		return () => {
+			document.title = document.title.replace(/^\(\d+\)\s*/, "");
+		};
+	}, [totalUnread]);
+
 	// Notification deep links land on /portal/home?chat=<conversationId>
 	// (there is no /portal/support page). The param is consumed so a later
 	// refresh doesn't force the widget back open.
 	const [searchParams, setSearchParams] = useSearchParams();
-	const openConversation = chat.openConversation;
 	useEffect(() => {
 		const target = searchParams.get("chat");
 		if (!target) return;
@@ -394,11 +426,10 @@ export function CommunicationCenter() {
 		} else if (target === "open" || target === "support") {
 			void handleSelectChannel("support");
 		} else {
-			setActiveChannel("support");
-			setPane("chat");
-			void openConversation(target);
+			const conv = context?.conversations.find((c) => c.id === target);
+			void openThread(target, conv?.type ?? "support");
 		}
-	}, [searchParams, setSearchParams, handleSelectChannel, openConversation]);
+	}, [searchParams, setSearchParams, handleSelectChannel, openThread, context]);
 
 	/* Send message (support + officer) */
 	const handleSend = useCallback(async (text: string) => {
@@ -531,24 +562,117 @@ export function CommunicationCenter() {
 
 	const officerFirstName = officer?.name.split(" ")[0] ?? "your officer";
 
+	/* Inbox row helpers — avatar initials, relative time, one row per thread. */
+	const convAvatar = (c: ChatConversation): string => {
+		const owner = c.participants.find((p) => p.role === "owner");
+		const src = owner?.name ?? (c.type === "support" ? "Century Support" : (c.subject ?? c.title));
+		const ini = src.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+		return ini || "··";
+	};
+
+	const relTime = (iso?: string | null): string => {
+		if (!iso) return "";
+		const t = new Date(iso).getTime();
+		const diff = Date.now() - t;
+		if (!Number.isFinite(diff) || diff < 0) return "";
+		if (diff < 60_000) return "now";
+		if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m`;
+		if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h`;
+		if (diff < 7 * 86_400_000) return `${Math.floor(diff / 86_400_000)}d`;
+		return new Date(t).toLocaleDateString([], { month: "short", day: "numeric" });
+	};
+
+	const renderConvRow = (c: ChatConversation, dimmed = false) => {
+		const unread = c.unreadCount > 0;
+		const preview = c.lastMessage
+			? c.lastMessage.deletedAt
+				? "Message deleted"
+				: `${c.lastMessage.senderOpsUserId != null ? (c.lastMessage.senderName ?? "Desk") : "You"}: ${c.lastMessage.content}`
+			: "No messages yet";
+		return (
+			<button
+				key={c.id}
+				type="button"
+				style={{ ...reqRowStyle, opacity: dimmed ? 0.6 : 1, flexDirection: "row", gap: "8px", alignItems: "flex-start", textAlign: "left" }}
+				onClick={() => void openThread(c.id, c.type)}
+			>
+				<span style={rowAvaStyle}>{convAvatar(c)}</span>
+				<span style={{ flex: 1, minWidth: 0 }}>
+					<span style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
+						<span
+							style={{
+								...reqSubjectStyle,
+								flex: 1,
+								minWidth: 0,
+								overflow: "hidden",
+								textOverflow: "ellipsis",
+								whiteSpace: "nowrap",
+								fontWeight: unread ? 800 : 600,
+							}}
+						>
+							{c.subject ?? c.title}
+						</span>
+						<span style={rowTimeStyle}>{relTime(c.lastMessageAt ?? c.updatedAt)}</span>
+					</span>
+					<span
+						style={{
+							...reqMetaStyle,
+							display: "block",
+							overflow: "hidden",
+							textOverflow: "ellipsis",
+							whiteSpace: "nowrap",
+							...(unread ? { color: "#000000", fontWeight: 600 } : {}),
+						}}
+					>
+						{preview}
+					</span>
+					<span style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "3px" }}>
+						{c.status === "open" && c.waitingOn === "client" && <span style={rowTagWaitStyle}>WAITING ON YOU</span>}
+						{c.status !== "open" && <span style={rowTagStyle}>RESOLVED</span>}
+						{(c.category ?? c.type) && <span style={rowTagStyle}>{(c.category ?? c.type).toUpperCase()}</span>}
+						{unread && <span style={unreadPillStyle}>{c.unreadCount}</span>}
+					</span>
+				</span>
+			</button>
+		);
+	};
+
 	const officerPresence =
 		officer?.presence && officer.presence !== "offline"
 			? `● ${officer.presence === "available" ? "online" : officer.presence.replace("_", " ")}`
 			: null;
 
+	// The thread currently open, looked up in the context list for its
+	// subject/reference/status — the header names the thread, not the channel.
+	const activeConv = useMemo(
+		() => context?.conversations.find((c) => c.id === chat.conversationId) ?? null,
+		[context, chat.conversationId],
+	);
+
 	const headMeta =
-		activeChannel === "support"
-			? { ini: "CS", name: "Century Support", sub: "Desk open · replies within the hour", ai: false }
-			: activeChannel === "officer"
-				? {
-						ini: (officer?.name ?? "··").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase(),
-						name: officer?.name ?? "Assigned officer",
-						sub: officer
-							? `${officerPresence ? `${officerPresence} · ` : ""}${officer.availabilityNote ?? officer.role ?? "Officer"}${officer.branch ? ` · ${officer.branch}` : ""}`
-							: "Being assigned",
-						ai: false,
-					}
-				: { ini: "AI", name: "Century AI", sub: "Instant · knows your journey stage", ai: true };
+		pane === "list"
+			? { ini: "CN", name: "Messages", sub: "Support · your officer · Century AI", ai: false }
+			: pane === "new-request"
+				? { ini: "CS", name: "New request", sub: "Straight to the support desk", ai: false }
+				: activeChannel === "ai"
+					? { ini: "AI", name: "Century AI", sub: "Instant · knows your journey stage", ai: true }
+					: activeChannel === "support"
+						? {
+								ini: "CS",
+								name: activeConv?.subject ?? "Century Support",
+								sub: activeConv?.reference
+									? `${activeConv.reference} · ${activeConv.status}`
+									: "Desk open · replies within the hour",
+								ai: false,
+							}
+						: {
+								ini: (activeConv?.title ?? officer?.name ?? "··").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase(),
+								name: activeConv?.title ?? officer?.name ?? "Assigned officer",
+								sub: officer
+									? `${officerPresence ? `${officerPresence} · ` : ""}${officer.availabilityNote ?? officer.role ?? "Officer"}${officer.branch ? ` · ${officer.branch}` : ""}`
+									: "Being assigned",
+								ai: false,
+							};
 
 	return (
 		<>
@@ -569,7 +693,15 @@ export function CommunicationCenter() {
 					<button
 						type="button"
 						className="cchat-peek"
-						onClick={() => setOpen(true)}
+						onClick={() => {
+							setOpen(true);
+							if (peek.convId) {
+								const c = context?.conversations.find((x) => x.id === peek.convId);
+								void openThread(peek.convId, c?.type ?? "support");
+							} else {
+								setPane("list");
+							}
+						}}
 					>
 						<b>{peek.who}</b>
 						{peek.text.slice(0, 90)}{peek.text.length > 90 ? "…" : ""}
@@ -631,8 +763,29 @@ export function CommunicationCenter() {
 			{/* Floating Hub Window */}
 			{open && (
 				<div className={`cchat-win cn-chat${expanded ? " cchat-win--xl" : ""}`}>
-					{/* Header = who you're talking to, not the word "chat" */}
+					{/* Header: the inbox identity on the list; back + party in a thread */}
 					<header className="cchat-win__head">
+						{pane !== "list" && (
+							<button
+								type="button"
+								onClick={() => setPane("list")}
+								title="All conversations"
+								aria-label="Back to messages"
+								style={{
+									border: "none",
+									background: "none",
+									cursor: "pointer",
+									fontSize: "10px",
+									fontWeight: 700,
+									fontFamily: "var(--font-mono, monospace)",
+									letterSpacing: "0.08em",
+									color: "var(--foreground, #000)",
+									padding: "0 6px 0 0",
+								}}
+							>
+								←
+							</button>
+						)}
 						<span className={`cchat-ava${headMeta.ai ? " cchat-ava--ai" : ""}`}>{headMeta.ini}</span>
 						<div className="cchat-win__who">
 							<p className="cchat-win__name">{headMeta.name}</p>
@@ -667,54 +820,26 @@ export function CommunicationCenter() {
 						</div>
 					</header>
 
-					{/* Channel tabs carry their own unread counts — AI first:
-					    instant answers, then the desk, then your officer. */}
-					<nav className="cchat-tabs" aria-label="Chat channels">
-						<button
-							type="button"
-							onClick={() => handleSelectChannel("ai")}
-							className={activeChannel === "ai" ? "on" : ""}
-						>
-							AI
-						</button>
-						<button
-							type="button"
-							onClick={() => handleSelectChannel("support")}
-							className={activeChannel === "support" ? "on" : ""}
-						>
-							Support
-							{channelUnread.support > 0 && <span className="u">{channelUnread.support}</span>}
-						</button>
-						<button
-							type="button"
-							onClick={() => handleSelectChannel("officer")}
-							className={activeChannel === "officer" ? "on" : ""}
-						>
-							{officer ? officer.name.split(" ")[0] : "Officer"}
-							{channelUnread.officer > 0 && <span className="u">{channelUnread.officer}</span>}
-						</button>
-					</nav>
-
-					{/* Context strip: what this thread is for, right now. On support
-					    it doubles as the requests-pane toggle — the portal has no
-					    standalone help page, the list lives inside the window. */}
+					{/* Context strip: what this pane is for, right now. */}
 					<div className="cchat-strip">
 						<span>
-							{activeChannel === "support"
-								? pane === "chat"
-									? "Triage queue · your file is attached automatically"
-									: "Your requests"
-								: activeChannel === "officer"
-									? `${officer?.stageLabel ?? "Officer"} · direct thread`.toUpperCase()
-									: `Context: ${journeyPhase.label}${pendingAction ? ` · ${pendingAction.title}` : ""}`.toUpperCase()}
+							{pane === "list"
+								? "ALL CONVERSATIONS"
+								: pane === "new-request"
+									? "NEW REQUEST"
+									: activeChannel === "support"
+										? (activeConv?.waitingOn === "client" ? "WAITING ON YOUR REPLY" : "SUPPORT THREAD")
+										: activeChannel === "officer"
+											? `${officer?.stageLabel ?? activeConv?.title ?? "Officer"} · direct thread`.toUpperCase()
+											: `Context: ${journeyPhase.label}${pendingAction ? ` · ${pendingAction.title}` : ""}`.toUpperCase()}
 						</span>
-						{activeChannel === "support" && (
+						{pane === "chat" && activeChannel === "support" && (
 							<button
 								type="button"
 								className="cchat-strip__link"
-								onClick={() => setPane(pane === "chat" ? "requests" : "chat")}
+								onClick={() => setPane("new-request")}
 							>
-								{pane === "chat" ? "All requests ▾" : "← Back"}
+								+ New request
 							</button>
 						)}
 					</div>
@@ -729,64 +854,63 @@ export function CommunicationCenter() {
 
 					{/* Body */}
 					<div style={bodyStyle}>
-						{/* Requests pane — bands by who owes the next move. */}
-						{pane === "requests" && (
+						{/* Inbox — every conversation in one list, banded by who owes
+						    the next move. A row opens the rightful session. */}
+						{pane === "list" && (
 							<div style={streamContainerStyle}>
 								<div style={reqListStyle}>
-									{requestLists.waiting.length > 0 && (
+									<p style={reqBandStyle}>DIRECT LINES</p>
+									<button
+										type="button"
+										style={{ ...reqRowStyle, flexDirection: "row", gap: "8px", alignItems: "flex-start", textAlign: "left" }}
+										onClick={() => void handleSelectChannel("ai")}
+									>
+										<span style={{ ...rowAvaStyle, background: "#000000", color: "#ffffff" }}>AI</span>
+										<span style={{ flex: 1, minWidth: 0 }}>
+											<span style={reqSubjectStyle}>Century AI</span>
+											<span style={{ ...reqMetaStyle, display: "block" }}>
+												Instant answers — knows your journey stage
+											</span>
+										</span>
+									</button>
+									{isOfficerAssigned && (
+										<button
+											type="button"
+											style={{ ...reqRowStyle, flexDirection: "row", gap: "8px", alignItems: "flex-start", textAlign: "left" }}
+											onClick={() => void handleSelectChannel("officer")}
+										>
+											<span style={rowAvaStyle}>
+												{(officer?.name ?? "··").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
+											</span>
+											<span style={{ flex: 1, minWidth: 0 }}>
+												<span style={reqSubjectStyle}>{officer?.name ?? "Assigned officer"}</span>
+												<span style={{ ...reqMetaStyle, display: "block" }}>
+													{officerPresence ?? officer?.role ?? "Officer"} · {officer?.stageLabel ?? "your stage"}
+												</span>
+											</span>
+										</button>
+									)}
+									{inboxBands.waiting.length > 0 && (
 										<>
-											<p style={reqBandStyle}>WAITING ON YOU</p>
-											{requestLists.waiting.map((c) => (
-												<button key={c.id} type="button" style={reqRowStyle} onClick={() => void openThread(c.id, c.type)}>
-													<span style={reqSubjectStyle}>{c.subject ?? c.title}</span>
-													<span style={reqMetaStyle}>
-														{c.reference ? `${c.reference} · ` : ""}{(c.category ?? "other").toUpperCase()} · {c.lastMessage?.senderName ?? "desk"} replied · needs your reply
-													</span>
-												</button>
-											))}
+											<p style={reqBandStyle}>NEEDS YOUR REPLY</p>
+											{inboxBands.waiting.map((c) => renderConvRow(c))}
 										</>
 									)}
-									{requestLists.open.length > 0 && (
+									{inboxBands.open.length > 0 && (
 										<>
 											<p style={reqBandStyle}>OPEN</p>
-											{requestLists.open.map((c) => (
-												<button key={c.id} type="button" style={reqRowStyle} onClick={() => void openThread(c.id, c.type)}>
-													<span style={reqSubjectStyle}>{c.subject ?? c.title}</span>
-													<span style={reqMetaStyle}>
-														{c.reference ? `${c.reference} · ` : ""}{(c.category ?? "other").toUpperCase()}
-														{c.participants.find((p) => p.role === "owner") ? ` · with ${c.participants.find((p) => p.role === "owner")!.name.split(" ")[0]}` : " · desk queue"}
-													</span>
-												</button>
-											))}
+											{inboxBands.open.map((c) => renderConvRow(c))}
 										</>
 									)}
-									{requestLists.resolved.length > 0 && (
+									{inboxBands.resolved.length > 0 && (
 										<>
 											<p style={reqBandStyle}>RESOLVED</p>
-											{requestLists.resolved.map((c) => (
-												<button key={c.id} type="button" style={{ ...reqRowStyle, opacity: 0.6 }} onClick={() => void openThread(c.id, c.type)}>
-													<span style={reqSubjectStyle}>{c.subject ?? c.title}</span>
-													<span style={reqMetaStyle}>
-														{c.reference ? `${c.reference} · ` : ""}{(c.category ?? "other").toUpperCase()} · resolved{c.resolvedAt ? ` ${new Date(c.resolvedAt).toLocaleDateString()}` : ""}
-													</span>
-												</button>
-											))}
+											{inboxBands.resolved.map((c) => renderConvRow(c, true))}
 										</>
 									)}
-									{requestLists.caseThreads.length > 0 && (
-										<>
-											<p style={reqBandStyle}>CASE CONVERSATIONS</p>
-											{requestLists.caseThreads.map((c) => (
-												<button key={c.id} type="button" style={{ ...reqRowStyle, opacity: 0.75 }} onClick={() => void openThread(c.id, c.type)}>
-													<span style={reqSubjectStyle}>{c.title}</span>
-													<span style={reqMetaStyle}>{c.type.toUpperCase()} · {c.status}</span>
-												</button>
-											))}
-										</>
-									)}
-									{requestLists.waiting.length + requestLists.open.length + requestLists.resolved.length + requestLists.caseThreads.length === 0 && (
+									{inboxBands.waiting.length + inboxBands.open.length + inboxBands.resolved.length === 0 && (
 										<p style={{ fontSize: "11px", color: "#52525b", textAlign: "center", padding: "24px 12px" }}>
-											No requests yet — start one below, or just message the desk.
+											No conversations yet — message the desk below, or ask the AI above.
 										</p>
 									)}
 								</div>
@@ -879,7 +1003,7 @@ export function CommunicationCenter() {
 
 						{/* Support + Officer channels. Shared components */}
 						{pane === "chat" && (activeChannel === "support" || activeChannel === "officer") && (
-							activeChannel === "officer" && !isOfficerAssigned ? (
+							activeChannel === "officer" && !isOfficerAssigned && !chat.conversationId ? (
 								<div style={unassignedStateStyle}>
 									<div style={{ fontSize: "12px", fontWeight: 700, color: "#000000", marginBottom: "8px", letterSpacing: "0.04em" }}>
 										CONSULTANT BEING ASSIGNED
@@ -903,6 +1027,7 @@ export function CommunicationCenter() {
 										typing={chat.typing}
 										isOwn={isOwn}
 										bubbleProps={bubbleProps}
+										unreadFromId={firstUnreadId}
 										header={
 											chat.loading && chat.messages.length === 0 ? (
 												<div style={{ textAlign: "center", color: "var(--cn-chat-muted-fg)", fontSize: 12, padding: 16 }}>
@@ -1383,6 +1508,58 @@ const reqMetaStyle: CSSProperties = {
 	fontFamily: "monospace",
 	letterSpacing: "0.04em",
 	color: "#71717a",
+};
+
+const rowAvaStyle: CSSProperties = {
+	width: "30px",
+	height: "30px",
+	flex: "none",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	border: "1.5px solid #000000",
+	background: "#f4f4f5",
+	fontSize: "10px",
+	fontWeight: 700,
+};
+
+const rowTimeStyle: CSSProperties = {
+	fontSize: "9px",
+	fontFamily: "monospace",
+	color: "#a1a1aa",
+	flex: "none",
+};
+
+const rowTagStyle: CSSProperties = {
+	fontSize: "8px",
+	fontWeight: 700,
+	fontFamily: "monospace",
+	letterSpacing: "0.08em",
+	padding: "1px 4px",
+	border: "1px solid #d4d4d8",
+	color: "#71717a",
+};
+
+const rowTagWaitStyle: CSSProperties = {
+	...rowTagStyle,
+	background: "var(--accent, #b45309)",
+	borderColor: "var(--accent, #b45309)",
+	color: "#ffffff",
+};
+
+const unreadPillStyle: CSSProperties = {
+	marginLeft: "auto",
+	minWidth: "16px",
+	height: "16px",
+	padding: "0 4px",
+	background: "var(--bad, #b91c1c)",
+	color: "#ffffff",
+	fontSize: "9px",
+	fontWeight: 700,
+	fontFamily: "monospace",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
 };
 
 const reqNewBtnStyle: CSSProperties = {

@@ -161,12 +161,12 @@ export function OpsLogin() {
 							body:
 								mfaMethod === "email_otp" ? (
 									<>
-										It lands at <strong>{maskedWho}</strong> and expires shortly — check
+										It lands at <strong>{maskedWho}</strong> and expires shortly. Check
 										spam if it hasn't arrived.
 									</>
 								) : (
 									<>
-										It refreshes every 30 seconds — a <strong>backup code</strong> works in
+										It refreshes every 30 seconds. A <strong>backup code</strong> works in
 										place of the app. Lost the device entirely? A manager resets MFA from
 										Administration → Authentication → MFA roster.
 									</>
@@ -176,11 +176,11 @@ export function OpsLogin() {
 					: {
 							chip: "Staff only",
 							label: "Sign in",
-							title: <>Every case, queue and ledger — behind <em>two factors</em>.</>,
+							title: <>Every case, queue and ledger. Behind <em>two factors</em>.</>,
 							body: (
 								<>
 									Credentials only; there is no social sign-in on the console. Staff accounts
-									are created by invitation — <strong>ask your manager</strong> if you don't
+									are created by invitation. <strong>Ask your manager</strong> if you don't
 									have one.
 								</>
 							),
@@ -189,7 +189,7 @@ export function OpsLogin() {
 			card={
 				twoFactorRequired
 					? {
-							barLeft: `${maskedWho} — verify`,
+							barLeft: `${maskedWho} · verify`,
 							barRight: mfaMethod === "email_otp" ? "Email code" : "Authenticator · TOTP",
 							foot: (
 								<>
@@ -256,7 +256,7 @@ export function OpsLogin() {
 									: "Sending you a verification code…"
 								: useBackupCode
 									? "Enter one of your single-use backup codes."
-									: "From your authenticator app — Century NIT Ops."}
+									: "From your authenticator app, under Century NIT Ops."}
 						</p>
 					</div>
 
@@ -269,7 +269,7 @@ export function OpsLogin() {
 										<span>Logged</span>
 									</div>
 									<div className="ops-lockbox__body">
-										{error} A manager can unlock you from Authentication → Events — or
+										{error} A manager can unlock you from Authentication → Events, or
 										wait it out.
 									</div>
 								</div>
@@ -322,7 +322,7 @@ export function OpsLogin() {
 								onChange={(e) => setTrustDevice(e.target.checked)}
 								disabled={loading}
 							/>
-							Trust this device — 30 days
+							Trust this device for 30 days
 						</label>
 					</form>
 				</>
@@ -332,7 +332,7 @@ export function OpsLogin() {
 						<p className="ops-login__eyebrow">Welcome back</p>
 						<h1 className="ops-login__title">Sign in</h1>
 						<p className="ops-login__subtitle">
-							Your staff credentials — the same email and password on file.
+							Your staff credentials. The same email and password on file.
 						</p>
 					</div>
 
@@ -345,7 +345,7 @@ export function OpsLogin() {
 										<span>Logged</span>
 									</div>
 									<div className="ops-lockbox__body">
-										{error} A manager can unlock you from Authentication → Events — or
+										{error} A manager can unlock you from Authentication → Events, or
 										wait it out.
 									</div>
 								</div>

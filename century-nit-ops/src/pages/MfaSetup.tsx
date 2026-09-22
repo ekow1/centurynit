@@ -51,7 +51,7 @@ type Step =
 const METHOD_META: Record<string, { name: string; desc: string; icon: string }> = {
 	totp: {
 		name: "Authenticator App",
-		desc: "Google Authenticator, Authy, 1Password — scan a QR code",
+		desc: "Google Authenticator, Authy, 1Password. Scan a QR code",
 		icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2" /><line x1="12" y1="18" x2="12.01" y2="18" /></svg>',
 	},
 	email_otp: {
@@ -249,14 +249,14 @@ export function MfaSetup() {
 
 	function downloadCodes() {
 		const body = [
-			"Century NIT — Operations Center",
+			"Century NIT · Operations Center",
 			"Two-factor backup codes",
 			`Account: ${opsUser?.email ?? ""}`,
 			"",
 			...backupCodes,
 			"",
 			"Each code works once, in place of your authenticator.",
-			"Keep them somewhere safe — they are never shown again.",
+			"Keep them somewhere safe. They are never shown again.",
 		].join("\n");
 		const url = URL.createObjectURL(new Blob([body], { type: "text/plain" }));
 		const a = document.createElement("a");
@@ -321,14 +321,14 @@ export function MfaSetup() {
 					step === "manage" ? (
 						<>Your account already carries <em>two factors</em>.</>
 					) : step === "done" ? (
-						<>Two-factor is <em>on</em> — you're covered.</>
+						<>Two-factor is <em>on</em>. You're covered.</>
 					) : (
-						<>No skip — every staff account carries <em>two factors</em>.</>
+						<>No skip. Every staff account carries <em>two factors</em>.</>
 					),
 				body:
 					step === "manage" || step === "method" ? (
 						<>
-							An authenticator app is the stronger option — codes work offline and can't be
+							An authenticator app is the stronger option. Codes work offline and can't be
 							intercepted. Email codes are the fallback for shared or restricted devices.
 						</>
 					) : step === "totp-codes" ? (
@@ -343,9 +343,9 @@ export function MfaSetup() {
 			}}
 			card={{
 				barLeft:
-					step === "manage" ? `${who} — enrolled`
+					step === "manage" ? `${who} · enrolled`
 					: step === "method" ? "Choose a method"
-					: step === "done" ? `${who} — enrolled`
+					: step === "done" ? `${who} · enrolled`
 					: `Authenticator setup`,
 				barRight,
 				wide: step === "totp-scan" || step === "totp-codes",
@@ -461,7 +461,7 @@ export function MfaSetup() {
 					<p className="ops-login__eyebrow">Add your authenticator</p>
 					<h1 className="ops-login__title">Confirm your password</h1>
 					<p className="invite-card__body">
-						Pairing a new factor is sensitive — prove it's you first.
+						Pairing a new factor is sensitive. Prove it's you first.
 					</p>
 					<form className="ops-login__form" onSubmit={beginTotp}>
 						<PasswordField
@@ -490,7 +490,7 @@ export function MfaSetup() {
 				<>
 					<p className="ops-login__eyebrow">Add your authenticator</p>
 					<h1 className="ops-login__title">Scan with your app</h1>
-					<p className="invite-card__body">Camera on the code — or type the key on the right.</p>
+					<p className="invite-card__body">Camera on the code, or type the key on the right.</p>
 					<div className="mfa-enrol">
 						<div className="mfa-qr-frame">
 							{qrDataUrl ? (

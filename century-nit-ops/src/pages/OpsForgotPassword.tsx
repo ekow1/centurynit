@@ -114,7 +114,7 @@ export function OpsForgotPassword() {
 				),
 			}}
 			card={{
-				barLeft: sent ? `${email} — sent` : "Console access",
+				barLeft: sent ? `${email} · sent` : "Console access",
 				barRight: "Recovery",
 				foot: (
 					<>

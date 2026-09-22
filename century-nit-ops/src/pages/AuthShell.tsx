@@ -7,7 +7,7 @@ import { publicSiteUrl } from "../lib/publicSite";
  * Aside (dark): wordmark + screen chip on top, ONE context block in the
  * middle (a statement or a stepper — never feature marketing), a ruled
  * footer. Stage (paper): a thin bar carrying the screen's position, then
- * a hard-bordered card with an amber rule on top and a footer strip for
+ * the bare form column — no card, no box — with a ruled foot strip for
  * secondary actions.
  */
 
@@ -103,10 +103,7 @@ export function AuthShell({
 				</div>
 				<div className="ops-login__stage">
 					<div className={`ops-login__cardframe${card?.wide ? " ops-login__cardframe--wide" : ""}`}>
-						<div className="ops-login__cardrule" />
-						<div className="ops-login__cardinner">
-							<div className="ops-login__card">{children}</div>
-						</div>
+						<div className="ops-login__card">{children}</div>
 						{card?.foot ? <div className="ops-login__cardfoot">{card.foot}</div> : null}
 					</div>
 				</div>

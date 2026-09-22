@@ -150,7 +150,7 @@ export function MfaChallenge() {
 				body:
 					method === "email_otp" ? (
 						<>
-							It lands at <strong>{maskedWho}</strong> and expires shortly — check spam if
+							It lands at <strong>{maskedWho}</strong> and expires shortly. Check spam if
 							it hasn't arrived.
 						</>
 					) : (
@@ -162,7 +162,7 @@ export function MfaChallenge() {
 				footLeft: maskedWho,
 			}}
 			card={{
-				barLeft: `${maskedWho} — verify`,
+				barLeft: `${maskedWho} · verify`,
 				barRight: method === "email_otp" ? "Email code" : "Authenticator · TOTP",
 				foot: (
 					<>
@@ -195,7 +195,7 @@ export function MfaChallenge() {
 						? otpSent
 							? `A 6-digit code went to ${maskedWho}.`
 							: "Sending you a verification code…"
-						: "From your authenticator app — Century NIT Ops."}
+						: "From your authenticator app, under Century NIT Ops."}
 				</p>
 			</div>
 

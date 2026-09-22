@@ -36,7 +36,7 @@ const FAILURE_COPY: Record<string, { title: string; body: string }> = {
 	},
 	INVITATION_ALREADY_ACCEPTED: {
 		title: "This invitation has already been used",
-		body: "Your account exists — sign in with the password you chose. If that was not you, contact your administrator.",
+		body: "Your account exists. Sign in with the password you chose. If that was not you, contact your administrator.",
 	},
 	INVITATION_INVALID: {
 		title: "This invitation link is not valid",
@@ -147,7 +147,7 @@ export function AcceptInvite() {
 					chip: "Invitation",
 					label: "Invitation",
 					title: <>This link can't be used.</>,
-					body: "Invitations are single-use and expire after seven days — whoever invited you can send a fresh one from the staff directory.",
+					body: "Invitations are single-use and expire after seven days. Whoever invited you can send a fresh one from the staff directory.",
 					footLeft: "Wrong link? Close the tab",
 					footRight: "Audited",
 				}}
@@ -227,8 +227,8 @@ export function AcceptInvite() {
 				</h1>
 				<p className="ops-login__subtitle">
 					{preview?.hasExistingLogin
-						? "This email already has a login — confirm the password you already use."
-						: "One password, then two-factor — the account activates when both are done."}
+						? "This email already has a login. Confirm the password you already use."
+						: "One password, then two-factor. The account activates when both are done."}
 				</p>
 			</div>
 
@@ -257,7 +257,7 @@ export function AcceptInvite() {
 					hint={
 						preview?.hasExistingLogin
 							? "This email already has a login. Enter the password you already use."
-							: `At least ${PASSWORD_MIN_LENGTH} characters. Nobody else — including whoever invited you — ever sees it.`
+							: `At least ${PASSWORD_MIN_LENGTH} characters. Nobody else, including whoever invited you, ever sees it.`
 					}
 				/>
 				<PasswordField

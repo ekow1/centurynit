@@ -921,25 +921,16 @@
 	padding: 2rem 2.4rem;
 }
 
+/* The form sits bare on the stage — no card box, no background, no shadow.
+   One sizing system: 46px inputs, 46px full-width primary, 400px column. */
+
 .ops-login__cardframe {
 	width: 100%;
 	max-width: 400px;
-	background: #fff;
-	border: 1px solid var(--foreground);
-	box-shadow: 8px 8px 0 rgba(23, 22, 26, 0.06);
 }
 
 .ops-login__cardframe--wide {
-	max-width: 460px;
-}
-
-.ops-login__cardrule {
-	height: 3px;
-	background: var(--auth-amber);
-}
-
-.ops-login__cardinner {
-	padding: 1.7rem 1.8rem 1.4rem;
+	max-width: 560px;
 }
 
 .ops-login__card {
@@ -954,8 +945,10 @@
 	justify-content: space-between;
 	align-items: center;
 	gap: 0.75rem;
+	flex-wrap: wrap;
 	border-top: 1px solid var(--auth-line);
-	padding: 0.8rem 1.8rem;
+	margin-top: 1.35rem;
+	padding-top: 1rem;
 	font-family: var(--font-mono);
 	font-size: 0.62rem;
 	color: var(--muted-foreground);
@@ -1145,18 +1138,18 @@
 
 .ops-login__input {
 	width: 100%;
-	padding: 0.8rem 0.9rem;
-	border: 1px solid var(--border-light);
-	background: var(--background);
+	height: 46px;
+	padding: 0 0.9rem;
+	border: 1px solid var(--foreground);
+	background: var(--card);
 	font-family: var(--font-body);
 	font-size: var(--text-base);
 	outline: none;
-	transition: border-color var(--t-instant);
+	transition: box-shadow var(--t-instant);
 }
 
 .ops-login__input:focus {
-	border-color: var(--foreground);
-	box-shadow: inset 0 0 0 1px var(--foreground);
+	box-shadow: inset 0 0 0 2px var(--auth-amber);
 }
 
 .ops-login__error {
@@ -1173,13 +1166,13 @@
 
 .ops-otp {
 	display: flex;
-	gap: 0.55rem;
-	justify-content: center;
+	gap: 0.5rem;
 }
 
 .ops-otp__cell {
-	width: 42px;
-	height: 52px;
+	flex: 1;
+	width: auto;
+	height: 54px;
 	border: 1px solid var(--foreground);
 	background: #fff;
 	font-family: var(--font-mono);
@@ -1332,8 +1325,18 @@
 	justify-content: center;
 	gap: 0.5rem;
 	width: 100%;
-	padding: 0.85rem;
+	height: 46px;
+	padding: 0;
 	font-size: var(--text-sm);
+	border-top: 3px solid var(--auth-amber) !important;
+}
+
+/* Every non-small primary inside an auth form shares the same height and
+   amber top edge — the accent always sits on the action */
+
+.ops-login__card .btn--primary:not(.btn--sm) {
+	min-height: 46px;
+	border-top: 3px solid var(--auth-amber);
 }
 
 .ops-login__back {

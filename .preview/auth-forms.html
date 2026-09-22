@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ops auth · form consistency pass</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; border-radius: 0 !important; }
+  :root {
+    --ink: #18181b; --ink-60: #52525b; --ink-40: #a1a1aa;
+    --paper: #f5f4f0; --card: #fbfaf7;
+    --line: #d8d4c9; --line-soft: #e7e4db;
+    --amber: #b97a10; --amber-ink: #8a5a0a; --amber-bg: #fdf6e7;
+    --red: #b91c1c; --red-bg: #fef2f2;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    --serif: Georgia, "Times New Roman", serif;
+    --sans: -apple-system, "Segoe UI", Interf, sans-serif;
+    /* ── the single sizing system every form shares ── */
+    --f-label: 10px;      /* mono uppercase label */
+    --f-input-h: 46px;    /* every text input, everywhere */
+    --f-btn-h: 46px;      /* every primary button */
+    --f-gap: 18px;        /* field-to-field gap */
+    --f-title: 30px;      /* serif form title */
+    --f-lead: 13.5px;     /* lead line under the title */
+    --f-col: 400px;       /* form column width on the stage */
+  }
+  body { font-family: var(--sans); color: var(--ink); background: var(--paper); }
+  .mono { font-family: var(--mono); }
+
+  /* ══ frame ══ */
+  .screen { display: flex; min-height: 100vh; }
+  .aside {
+    flex: 0 0 42%; background: var(--ink); color: var(--paper);
+    display: flex; flex-direction: column; padding: 40px 48px;
+    position: relative; overflow: hidden;
+  }
+  .aside::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background:
+      linear-gradient(to right, rgba(255,255,255,.045) 1px, transparent 1px) 0 0 / 72px 100%,
+      linear-gradient(to bottom, rgba(255,255,255,.045) 1px, transparent 1px) 0 0 / 100% 72px;
+  }
+  .aside-top { display: flex; justify-content: space-between; align-items: flex-start; position: relative; }
+  .word { font-family: var(--serif); font-size: 22px; letter-spacing: -.01em; color: var(--paper); text-decoration: none; }
+  .word b { color: var(--amber); font-weight: 400; }
+  .chip {
+    font-family: var(--mono); font-size: 9px; font-weight: 800; letter-spacing: .14em;
+    text-transform: uppercase; border: 1px solid rgba(255,255,255,.35); padding: 5px 10px;
+  }
+  .aside-mid { margin: auto 0; position: relative; }
+  .statement { font-family: var(--serif); font-size: clamp(24px, 2.4vw, 34px); line-height: 1.28; letter-spacing: -.01em; }
+  .statement em { color: var(--amber); font-style: normal; }
+  .aside-sub { margin-top: 16px; font-size: 12.5px; line-height: 1.6; color: rgba(245,244,240,.55); max-width: 34ch; }
+  .stepper { margin-top: 26px; border-top: 1px solid rgba(255,255,255,.18); }
+  .stepper div { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.12); font-size: 12px; align-items: baseline; }
+  .stepper .n { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; color: rgba(245,244,240,.4); width: 18px; }
+  .stepper .on { color: var(--amber); font-weight: 700; }
+  .stepper .done { color: rgba(245,244,240,.45); }
+  .stepper .done .n::after { content: " ✓"; color: var(--amber); }
+  .aside-foot { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: rgba(245,244,240,.4); border-top: 1px solid rgba(255,255,255,.18); padding-top: 16px; position: relative; }
+
+  .stage { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .stage-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0 48px; height: 44px; border-bottom: 1px solid var(--line-soft);
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-60);
+    flex-shrink: 0;
+  }
+  .stage-body { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 48px; }
+
+  /* ══ the form — no card, no box, no background. just the form. ══ */
+  .form { width: 100%; max-width: var(--f-col); }
+  .form--wide { max-width: 560px; }
+
+  .who {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid var(--line); padding: 6px 10px; margin-bottom: 20px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  }
+  .who i { width: 7px; height: 7px; background: var(--amber); display: inline-block; }
+  .eyebrow { font-family: var(--mono); font-size: var(--f-label); font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--amber-ink); margin-bottom: 10px; }
+  .title { font-family: var(--serif); font-size: var(--f-title); letter-spacing: -.02em; line-height: 1.15; margin-bottom: 10px; }
+  .lead { font-size: var(--f-lead); line-height: 1.55; color: var(--ink-60); margin-bottom: 28px; max-width: 44ch; }
+
+  .field { margin-bottom: var(--f-gap); }
+  .field label { display: block; font-family: var(--mono); font-size: var(--f-label); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-60); margin-bottom: 7px; }
+  .input {
+    width: 100%; height: var(--f-input-h); border: 1px solid var(--ink);
+    background: var(--card); padding: 0 14px; font-size: 14px; font-family: inherit; color: var(--ink);
+  }
+  .input::placeholder { color: var(--ink-40); }
+  .input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--amber); }
+  .hint { margin-top: 6px; font-size: 11px; color: var(--ink-40); }
+  .meta { display: flex; justify-content: space-between; align-items: center; margin: -6px 0 20px; font-size: 11.5px; }
+  .meta label { display: flex; align-items: center; gap: 7px; color: var(--ink-60); cursor: pointer; }
+  .meta input[type=checkbox] { width: 13px; height: 13px; accent-color: var(--ink); }
+  .link { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--ink); font-size: 11.5px; }
+  .link:hover { color: var(--amber-ink); border-color: var(--amber); }
+
+  .primary {
+    width: 100%; height: var(--f-btn-h); border: 1px solid var(--ink);
+    background: var(--ink); color: var(--paper); font-size: 13px; font-weight: 650;
+    font-family: inherit; cursor: pointer; letter-spacing: .02em;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .primary:hover { background: #000; }
+  .primary--amber { border-top: 3px solid var(--amber); }
+  .ghost {
+    width: 100%; height: var(--f-btn-h); border: 1px solid var(--ink);
+    background: transparent; color: var(--ink); font-size: 13px; font-weight: 600;
+    font-family: inherit; cursor: pointer;
+  }
+  .ghost:hover { background: var(--card); }
+
+  .foot { display: flex; justify-content: space-between; gap: 14px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line-soft); flex-wrap: wrap; }
+  .foot .link { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+
+  /* OTP cells — same height system */
+  .otp { display: flex; gap: 8px; margin-bottom: var(--f-gap); }
+  .otp input {
+    width: 100%; height: 54px; border: 1px solid var(--ink); background: var(--card);
+    font-family: var(--mono); font-size: 22px; font-weight: 700; text-align: center; color: var(--ink);
+  }
+  .otp input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--amber); }
+  .otp input.filled { background: var(--ink); color: var(--paper); }
+
+  /* state banners + boxes — same 1px ink, tinted paper */
+  .banner { border: 1px solid var(--red); background: var(--red-bg); color: var(--red); padding: 12px 14px; font-size: 12.5px; margin-bottom: 22px; }
+  .lock { border: 1px solid var(--ink); border-top: 3px solid var(--red); background: var(--card); padding: 22px; margin-bottom: 22px; }
+  .lock .big { font-family: var(--mono); font-size: 34px; font-weight: 800; letter-spacing: .04em; margin: 6px 0 4px; }
+  .warn { border: 1px dashed var(--amber); background: var(--amber-bg); color: var(--amber-ink); padding: 12px 14px; font-size: 12px; margin-bottom: 20px; }
+
+  /* setup scan: qr + key side by side */
+  .scan { display: flex; gap: 24px; align-items: stretch; margin-bottom: var(--f-gap); }
+  .qr { width: 168px; height: 168px; border: 1px solid var(--ink); background: var(--card); flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center; }
+  .qr svg { display: block; }
+  .keycol { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+  .keybox { border: 1px solid var(--line); background: var(--card); padding: 12px 14px; font-family: var(--mono); font-size: 15px; letter-spacing: .14em; word-break: break-all; }
+  .keycap { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-40); margin-bottom: 6px; }
+
+  /* codes deliverable */
+  .codes { border: 1px solid var(--ink); background: var(--card); margin-bottom: var(--f-gap); }
+  .codes div { display: flex; justify-content: space-between; padding: 9px 14px; border-bottom: 1px solid var(--line-soft); font-family: var(--mono); font-size: 12.5px; }
+  .codes div:last-child { border-bottom: none; }
+  .codes div span:first-child { color: var(--ink-60); }
+  .btnrow { display: flex; gap: 10px; margin-bottom: var(--f-gap); }
+  .btnrow .ghost { flex: 1; }
+
+  /* rules list on invite */
+  .rules { margin: 4px 0 20px; }
+  .rules div { font-size: 12px; color: var(--ink-60); padding: 3px 0; }
+  .rules div::before { content: "□ "; font-family: var(--mono); }
+  .rules .ok { color: #166534; }
+  .rules .ok::before { content: "■ "; color: #166534; }
+
+  /* ══ mock page chrome ══ */
+  .mockhead { padding: 26px 40px; border-bottom: 2px solid var(--ink); display: flex; justify-content: space-between; align-items: baseline; }
+  .mockhead h1 { font-family: var(--serif); font-size: 22px; }
+  .mockhead span { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-60); }
+  .sec { padding: 40px; border-bottom: 1px solid var(--line); }
+  .sec > h2 { font-family: var(--mono); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--amber-ink); margin-bottom: 6px; }
+  .sec > p { font-size: 12px; color: var(--ink-60); margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 40px 48px; align-items: start; }
+  .cell > .cap { font-family: var(--mono); font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-40); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .cell .form { max-width: var(--f-col); }
+  .cell .form--wide { max-width: 560px; }
+  .cell .title { font-size: 22px; }
+  .cell .lead { font-size: 12.5px; margin-bottom: 20px; }
+  @media (max-width: 900px) { .screen { flex-direction: column; } .aside { flex: none; } }
+</style>
+</head>
+<body>
+
+<div class="mockhead">
+  <h1>Ops auth · form consistency</h1>
+  <span>v2 · bare form · one sizing system · no em dashes</span>
+</div>
+
+<!-- ═══ 1 · the full screen: sign-in ═══ -->
+<div class="screen">
+  <aside class="aside">
+    <div class="aside-top">
+      <a class="word" href="#">Century <b>NIT</b></a>
+      <span class="chip">Staff only</span>
+    </div>
+    <div class="aside-mid">
+      <p class="statement">Every case, queue and ledger. Behind <em>two factors</em>.</p>
+      <p class="aside-sub">Credentials alone are not enough. Staff accounts are invited, not self served.</p>
+    </div>
+    <div class="aside-foot"><span>Accra · Kumasi</span><span>Attempts audited</span></div>
+  </aside>
+  <main class="stage">
+    <div class="stage-bar"><span>Sign in</span><span>Step 1 of 2</span></div>
+    <div class="stage-body">
+      <div class="form">
+        <p class="eyebrow">Sign in</p>
+        <h2 class="title">Your work email</h2>
+        <p class="lead">Use the address your invitation was sent to. Personal accounts do not sign in here.</p>
+        <div class="field">
+          <label for="e1">Email</label>
+          <input id="e1" class="input" type="email" placeholder="name@centurynit.com">
+        </div>
+        <div class="field">
+          <label for="p1">Password</label>
+          <input id="p1" class="input" type="password" placeholder="••••••••••">
+        </div>
+        <div class="meta">
+          <label><input type="checkbox"> Remember this device</label>
+          <a class="link" href="#">Forgot password</a>
+        </div>
+        <button class="primary primary--amber">Continue →</button>
+        <div class="foot">
+          <a class="link" href="#">Locked out</a>
+          <a class="link" href="#">Contact your manager</a>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══ 1b · invite accept — aside carries "joining as" + stepper ═══ -->
+<div class="screen" style="border-top:2px solid var(--ink)">
+  <aside class="aside">
+    <div class="aside-top">
+      <a class="word" href="#">Century <b>NIT</b></a>
+      <span class="chip">Invitation</span>
+    </div>
+    <div class="aside-mid">
+      <p class="eyebrow" style="color:var(--amber); margin-bottom:14px">You're joining as</p>
+      <p class="statement" style="font-size:22px">ekowfirmino@<em>hotmail.com</em></p>
+      <p class="aside-sub" style="margin-top:8px">Manager · Accra<br>Century NIT Operations · link expires Sep 29</p>
+      <div class="stepper">
+        <div class="done"><span class="n">01</span>Invitation accepted</div>
+        <div class="on"><span class="n">02</span>Set your password</div>
+        <div><span class="n">03</span>Set up two factor</div>
+        <div><span class="n">04</span>You're in</div>
+      </div>
+    </div>
+    <div class="aside-foot"><span>Accra · Kumasi</span><span>Attempts audited</span></div>
+  </aside>
+  <main class="stage">
+    <div class="stage-bar"><span>ekowfirmino@hotmail.com · set password</span><span>Step 2 of 4</span></div>
+    <div class="stage-body">
+      <div class="form">
+        <p class="eyebrow">Step 2 · Password</p>
+        <h2 class="title">Choose a password</h2>
+        <p class="lead">For ekowfirmino@hotmail.com. The invitation expires in 2 days.</p>
+        <div class="field"><label>Password</label><input class="input" type="password" value="••••••••••••"></div>
+        <div class="field"><label>Repeat password</label><input class="input" type="password"></div>
+        <div class="rules">
+          <div class="ok">At least 10 characters</div>
+          <div class="ok">One uppercase letter</div>
+          <div>One number or symbol</div>
+        </div>
+        <button class="primary primary--amber">Set password →</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══ 1c · mfa setup — aside carries the stepper ═══ -->
+<div class="screen" style="border-top:2px solid var(--ink)">
+  <aside class="aside">
+    <div class="aside-top">
+      <a class="word" href="#">Century <b>NIT</b></a>
+      <span class="chip">Setup</span>
+    </div>
+    <div class="aside-mid">
+      <p class="statement" style="font-size:22px">Two factor is <em>required</em> for staff.</p>
+      <div class="stepper">
+        <div class="done"><span class="n">01</span>Confirm password</div>
+        <div class="on"><span class="n">02</span>Scan the code</div>
+        <div><span class="n">03</span>Verify first code</div>
+        <div><span class="n">04</span>Save backup codes</div>
+      </div>
+    </div>
+    <div class="aside-foot"><span>Accra · Kumasi</span><span>Attempts audited</span></div>
+  </aside>
+  <main class="stage">
+    <div class="stage-bar"><span>efua@centurynit.com · setup</span><span>Authenticator · TOTP</span></div>
+    <div class="stage-body">
+      <div class="form form--wide">
+        <span class="who"><i></i> efua@centurynit.com</span>
+        <p class="eyebrow">Step 2 · Scan</p>
+        <h2 class="title">Add to your authenticator</h2>
+        <p class="lead">Scan with your app, or type the key. Enrols as Century NIT Ops · efua@centurynit.com.</p>
+        <div class="scan">
+          <div class="qr">
+            <svg width="140" height="140" viewBox="0 0 29 29" shape-rendering="crispEdges"><rect width="29" height="29" fill="#fff"/><g fill="#18181b"><rect x="0" y="0" width="7" height="7"/><rect x="1" y="1" width="5" height="5" fill="#fff"/><rect x="2" y="2" width="3" height="3"/><rect x="22" y="0" width="7" height="7"/><rect x="23" y="1" width="5" height="5" fill="#fff"/><rect x="24" y="2" width="3" height="3"/><rect x="0" y="22" width="7" height="7"/><rect x="1" y="23" width="5" height="5" fill="#fff"/><rect x="2" y="24" width="3" height="3"/><rect x="9" y="2" width="2" height="2"/><rect x="13" y="0" width="2" height="2"/><rect x="17" y="2" width="2" height="2"/><rect x="10" y="6" width="2" height="2"/><rect x="16" y="6" width="2" height="2"/><rect x="2" y="10" width="2" height="2"/><rect x="6" y="11" width="2" height="2"/><rect x="11" y="9" width="2" height="2"/><rect x="15" y="11" width="2" height="2"/><rect x="20" y="9" width="2" height="2"/><rect x="24" y="10" width="2" height="2"/><rect x="27" y="12" width="2" height="2"/><rect x="1" y="15" width="2" height="2"/><rect x="5" y="14" width="2" height="2"/><rect x="9" y="15" width="2" height="2"/><rect x="13" y="13" width="2" height="2"/><rect x="18" y="15" width="2" height="2"/><rect x="22" y="14" width="2" height="2"/><rect x="26" y="16" width="2" height="2"/><rect x="3" y="18" width="2" height="2"/><rect x="8" y="19" width="2" height="2"/><rect x="12" y="17" width="2" height="2"/><rect x="16" y="19" width="2" height="2"/><rect x="21" y="18" width="2" height="2"/><rect x="25" y="19" width="2" height="2"/><rect x="10" y="22" width="2" height="2"/><rect x="14" y="24" width="2" height="2"/><rect x="19" y="22" width="2" height="2"/><rect x="23" y="24" width="2" height="2"/><rect x="27" y="25" width="2" height="2"/><rect x="9" y="26" width="2" height="2"/><rect x="12" y="26" width="2" height="2"/><rect x="16" y="27" width="2" height="2"/><rect x="20" y="26" width="2" height="2"/></g></svg>
+          </div>
+          <div class="keycol">
+            <p class="keycap">Manual key</p>
+            <div class="keybox">JBSW Y3DP EHPK 3PXP</div>
+            <p class="hint">Authenticator app · Settings · Enter a setup key</p>
+          </div>
+        </div>
+        <button class="primary primary--amber">I have scanned it →</button>
+        <div class="foot"><a class="link">Use email codes instead</a></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══ 2 · every form, same column, same system ═══ -->
+<section class="sec">
+  <h2>All nine forms · identical column, field height, button</h2>
+  <p>One system: 46px inputs, 46px full width primary, 10px mono labels, 18px field gaps, 400px column (560px when the form needs width). Nothing sits in a box.</p>
+  <div class="grid">
+
+    <div class="cell">
+      <p class="cap">01 · Sign in</p>
+      <div class="form">
+        <p class="eyebrow">Sign in</p>
+        <h3 class="title">Your work email</h3>
+        <p class="lead">Use the address your invitation was sent to.</p>
+        <div class="field"><label>Email</label><input class="input" placeholder="name@centurynit.com"></div>
+        <div class="field"><label>Password</label><input class="input" type="password" placeholder="••••••••••"></div>
+        <div class="meta"><label><input type="checkbox"> Remember device</label><a class="link">Forgot password</a></div>
+        <button class="primary primary--amber">Continue →</button>
+        <div class="foot"><a class="link">Locked out</a><a class="link">Manager</a></div>
+      </div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">02 · MFA · authenticator</p>
+      <div class="form">
+        <span class="who"><i></i> efua@centurynit.com</span>
+        <p class="eyebrow">Two factor</p>
+        <h3 class="title">Enter the code</h3>
+        <p class="lead">Six digits from your authenticator, under Century NIT Ops.</p>
+        <div class="otp">
+          <input value="4" class="filled"><input value="8" class="filled"><input value="1" class="filled"><input><input><input>
+        </div>
+        <div class="meta"><label><input type="checkbox"> Trust this device for 30 days</label></div>
+        <button class="primary primary--amber">Verify →</button>
+        <div class="foot"><a class="link">Backup code</a><a class="link">Email a code</a><a class="link">Back</a></div>
+      </div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">03 · MFA · email variant</p>
+      <div class="form">
+        <span class="who"><i></i> e···@centurynit.com</span>
+        <p class="eyebrow">Two factor</p>
+        <h3 class="title">Check your inbox</h3>
+        <p class="lead">We sent six digits to your email. The code expires in 10 minutes.</p>
+        <div class="otp">
+          <input><input><input><input><input><input>
+        </div>
+        <div class="meta"><label><input type="checkbox"> Trust this device for 30 days</label><a class="link">Resend · 42s</a></div>
+        <button class="primary primary--amber">Verify →</button>
+        <div class="foot"><a class="link">Backup code</a><a class="link">Use authenticator</a><a class="link">Back</a></div>
+      </div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">04 · MFA · locked</p>
+      <div class="form">
+        <span class="who"><i></i> efua@centurynit.com</span>
+        <p class="eyebrow">Locked</p>
+        <h3 class="title">Too many tries</h3>
+        <div class="lock">
+          <p class="keycap">Try again in</p>
+          <p class="big">09:41</p>
+          <p class="hint" style="margin-top:0">Five failed attempts. The counter resets on its own.</p>
+        </div>
+        <button class="ghost">Use a backup code</button>
+        <div class="foot"><a class="link">Reset by email</a><a class="link">Contact manager</a></div>
+      </div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">05 · Setup · scan</p>
+      <div class="form form--wide">
+        <span class="who"><i></i> efua@centurynit.com</span>
+        <p class="eyebrow">Step 2 · Scan</p>
+        <h3 class="title">Add to your authenticator</h3>
+        <p class="lead">Scan with your app, or type the key. Enrols as Century NIT Ops · efua@centurynit.com.</p>
+        <div class="scan">
+          <div class="qr">
+            <svg width="140" height="140" viewBox="0 0 29 29" shape-rendering="crispEdges"><rect width="29" height="29" fill="#fff"/><g fill="#18181b"><rect x="0" y="0" width="7" height="7"/><rect x="1" y="1" width="5" height="5" fill="#fff"/><rect x="2" y="2" width="3" height="3"/><rect x="22" y="0" width="7" height="7"/><rect x="23" y="1" width="5" height="5" fill="#fff"/><rect x="24" y="2" width="3" height="3"/><rect x="0" y="22" width="7" height="7"/><rect x="1" y="23" width="5" height="5" fill="#fff"/><rect x="2" y="24" width="3" height="3"/><rect x="9" y="2" width="2" height="2"/><rect x="13" y="0" width="2" height="2"/><rect x="17" y="2" width="2" height="2"/><rect x="10" y="6" width="2" height="2"/><rect x="16" y="6" width="2" height="2"/><rect x="2" y="10" width="2" height="2"/><rect x="6" y="11" width="2" height="2"/><rect x="11" y="9" width="2" height="2"/><rect x="15" y="11" width="2" height="2"/><rect x="20" y="9" width="2" height="2"/><rect x="24" y="10" width="2" height="2"/><rect x="27" y="12" width="2" height="2"/><rect x="1" y="15" width="2" height="2"/><rect x="5" y="14" width="2" height="2"/><rect x="9" y="15" width="2" height="2"/><rect x="13" y="13" width="2" height="2"/><rect x="18" y="15" width="2" height="2"/><rect x="22" y="14" width="2" height="2"/><rect x="26" y="16" width="2" height="2"/><rect x="3" y="18" width="2" height="2"/><rect x="8" y="19" width="2" height="2"/><rect x="12" y="17" width="2" height="2"/><rect x="16" y="19" width="2" height="2"/><rect x="21" y="18" width="2" height="2"/><rect x="25" y="19" width="2" height="2"/><rect x="10" y="22" width="2" height="2"/><rect x="14" y="24" width="2" height="2"/><rect x="19" y="22" width="2" height="2"/><rect x="23" y="24" width="2" height="2"/><rect x="27" y="25" width="2" height="2"/><rect x="9" y="26" width="2" height="2"/><rect x="12" y="26" width="2" height="2"/><rect x="16" y="27" width="2" height="2"/><rect x="20" y="26" width="2" height="2"/></g></svg>
+          </div>
+          <div class="keycol">
+            <p class="keycap">Manual key</p>
+            <div class="keybox">JBSW Y3DP EHPK 3PXP</div>
+            <p class="hint">Authenticator app · Settings · Enter a setup key</p>
+          </div>
+        </div>
+        <button class="primary primary--amber">I have scanned it →</button>
+        <div class="foot"><a class="link">Use email codes instead</a></div>
+      </div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">06 · Setup · verify</p>
+      <div class="form">
+        <span class="who"><i></i> efua@centurynit.com</span>
+        <p class="eyebrow">Step 3 · Verify</p>
+        <h3 class="title">First code</h3>
+        <p class="lead">Type the six digits your app now shows for Century NIT Ops.</p>
+        <div class="otp">
+          <input><input><input><input><input><input>
+        </div>
+        <button class="primary primary--amber">Verify and finish →</button>
+        <div class="foot"><a class="link">Back to scan</a></div>
+      </div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">07 · Setup · backup codes</p>
+      <div class="form">
+        <p class="eyebrow">Step 4 · Codes</p>
+        <h3 class="title">Save these</h3>
+        <p class="lead">Each code works once, when you cannot reach your authenticator.</p>
+        <div class="warn">Store them somewhere outside this device. We cannot show them again.</div>
+        <div class="codes">
+          <div><span>01</span><span>k7f2 · 9dx4</span></div>
+          <div><span>02</span><span>q8m1 · 3vbn</span></div>
+          <div><span>03</span><span>z4p9 · 6hjk</span></div>
+          <div><span>04</span><span>w2t7 · 8cxs</span></div>
+          <div><span>05</span><span>n5r3 · 2qwm</span></div>
+          <div><span>06</span><span>b9k4 · 7fjd</span></div>
+        </div>
+        <div class="btnrow">
+          <button class="ghost">Copy all</button>
+          <button class="ghost">Download .txt</button>
+        </div>
+        <button class="primary primary--amber">Done →</button>
+      </div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">08 · Invite · set password</p>
+      <div class="form">
+        <span class="who"><i></i> joining as · Consultant · Accra</span>
+        <p class="eyebrow">Step 2 · Password</p>
+        <h3 class="title">Choose a password</h3>
+        <p class="lead">For e···@centurynit.com. Invitation expires in 2 days.</p>
+        <div class="field"><label>Password</label><input class="input" type="password" value="••••••••••••"></div>
+        <div class="field"><label>Repeat password</label><input class="input" type="password"></div>
+        <div class="rules">
+          <div class="ok">At least 10 characters</div>
+          <div class="ok">One uppercase letter</div>
+          <div>One number or symbol</div>
+        </div>
+        <button class="primary primary--amber">Set password →</button>
+      </div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">09 · Forgot password</p>
+      <div class="form">
+        <p class="eyebrow">Recovery</p>
+        <h3 class="title">Email a reset link</h3>
+        <p class="lead">We send a one time link to your work email. All sessions are signed out when you reset.</p>
+        <div class="field"><label>Email</label><input class="input" placeholder="name@centurynit.com"></div>
+        <button class="primary primary--amber">Send reset link →</button>
+        <div class="foot"><a class="link">Back to sign in</a></div>
+      </div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">10 · Reset password</p>
+      <div class="form">
+        <span class="who"><i></i> e···@centurynit.com</span>
+        <p class="eyebrow">Recovery</p>
+        <h3 class="title">New password</h3>
+        <p class="lead">This link works once. Resetting signs out every session.</p>
+        <div class="field"><label>New password</label><input class="input" type="password"></div>
+        <div class="field"><label>Repeat password</label><input class="input" type="password"></div>
+        <button class="primary primary--amber">Reset password →</button>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="sec">
+  <h2>What changed</h2>
+  <p style="max-width:70ch">
+    1 · The card is gone: no border, no paper background, no shadow around the form. The form sits directly on the stage, so the eye reads the column, not a box.<br><br>
+    2 · One sizing system across all nine forms: 46px input height, 46px full width primary, 10px mono uppercase labels, 18px field gaps, one 400px column (560px only for the QR scan row).<br><br>
+    3 · Em dashes removed from all copy. Separators are middle dots or sentence breaks.<br><br>
+    4 · No back to public site element anywhere. The wordmark stays the quiet way out.<br><br>
+    5 · The amber marker stays but moves to the top edge of the primary button, so accent and action always sit together.
+  </p>
+</section>
+
+</body>
+</html>

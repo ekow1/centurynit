@@ -66,7 +66,7 @@ export function OpsResetPassword() {
 				body: (
 					<>
 						This link works once. Saving a new password <strong>ends every other
-						session</strong> on this account — including this one.
+						session</strong> on this account, including this one.
 					</>
 				),
 			}}

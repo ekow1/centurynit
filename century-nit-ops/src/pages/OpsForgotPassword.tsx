@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, checkStaffEmail, requestPasswordReset } from "../lib/api";
-import { AuthShell, AuthContextCard } from "./AuthShell";
+import { AuthShell } from "./AuthShell";
 
 const MAIL_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>';
 const ARROW_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
@@ -100,16 +100,7 @@ export function OpsForgotPassword() {
 	}
 
 	return (
-		<AuthShell
-			context={
-				<AuthContextCard
-					title="Password reset"
-					fine={<>Only staff addresses receive a link —<br />the page won't confirm which exist.<br />Locked out of MFA too? Ask your manager.</>}
-				>
-					<p>A reset link goes to the address on the staff account. It expires shortly after it's sent.</p>
-				</AuthContextCard>
-			}
-		>
+		<AuthShell>
 			<div className="ops-login__head">
 				<h1 className="ops-login__title">Reset your password</h1>
 				<p className="ops-login__subtitle">

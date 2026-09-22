@@ -2,9 +2,8 @@ import { useNavigate, Navigate, Link } from "react-router-dom";
 import { useOpsAuth, ROLE_HOME } from "./OpsAuthContext";
 import { useState, useEffect } from "react";
 import { getPendingMfaMethod } from "../lib/api";
-import { AuthShell, AuthContextCard, maskEmail } from "./AuthShell";
+import { AuthShell } from "./AuthShell";
 import { PasswordField } from "./PasswordField";
-import { OtpInput } from "./OtpInput";
 
 const LOCK_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
 const MAIL_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>';
@@ -132,81 +131,56 @@ export function OpsLogin() {
 		}
 	}
 
-	const showOtpBoxes = mfaMethod === "email_otp" || !useBackupCode;
 	return (
-		<AuthShell
-			context={
-				twoFactorRequired ? (
-					<AuthContextCard
-						title="Two-factor check"
-						fine={<>Lost the device? A manager resets MFA from<br />Administration &rarr; Authentication &rarr; MFA roster.</>}
-					>
-						<p>
-							{mfaMethod === "email_otp"
-								? <>A 6-digit code was sent to <strong>{maskEmail(mfaEmail ?? email)}</strong>. It expires shortly.</>
-								: <>The code is in your authenticator app as <strong>Century NIT Ops &middot; {maskEmail(mfaEmail ?? email)}</strong>. It refreshes every 30 seconds.</>}
-						</p>
-					</AuthContextCard>
-				) : (
-					<AuthContextCard
-						title="Staff sign-in"
-						fine={<>No account? Staff are invited —<br />ask your manager for an invitation.</>}
-					>
-						<p>Credentials only — Google sign-in is off for staff accounts. Every account signs in with two factors.</p>
-					</AuthContextCard>
-				)
-			}
-			copy={twoFactorRequired ? "Sign-ins, failures and lockouts are audited." : undefined}
-		>
+		<AuthShell>
 			{twoFactorRequired ? (
 				<>
 					<div className="ops-login__head">
-						<span className="ops-login__badge">{mfaMethod === "email_otp" ? maskEmail(mfaEmail ?? email) : (mfaEmail ?? email)}</span>
-						<h1 className="ops-login__title">Verification code</h1>
+						<h1 className="ops-login__title">Two-Factor Authentication</h1>
 						<p className="ops-login__subtitle">
 							{mfaMethod === "email_otp"
 								? (otpSent
-									? `Enter the 6-digit code sent to ${maskEmail(mfaEmail ?? email)}.`
+									? `Enter the 6-digit code sent to ${mfaEmail ?? email}`
 									: "Sending you a verification code...")
 								: (useBackupCode
-									? "Enter one of your 10-character backup recovery codes."
-									: "From your authenticator app.")}
+									? "Enter one of your 10-character backup recovery codes"
+									: "Enter the current 6-digit code from your authenticator app")}
 						</p>
 					</div>
 
 					<form id="mfa-form" onSubmit={handleTwoFactorSubmit} className="ops-login__form">
-						{showOtpBoxes ? (
-							<OtpInput
+						<div className="ops-login__field">
+							<label className="ops-login__label">
+								<span dangerouslySetInnerHTML={{ __html: LOCK_SVG }} />
+								{mfaMethod === "email_otp"
+									? "Email Code"
+									: (useBackupCode ? "Backup Recovery Code" : "Authenticator Code")}
+							</label>
+							<input
+								type="text"
 								value={twoFactorCode}
-								onChange={(v) => {
+								onChange={(e) => {
 									if (error) setError(null);
-									setTwoFactorCode(v);
+									setTwoFactorCode(
+										(mfaMethod === "email_otp" || !useBackupCode)
+											? e.target.value.replace(/\D/g, "").slice(0, 6)
+											: e.target.value.trim(),
+									);
 								}}
+								placeholder={
+									mfaMethod === "email_otp"
+										? "000000"
+										: (useBackupCode ? "e.g. a1b2c3d4e5" : "000000")
+								}
+								inputMode={(mfaMethod === "email_otp" || !useBackupCode) ? "numeric" : "text"}
+								autoComplete="one-time-code"
+								pattern={(mfaMethod === "email_otp" || !useBackupCode) ? "[0-9]{6}" : undefined}
+								maxLength={mfaMethod === "email_otp" ? 6 : (useBackupCode ? 32 : 6)}
+								className="ops-login__input mono"
+								required
 								autoFocus
-								disabled={loading}
 							/>
-						) : (
-							<div className="ops-login__field">
-								<label className="ops-login__label">
-									<span dangerouslySetInnerHTML={{ __html: LOCK_SVG }} />
-									Backup Recovery Code
-								</label>
-								<input
-									type="text"
-									value={twoFactorCode}
-									onChange={(e) => {
-										if (error) setError(null);
-										setTwoFactorCode(e.target.value.trim());
-									}}
-									placeholder="e.g. a1b2c3d4e5"
-									autoComplete="one-time-code"
-									maxLength={32}
-									className="ops-login__input mono"
-									required
-									autoFocus
-								/>
-							</div>
-						)}
+						</div>
 
 						{error ? (
 							<p className="ops-login__error" role="alert">{error}</p>
@@ -227,7 +201,7 @@ export function OpsLogin() {
 							Trust this device for 30 days
 						</label>
 
-						<div className="ops-login__foot">
+						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "var(--text-xs)" }}>
 							{mfaMethod !== "email_otp" && (
 								<button
 									type="button"
@@ -236,9 +210,10 @@ export function OpsLogin() {
 										setTwoFactorCode("");
 										setError(null);
 									}}
-									className="ops-login__footlink"
+									className="btn btn--ghost btn--xs"
+									style={{ padding: "0.25rem 0.5rem" }}
 								>
-									{useBackupCode ? "Use authenticator app" : "Use a backup code"}
+									{useBackupCode ? "Use Authenticator App" : "Use a backup recovery code"}
 								</button>
 							)}
 							{mfaMethod === "email_otp" && (
@@ -255,7 +230,8 @@ export function OpsLogin() {
 											setError("Could not resend code");
 										}
 									}}
-									className="ops-login__footlink"
+									className="btn btn--ghost btn--xs"
+									style={{ padding: "0.25rem 0.5rem" }}
 								>
 									{resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
 								</button>
@@ -270,9 +246,10 @@ export function OpsLogin() {
 									setError(null);
 									setOtpSent(false);
 								}}
-								className="ops-login__footlink"
+								className="ops-login__back"
+								style={{ margin: 0, width: "auto" }}
 							>
-								Back
+								Back to login
 							</button>
 						</div>
 					</form>
@@ -319,14 +296,7 @@ export function OpsLogin() {
 									Forgot password?
 								</Link>
 							</div>
-							{error && /lock/i.test(error) ? (
-								<div className="ops-login__lock" role="alert">
-									<p className="ops-login__lock-title">Account locked</p>
-									<p className="ops-login__lock-body">
-										{error} Failed attempts are recorded with your IP and device — a manager can unlock you from Authentication &rarr; Events.
-									</p>
-								</div>
-							) : error ? (
+							{error ? (
 								<p className="ops-login__error" role="alert">{error}</p>
 							) : null}
 							<button type="submit" disabled={loading || !email || !password} className="btn btn--primary ops-login__submit">

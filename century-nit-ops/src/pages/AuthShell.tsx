@@ -7,64 +7,41 @@ import { publicSiteUrl } from "../lib/publicSite";
  * panel on the left, card on the right. Login, MFA challenge, MFA setup,
  * invite acceptance, forgot and reset all render inside this so a staff
  * member sees one continuous surface instead of five unrelated pages.
- *
- * The aside's middle slot is `context` — per-screen content that answers
- * "what is this screen, who is it for, who do I contact": a context card,
- * a stepper on multi-step flows, or nothing on the simplest screens.
  */
 
-export type AuthStep = { label: string; sub?: string; state: "done" | "on" | "todo" };
+const SHIELD_SVG =
+	'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
+const SEARCH_SVG =
+	'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
+const CHECK_SVG =
+	'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
 
-/** ama@centurynit.com → a***@centurynit.com — for "we sent a code" copy. */
-export function maskEmail(email: string | null | undefined): string {
-	if (!email) return "your email";
-	const at = email.indexOf("@");
-	if (at <= 0) return "***";
-	return `${email[0]}***${email.slice(at)}`;
-}
+export type AuthFeature = { icon: string; title: string; desc: string };
 
-export function AuthContextCard({
-	title,
-	children,
-	fine,
-}: {
-	title: string;
-	children: ReactNode;
-	fine?: ReactNode;
-}) {
-	return (
-		<div className="ops-login__ctx">
-			<p className="ops-login__ctx-title">{title}</p>
-			<div className="ops-login__ctx-body">{children}</div>
-			{fine ? <p className="ops-login__ctx-fine">{fine}</p> : null}
-		</div>
-	);
-}
-
-export function AuthStepper({ steps }: { steps: AuthStep[] }) {
-	return (
-		<div className="ops-login__steps">
-			{steps.map((s, i) => (
-				<div key={s.label} className={`ops-login__step ops-login__step--${s.state}`}>
-					<span className="ops-login__step-n">{s.state === "done" ? "✓" : i + 1}</span>
-					<span>
-						{s.label}
-						{s.sub ? <span className="ops-login__step-sub">{s.sub}</span> : null}
-					</span>
-				</div>
-			))}
-		</div>
-	);
-}
+const DEFAULT_FEATURES: AuthFeature[] = [
+	{
+		icon: SHIELD_SVG,
+		title: "Secure Access",
+		desc: "Role-based permissions across every module",
+	},
+	{
+		icon: SEARCH_SVG,
+		title: "Unified Workspace",
+		desc: "CRM, workflow, finance, and cases in one place",
+	},
+	{
+		icon: CHECK_SVG,
+		title: "Real-time Pipeline",
+		desc: "Track every application from lead to enrollment",
+	},
+];
 
 export function AuthShell({
 	children,
-	context,
-	copy,
+	features = DEFAULT_FEATURES,
 }: {
 	children: ReactNode;
-	context?: ReactNode;
-	copy?: ReactNode;
+	features?: AuthFeature[];
 }) {
 	return (
 		<div className="ops-login">
@@ -76,14 +53,25 @@ export function AuthShell({
 					<p className="ops-login__tagline">Operations Center</p>
 				</div>
 
-				{context ? <div className="ops-login__aside-mid">{context}</div> : <div />}
+				{features.length > 0 && (
+					<div className="ops-login__features">
+						{features.map((f) => (
+							<div className="ops-login__feature" key={f.title}>
+								<span
+									className="ops-login__feature-icon"
+									dangerouslySetInnerHTML={{ __html: f.icon }}
+								/>
+								<div>
+									<p className="ops-login__feature-title">{f.title}</p>
+									<p className="ops-login__feature-desc">{f.desc}</p>
+								</div>
+							</div>
+						))}
+					</div>
+				)}
 
 				<p className="ops-login__copy">
-					{copy ?? (
-						<>
-							Century NIT &copy; {new Date().getFullYear()} &middot; Operations Center
-						</>
-					)}
+					Century NIT &copy; {new Date().getFullYear()} &middot; Operations Center
 				</p>
 			</div>
 

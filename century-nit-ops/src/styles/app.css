@@ -3464,9 +3464,84 @@
 .hd-row__tail {
 	display: flex;
 	align-items: center;
-	gap: 0.3rem;
-	flex-wrap: wrap;
+	gap: 0.45rem;
 	margin-top: 0.1rem;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+/* Row tail is one meta line — plain mono text, not stacked pills */
+
+.hd-meta {
+	font-family: var(--font-mono);
+	font-size: 0.55rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.hd-meta--red {
+	color: var(--hd-red);
+}
+
+.hd-row--active .hd-meta {
+	color: rgba(255, 255, 255, 0.7);
+}
+
+.hd-row--active .hd-meta--red {
+	color: #fca5a5;
+}
+
+.hd-thread-empty {
+	margin: auto;
+	text-align: center;
+	padding: 2rem 1rem;
+}
+
+.hd-thread-empty__ref {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+}
+
+.hd-thread-empty__sub {
+	font-size: var(--text-sm);
+	color: var(--muted-foreground);
+	margin-top: 0.4rem;
+}
+
+.hd-refline {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	margin-bottom: 0.4rem;
+}
+
+.hd-copy {
+	border: 1px solid var(--border);
+	background: var(--background);
+	font-family: var(--font-mono);
+	font-size: 0.55rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	padding: 0.1rem 0.45rem;
+	cursor: pointer;
+	color: var(--muted-foreground);
+}
+
+.hd-copy:hover {
+	border-color: var(--foreground);
+	color: var(--foreground);
 }
 
 .hd-tag {

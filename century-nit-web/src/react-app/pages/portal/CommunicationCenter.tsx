@@ -740,7 +740,7 @@ export function CommunicationCenter() {
 												<button key={c.id} type="button" style={reqRowStyle} onClick={() => void openThread(c.id, c.type)}>
 													<span style={reqSubjectStyle}>{c.subject ?? c.title}</span>
 													<span style={reqMetaStyle}>
-														{(c.category ?? "other").toUpperCase()} · {c.lastMessage?.senderName ?? "desk"} replied · needs your reply
+														{c.reference ? `${c.reference} · ` : ""}{(c.category ?? "other").toUpperCase()} · {c.lastMessage?.senderName ?? "desk"} replied · needs your reply
 													</span>
 												</button>
 											))}
@@ -753,7 +753,7 @@ export function CommunicationCenter() {
 												<button key={c.id} type="button" style={reqRowStyle} onClick={() => void openThread(c.id, c.type)}>
 													<span style={reqSubjectStyle}>{c.subject ?? c.title}</span>
 													<span style={reqMetaStyle}>
-														{(c.category ?? "other").toUpperCase()}
+														{c.reference ? `${c.reference} · ` : ""}{(c.category ?? "other").toUpperCase()}
 														{c.participants.find((p) => p.role === "owner") ? ` · with ${c.participants.find((p) => p.role === "owner")!.name.split(" ")[0]}` : " · desk queue"}
 													</span>
 												</button>
@@ -767,7 +767,7 @@ export function CommunicationCenter() {
 												<button key={c.id} type="button" style={{ ...reqRowStyle, opacity: 0.6 }} onClick={() => void openThread(c.id, c.type)}>
 													<span style={reqSubjectStyle}>{c.subject ?? c.title}</span>
 													<span style={reqMetaStyle}>
-														{(c.category ?? "other").toUpperCase()} · resolved{c.resolvedAt ? ` ${new Date(c.resolvedAt).toLocaleDateString()}` : ""}
+														{c.reference ? `${c.reference} · ` : ""}{(c.category ?? "other").toUpperCase()} · resolved{c.resolvedAt ? ` ${new Date(c.resolvedAt).toLocaleDateString()}` : ""}
 													</span>
 												</button>
 											))}

@@ -1754,6 +1754,12 @@ export const conversations = pgTable(
 
 		/** Denormalised last-activity timestamp for sorting / unread queries. */
 		lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+		/**
+		 * Human-facing ticket reference, e.g. REQ-2026-0142 — minted on insert
+		 * (advisory-locked max-scan, same pattern as CNS-/APP-/INV- refs). The
+		 * UUID stays the join/deep-link key; this is what humans quote.
+		 */
+		reference: varchar("reference", { length: 24 }),
 		/** Lifecycle: open (default) / closed (read-only for customers) / archived. */
 		status: conversationStatusEnum("status").notNull().default("open"),
 		closedAt: timestamp("closed_at", { withTimezone: true }),
@@ -1767,6 +1773,7 @@ export const conversations = pgTable(
 		byStage: index("conversations_stage_idx").on(t.linkedEntityType, t.linkedEntityId, t.stageKey),
 		queue: index("conversations_queue_idx").on(t.type, t.status, t.waitingOn, t.category),
 		userOpen: index("conversations_user_open_idx").on(t.userId, t.status),
+		referenceUnique: uniqueIndex("conversations_reference_key").on(t.reference),
 	}),
 );
 

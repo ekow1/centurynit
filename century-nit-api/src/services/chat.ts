@@ -39,6 +39,23 @@ import { JOURNEY_STAGE_LABELS, type ConversationStatus } from "century-nit-share
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 
+/**
+ * `REQ-2026-0142` — the quotable ticket number for a thread. Advisory-locked
+ * max-scan like CNS-/APP-/INV- refs (lock key 710005); must run inside a
+ * transaction because `pg_advisory_xact_lock` is transaction-scoped.
+ */
+export async function nextConversationReference(tx: typeof db): Promise<string> {
+	const year = new Date().getUTCFullYear();
+	await tx.execute(sql`SELECT pg_advisory_xact_lock(710005, ${year})`);
+	const [row] = await tx
+		.select({
+			max: sql<number>`coalesce(max(split_part(${conversations.reference}, '-', 3)::int), 0)::int`,
+		})
+		.from(conversations)
+		.where(sql`${conversations.reference} like ${`REQ-${year}-%`}`);
+	return `REQ-${year}-${String((row?.max ?? 0) + 1).padStart(4, "0")}`;
+}
+
 async function getParticipantOpsUser(opsUserId: string) {
 	const [row] = await db
 		.select({ id: opsUsers.id, name: opsUsers.name, email: opsUsers.email })
@@ -214,6 +231,7 @@ function serializeConversation(
 	return {
 		id: row.id,
 		type: row.type as "applicant" | "direct" | "entity" | "group",
+		reference: row.reference,
 		status: (row.status ?? "open") as ChatConversation["status"],
 		/** The portal user this conversation belongs to (client-facing threads). */
 		clientUserId: row.userId ?? null,
@@ -582,17 +600,22 @@ export async function createConversation(
 	// Determine type
 	const type = input.linkedEntityType ? "entity" : input.participantOpsUserIds?.length ? "group" : "direct";
 
-	// Create conversation
-	const [created] = await db
-		.insert(conversations)
-		.values({
-			type,
-			title,
-			linkedEntityType: input.linkedEntityType ?? null,
-			linkedEntityId: input.linkedEntityId ?? null,
-			createdBy: creatorOpsUser.id,
-		})
-		.returning();
+	// Create conversation (in a tx so the ref mint holds its advisory lock)
+	const created = await db.transaction(async (tx) => {
+		const reference = await nextConversationReference(tx as unknown as typeof db);
+		const [c] = await tx
+			.insert(conversations)
+			.values({
+				type,
+				title,
+				reference,
+				linkedEntityType: input.linkedEntityType ?? null,
+				linkedEntityId: input.linkedEntityId ?? null,
+				createdBy: creatorOpsUser.id,
+			})
+			.returning();
+		return c;
+	});
 
 	// Add creator as owner
 	await db.insert(conversationParticipants).values({
@@ -1553,15 +1576,20 @@ export async function getOrCreateApplicantConversation(userId: string): Promise<
 		throw new HttpError(409, "NO_ASSIGNED_OFFICER", "Your case has not been assigned to a consultant yet");
 	}
 
-	const [conv] = await db
-		.insert(conversations)
-		.values({
-			type: "applicant",
-			title: appRow.name,
-			userId,
-			createdBy: officerId,
-		})
-		.returning();
+	const conv = await db.transaction(async (tx) => {
+		const reference = await nextConversationReference(tx as unknown as typeof db);
+		const [c] = await tx
+			.insert(conversations)
+			.values({
+				type: "applicant",
+				title: appRow.name,
+				reference,
+				userId,
+				createdBy: officerId,
+			})
+			.returning();
+		return c;
+	});
 
 	// Add the assigned officer as a participant
 	await db.insert(conversationParticipants).values({

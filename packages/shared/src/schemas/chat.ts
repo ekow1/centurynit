@@ -183,6 +183,8 @@ export type ChatParticipant = z.infer<typeof chatParticipantSchema>;
 export const chatConversationSchema = z.object({
 	id: z.string().uuid(),
 	type: conversationTypeSchema,
+	/** Human-facing ticket ref (REQ-2026-0142). Null on rows predating 0115 until the backfill runs. */
+	reference: z.string().nullable().optional(),
 	title: z.string(),
 	linkedEntityType: z.string().nullable().optional(),
 	linkedEntityId: z.string().uuid().nullable().optional(),

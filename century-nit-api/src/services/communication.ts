@@ -47,7 +47,7 @@ import {
 import { HttpError } from "../middleware/error.js";
 import type { SessionUser, StaffContext } from "../middleware/auth.js";
 import { canAccessApplication } from "./cases.js";
-import { publishChatEvent, publishChatEventToClient, notifyOfflineParticipants, sendMessage } from "./chat.js";
+import { publishChatEvent, publishChatEventToClient, notifyOfflineParticipants, sendMessage, nextConversationReference } from "./chat.js";
 import { notify, notifyMany, getStaffUserId, getCustomerServiceUserIds, getManagerAndCoordinatorUserIds } from "./notify.js";
 import { serializeMessageRow, hydrateMessages } from "./message-serializer.js";
 
@@ -321,6 +321,7 @@ async function serializeConversation(
 	return {
 		id: row.id,
 		type: row.type as ChatConversation["type"],
+		reference: row.reference,
 		title: row.title,
 		linkedEntityType: row.linkedEntityType,
 		linkedEntityId: row.linkedEntityId,
@@ -435,27 +436,32 @@ export async function findOrCreateConversation(
 		return { id: existing.id, created: false, row: existing };
 	}
 
-	const [created] = await db
-		.insert(conversations)
-		.values({
-			type: input.type,
-			title: input.title,
-			linkedEntityType,
-			linkedEntityId,
-			userId: input.userId ?? null,
-			createdBy: validCreatorId,
-			stageKey,
-			emailInboxToken: randomUUID(),
-			status: "open",
-			subject: input.subject ?? null,
-			category: input.category ?? null,
-			priority: input.priority ?? "normal",
-			audience: input.audience === "internal" ? "internal" : "client",
-			raisedByOpsUserId: input.raisedByOpsUserId ?? null,
-			// A new request owes the desk a reply until staff answer.
-			waitingOn: input.type === "support" ? "us" : null,
-		})
-		.returning();
+	const created = await db.transaction(async (tx) => {
+		const reference = await nextConversationReference(tx as unknown as typeof db);
+		const [c] = await tx
+			.insert(conversations)
+			.values({
+				type: input.type,
+				title: input.title,
+				reference,
+				linkedEntityType,
+				linkedEntityId,
+				userId: input.userId ?? null,
+				createdBy: validCreatorId,
+				stageKey,
+				emailInboxToken: randomUUID(),
+				status: "open",
+				subject: input.subject ?? null,
+				category: input.category ?? null,
+				priority: input.priority ?? "normal",
+				audience: input.audience === "internal" ? "internal" : "client",
+				raisedByOpsUserId: input.raisedByOpsUserId ?? null,
+				// A new request owes the desk a reply until staff answer.
+				waitingOn: input.type === "support" ? "us" : null,
+			})
+			.returning();
+		return c;
+	});
 
 	// Add creator + participants.
 	if (validCreatorId) {

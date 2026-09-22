@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Helpdesk v2 — ticket refs + decluttered queue</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  --bg:#faf9f6;--paper:#fff;--ink:#1a1814;--mut:#6b6659;
+  --line:#e3ded2;--line-soft:#ece8dd;
+  --amber:#e8a020;--red:#c2402f;--green:#1e7a46;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"Inter",system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45}
+.wrap{max-width:1440px;margin:0 auto;padding:28px 20px 64px}
+h1{font-size:20px;font-weight:700;letter-spacing:-.01em;margin-bottom:4px}
+.sub{color:var(--mut);font-size:13px;margin-bottom:20px}
+.note{border:1px solid var(--line);background:var(--paper);padding:10px 14px;font-size:12.5px;color:var(--mut);margin-bottom:24px}
+.note b{color:var(--ink)}
+
+/* ── viewport frame ── */
+.frame{border:1.5px solid var(--ink);background:var(--paper);height:640px;display:flex;flex-direction:column;overflow:hidden}
+.chrome{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--bg);flex-shrink:0}
+.dot{width:9px;height:9px;background:var(--line)}
+.url{font-family:var(--mono);font-size:10px;color:var(--mut);letter-spacing:.05em}
+.screen{flex:1;display:flex;flex-direction:column;min-height:0}
+
+/* page head */
+.pg-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:14px 18px 10px;border-bottom:1px solid var(--line);flex-shrink:0}
+.pg-head h2{font-size:17px;font-weight:700}
+.pg-head .meta{font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-top:2px}
+.pg-btns{display:flex;gap:8px}
+.btn{font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;border:1px solid var(--ink);background:var(--ink);color:#fff;cursor:pointer;white-space:nowrap}
+.btn.ghost{background:#fff;color:var(--ink);border-color:var(--line)}
+.btn.ghost:hover{border-color:var(--ink)}
+.btn.sm{padding:4px 8px;font-size:9px}
+.statline{font-family:var(--mono);font-size:9px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);padding:6px 18px;border-bottom:1px solid var(--line-soft);flex-shrink:0}
+.statline b{color:var(--ink)}
+.statline .r{color:var(--red);font-weight:700}
+
+/* split */
+.split{flex:1;display:flex;min-height:0}
+.queue{width:292px;flex-shrink:0;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:var(--bg)}
+.thread{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+.rail{width:236px;flex-shrink:0;border-left:1px solid var(--line);overflow-y:auto;background:var(--paper)}
+
+/* queue head — chips now fit one row */
+.qhead{padding:10px 10px 8px;border-bottom:1px solid var(--line);background:var(--paper);flex-shrink:0}
+.chips{display:flex;gap:4px;flex-wrap:nowrap}
+.chip{font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--line);background:#fff;color:var(--mut);padding:4px 7px;cursor:pointer;white-space:nowrap}
+.chip.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.chip.hot{color:var(--red);border-color:var(--red)}
+.chip.more{border-style:dashed;margin-left:auto}
+.search{width:100%;margin-top:8px;border:1px solid var(--line);background:var(--bg);padding:6px 8px;font-size:11.5px;font-family:var(--sans);outline:none}
+.search::placeholder{color:var(--mut)}
+.search:focus{border-color:var(--ink)}
+.hint{font-family:var(--mono);font-size:8px;color:var(--mut);letter-spacing:.05em;margin-top:5px;text-transform:uppercase}
+
+.qbody{flex:1;overflow-y:auto;min-height:0}
+.band{display:flex;justify-content:space-between;align-items:baseline;padding:7px 10px;background:var(--bg);border-bottom:1px solid var(--line-soft);font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+.band .n{color:var(--mut);font-weight:400}
+.band.red{background:#fdf0ee;color:var(--red)}
+.band.red .n{color:#c98f85}
+
+/* row: kicker = ref · category, tail = one meta line */
+.row{display:block;width:100%;text-align:left;padding:9px 10px;background:#fff;border:none;border-bottom:1px solid var(--line-soft);border-left:3px solid transparent;cursor:pointer}
+.row:hover{background:var(--bg)}
+.row.on{background:var(--ink);color:#fff;border-left-color:var(--amber)}
+.rkick{display:block;font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rkick .ref{color:var(--ink)}
+.row.on .rkick,.row.on .rkick .ref{color:rgba(255,255,255,.75)}
+.rwho{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:2px}
+.rname{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rtime{font-family:var(--mono);font-size:8.5px;color:var(--mut);flex-shrink:0}
+.row.on .rtime{color:rgba(255,255,255,.7)}
+.rsnip{display:block;font-size:11px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.row.on .rsnip{color:rgba(255,255,255,.7)}
+.rtail{display:flex;align-items:center;gap:6px;margin-top:4px;font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)}
+.rtail .w{color:var(--red)}
+.rtail .o{color:var(--mut)}
+.rtail .un{margin-left:auto;background:var(--ink);color:#fff;padding:1px 6px;font-size:8.5px}
+.row.on .rtail{color:rgba(255,255,255,.7)}
+.row.on .rtail .w{color:#fca5a5}
+.row.on .rtail .un{background:var(--amber);color:#fff}
+
+/* thread */
+.thead{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);flex-shrink:0}
+.back{border:1px solid var(--line);background:#fff;width:26px;height:26px;cursor:pointer;font-size:12px}
+.tid{min-width:0;flex:1}
+.tid .kick{font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}
+.tid .kick .ref{color:var(--ink)}
+.tid h3{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tid .sub2{font-size:10.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tacts{display:flex;gap:6px;flex-shrink:0}
+.tbody{flex:1;overflow-y:auto;padding:16px 14px;min-height:0}
+.daymark{text-align:center;font-family:var(--mono);font-size:8.5px;color:var(--mut);letter-spacing:.1em;text-transform:uppercase;margin:8px 0 14px}
+.msg{max-width:62%;border:1px solid var(--line);background:#fff;padding:8px 12px;font-size:12.5px;margin-bottom:10px}
+.msg .mt{font-family:var(--mono);font-size:8px;color:var(--mut);margin-top:4px}
+.msg.me{margin-left:auto;background:var(--ink);color:#fff;border-color:var(--ink)}
+.msg.me .mt{color:rgba(255,255,255,.6)}
+.empty{flex:1;display:flex;align-items:center;justify-content:center;padding:24px}
+.ecard{border:1px dashed var(--line);padding:18px 22px;text-align:center;max-width:300px}
+.ecard .r{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.1em;color:var(--ink)}
+.ecard p{font-size:11.5px;color:var(--mut);margin-top:6px}
+.czone{border-top:1px solid var(--line);flex-shrink:0}
+.ctabs{display:flex;gap:2px;padding:6px 10px 0}
+.ctab{font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:4px 8px;border:none;background:none;color:var(--mut);cursor:pointer;border-bottom:2px solid transparent}
+.ctab.on{color:var(--ink);border-bottom-color:var(--ink)}
+.crow{display:flex;align-items:flex-end;gap:8px;padding:8px 10px 10px}
+.cta{flex:1;border:1px solid var(--line);background:#fff;padding:7px 10px;font-size:12px;min-height:34px;color:var(--mut)}
+.send{background:var(--ink);color:#fff;border:1px solid var(--ink);width:34px;height:34px;cursor:pointer;font-size:13px}
+.attach{border:1px solid var(--line);background:#fff;width:34px;height:34px;cursor:pointer;font-size:12px;color:var(--mut)}
+
+/* rail */
+.sect{padding:12px 12px;border-bottom:1px solid var(--line-soft)}
+.sect h4{font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-bottom:7px}
+.kv{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;padding:2px 0}
+.kv b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kv span{color:var(--mut);text-align:right;white-space:nowrap}
+.kv .mono{font-family:var(--mono);font-size:9.5px}
+.kv .ok{color:var(--green)}.kv .warn{color:var(--amber)}.kv .bad{color:var(--red)}
+.refline{display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;margin-bottom:6px}
+.copy{border:1px solid var(--line);background:#fff;font-family:var(--mono);font-size:8px;padding:1px 6px;cursor:pointer;color:var(--mut)}
+
+.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-top:24px}
+.cell{border:1px solid var(--line);background:var(--paper);padding:12px 14px;font-size:12.5px}
+.cell b{display:block;font-size:11px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
+.cell p{color:var(--mut);font-size:12px}
+.cell code{font-family:var(--mono);font-size:10px;background:var(--bg);padding:0 4px;border:1px solid var(--line-soft)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Helpdesk v2 — ticket refs + decluttered queue</h1>
+  <p class="sub">Same three columns you approved. What changed: every thread gets a quotable <b>REQ-YYYY-NNNN</b> number, the row tail collapses to one meta line, and housekeeping never previews.</p>
+
+  <div class="note">
+    <b>Ticket tracking:</b> the ref mints when the thread is created — same <code>CNS-</code>/<code>APP-</code> pattern, advisory-locked. Search the queue by ref, name, or message text. Clients see it in the portal too, so "my ticket REQ-2026-0142" works over the phone.
+  </div>
+
+  <div class="frame">
+    <div class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">/helpdesk</span></div>
+    <div class="screen">
+      <div class="pg-head">
+        <div><h2>Helpdesk</h2><div class="meta">Every client conversation, the ones waiting on you first</div></div>
+        <div class="pg-btns"><button class="btn ghost sm">+ Log request</button><button class="btn sm">+ New conversation</button></div>
+      </div>
+      <div class="statline"><b>6 OPEN</b> · <b>3 AWAITING REPLY</b> · <b>3 UNCLAIMED</b> · <b>0 UNREAD</b> · 28 H LONGEST WAIT · <span class="r">6 BREACHING</span></div>
+
+      <div class="split">
+        <!-- QUEUE -->
+        <aside class="queue">
+          <div class="qhead">
+            <div class="chips">
+              <button class="chip on">All · 6</button>
+              <button class="chip">Awaiting · 3</button>
+              <button class="chip">Mine · 0</button>
+              <button class="chip hot">Breach · 6</button>
+              <button class="chip more">▾</button>
+            </div>
+            <input class="search" value="req-2026-0142" readonly>
+            <div class="hint">Search ref · client · message text</div>
+          </div>
+          <div class="qbody">
+            <div class="band red"><span>Breaching · 6</span><span class="n">past first-response target</span></div>
+
+            <button class="row on">
+              <span class="rkick"><span class="ref">REQ-2026-0142</span> · PAYMENTS</span>
+              <span class="rwho"><span class="rname">Enock Yaw Enu</span><span class="rtime">1:33 PM</span></span>
+              <span class="rsnip">Enock Yaw Enu: Inquiry: Payment &amp; Invoices…</span>
+              <span class="rtail"><span class="w">28H</span><span class="o">UNCLAIMED</span><span class="un">1</span></span>
+            </button>
+
+            <button class="row">
+              <span class="rkick"><span class="ref">REQ-2026-0138</span> · DOCUMENTS</span>
+              <span class="rwho"><span class="rname">Enock Yaw Enu</span><span class="rtime">9:35 AM</span></span>
+              <span class="rsnip">Enock Yaw Enu: I was chatting with…</span>
+              <span class="rtail"><span class="w">26H</span><span class="o">UNCLAIMED</span></span>
+            </button>
+
+            <button class="row">
+              <span class="rkick"><span class="ref">REQ-2026-0135</span> · DEPARTURE · <span class="ref">APP-2026-0001</span></span>
+              <span class="rwho"><span class="rname">Enock Enu</span><span class="rtime">9:05 AM</span></span>
+              <span class="rsnip">You: Travel checklist is ready…</span>
+              <span class="rtail"><span class="o">YOU</span></span>
+            </button>
+
+            <div class="band"><span>Waiting on client · 2</span><span class="n">their move</span></div>
+
+            <button class="row">
+              <span class="rkick"><span class="ref">REQ-2026-0131</span> · VISA · <span class="ref">APP-2026-0001</span></span>
+              <span class="rwho"><span class="rname">Enock Yaw Enu</span><span class="rtime">Yesterday</span></span>
+              <span class="rsnip">You: Visa decision is in — approved…</span>
+              <span class="rtail"><span class="o">YOU</span></span>
+            </button>
+
+            <button class="row">
+              <span class="rkick"><span class="ref">REQ-2026-0129</span> · SUPPORT</span>
+              <span class="rwho"><span class="rname">Super Admin</span><span class="rtime">1:01 PM</span></span>
+              <span class="rsnip">Super Admin: following up on…</span>
+              <span class="rtail"><span class="o">UNCLAIMED</span></span>
+            </button>
+
+            <div class="band"><span>Resolved · 1</span><span class="n">▾</span></div>
+          </div>
+        </aside>
+
+        <!-- THREAD -->
+        <section class="thread">
+          <div class="thead">
+            <button class="back">←</button>
+            <div class="tid">
+              <p class="kick"><span class="ref">REQ-2026-0142</span> · PAYMENTS · SUPPORT</p>
+              <h3>Enock Yaw Enu</h3>
+              <p class="sub2">with Enock Yaw Enu · open · unclaimed · replies go to the portal</p>
+            </div>
+            <div class="tacts">
+              <button class="btn sm">Resolve ✓</button>
+              <button class="btn ghost sm">Claim</button>
+              <button class="btn ghost sm">Reassign</button>
+              <button class="btn ghost sm">⌛ us</button>
+              <button class="btn ghost sm">Escalate</button>
+              <button class="btn ghost sm">Details</button>
+            </div>
+          </div>
+          <div class="tbody">
+            <div class="daymark">Yesterday</div>
+            <div class="msg">Inquiry: Payment &amp; Invoices — I was charged twice for the application invoice.<div class="mt">ENOCK YAW ENU · 1:33 PM</div></div>
+            <div class="msg me">On it — pulling up INV-2026-0091 now.<div class="mt">YOU · 1:35 PM</div></div>
+          </div>
+          <div class="czone">
+            <div class="ctabs"><button class="ctab on">Reply</button><button class="ctab">Note</button><button class="ctab">Snippets +</button></div>
+            <div class="crow">
+              <div class="cta">Reply to the client…</div>
+              <button class="attach">📎</button>
+              <button class="send">→</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- CONTEXT RAIL -->
+        <aside class="rail">
+          <div class="sect">
+            <h4>Client</h4>
+            <div class="kv"><b>Enock Yaw Enu</b></div>
+            <div class="kv"><span>abusba35519y@gmail.com</span></div>
+            <div class="kv"><span>Accra-Hub → United Kingdom</span></div>
+            <div class="kv"><span>Client since Nov 2025</span></div>
+          </div>
+          <div class="sect">
+            <h4>Journey</h4>
+            <div class="kv"><b class="mono">APP-2026-0001</b><span>Visa · in progress</span></div>
+          </div>
+          <div class="sect">
+            <h4>Money</h4>
+            <div class="kv"><b class="mono">INV-2026-0091</b><span class="warn">application · unpaid</span></div>
+          </div>
+          <div class="sect">
+            <h4>Next appointment</h4>
+            <div class="kv"><span>consultation · Tue, Sep 22, 10:00 AM</span></div>
+          </div>
+          <div class="sect">
+            <h4>Thread</h4>
+            <div class="refline"><span>REQ-2026-0142</span><button class="copy">COPY</button></div>
+            <div class="kv"><b>Owner</b><span>Unclaimed</span></div>
+            <div class="kv"><b>Messages</b><span>2</span></div>
+            <div class="kv"><b>Status</b><span class="warn">open</span></div>
+            <div class="kv"><b>Waiting on</b><span>us</span></div>
+            <div class="kv"><b>Opened</b><span>Sep 21, 1:33 PM</span></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="cell"><b>REQ-2026-0142 — the ticket number</b><p>Minted on creation (<code>REQ-YYYY-NNNN</code>, advisory-locked like <code>CNS-</code>). Shows in the queue kicker, the thread header, the rail's Thread block with a copy button — and on the client's portal request so they can quote it.</p></div>
+    <div class="cell"><b>Queue row — one meta line</b><p>Kicker carries ref + category (+ linked case). The tail is a single mono line: wait clock in red · owner/unclaimed · unread count. No more pill stacking.</p></div>
+    <div class="cell"><b>Filters — one row</b><p>All / Awaiting / Mine / Breach fit the column; Waiting, Unclaimed, Unread-only, type facets and sort live behind the dashed <code>▾</code> chip.</p></div>
+    <div class="cell"><b>Escalate demoted</b><p>Same row, but plain ghost — the red outline was competing with Resolve. Still one click.</p></div>
+    <div class="cell"><b>No housekeeping previews</b><p>"Stage assigned to…" never renders as a snippet — client-side guard until the API redeploy seals it server-side.</p></div>
+    <div class="cell"><b>Empty thread</b><p>A thread with no messages shows a centred card naming the ref instead of dead space.</p></div>
+  </div>
+</div>
+</body>
+</html>

@@ -65,6 +65,9 @@ type TypeFacet = "" | "support" | "case" | "stage" | "applicant";
 type SortMode = "recent" | "waiting";
 
 const FILTERS: Filter[] = ["all", "awaiting", "waiting", "unclaimed", "mine", "breaching"];
+/** Chips that always fit the queue column; the rest live behind the ▾ drawer. */
+const PRIMARY_FILTERS: Filter[] = ["all", "awaiting", "mine", "breaching"];
+const DRAWER_FILTERS: Filter[] = FILTERS.filter((f) => !PRIMARY_FILTERS.includes(f));
 const FILTER_LABELS: Record<Filter, string> = {
 	all: "All",
 	awaiting: "Awaiting reply",
@@ -127,14 +130,15 @@ function clientName(c: ChatConversation): string {
 	if (c.type === "support" || c.type === "applicant") return c.title || "Client";
 	return c.title || "Conversation";
 }
-/** "Support · APP-2026-0142", "Stage · Consultation" - the thread's subject without opening it. */
+/** "REQ-2026-0142 · PAYMENTS · double charge", "REQ-… · Stage · APP-2026-0142" — the ticket ref leads so staff can scan/quote it. */
 function kickerOf(c: ChatConversation): string {
 	const type = TYPE_LABELS[c.type] ?? c.type;
+	const ref = c.reference ? `${c.reference} · ` : "";
 	// Requests carry a subject — show it; the category tags along.
-	if (c.subject) return `${c.category ? `${c.category.toUpperCase()} · ` : ""}${c.subject}`;
-	if (c.type === "case" || c.type === "stage") return `${type} · ${c.title}`;
-	if (c.linkedEntityType) return `${type} · ${c.linkedEntityType}`;
-	return type;
+	if (c.subject) return `${ref}${c.category ? `${c.category.toUpperCase()} · ` : ""}${c.subject}`;
+	if (c.type === "case" || c.type === "stage") return `${ref}${type} · ${c.title}`;
+	if (c.linkedEntityType) return `${ref}${type} · ${c.linkedEntityType}`;
+	return `${ref}${type}`;
 }
 function entityLink(c: ChatConversation): { to: string; label: string } | null {
 	if (!c.linkedEntityId) return null;
@@ -283,6 +287,7 @@ export function EnterpriseHelpdesk() {
 			list = list.filter(
 				(c) =>
 					c.title.toLowerCase().includes(q) ||
+					(c.reference ?? "").toLowerCase().includes(q) ||
 					(c.lastMessage?.content ?? "").toLowerCase().includes(q) ||
 					(c.lastMessage?.senderName ?? "").toLowerCase().includes(q) ||
 					c.participants.some((p) => p.name.toLowerCase().includes(q)),
@@ -644,7 +649,7 @@ export function EnterpriseHelpdesk() {
 						<div className="ops-split__list hd-list">
 							<div className="hd-list__head">
 								<div className="hd-filters" role="tablist" aria-label="Conversations">
-									{FILTERS.map((f) => {
+									{PRIMARY_FILTERS.map((f) => {
 										const n = counts[f];
 										const on = filter === f;
 										return (
@@ -671,6 +676,21 @@ export function EnterpriseHelpdesk() {
 								</div>
 								{drawerActive && (
 									<div className="hd-filters" role="group" aria-label="Refine" style={{ marginTop: "0.5rem" }}>
+										{DRAWER_FILTERS.map((f) => {
+											const n = counts[f];
+											const on = filter === f;
+											return (
+												<button
+													key={f}
+													type="button"
+													aria-pressed={on}
+													className={`hd-chip${on ? " hd-chip--on" : ""}`}
+													onClick={() => setFilter(f)}
+												>
+													{FILTER_LABELS[f]} · {n}
+												</button>
+											);
+										})}
 										{TYPE_FACETS.map((t) => (
 											<button
 												key={t.id || "any"}
@@ -705,7 +725,7 @@ export function EnterpriseHelpdesk() {
 								<input
 									type="search"
 									className="cn-search"
-									placeholder="Search client, request…"
+									placeholder="Search ref, client, request…"
 									value={search}
 									onChange={(e) => setSearch(e.target.value)}
 									aria-label="Search conversations"
@@ -776,19 +796,21 @@ export function EnterpriseHelpdesk() {
 											<span className="hd-row__time">{convTime(c.lastMessage?.createdAt ?? c.lastMessageAt ?? c.updatedAt)}</span>
 										</span>
 										<span className="hd-row__snip">
-											{c.lastMessage
+											{c.lastMessage && c.lastMessage.messageType !== "system"
 												? `${c.lastMessage.senderUserId ? c.lastMessage.senderName : "You"}: ${c.lastMessage.content}`
 												: link
 													? link.label
 													: c.participants.map((p) => p.name).join(", ")}
 										</span>
 										<span className="hd-row__tail">
-											{hours > 0 ? <span className={`hd-tag${hours >= 24 ? " hd-tag--red" : ""}`}>waiting {waitLabel(hours)}</span> : null}
-											{isClosed(c) ? (
-												<span className="hd-tag">{c.status}</span>
-											) : (
-												<span className="hd-tag">{owner ? (owner.opsUserId === opsUser?.opsUserId ? "you" : owner.name) : "unclaimed"}</span>
-											)}
+											{hours > 0 ? <span className={`hd-meta${hours >= 24 ? " hd-meta--red" : ""}`}>{waitLabel(hours)}</span> : null}
+											<span className="hd-meta">
+												{isClosed(c)
+													? c.status
+													: owner
+														? owner.opsUserId === opsUser?.opsUserId ? "you" : owner.name
+														: "unclaimed"}
+											</span>
 											{c.unreadCount > 0 ? <span className="hd-unread">{c.unreadCount}</span> : null}
 										</span>
 														</button>
@@ -1022,6 +1044,19 @@ function ContextRail({
 
 			<div className="hd-sect">
 				<h4 className="hd-sect__h">Thread</h4>
+				{conversation.reference && (
+					<div className="hd-refline">
+						<span className="mono">{conversation.reference}</span>
+						<button
+							type="button"
+							className="hd-copy"
+							onClick={() => void navigator.clipboard?.writeText(conversation.reference!)}
+							title="Copy ticket reference"
+						>
+							copy
+						</button>
+					</div>
+				)}
 				<div className="hd-kv"><b>Owner</b><span>{context?.owner ? context.owner.name : "Unclaimed"}</span></div>
 				<div className="hd-kv"><b>Messages</b><span>{context?.messageCount ?? 0}</span></div>
 				<div className="hd-kv"><b>Status</b><span className={stClass(conversation.status)}>{conversation.status}</span></div>
@@ -1205,7 +1240,7 @@ function ConversationThread({
 						</button>
 					)}
 					<div className="hd-popwrap">
-						<button type="button" className="btn btn--ghost btn--sm hd-btn--warn" onClick={() => setEscalateOpen((v) => !v)} disabled={statusBusy} title="Send to the manager queue">Escalate</button>
+						<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEscalateOpen((v) => !v)} disabled={statusBusy} title="Send to the manager queue">Escalate</button>
 						{escalateOpen && (
 							<div className="hd-pop" style={{ minWidth: "16rem", padding: "0.6rem" }}>
 								<input
@@ -1259,6 +1294,11 @@ function ConversationThread({
 					) : msgsLoading && messages.length === 0 ? (
 						<div style={{ textAlign: "center", color: "var(--cn-chat-muted-fg)", fontSize: 12, padding: 16 }}>
 							Loading messages...
+						</div>
+					) : messages.length === 0 ? (
+						<div className="hd-thread-empty">
+							<p className="hd-thread-empty__ref">{conversation.reference ?? "New thread"}</p>
+							<p className="hd-thread-empty__sub">No messages yet — open with a reply or an internal note.</p>
 						</div>
 					) : null
 				}

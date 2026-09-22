@@ -119,9 +119,9 @@ const html = `<!DOCTYPE html>
 	size: A4;
 	margin: 23mm 21mm 24mm;
 	@bottom-center {
-		content: "—  " counter(page) "  —";
+		content: counter(page);
 		font-family: Georgia, "Times New Roman", serif;
-		font-size: 8.5pt; color: #8a8a8a; letter-spacing: 0.08em;
+		font-size: 9pt; color: #6b655c;
 	}
 }
 @page :left {
@@ -164,8 +164,6 @@ body {
 .cover .brand { font-family: "Segoe UI", Calibri, sans-serif;
 	font-size: 9.5pt; letter-spacing: 0.42em; text-transform: uppercase;
 	color: #211d19; }
-.cover .brand::before, .cover .brand::after { content: "—";
-	color: #b8b2a6; margin: 0 12pt; font-family: Georgia, serif; }
 .cover .doc { margin-top: 3.5pt; font-family: "Segoe UI", sans-serif;
 	font-size: 7pt; letter-spacing: 0.22em; text-transform: uppercase;
 	color: #9a948a; }
@@ -229,20 +227,23 @@ em { font-style: italic; }
 code { font-family: Consolas, "Courier New", monospace;
 	font-size: 8.8pt; color: #4a443c; }
 
-/* Tables: booktabs style — rules only, no boxes */
+/* Tables — tinted header band, quiet row rules, roomier cells */
 table { border-collapse: collapse; width: 100%; margin: 15pt 0;
 	font-size: 9pt; line-height: 1.5; }
 thead { display: table-header-group; }
 tr { break-inside: avoid; }
-th, td { padding: 5pt 9pt 5pt 0; text-align: left; vertical-align: top;
-	border: none; }
+th, td { padding: 6.5pt 10pt 6.5pt 8pt; text-align: left;
+	vertical-align: top; border: none; }
 th { font-family: "Segoe UI", sans-serif; font-size: 7.8pt;
-	text-transform: uppercase; letter-spacing: 0.07em;
+	text-transform: uppercase; letter-spacing: 0.08em;
 	color: #211d19; font-weight: 600;
-	border-bottom: 0.9pt solid #2a2620; }
-tbody tr { border-bottom: 0.45pt solid #d8d3c8; }
+	background: #efece4;
+	border-top: 0.9pt solid #2a2620;
+	border-bottom: 0.75pt solid #2a2620; }
+tbody tr { border-bottom: 0.45pt solid #ddd8cc; }
 tbody tr:last-child { border-bottom: 0.9pt solid #2a2620; }
 td { color: #3a352f; }
+td:first-child, th:first-child { padding-left: 8pt; }
 
 .closing { margin-top: 36pt; text-align: center; }
 .closing .ornament { color: #b8b2a6; letter-spacing: 1.2em;

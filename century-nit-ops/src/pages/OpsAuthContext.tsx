@@ -282,7 +282,14 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		try {
 			const sess = await getSession();
 			applyPolicy(sess);
-			if (!sess.staff) dropStaleSession();
+			if (!sess.staff) {
+				// A live session with no staff profile — e.g. a portal account
+				// signed in through this origin — poisons every API call with
+				// 403s for its whole lifetime. Kill the cookie, don't just
+				// forget our copy of the user.
+				if (sess.user) void apiSignOut().catch(() => {});
+				dropStaleSession();
+			}
 		} catch {}
 	}, [applyPolicy, dropStaleSession]);
 
@@ -305,6 +312,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 					// dead or belongs to a portal account, so the sessionStorage
 					// copy is stale. Without this the guards keep a phantom user
 					// and their MFA probes 401 into /mfa-setup instead of /login.
+					if (sess.user) void apiSignOut().catch(() => {});
 					dropStaleSession();
 				}
 			} catch {
@@ -345,7 +353,12 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		const sess = await getSession();
 		applyPolicy(sess);
 		const { staff } = sess;
-		if (!staff) throw new Error("No staff profile linked to this account.");
+		// The credential sign-in already set a session cookie — a non-staff
+		// account would otherwise leave it behind to 403 every later call.
+		if (!staff) {
+			await apiSignOut().catch(() => {});
+			throw new Error("No staff profile linked to this account.");
+		}
 
 		const user = staffToOpsUser(staff);
 		setOpsUser(user);
@@ -364,7 +377,10 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		const sess = await getSession();
 		applyPolicy(sess);
 		const { staff } = sess;
-		if (!staff) throw new Error("No staff profile linked to this account.");
+		if (!staff) {
+			await apiSignOut().catch(() => {});
+			throw new Error("No staff profile linked to this account.");
+		}
 		const user = staffToOpsUser(staff);
 		setOpsUser(user);
 		saveSession(user);
@@ -381,7 +397,10 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		const sess = await getSession();
 		applyPolicy(sess);
 		const { staff } = sess;
-		if (!staff) throw new Error("No staff profile linked to this account.");
+		if (!staff) {
+			await apiSignOut().catch(() => {});
+			throw new Error("No staff profile linked to this account.");
+		}
 		const user = staffToOpsUser(staff);
 		setOpsUser(user);
 		saveSession(user);

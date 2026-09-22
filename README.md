@@ -2,6 +2,12 @@
 
 Monorepo for Century NIT Consult.
 
+- **`docs/`** — the engineering reference: architecture, database, API
+  surface, auth, journey, money, communications, marketing, CMS,
+  scheduling, frontends, operations. Start at
+  [docs/README.md](docs/README.md).
+- **`FEATURES.md`** — stakeholder walkthrough of what the product does.
+
 ```
 century-nit-suite/
 ├── century-nit-web/     Public site + applicant portal (React + Vite)

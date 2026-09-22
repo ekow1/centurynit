@@ -162,7 +162,11 @@ reassignment closes the old one, never overwrites. Each chapter has its own
 seat (consultant, visa officer, travel officer), and the assignment picker
 for each chapter only offers staff holding the matching ownership
 permission. A consultant can delegate a session to a colleague and reclaim
-it, and a daily duty-coordinator roster covers each branch.
+it, and a daily duty-coordinator roster covers each branch. Every client
+also has a journey coordinator who carries into every case they open, so
+coordination follows the person from consultation through application.
+At consultation placement the assigned officer can be chosen to carry the
+whole case, becoming the application's handler from day one.
 
 ### Hard boundaries
 
@@ -291,6 +295,12 @@ actually pays tracks a rate finance controls. A post-arrival catalogue
 carries the charges that only become relevant after the client lands,
 each with its own trigger and instalment rules.
 
+A package is a contract, not just a price: it sets a price per stage,
+lists which catalogue fees it covers, caps how many school applications it
+includes, and can require verified documents before applications start.
+The client's funding track and target school count are chosen with the
+package and shape the quotation.
+
 ### The ledger
 
 Every case and every client has a ledger view: a chapter-numbered journal
@@ -357,8 +367,9 @@ One notification service fans out to three channels (in-app, email, and
 browser push) and logs every delivery attempt so a failure can be retried.
 Clients only ever see client-appropriate event kinds; staff-only signals
 never reach the portal. Each user controls their own matrix of which
-events arrive on which channels. Email never sends inside a web request;
-it's queued, so a failed send can never roll back a booking.
+events arrive on which channels, and can set quiet hours in their own
+timezone so nothing pings overnight. Email never sends inside a web
+request; it's queued, so a failed send can never roll back a booking.
 
 The portal is push-driven: a live event stream tells it when stages,
 assignments, invoices or visa states change, so the client sees updates
@@ -486,14 +497,18 @@ exact task.
   referral to another branch.
 - **Clients, Leads**: records and the enquiry pipeline, which moves a
   lead through new, contacted, consultation booked, assessment complete,
-  and converted or lost.
+  and converted or lost. Leads carry their source, and a lost lead records
+  a fixed reason so reports can group them. A "last real touch" timestamp
+  tracks when a human actually reached the person, set only by real
+  contact, never by an edit, so stale leads are easy to spot.
 - **Appointments, Live meetings**: the week and rooms in progress.
 - **Universities, Programmes, Scholarships, Packages, Departure
   checklist**: the catalogue editors. Scholarships can also be awarded to
   a specific applicant from their record.
 - **Invoices, Ledger, Payments, Fee schedule, Payment plans**: the
   finance suite.
-- **Reports**: revenue and operations analytics.
+- **Reports**: revenue and operations analytics, including invoice aging
+  buckets driven by each invoice's due date.
 - **Scheduling, My availability**: the week the branch offers, and each
   person's own hours and calendar connections.
 - **Marketing**: campaigns, audiences, contacts, templates, automations.
@@ -542,14 +557,19 @@ done, current and locked.
 - **Enrolment**: the assessment outcome, the decision, package and plan,
   the deposit.
 - **Applications**: school choices, the fee invoice, per-school tracking,
-  accepting an offer.
+  accepting an offer. Each school track keeps its own history, the school's
+  own reference number for chasing, proof that we submitted, and when an
+  offer lands its terms are recorded: tuition, deposit and its due date,
+  with the offer letter filed into the vault.
 - **Visa**: consent, the invoice, live tracking to the decision (a
   refusal parks the case with a reapplication path).
 - **Departure**: travel help (yes, hold or no), the fee milestone, the
   checklist, document release. Choosing travel help assigns a travel
   officer, and only then is the airline fare invoiced, separately: the
   service fee was already collected in the package, and no ticket is ever
-  billed before someone owns the booking.
+  billed before someone owns the booking. The chapter also keeps the
+  logistics record: the report-by date, the briefing, airport pickup,
+  accommodation, an emergency contact, and the arrival confirmation.
 - **Complete**: the post-arrival instalment schedule.
 - **Appointments, Documents, Fees, Security**: bookings, the
   vault, the ledger and receipts, and the security page: profile fields,
@@ -844,6 +864,15 @@ event carries just the entity ids, and each is addressed to an audience:
 the client's own channel, or every connected console. The apps react by
 refetching only the affected slice, never the whole screen, so a payment
 settling mid-conversation updates the ledger without a reload.
+
+### Snapshot integrity
+
+Where a client's choice depends on catalogue data, the choice freezes a
+copy: a school selection stores the university, programme, country and
+tuition as they were at selection time. A later catalogue edit or deletion
+can never silently change what a client was quoted, and the offer terms
+recorded on each track (tuition, deposit, due date) are facts on the case,
+not lookups.
 
 ### The audit chain, mechanically
 

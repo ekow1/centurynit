@@ -204,9 +204,9 @@ main { text-align: left; }
 h2, h3, th, td, li, .toc .t { text-align-last: left !important; }
 h2 {
 	font-weight: 400; font-size: 19pt; color: #211d19;
-	margin: 32pt 0 6pt; text-align: left;
+	margin: 0 0 6pt; text-align: left;
 	padding: 12pt 0 10pt; border-top: 3pt double #2a2620;
-	break-after: avoid; break-inside: avoid;
+	break-before: page; break-after: avoid; break-inside: avoid;
 }
 h2 .kicker { display: block; font-family: "Segoe UI", sans-serif;
 	font-size: 8pt; letter-spacing: 0.32em; text-transform: uppercase;

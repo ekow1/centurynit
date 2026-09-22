@@ -587,9 +587,11 @@ mentions, reactions) serves:
 
 Threads can be escalated to managers, and staff keep a library of canned
 replies scoped to a branch or a stage with merge variables filled at send.
-Threads also carry system and action entries, so a status change or an
-assignment shows up in the conversation where it happened, and staff can
-drop internal notes that are filtered out of every client-facing read.
+Assignments and stage transitions are recorded as housekeeping entries
+in the thread's history, but they no longer surface as chat: they are
+filtered from transcripts, never appear as the last-message preview, and
+never count as unread on either side. Staff can drop internal notes that
+are filtered out of every client-facing read.
 When a client is offline, a reply is emailed to them, and their
 email reply lands back on the same conversation. Staff presence and typing
 are shown live as they happen.
@@ -613,16 +615,32 @@ The message mechanics are carefully chosen, not incidental:
   stream would leak even though it never appears in their history, so the
   two paths resolve recipients separately.
 
-### The AI assistant
+### The AI assistant, in three tiers
 
-A knowledge assistant runs at the edge on Cloudflare's Workers AI (a
-Llama 3.1 model, streaming its replies as they're generated), with three
-personas: a **website assistant** for prospective students on public pages,
-a **portal assistant** inside the client's communication hub, and an
-**enquiry** path for visitors. It answers general questions only, says so
-when it isn't certain of a Century-specific detail, and points people to a
-human for anything account-specific. First-time public use is gated by a
-bot check so the widget can't be farmed.
+One assistant runs at the edge on Cloudflare's Workers AI (a Llama 3.1
+model, streaming its replies as they're generated), but what it may say
+is tiered by who is asking, and the tier is proven server-side, never
+claimed by the request:
+
+- **Tier 0, the public website.** Anyone may ask; a Turnstile check gates
+  the widget so it can't be farmed. This tier answers general questions
+  about Century NIT only (destinations, programmes, requirements, the
+  journey as we run it) under a hard rule: it never emits a link, a path
+  or a "go to" direction, because account pages don't exist until you
+  sign in. Anything specific is pointed to a human channel.
+- **Tier 1, the portal.** The portal session is verified against the API
+  on every turn before the richer prompt is served. This tier is
+  journey-aware: the client's real state (stage, next step, invoice
+  status) travels with the question, so it answers *their* situation,
+  and it may link straight into portal pages from a fixed map.
+- **Tier 2, the console.** Staff get their own assistant inside the
+  Communication Hub. The console's Worker verifies the staff session
+  with the API on every turn, then serves a codebase-aware prompt that
+  may name pages, queues, settings and subsystems, and may link to
+  console routes from a fixed map, never an invented one.
+
+All three surfaces share the same composer component, so the chat feels
+identical wherever it appears.
 
 ### Notifications
 
@@ -820,6 +838,13 @@ Open to everyone, no sign-in:
   registered client and drops them into chapter one.
 - **The AI assistant and a newsletter popup** float on every public page;
   first-time assistant use passes a bot check.
+
+Both apps are installable on phones and desktops: homescreen icons in
+bitmap and maskable forms, scoped manifests with app shortcuts, and an
+install button in the portal's sidebar and account menu and the
+console's user menu. On iOS, where browsers can't prompt, the button
+expands into the Add to Home Screen steps instead of sitting dead. The
+service workers carry the icons push notifications use.
 
 ### The portal
 

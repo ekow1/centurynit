@@ -223,13 +223,51 @@ coordination follows the person from consultation through application.
 At consultation placement the assigned officer can be chosen to carry the
 whole case, becoming the application's handler from day one.
 
-### Hard boundaries
+### Hard boundaries, and how a handoff is worked
 
 Some moments stop the case until a manager acts. Paying the deposit raises
 a "pending handler assignment" handoff; that payment is the only trigger
 for the school-submission handler. Entering departure or the final payment
 stage hard-gates the same way until a manager resolves the handoff or
 defers it.
+
+A pending handoff is worked, not just waited on:
+
+- **A qualified officer can claim it.** The staffing queue isn't only
+  for managers: someone whose role matches the open seat can take the
+  handoff themselves.
+- **Deferring requeues it.** A manager can set a handoff aside for later;
+  it stays pending and re-alerts the management queue rather than going
+  quiet.
+- **Nothing waits forever.** A handoff left five days unanswered, or
+  deferred for a third time, escalates automatically.
+- **Seats can be released.** A chapter seat handed back returns the
+  staffing need to the queue for someone else to fill.
+- **The case team is a picture, not a guess.** Every live seat and every
+  seat that ended shows on the case file, with the boundary between
+  chapter specialist and whole-case owner explicit.
+
+Resolving a handoff writes the assignment, tells the chosen handler, and
+once the case is staffed, tells the client who their person is.
+
+### What a case does on its own
+
+A case is numbered `APP-2026-0007` from a collision-proof sequence, and it
+moves some things itself rather than waiting for a human:
+
+- **Documents can advance it.** When every document a stage requested is
+  verified, the case checks whether it can move forward. Verified
+  documents alone still don't open school submission: the chapter's
+  other gates apply too.
+- **Chapters raise their own invoices.** Opening the visa chapter raises
+  the destination's visa costs as a proforma automatically, gated on the
+  visa-stage documents and entry evidence: when those are outstanding
+  the case says so instead of billing quietly, and the officer raises it
+  by hand once they clear. One live visa invoice per case.
+- **"Nothing due" is said out loud.** If the chosen schools carry no
+  application fees, or the destination records no visa costs, the case
+  posts a visible note that nothing is owed before work starts, instead
+  of leaving the client to wonder whether a bill is coming.
 
 ### The pre-departure checklist
 
@@ -347,15 +385,25 @@ queue, because the branch owns the file, not the client's location.
 
 ### Meetings
 
-Online sessions run in video rooms the client joins **inside the
-portal**, no external link needed. Staff can paste any meeting link
-(Zoom, Meet, Teams, any https address) onto a booking, or generate a
-Google Meet space on demand through the company's connected Google
-account, either way the client just sees "join". Join windows differ by
-side: the host gets in thirty minutes early to prep, the client fifteen,
-and the room dies two hours after the end. A background check every
-minute marks meetings live or ended, feeding the console's "what's
-happening now" view.
+A booking gets a video room one of three ways, resolved against what is
+actually connected: **LiveKit** rooms render the call *inside the app*
+(no external link at all), **Daily** rooms open in the browser, and a
+company-connected Google account can mint a **Meet** space. Staff press
+"generate" and the room is created on whichever provider is active, the
+link lands on the booking, and the client is emailed and notified.
+Pasting any https link (Zoom, Teams, anything) works too and flows
+through the same join button.
+
+Joining is one door with different keys. For provider rooms the door
+mints a per-person token: the assigned consultant hosts (the case's
+coordinator hosts too; on an unassigned booking whichever oversight
+joins holds the room), and anyone else watching gets a participant token
+with no end-for-all power. Join windows differ by side: staff get in
+thirty minutes early to prep, the client fifteen, and the room dies two
+hours after the end. Pasted links and Meet bookings skip the token layer
+entirely and return the stored link, so manual meetings keep working
+through the same button. A background check every minute marks meetings
+live or ended, feeding the console's "what's happening now" view.
 
 Staff calendars connect both ways: they can pull their personal calendar's
 busy times in so clients can't book over them, and publish their Century
@@ -550,14 +598,27 @@ with the reason attached.
 
 ## Part 7: Documents
 
-Clients upload through a vault: the file goes straight to private storage
-via a temporary signed link, then staff verify it or reject it with a
-note. Verification progress feeds the client's checklist and the journey on
+Clients upload through a vault in two phases: the API mints a temporary
+signed link, the browser sends the file straight to private storage, then
+the client confirms — and the API *checks the object actually landed in
+storage* before marking it uploaded, preferring the size storage recorded
+over whatever the request claimed. Nobody can mark a document uploaded
+without a file behind it.
+
+Staff can also place files on a client's record (an offer letter, a
+corrected scan), and the same complete-check applies. Review is
+caseload-scoped: the documents module lets a role review at all, but a
+consultant can only verify or reject for applicants on their own
+caseload. Every review records who decided and a note; a rejection shows
+the client the reason and starts its expiry clock (thirty days by
+default, then a daily purge deletes the file).
+
+Verification progress feeds the client's checklist and the journey on
 both sides. Staff can request a specific document by name ("passport data
-page"), which appears as a task in the portal. Rejected files are purged
-after a retention period. Nothing is publicly reachable; every download
-goes through a short-lived signed link the API mints. Uploads accept PDF
-only, up to fifteen megabytes.
+page"), which appears as a task in the portal. Nothing is publicly
+reachable; every download goes through a short-lived signed link the API
+mints — five minutes by default. Uploads accept PDF only, up to fifteen
+megabytes.
 
 One deliberate hold: the documents the agency produces as the client's
 agent, the admission letter and the visa outcome, are visible in the vault
@@ -1131,8 +1192,10 @@ why they can't disagree with the payments table.
 
 Upload is three steps: the API mints a short-lived upload link, the file
 goes straight from the browser to private storage, then the client tells
-the API it's complete and the record lands. Review changes the record's
-state (verified, or rejected with a note the client sees) and that state
+the API it's complete — at which point the API asks storage whether the
+object really exists before the record lands, because trusting the claim
+would let a reviewer open nothing. Review changes the record's state
+(verified, or rejected with a note the client sees) and that state
 feeds the checklist and the journey. Downloads are minted per request.
 Rejected files are deleted by a daily sweep after a retention window, so
 rejected personal documents don't accumulate in storage.

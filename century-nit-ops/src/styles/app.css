@@ -3290,7 +3290,9 @@
 	flex-shrink: 0;
 }
 
-.hd-split {
+/* specificity beats scheduling.css's .ops-split { align-items: flex-start },
+   which loads later and would otherwise re-unbind every column's height */
+.ops-split.hd-split {
 	display: flex;
 	gap: 1rem;
 	align-items: stretch;
@@ -3311,6 +3313,9 @@
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
+		/* column-flex child of .portal__main — without this, tall content
+		   forces it past the viewport and the bottom clips unreachable */
+		min-height: 0;
 	}
 	.hd-page {
 		flex: 1;

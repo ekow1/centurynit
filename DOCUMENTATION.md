@@ -37,6 +37,28 @@ origins for the rare calls that are genuinely cross-origin; the same list
 feeds both the browser security layer and the sign-in system so they can
 never drift apart.
 
+### The technology stack
+
+| Layer | Technology |
+|---|---|
+| Language | TypeScript everywhere: API, both front ends, shared packages |
+| API | Hono on Node.js, validated by Zod schemas that also generate the interactive API reference (Scalar) |
+| Database | PostgreSQL, Drizzle ORM, numbered migrations, row-level security |
+| Authentication | Better Auth: sessions, Google sign-in, one-time codes, two-factor |
+| Queue and cache | Redis with BullMQ workers for every background job |
+| Front ends | React with React Router, built by Vite, deployed as Cloudflare Workers |
+| Edge | Cloudflare Workers serve the apps and proxy the API; Workers AI (Llama 3.1) runs the assistant; Turnstile checks bots |
+| Email | Resend, delivery events returning through a signed webhook |
+| File storage | Supabase Storage behind short-lived signed links |
+| Video | LiveKit rooms, Daily kept as an alternative provider |
+| Calendars | Google APIs for staff connections, iCal feeds both directions |
+| Payments | Paystack as the primary rail, Stripe alongside when configured |
+| Documents | pdfmake renders the invoice and receipt PDFs |
+| Push | Web Push for browser notifications |
+| Shared code | Internal packages carry the shared schemas, the content catalogue and the chat UI, so the three apps can't drift |
+| Testing | Vitest, including end-to-end journey and booking suites |
+| Deployment | The API ships as a Docker image; the front ends deploy with Wrangler |
+
 ### Where the truth lives
 
 Everything of record is in one PostgreSQL database: cases, invoices,

@@ -3,50 +3,63 @@
 <style>
 @page {
 	size: A4;
-	margin: 24mm 20mm 22mm;
+	margin: 20mm 18mm 20mm;
+	@top-left {
+		content: "CENTURY NIT CONSULT";
+		font-family: "Segoe UI", sans-serif; font-size: 7.5pt;
+		letter-spacing: 0.18em; color: #999;
+	}
 	@top-right {
 		content: "Complete Platform Documentation";
 		font-family: Georgia, "Times New Roman", serif;
 		font-style: italic; font-size: 8.5pt; color: #777;
 	}
 	@bottom-left {
-		content: "Century NIT Consult";
+		content: "Century NIT Consult · Internal documentation";
 		font-size: 8pt; color: #999; letter-spacing: 0.06em;
 	}
 	@bottom-right {
-		content: counter(page);
-		font-family: Georgia, serif; font-size: 9.5pt; color: #555;
+		content: "Page " counter(page) " of " counter(pages);
+		font-family: Georgia, serif; font-size: 9pt; color: #555;
 	}
 }
 @page cover {
+	@top-left { content: none; }
 	@top-right { content: none; }
 	@bottom-left { content: none; }
 	@bottom-right { content: none; }
 }
 @page toc {
+	@top-left { content: none; }
 	@top-right { content: none; }
 }
 * { box-sizing: border-box; }
 html { -webkit-print-color-adjust: exact; }
 body {
 	font-family: "Segoe UI", Calibri, "Helvetica Neue", Arial, sans-serif;
-	font-size: 10pt; line-height: 1.62; color: #1c1c1c; margin: 0;
+	font-size: 9.8pt; line-height: 1.55; color: #1c1c1c; margin: 0;
 	hyphens: auto;
 }
 
 /* — Cover — */
-.cover { page: cover; break-after: page; height: 245mm;
+.cover { page: cover; break-after: page; height: 250mm;
 	display: flex; flex-direction: column; justify-content: center; }
 .cover .brand { font-size: 9pt; letter-spacing: 0.34em; text-transform: uppercase;
-	color: #777; margin-bottom: 34pt; }
-.cover .rule { width: 42pt; border-top: 2.5pt solid #1c1c1c; margin-bottom: 26pt; }
+	color: #777; margin-bottom: 30pt; }
+.cover .rule { width: 42pt; border-top: 2.5pt solid #1c1c1c; margin-bottom: 24pt; }
 .cover h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400;
-	font-size: 34pt; line-height: 1.22; margin: 0 0 20pt; color: #1c1c1c; }
+	font-size: 34pt; line-height: 1.22; margin: 0 0 18pt; color: #1c1c1c; }
 .cover .sub { font-size: 12pt; color: #444; max-width: 128mm; line-height: 1.6;
-	margin: 0 0 60pt; }
+	margin: 0 0 48pt; }
 .cover .meta { font-size: 9pt; color: #777; letter-spacing: 0.08em;
 	border-top: 0.6pt solid #bbb; padding-top: 12pt; width: 128mm;
 	display: flex; justify-content: space-between; }
+.cover .control { margin-top: 46pt; width: 128mm; border-collapse: collapse;
+	font-size: 8.5pt; }
+.cover .control td { border-top: 0.5pt solid #ccc; padding: 6pt 10pt 6pt 0;
+	color: #555; vertical-align: top; }
+.cover .control td:first-child { color: #999; text-transform: uppercase;
+	letter-spacing: 0.1em; font-size: 7.5pt; width: 34mm; padding-top: 7pt; }
 
 /* — Contents — */
 .toc { page: toc; break-after: page; }
@@ -71,22 +84,22 @@ main { text-align: left; }
 h2, h3, th, td, li, .toc .t { text-align-last: left !important; }
 h2 {
 	font-family: Georgia, "Times New Roman", serif; font-weight: 400;
-	font-size: 19pt; color: #1c1c1c; margin: 0 0 4pt;
-	break-before: page; text-align: left;
-	padding-bottom: 10pt; border-bottom: 0.8pt solid #1c1c1c;
+	font-size: 18pt; color: #1c1c1c;
+	margin: 30pt 0 4pt; text-align: left;
+	padding: 12pt 0 9pt; border-top: 2.5pt solid #1c1c1c;
+	break-after: avoid; break-inside: avoid;
 }
 h2 .kicker { display: block; font-family: "Segoe UI", sans-serif;
 	font-size: 8pt; letter-spacing: 0.3em; text-transform: uppercase;
-	color: #999; margin-bottom: 10pt; }
-h2 + p { margin-top: 14pt; }
+	color: #999; margin-bottom: 8pt; }
 h3 {
 	font-family: Georgia, serif; font-weight: 400; font-size: 12pt;
-	margin: 20pt 0 6pt; break-after: avoid; color: #1c1c1c;
+	margin: 17pt 0 5pt; break-after: avoid; color: #1c1c1c;
 	font-variant: small-caps; letter-spacing: 0.05em; text-align: left;
 }
-p { margin: 6pt 0; orphans: 3; widows: 3; }
-ul, ol { margin: 6pt 0 10pt; padding-left: 17pt; }
-li { margin: 3.5pt 0; padding-left: 2pt; }
+p { margin: 5pt 0; orphans: 3; widows: 3; }
+ul, ol { margin: 5pt 0 9pt; padding-left: 17pt; }
+li { margin: 3pt 0; padding-left: 2pt; }
 li::marker { color: #999; }
 strong { font-weight: 600; }
 em { font-style: italic; }
@@ -119,6 +132,12 @@ td { color: #333; }
 	how it is built, how the client journey works, and how it runs in
 	production.</p>
 	<div class="meta"><span>Client portal · Operations Center · API</span><span>2026-09-22</span></div>
+	<table class="control">
+		<tr><td>Document</td><td>Complete Platform Documentation</td></tr>
+		<tr><td>Applies to</td><td>Public website, client portal, Operations Center, API and workers</td></tr>
+		<tr><td>Status</td><td>Current — generated from DOCUMENTATION.md</td></tr>
+		<tr><td>Audience</td><td>Internal, partners, technical stakeholders</td></tr>
+	</table>
 </div>
 <nav class="toc">
 	<div class="toc-title">Contents</div>

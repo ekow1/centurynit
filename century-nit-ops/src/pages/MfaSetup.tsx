@@ -10,7 +10,7 @@ import {
 	type MfaEnrollmentStatus,
 } from "../lib/api";
 import { useOpsAuth, ROLE_HOME } from "./OpsAuthContext";
-import { AuthShell, maskEmail, type AuthStep } from "./AuthShell";
+import { AuthShell, AuthFeats, maskEmail, type AuthStep } from "./AuthShell";
 import { OtpInput } from "./OtpInput";
 import { PasswordField } from "./PasswordField";
 
@@ -327,15 +327,19 @@ export function MfaSetup() {
 					),
 				body:
 					step === "manage" || step === "method" ? (
-						<>
-							An authenticator app is the stronger option. Codes work offline and can't be
-							intercepted. Email codes are the fallback for shared or restricted devices.
-						</>
+						<AuthFeats
+							items={[
+								{ icon: "qr", text: <>An authenticator app is the <strong>stronger option</strong>. Codes work offline.</> },
+								{ icon: "mail", text: "Email codes are the fallback for shared or restricted devices." },
+							]}
+						/>
 					) : step === "totp-codes" ? (
-						<>
-							<strong>Without these and your phone</strong>, only an admin reset recovers the
-							account. Store them like a password.
-						</>
+						<AuthFeats
+							items={[
+								{ icon: "key", text: <>Without these <strong>and</strong> your phone, only an admin reset recovers the account.</> },
+								{ icon: "lock", text: "Store them like a password." },
+							]}
+						/>
 					) : undefined,
 				steps,
 				footLeft: "1Password · Google · Microsoft · Authy",

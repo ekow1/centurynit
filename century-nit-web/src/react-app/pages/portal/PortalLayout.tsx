@@ -27,6 +27,8 @@ import { CommunicationCenter } from "./CommunicationCenter";
 import { PortalAppBar, PortalTabBar } from "./PortalMobileNav";
 import { OnboardingModal } from "../../components/portal/OnboardingModal";
 import { MfaPrompt } from "../../components/portal/MfaPrompt";
+import { IdleTimeout } from "../../components/portal/IdleTimeout";
+import { getCurrentSession } from "../../context/authStore";
 import { useBrand } from "../../data/useBrand";
 
 /**
@@ -146,6 +148,32 @@ export function PortalLayout() {
 
 	return (
 		<div className="portal">
+			{/* Twelve hours without input ends the portal session. The warning
+			    modal counts down the last five minutes; "Stay signed in"
+			    re-validates the cookie and resets the clock. */}
+			<IdleTimeout
+				idleMs={12 * 60 * 60 * 1000}
+				warnMs={5 * 60 * 1000}
+				storageKey="cn-portal-idle-at"
+				name={authUser?.name}
+				idleLabel="12 hours"
+				lead="You've been away for about 12 hours. For your privacy, the portal signs you out automatically."
+				keepAlive={async () => {
+					try {
+						return Boolean(await getCurrentSession());
+					} catch {
+						return false;
+					}
+				}}
+				onExpire={() => {
+					void (async () => {
+						try {
+							await signOut();
+						} catch {}
+						window.location.assign("/start?reason=idle");
+					})();
+				}}
+			/>
 			<aside className="portal__aside">
 				<div className="portal__brand">
 					<Link to="/portal/home" className="nav__logo">

@@ -756,7 +756,7 @@
 
 .ops-login__chip {
 	font-family: var(--font-mono);
-	font-size: 0.55rem;
+	font-size: 0.64rem;
 	letter-spacing: 0.14em;
 	text-transform: uppercase;
 	color: var(--auth-dim);
@@ -777,7 +777,7 @@
 	align-items: center;
 	gap: 0.6rem;
 	font-family: var(--font-mono);
-	font-size: 0.58rem;
+	font-size: 0.66rem;
 	letter-spacing: 0.18em;
 	text-transform: uppercase;
 	color: var(--auth-amber);
@@ -792,7 +792,7 @@
 
 .ops-login__ctx-title {
 	font-family: var(--font-display);
-	font-size: 1.5rem;
+	font-size: 1.8rem;
 	font-weight: 400;
 	line-height: 1.3;
 	letter-spacing: -0.01em;
@@ -806,10 +806,49 @@
 }
 
 .ops-login__ctx-body {
-	font-size: var(--text-sm);
+	font-size: 0.88rem;
 	line-height: 1.65;
 	color: rgba(255, 255, 255, 0.55);
 	max-width: 40ch;
+}
+
+/* Ruled icon rows — the aside reads as facts, not a paragraph */
+
+.ops-login__feats {
+	margin-top: 1.5rem;
+	border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.ops-login__feat {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 0.6rem 0;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+	font-size: 0.8rem;
+	line-height: 1.5;
+	color: rgba(255, 255, 255, 0.62);
+}
+
+.ops-login__feat-ic {
+	width: 24px;
+	height: 24px;
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	display: grid;
+	place-items: center;
+	flex: none;
+	color: var(--auth-amber);
+}
+
+.ops-login__ic {
+	width: 13px;
+	height: 13px;
+	display: block;
+}
+
+.ops-login__feat-tx strong {
+	color: #ece9e0;
+	font-weight: 500;
 }
 
 .ops-login__ctx-body strong {
@@ -832,7 +871,7 @@
 
 .ops-login__step-n {
 	font-family: var(--font-mono);
-	font-size: 0.6rem;
+	font-size: 0.68rem;
 	width: 20px;
 	height: 20px;
 	border: 1px solid rgba(255, 255, 255, 0.25);
@@ -876,7 +915,7 @@
 	border-top: 1px solid rgba(255, 255, 255, 0.14);
 	padding-top: 1rem;
 	font-family: var(--font-mono);
-	font-size: 0.58rem;
+	font-size: 0.64rem;
 	letter-spacing: 0.06em;
 	color: var(--auth-dim);
 	position: relative;
@@ -901,7 +940,7 @@
 	padding: 1.05rem 1.6rem;
 	border-bottom: 1px solid var(--auth-line);
 	font-family: var(--font-mono);
-	font-size: 0.58rem;
+	font-size: 0.64rem;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
 	color: var(--muted-foreground);
@@ -950,14 +989,14 @@
 	margin-top: 1.35rem;
 	padding-top: 1rem;
 	font-family: var(--font-mono);
-	font-size: 0.62rem;
+	font-size: 0.7rem;
 	color: var(--muted-foreground);
 }
 
 .ops-login__cardfoot a,
 .ops-login__footlink {
 	font-family: var(--font-mono);
-	font-size: 0.62rem;
+	font-size: 0.7rem;
 	letter-spacing: 0.02em;
 	color: var(--foreground);
 	text-decoration: none;
@@ -989,7 +1028,7 @@
 
 .ops-login__eyebrow {
 	font-family: var(--font-mono);
-	font-size: 0.56rem;
+	font-size: 0.66rem;
 	letter-spacing: 0.16em;
 	text-transform: uppercase;
 	color: var(--auth-amber-ink);
@@ -1002,7 +1041,7 @@
 	align-self: flex-start;
 	gap: 0.45rem;
 	font-family: var(--font-mono);
-	font-size: 0.62rem;
+	font-size: 0.7rem;
 	letter-spacing: 0.03em;
 	padding: 0.28rem 0.6rem;
 	border: 1px solid var(--border-light);
@@ -1021,13 +1060,13 @@
 
 .ops-login__title {
 	font-family: var(--font-display);
-	font-size: 1.55rem;
+	font-size: 1.85rem;
 	font-weight: 500;
 	letter-spacing: -0.015em;
 }
 
 .ops-login__subtitle {
-	font-size: var(--text-sm);
+	font-size: 0.92rem;
 	color: var(--muted-foreground);
 	line-height: 1.55;
 }
@@ -1124,7 +1163,7 @@
 	align-items: center;
 	gap: 0.4rem;
 	font-family: var(--font-mono);
-	font-size: var(--text-xs);
+	font-size: 0.66rem;
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
 	color: var(--muted-foreground);
@@ -1170,13 +1209,14 @@
 }
 
 .ops-otp__cell {
-	flex: 1;
-	width: auto;
+	flex: 1 1 0;
+	min-width: 0;
 	height: 54px;
 	border: 1px solid var(--foreground);
 	background: #fff;
 	font-family: var(--font-mono);
-	font-size: 1.25rem;
+	font-size: 1.4rem;
+	font-weight: 700;
 	text-align: center;
 	outline: none;
 	color: var(--foreground);
@@ -1212,7 +1252,7 @@
 	background: #f9efec;
 	padding: 0.55rem 0.75rem;
 	font-family: var(--font-mono);
-	font-size: 0.56rem;
+	font-size: 0.64rem;
 	letter-spacing: 0.12em;
 	text-transform: uppercase;
 	color: #a33b2e;
@@ -1221,7 +1261,7 @@
 
 .ops-lockbox__body {
 	padding: 0.7rem 0.75rem;
-	font-size: 0.78rem;
+	font-size: 0.84rem;
 	line-height: 1.55;
 	color: #5c4038;
 }
@@ -1237,7 +1277,7 @@
 
 .mfa-enrol__label {
 	font-family: var(--font-mono);
-	font-size: 0.56rem;
+	font-size: 0.64rem;
 	letter-spacing: 0.12em;
 	text-transform: uppercase;
 	color: var(--muted-foreground);
@@ -1245,7 +1285,7 @@
 }
 
 .mfa-enrol__copy {
-	font-size: 0.74rem;
+	font-size: 0.82rem;
 	line-height: 1.55;
 	color: var(--muted-foreground);
 	margin: 0;
@@ -1260,7 +1300,7 @@
 	padding: 0.5rem 0.65rem;
 	margin-top: 0.55rem;
 	font-family: var(--font-mono);
-	font-size: 0.7rem;
+	font-size: 0.8rem;
 	letter-spacing: 0.06em;
 }
 
@@ -1299,7 +1339,7 @@
 
 .ops-codes span {
 	font-family: var(--font-mono);
-	font-size: 0.74rem;
+	font-size: 0.82rem;
 	letter-spacing: 0.04em;
 	padding: 0.5rem 0.65rem;
 	border-bottom: 1px solid var(--auth-line);
@@ -1339,6 +1379,13 @@
 	border-top: 3px solid var(--auth-amber);
 }
 
+/* Disabled reads as intent, not breakage — ink at low opacity, not grey wash */
+
+.ops-login__card .btn--primary:disabled {
+	opacity: 0.35;
+	border-top-color: var(--auth-amber);
+}
+
 .ops-login__back {
 	display: flex;
 	align-items: center;
@@ -1347,7 +1394,7 @@
 	width: 100%;
 	padding: 0.7rem;
 	font-family: var(--font-mono);
-	font-size: var(--text-xs);
+	font-size: 0.72rem;
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
 	color: var(--muted-foreground);
@@ -1366,7 +1413,7 @@
 	align-items: center;
 	gap: 0.45rem;
 	font-family: var(--font-mono);
-	font-size: var(--text-xs);
+	font-size: 0.72rem;
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
 	color: var(--muted-foreground);
@@ -7114,7 +7161,7 @@ input[type="time"].input {
 	align-items: center;
 	justify-content: space-between;
 	gap: 0.75rem;
-	font-size: var(--text-xs);
+	font-size: 0.72rem;
 }
 
 .ops-login__remember {
@@ -7124,7 +7171,7 @@ input[type="time"].input {
 	color: var(--muted-foreground);
 	cursor: pointer;
 	font-family: var(--font-mono);
-	font-size: var(--text-xs);
+	font-size: 0.72rem;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
 }
@@ -7345,3 +7392,115 @@ input[type="time"].input {
 .scoperoute-lg__leg--off .scoperoute-lg__name { text-decoration: line-through; }
 .scoperoute-lg__leg--off .scoperoute-lg__dot { background: var(--background); border: 1px solid var(--border); }
 .scoperoute-lg__leg--rec .scoperoute-lg__dot { background: var(--background); border: 1px solid #b45309; }
+
+/* ─── Idle session timeout ─── */
+.idle-veil {
+	position: fixed;
+	inset: 0;
+	z-index: 4000;
+	background: rgba(24, 24, 27, 0.55);
+	backdrop-filter: blur(2px);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 20px;
+}
+.idle-card {
+	width: min(430px, 100%);
+	background: var(--auth-paper);
+	border: 1px solid #18181b;
+	border-top: 3px solid var(--auth-amber);
+	box-shadow: 10px 10px 0 rgba(0, 0, 0, 0.3);
+}
+.idle-card__head { padding: 20px 22px 0; }
+.idle-card__eyebrow {
+	margin: 0;
+	font-family: "SFMono-Regular", Consolas, monospace;
+	font-size: 0.64rem;
+	font-weight: 800;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--auth-amber-ink);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.idle-card__eyebrow i { width: 8px; height: 8px; background: var(--auth-amber); }
+.idle-card__title {
+	font-family: Georgia, "Times New Roman", serif;
+	font-size: 1.55rem;
+	letter-spacing: -0.01em;
+	margin: 8px 0 6px;
+}
+.idle-card__lead { font-size: 0.85rem; line-height: 1.55; color: rgba(24, 24, 27, 0.62); margin: 0; }
+.idle-card__clock {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	padding: 16px 22px;
+	border-bottom: 1px solid var(--auth-line);
+}
+.idle-card__digits {
+	font-family: "SFMono-Regular", Consolas, monospace;
+	font-size: 2.4rem;
+	font-weight: 800;
+	letter-spacing: 0.04em;
+	font-variant-numeric: tabular-nums;
+}
+.idle-card__clockcap {
+	font-family: "SFMono-Regular", Consolas, monospace;
+	font-size: 0.58rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: rgba(24, 24, 27, 0.55);
+}
+.idle-card__meter { height: 3px; background: var(--auth-line); }
+.idle-card__meter i { display: block; height: 100%; background: var(--auth-amber); transition: width 1s linear; }
+.idle-card__actions { display: flex; gap: 10px; padding: 16px 22px 12px; }
+.idle-btn {
+	height: 46px;
+	font-family: inherit;
+	font-size: 0.85rem;
+	font-weight: 650;
+	cursor: pointer;
+	border: 1px solid #18181b;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 0 18px;
+}
+.idle-btn:disabled { opacity: 0.45; cursor: default; }
+.idle-btn--pri { flex: 1; background: #18181b; color: var(--auth-paper); border-top: 3px solid var(--auth-amber); }
+.idle-btn--ghost { background: transparent; color: rgba(24, 24, 27, 0.62); border-color: var(--auth-line); }
+.idle-btn--ghost:hover:not(:disabled) { border-color: #18181b; color: #18181b; }
+.idle-card__fine {
+	padding: 0 22px 16px;
+	margin: 0;
+	font-size: 0.72rem;
+	line-height: 1.5;
+	color: rgba(24, 24, 27, 0.45);
+}
+
+/* "Signed out after idle" notice on the login form */
+.ops-login__idle {
+	display: flex;
+	gap: 10px;
+	align-items: baseline;
+	border: 1px solid var(--auth-line);
+	border-left: 3px solid var(--auth-amber);
+	padding: 10px 12px;
+	font-size: 0.8rem;
+	line-height: 1.45;
+	color: rgba(24, 24, 27, 0.72);
+	background: rgba(185, 122, 16, 0.05);
+}
+.ops-login__idle-tag {
+	font-family: "SFMono-Regular", Consolas, monospace;
+	font-size: 0.58rem;
+	font-weight: 800;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--auth-amber-ink);
+	white-space: nowrap;
+}

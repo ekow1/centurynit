@@ -23,6 +23,7 @@ import {
 	type SessionResponse,
 } from "../lib/api";
 import { useOpsSSE } from "../hooks/useChatStream";
+import { IdleTimeout } from "../components/IdleTimeout";
 
 /* ─── Role Definitions ─── */
 
@@ -231,11 +232,25 @@ function PermissionsSync({ refresh }: { refresh: () => Promise<void> }) {
 	return null;
 }
 
+const IDLE_LIMIT_KEY = "cn-ops-idle-hours";
+const DEFAULT_IDLE_HOURS = 2;
+
 export function OpsAuthProvider({ children }: { children: ReactNode }) {
 	const [opsUser, setOpsUser] = useState<OpsUser | null>(loadSession);
 	const [authInitializing, setAuthInitializing] = useState(true);
 	const [dynamicPermissions, setDynamicPermissions] = useState<Record<string, string[]>>({});
 	const [roleCatalog, setRoleCatalog] = useState<RoleSummary[]>([]);
+	const [idleHours, setIdleHours] = useState<number>(DEFAULT_IDLE_HOURS);
+
+	// The admin auth policy owns the idle limit; every session probe adopts it.
+	// Persisted so the signed-out notice on /login can quote the real number.
+	const applyPolicy = useCallback((s: SessionResponse) => {
+		if (!s.idleHours) return;
+		setIdleHours(s.idleHours);
+		try {
+			localStorage.setItem(IDLE_LIMIT_KEY, String(s.idleHours));
+		} catch {}
+	}, []);
 
 	const opsRole = opsUser?.role ?? null;
 
@@ -255,14 +270,21 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		} catch {
 			// API error or unauthenticated, fallback to built-in map
 		}
-	}, []);
+		// Re-probe the session too: a changed idle policy reaches open tabs here
+		// rather than only at the next sign-in.
+		try {
+			applyPolicy(await getSession());
+		} catch {}
+	}, [applyPolicy]);
 
 	// On mount, check for an existing API session and load role permissions.
 	useEffect(() => {
 		let cancelled = false;
 		(async () => {
 			try {
-				const { staff } = await getSession();
+				const sess = await getSession();
+				applyPolicy(sess);
+				const { staff } = sess;
 				if (cancelled) return;
 				if (staff) {
 					const user = staffToOpsUser(staff);
@@ -277,7 +299,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 			}
 		})();
 		return () => { cancelled = true; };
-	}, [refreshPermissions]);
+	}, [refreshPermissions, applyPolicy]);
 
 	const opsSignInWithCredentials = useCallback(async (email: string, password: string, rememberMe?: boolean) => {
 		const res = await apiSignIn(email, password, rememberMe);
@@ -305,7 +327,9 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 			return { twoFactorRequired: true, mfaMethod };
 		}
 
-		const { staff } = await getSession();
+		const sess = await getSession();
+		applyPolicy(sess);
+		const { staff } = sess;
 		if (!staff) throw new Error("No staff profile linked to this account.");
 
 		const user = staffToOpsUser(staff);
@@ -313,7 +337,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		saveSession(user);
 		void refreshPermissions();
 		return { user };
-	}, [refreshPermissions]);
+	}, [refreshPermissions, applyPolicy]);
 
 	const opsVerifyTwoFactor = useCallback(async (code: string, isBackupCode?: boolean, trustDevice?: boolean) => {
 		const cleanCode = code.trim().replace(/\s+/g, "");
@@ -322,14 +346,16 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		} else {
 			await apiVerifyTotp(cleanCode.replace(/\D/g, ""), trustDevice);
 		}
-		const { staff } = await getSession();
+		const sess = await getSession();
+		applyPolicy(sess);
+		const { staff } = sess;
 		if (!staff) throw new Error("No staff profile linked to this account.");
 		const user = staffToOpsUser(staff);
 		setOpsUser(user);
 		saveSession(user);
 		void refreshPermissions();
 		return user;
-	}, [refreshPermissions]);
+	}, [refreshPermissions, applyPolicy]);
 
 	const opsVerifyEmailOtp = useCallback(async (code: string, trustDevice?: boolean) => {
 		const cleanCode = code.trim().replace(/\s+/g, "");
@@ -337,14 +363,16 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		// session on success. The custom /auth-settings/mfa/verify-otp needs a
 		// session already, so it could never serve this flow.
 		await verifyTwoFactorOtp(cleanCode, trustDevice);
-		const { staff } = await getSession();
+		const sess = await getSession();
+		applyPolicy(sess);
+		const { staff } = sess;
 		if (!staff) throw new Error("No staff profile linked to this account.");
 		const user = staffToOpsUser(staff);
 		setOpsUser(user);
 		saveSession(user);
 		void refreshPermissions();
 		return user;
-	}, [refreshPermissions]);
+	}, [refreshPermissions, applyPolicy]);
 
 	const opsSendMfaOtp = useCallback(async () => {
 		await sendTwoFactorOtp();
@@ -424,6 +452,35 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 			}}
 		>
 			{opsUser && <PermissionsSync refresh={refreshPermissions} />}
+			{opsUser && (
+				<IdleTimeout
+					idleMs={idleHours * 60 * 60 * 1000}
+					warnMs={5 * 60 * 1000}
+					storageKey="cn-ops-idle-at"
+					name={opsUser.name}
+					idleLabel={`${idleHours} ${idleHours === 1 ? "hour" : "hours"}`}
+					lead={`No activity for about ${idleHours} ${idleHours === 1 ? "hour" : "hours"}. For client data safety, staff sessions sign out automatically.`}
+					keepAlive={async () => {
+						try {
+							const sess = await getSession();
+							applyPolicy(sess);
+							return Boolean(sess.staff);
+						} catch {
+							return false;
+						}
+					}}
+					onExpire={() => {
+						void (async () => {
+							try {
+								await apiSignOut();
+							} catch {}
+							setOpsUser(null);
+							saveSession(null);
+							window.location.assign("/login?reason=idle");
+						})();
+					}}
+				/>
+			)}
 			{children}
 		</OpsAuthContext.Provider>
 	);

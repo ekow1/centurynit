@@ -241,7 +241,7 @@ export function StartJourney() {
 	const [newPassword, setNewPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
 	const [error, setError] = useState("");
-	const [verificationBanner, setVerificationBanner] = useState<"verified" | "error" | null>(null);
+	const [verificationBanner, setVerificationBanner] = useState<"verified" | "error" | "idle" | null>(null);
 
 	// Default settings (all enabled)
 	const defaults: AuthSettingsResponse = {
@@ -278,9 +278,13 @@ export function StartJourney() {
 		const verified = searchParams.get("verified");
 		const verifyError = searchParams.get("error");
 		const token = searchParams.get("token");
+		const reason = searchParams.get("reason");
 		if (token) {
 			setResetCode(token);
 			setStep("set");
+			setSearchParams({}, { replace: true });
+		} else if (reason === "idle") {
+			setVerificationBanner("idle");
 			setSearchParams({}, { replace: true });
 		} else if (verified === "true") {
 			setVerificationBanner("verified");
@@ -793,6 +797,11 @@ export function StartJourney() {
 					{verificationBanner === "error" ? (
 						<div className="auth-error" role="alert">
 							The verification link was invalid or expired. Please sign up again to request a new one.
+						</div>
+					) : null}
+					{verificationBanner === "idle" ? (
+						<div className="auth-note" role="status">
+							You were signed out after 12 hours without activity. Sign back in to continue.
 						</div>
 					) : null}
 

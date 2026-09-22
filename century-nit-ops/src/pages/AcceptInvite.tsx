@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, staffApi } from "century-nit-core/api";
 import type { InvitationPreview } from "century-nit-shared";
 import { useOpsAuth } from "./OpsAuthContext";
-import { AuthShell, type AuthStep } from "./AuthShell";
+import { AuthShell, AuthFeats, type AuthStep } from "./AuthShell";
 import { PasswordField, PASSWORD_MIN_LENGTH } from "./PasswordField";
 
 /**
@@ -197,13 +197,13 @@ export function AcceptInvite() {
 				label: "You're joining as",
 				title: <>{preview?.email}</>,
 				body: (
-					<>
-						{roleLabel}
-						{preview?.branch ? ` · ${preview.branch}` : ""}
-						<br />
-						{preview?.organisation}
-						{expires ? ` · ${expires}` : ""}
-					</>
+					<AuthFeats
+						items={[
+							{ icon: "user", text: <>{roleLabel}{preview?.branch ? ` · ${preview.branch}` : ""}</> },
+							{ icon: "pin", text: preview?.organisation ?? "Century NIT Operations" },
+							...(expires ? [{ icon: "clock" as const, text: expires }] : []),
+						]}
+					/>
 				),
 				steps,
 				footLeft: "Wrong person? Close the tab",

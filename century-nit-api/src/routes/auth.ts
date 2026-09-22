@@ -21,6 +21,7 @@ import { welcomeEmail } from "../services/notifications.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 import { deleteClientUser } from "../services/clientUsers.js";
 import { getAuthSettings, markMfaSessionPending } from "../services/auth-settings.js";
+import { getAuthPolicy } from "../services/audit.js";
 
 /**
  * Exported so middleware can read the session Better Auth already issues,
@@ -576,6 +577,10 @@ auth.get("/me", async (c) => {
 						email: staff.email,
 					}
 				: null,
+		// The ops idle guard enforces this client-side; staff sessions end
+		// after `idleHours` without input. Read by the console on mount and
+		// on each keep-alive ping so a policy change reaches open tabs.
+		idleHours: staff?.active ? (await getAuthPolicy()).idleHours : null,
 	});
 });
 

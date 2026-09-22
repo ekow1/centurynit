@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ops · session timeout mock</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; border-radius: 0 !important; }
+  :root {
+    --ink: #18181b; --ink-60: #52525b; --ink-40: #a1a1aa;
+    --paper: #f5f4f0; --card: #fbfaf7;
+    --line: #d8d4c9; --line-soft: #e7e4db;
+    --amber: #b97a10; --amber-ink: #8a5a0a; --amber-bg: #fdf6e7;
+    --red: #b91c1c; --red-bg: #fef2f2;
+    --mono: "SFMono-Regular", Consolas, monospace;
+    --serif: Georgia, "Times New Roman", serif;
+    --sans: -apple-system, "Segoe UI", sans-serif;
+  }
+  body { font-family: var(--sans); color: var(--ink); background: var(--paper); }
+  .mono { font-family: var(--mono); }
+
+  .mockhead { padding: 22px 36px; border-bottom: 2px solid var(--ink); display: flex; justify-content: space-between; align-items: baseline; }
+  .mockhead h1 { font-family: var(--serif); font-size: 20px; }
+  .mockhead span { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-60); }
+  .cap { font-family: var(--mono); font-size: 9.5px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--amber-ink); padding: 18px 36px 0; }
+  .capnote { font-size: 12px; color: var(--ink-60); padding: 4px 36px 16px; max-width: 80ch; }
+
+  /* ── fake console behind the prompt ── */
+  .console { position: relative; border: 1px solid var(--line); margin: 0 36px 40px; height: 560px; overflow: hidden; background: #fff; }
+  .cnav { display: flex; align-items: center; gap: 20px; padding: 0 24px; height: 48px; border-bottom: 1px solid var(--line); background: var(--ink); color: var(--paper); }
+  .cnav .w { font-family: var(--serif); font-size: 15px; }
+  .cnav .w b { color: var(--amber); font-weight: 400; }
+  .cnav .n { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.5); }
+  .cnav .n.on { color: var(--paper); border-bottom: 2px solid var(--amber); padding-bottom: 4px; }
+  .cnav .r { margin-left: auto; display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 9px; color: rgba(255,255,255,.5); }
+  .cnav .av { width: 24px; height: 24px; background: var(--amber); color: #fff; display: grid; place-items: center; font-size: 9px; font-weight: 800; }
+  .cbody { display: flex; height: calc(100% - 48px); }
+  .cside { width: 180px; border-right: 1px solid var(--line); padding: 14px; background: var(--card); }
+  .cside div { font-family: var(--mono); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-60); padding: 8px 6px; border-left: 2px solid transparent; }
+  .cside div.on { color: var(--ink); border-left-color: var(--amber); font-weight: 700; }
+  .cmain { flex: 1; padding: 18px 22px; }
+  .crow { display: flex; gap: 10px; margin-bottom: 14px; }
+  .cstat { flex: 1; border: 1px solid var(--line); padding: 10px 12px; background: var(--card); }
+  .cstat b { display: block; font-family: var(--serif); font-size: 22px; }
+  .cstat span { font-family: var(--mono); font-size: 8.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-60); }
+  .ctable { border: 1px solid var(--line); }
+  .ctable div { display: flex; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--line-soft); font-size: 11px; }
+  .ctable div:last-child { border: none; }
+  .ctable .m { font-family: var(--mono); font-size: 9px; color: var(--ink-60); }
+
+  /* ── the session prompt: centred modal, hard frame, amber rule ── */
+  .veil { position: absolute; inset: 0; background: rgba(24,24,27,.55); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+  .sess {
+    width: 420px; background: var(--card); border: 1px solid var(--ink);
+    border-top: 3px solid var(--amber); box-shadow: 10px 10px 0 rgba(0,0,0,.3);
+  }
+  .sess__head { padding: 20px 22px 0; }
+  .sess__eyebrow { font-family: var(--mono); font-size: 9.5px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--amber-ink); display: flex; align-items: center; gap: 8px; }
+  .sess__eyebrow i { width: 8px; height: 8px; background: var(--amber); display: inline-block; }
+  .sess__title { font-family: var(--serif); font-size: 24px; letter-spacing: -.01em; margin: 8px 0 6px; }
+  .sess__lead { font-size: 13px; line-height: 1.55; color: var(--ink-60); }
+  .sess__clock { display: flex; align-items: baseline; gap: 10px; padding: 18px 22px; border-bottom: 1px solid var(--line-soft); }
+  .sess__digits { font-family: var(--mono); font-size: 40px; font-weight: 800; letter-spacing: .04em; }
+  .sess__digits small { font-size: 18px; color: var(--ink-40); }
+  .sess__clockcap { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-60); }
+  .sess__meter { height: 3px; background: var(--line-soft); position: relative; }
+  .sess__meter i { position: absolute; left: 0; top: 0; bottom: 0; width: 32%; background: var(--amber); }
+  .sess__actions { display: flex; gap: 10px; padding: 16px 22px 20px; }
+  .btn { height: 46px; font-family: inherit; font-size: 13px; font-weight: 650; cursor: pointer; border: 1px solid var(--ink); display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 18px; }
+  .btn--pri { flex: 1; background: var(--ink); color: var(--paper); border-top: 3px solid var(--amber); }
+  .btn--ghost { background: transparent; color: var(--ink-60); border-color: var(--line); }
+  .btn--ghost:hover { border-color: var(--ink); color: var(--ink); }
+  .sess__fine { padding: 0 22px 18px; font-size: 11px; color: var(--ink-40); }
+  .sess__fine a { color: var(--ink); border-bottom: 1px solid var(--ink); text-decoration: none; }
+
+  /* ── variant: slim top banner instead of modal ── */
+  .banner-veil { position: absolute; top: 48px; left: 0; right: 0; background: var(--amber-bg); border-bottom: 1px solid var(--amber); display: flex; align-items: center; gap: 14px; padding: 10px 22px; }
+  .banner-veil .d { font-family: var(--mono); font-size: 13px; font-weight: 800; color: var(--amber-ink); }
+  .banner-veil p { font-size: 12px; color: var(--amber-ink); }
+  .banner-veil .acts { margin-left: auto; display: flex; gap: 8px; }
+  .banner-veil .btn { height: 34px; font-size: 11px; padding: 0 14px; }
+
+  /* ── expired state: signed out card ── */
+  .gone { position: absolute; inset: 0; background: var(--paper); display: flex; align-items: center; justify-content: center; }
+  .gone .sess { border-top-color: var(--red); }
+  .gone .sess__eyebrow { color: var(--red); }
+  .gone .sess__eyebrow i { background: var(--red); }
+
+  .annot { padding: 26px 36px 40px; border-top: 1px solid var(--line); }
+  .annot h2 { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--amber-ink); margin-bottom: 12px; }
+  .annot ul { list-style: none; font-size: 12.5px; color: var(--ink-60); line-height: 1.9; }
+  .annot li::before { content: "■ "; color: var(--amber); font-size: 9px; vertical-align: 2px; }
+  .annot b { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="mockhead">
+  <h1>Ops · session timeout</h1>
+  <span>2h idle · 5min warning · countdown</span>
+</div>
+
+<p class="cap">A · The warning — modal over the console</p>
+<p class="capnote">Five minutes before the 2-hour idle limit, the console dims and this prompt appears. The countdown is live. Any mouse or key activity does not auto-dismiss it — the staff member must choose.</p>
+
+<div class="console">
+  <div class="cnav">
+    <span class="w">Century <b>NIT</b></span>
+    <span class="n on">Cases</span><span class="n">Helpdesk</span><span class="n">Consultations</span><span class="n">Payments</span>
+    <span class="r"><span>efua · consultant</span><span class="av">E</span></span>
+  </div>
+  <div class="cbody">
+    <div class="cside"><div class="on">Queue</div><div>My cases</div><div>Unassigned</div><div>Closed</div></div>
+    <div class="cmain">
+      <div class="crow">
+        <div class="cstat"><b>14</b><span>Open cases</span></div>
+        <div class="cstat"><b>6</b><span>Awaiting client</span></div>
+        <div class="cstat"><b>2</b><span>Breaching</span></div>
+      </div>
+      <div class="ctable">
+        <div><span>CN-2026-014 · Efua Mensah</span><span class="m">VISA · WAITING 25H</span></div>
+        <div><span>CN-2026-019 · Kojo Asante</span><span class="m">ADMISSIONS · ACTIVE</span></div>
+        <div><span>CN-2026-021 · Ama Serwaa</span><span class="m">DEPARTURE · PAID</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="veil">
+    <div class="sess" role="alertdialog" aria-label="Session expiring">
+      <div class="sess__head">
+        <p class="sess__eyebrow"><i></i> Session expiring</p>
+        <h2 class="sess__title">Still there, Efua?</h2>
+        <p class="sess__lead">No activity for about 2 hours. For client data safety, staff sessions sign out automatically.</p>
+      </div>
+      <div class="sess__clock">
+        <span class="sess__digits">04<small>:</small>37</span>
+        <span class="sess__clockcap">until sign out</span>
+      </div>
+      <div class="sess__meter"><i></i></div>
+      <div class="sess__actions">
+        <button class="btn btn--pri">Stay signed in</button>
+        <button class="btn btn--ghost">Sign out now</button>
+      </div>
+      <p class="sess__fine">Staying signed in refreshes the session and resets the 2-hour idle clock. <a href="#">Why sessions expire</a></p>
+    </div>
+  </div>
+</div>
+
+<p class="cap">B · Alternative — top banner instead of a modal</p>
+<p class="capnote">Same countdown, less interruptive. Staff can keep working; the banner stays pinned until they act. Good if the modal feels too heavy, but easier to ignore.</p>
+
+<div class="console">
+  <div class="cnav">
+    <span class="w">Century <b>NIT</b></span>
+    <span class="n on">Cases</span><span class="n">Helpdesk</span><span class="n">Consultations</span><span class="n">Payments</span>
+    <span class="r"><span>efua · consultant</span><span class="av">E</span></span>
+  </div>
+  <div class="banner-veil">
+    <span class="d">04:37</span>
+    <p>Idle for about 2 hours. You'll be signed out unless you continue.</p>
+    <span class="acts">
+      <button class="btn btn--pri" style="border-top-width:1px">Stay signed in</button>
+      <button class="btn btn--ghost">Sign out</button>
+    </span>
+  </div>
+  <div class="cbody">
+    <div class="cside"><div class="on">Queue</div><div>My cases</div><div>Unassigned</div><div>Closed</div></div>
+    <div class="cmain">
+      <div class="crow">
+        <div class="cstat"><b>14</b><span>Open cases</span></div>
+        <div class="cstat"><b>6</b><span>Awaiting client</span></div>
+        <div class="cstat"><b>2</b><span>Breaching</span></div>
+      </div>
+      <div class="ctable">
+        <div><span>CN-2026-014 · Efua Mensah</span><span class="m">VISA · WAITING 25H</span></div>
+        <div><span>CN-2026-019 · Kojo Asante</span><span class="m">ADMISSIONS · ACTIVE</span></div>
+        <div><span>CN-2026-021 · Ama Serwaa</span><span class="m">DEPARTURE · PAID</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="cap">C · Expired — after the countdown reaches zero</p>
+<p class="capnote">The console is replaced entirely. The sign-in button returns to /login with a reason flag so the login page can say "you were signed out for inactivity" instead of looking like a fresh visit.</p>
+
+<div class="console">
+  <div class="gone">
+    <div class="sess">
+      <div class="sess__head">
+        <p class="sess__eyebrow"><i></i> Signed out</p>
+        <h2 class="sess__title">Session ended</h2>
+        <p class="sess__lead">You were inactive for 2 hours, so the console signed you out. Nothing was lost. Draft replies in Helpdesk are kept.</p>
+      </div>
+      <div class="sess__actions" style="padding-top:18px">
+        <button class="btn btn--pri" style="border-top-color:var(--red)">Sign back in →</button>
+      </div>
+      <p class="sess__fine">Signed out at 14:32 · attempt logged</p>
+    </div>
+  </div>
+</div>
+
+<section class="annot">
+  <h2>How it works</h2>
+  <ul>
+    <li><b>Idle clock</b> — mouse, keyboard, and scroll reset a 2-hour timer; API calls do too.</li>
+    <li><b>Warning at 5 minutes</b> — the prompt opens with a live countdown and a draining meter.</li>
+    <li><b>Stay signed in</b> — pings the session endpoint (extends the cookie) and resets the clock.</li>
+    <li><b>Sign out / countdown zero</b> — clears the session and lands on /login?reason=idle, which shows the "session ended" notice.</li>
+    <li><b>Background tabs</b> — the timer is wall-clock based, so a hidden tab still expires on time.</li>
+    <li><b>Modal vs banner</b> — pick A (can't miss it, forces a choice) or B (keeps working, pinned strip).</li>
+  </ul>
+</section>
+
+</body>
+</html>

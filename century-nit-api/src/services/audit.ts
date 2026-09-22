@@ -503,7 +503,7 @@ export interface AuthPolicy {
 
 export const DEFAULT_AUTH_POLICY: AuthPolicy = {
 	sessionDays: 14,
-	idleHours: 8,
+	idleHours: 2,
 	lockoutThreshold: 5,
 	lockoutWindowMin: 10,
 	lockoutMinutes: 15,

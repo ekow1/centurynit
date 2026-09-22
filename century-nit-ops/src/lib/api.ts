@@ -66,6 +66,8 @@ export type SessionResponse = {
 		name: string;
 		email: string;
 	} | null;
+	/** Admin-set inactivity limit (auth policy) the console's idle guard enforces. */
+	idleHours?: number | null;
 };
 
 export function getSession(): Promise<SessionResponse> {

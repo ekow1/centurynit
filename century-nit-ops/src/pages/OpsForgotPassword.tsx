@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, checkStaffEmail, requestPasswordReset } from "../lib/api";
-import { AuthShell } from "./AuthShell";
+import { AuthShell, AuthFeats } from "./AuthShell";
 
 const MAIL_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>';
 const ARROW_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
@@ -106,11 +106,14 @@ export function OpsForgotPassword() {
 				label: "Password reset",
 				title: <>A one-time link, straight to your <em>inbox</em>.</>,
 				body: (
-					<>
-						It works once and expires shortly. Signing back in <strong>ends every other
-						session</strong> on this account. No email? A manager resets staff access from
-						the staff directory.
-					</>
+					<AuthFeats
+						items={[
+							{ icon: "mail", text: "A one-time link, straight to your work inbox." },
+							{ icon: "clock", text: "It works once and expires shortly." },
+							{ icon: "lock", text: <>Signing back in <strong>ends every other session</strong>.</> },
+							{ icon: "user", text: "No email? A manager resets staff access from the directory." },
+						]}
+					/>
 				),
 			}}
 			card={{

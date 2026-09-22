@@ -3704,7 +3704,7 @@ a.dash-kpi--on:hover {
 .invite-card__body {
 	margin: 0 0 0.75rem;
 	line-height: 1.55;
-	font-size: var(--text-sm, 0.875rem);
+	font-size: 0.92rem;
 }
 
 .invite-card__meta {

@@ -1,8 +1,8 @@
-import { useNavigate, Navigate, Link } from "react-router-dom";
+import { useNavigate, Navigate, Link, useSearchParams } from "react-router-dom";
 import { useOpsAuth, ROLE_HOME } from "./OpsAuthContext";
 import { useState, useEffect } from "react";
 import { getPendingMfaMethod } from "../lib/api";
-import { AuthShell, maskEmail } from "./AuthShell";
+import { AuthShell, AuthFeats, maskEmail } from "./AuthShell";
 import { OtpInput } from "./OtpInput";
 import { PasswordField } from "./PasswordField";
 
@@ -26,6 +26,20 @@ export function OpsLogin() {
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [resendCooldown, setResendCooldown] = useState(0);
+	// The idle guard lands here as /login?reason=idle — say why, don't pretend
+	// it's a fresh visit.
+	const [searchParams] = useSearchParams();
+	const signedOutIdle = searchParams.get("reason") === "idle";
+	// The idle guard records the live policy so this notice can quote it —
+	// the login page itself has no session to re-read it from.
+	const idleHours = (() => {
+		try {
+			const v = Number(localStorage.getItem("cn-ops-idle-hours"));
+			return Number.isFinite(v) && v > 0 ? v : 2;
+		} catch {
+			return 2;
+		}
+	})();
 
 	/*
 	 * Resume a pending MFA challenge after a refresh. The signed two_factor
@@ -160,16 +174,21 @@ export function OpsLogin() {
 								),
 							body:
 								mfaMethod === "email_otp" ? (
-									<>
-										It lands at <strong>{maskedWho}</strong> and expires shortly. Check
-										spam if it hasn't arrived.
-									</>
+									<AuthFeats
+										items={[
+											{ icon: "mail", text: <>The code lands at <strong>{maskedWho}</strong> and expires shortly.</> },
+											{ icon: "eye", text: "Check spam if it hasn't arrived." },
+											{ icon: "shield", text: <>Every sign-in is <strong>audited</strong>.</> },
+										]}
+									/>
 								) : (
-									<>
-										It refreshes every 30 seconds. A <strong>backup code</strong> works in
-										place of the app. Lost the device entirely? A manager resets MFA from
-										Administration → Authentication → MFA roster.
-									</>
+									<AuthFeats
+										items={[
+											{ icon: "refresh", text: "The code refreshes every 30 seconds." },
+											{ icon: "code", text: <>A <strong>backup code</strong> works in place of the app.</> },
+											{ icon: "user", text: "Lost the device? A manager resets MFA from the roster." },
+										]}
+									/>
 								),
 							footLeft: maskedWho,
 						}
@@ -178,11 +197,13 @@ export function OpsLogin() {
 							label: "Sign in",
 							title: <>Every case, queue and ledger. Behind <em>two factors</em>.</>,
 							body: (
-								<>
-									Credentials only; there is no social sign-in on the console. Staff accounts
-									are created by invitation. <strong>Ask your manager</strong> if you don't
-									have one.
-								</>
+								<AuthFeats
+									items={[
+										{ icon: "lock", text: "Credentials only. No social sign-in on the console." },
+										{ icon: "shield", text: <>Two-factor required on <strong>every</strong> staff account.</> },
+										{ icon: "mail", text: <>No account? <strong>Ask your manager.</strong> Staff are invited.</> },
+									]}
+								/>
 							),
 						}
 			}
@@ -337,6 +358,15 @@ export function OpsLogin() {
 					</div>
 
 					<form onSubmit={handleFormSubmit} className="ops-login__form">
+						{signedOutIdle ? (
+							<div className="ops-login__idle" role="status">
+								<span className="ops-login__idle-tag">Signed out</span>
+								<span>
+									Your session ended after {idleHours} {idleHours === 1 ? "hour" : "hours"} without
+									activity. Sign back in to continue.
+								</span>
+							</div>
+						) : null}
 						{error ? (
 							lockedOut ? (
 								<div className="ops-lockbox" role="alert">

@@ -2472,11 +2472,11 @@ function AuthSettings() {
 				<div className="card" style={{ marginBottom: "1.5rem" }}>
 					<div className="admin-section-head" style={{ marginBottom: "0.75rem" }}>
 						<h2 className="section-title" style={{ margin: 0 }}>Session &amp; password policy</h2>
-						<span className="mono muted" style={{ fontSize: "0.62rem" }}>applies to new sign-ins</span>
+						<span className="mono muted" style={{ fontSize: "0.62rem" }}>idle timeout applies to open sessions too</span>
 					</div>
 					<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.85rem" }}>
 						<PolicyNum label="Session lifetime (days)" hint="How long a sign-in lasts" value={policyDraft.sessionDays ?? authPolicy.sessionDays} min={1} max={90} onChange={(v) => setPolicyDraft((p) => ({ ...p, sessionDays: v }))} />
-						<PolicyNum label="Idle timeout (hours)" hint="Auto sign-out when idle" value={policyDraft.idleHours ?? authPolicy.idleHours} min={1} max={72} onChange={(v) => setPolicyDraft((p) => ({ ...p, idleHours: v }))} />
+						<PolicyNum label="Idle timeout (hours)" hint="Warns 5 min before sign-out" value={policyDraft.idleHours ?? authPolicy.idleHours} min={1} max={72} onChange={(v) => setPolicyDraft((p) => ({ ...p, idleHours: v }))} />
 						<PolicyNum label="Lockout threshold" hint="Failures before lock" value={policyDraft.lockoutThreshold ?? authPolicy.lockoutThreshold} min={3} max={20} onChange={(v) => setPolicyDraft((p) => ({ ...p, lockoutThreshold: v }))} />
 						<PolicyNum label="Lockout window (min)" hint="Failures counted inside" value={policyDraft.lockoutWindowMin ?? authPolicy.lockoutWindowMin} min={5} max={60} onChange={(v) => setPolicyDraft((p) => ({ ...p, lockoutWindowMin: v }))} />
 						<PolicyNum label="Lockout duration (min)" hint="How long the lock holds" value={policyDraft.lockoutMinutes ?? authPolicy.lockoutMinutes} min={5} max={1440} onChange={(v) => setPolicyDraft((p) => ({ ...p, lockoutMinutes: v }))} />

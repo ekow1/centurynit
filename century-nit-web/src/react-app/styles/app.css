@@ -11634,3 +11634,97 @@ a.portal-ch--on:hover {
 .portal-ch--off .portal-ch__m {
 	border-style: dotted;
 }
+
+/* ─── Idle session timeout ─── */
+.idle-veil {
+	position: fixed;
+	inset: 0;
+	z-index: 10000;
+	background: rgba(0, 0, 0, 0.55);
+	backdrop-filter: blur(3px);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 1.25rem;
+}
+.idle-card {
+	width: min(27rem, 100%);
+	background: var(--background);
+	border: 1px solid var(--foreground);
+	border-top: 3px solid #b45309;
+	box-shadow: 10px 10px 0 rgba(0, 0, 0, 0.3);
+}
+.idle-card__head { padding: 1.25rem 1.4rem 0; }
+.idle-card__eyebrow {
+	margin: 0;
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	font-weight: 800;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: #b45309;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+.idle-card__eyebrow i { width: 8px; height: 8px; background: #b45309; }
+.idle-card__title {
+	font-family: var(--font-display);
+	font-size: 1.55rem;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	margin: 0.5rem 0 0.35rem;
+}
+.idle-card__lead { font-size: 0.85rem; line-height: 1.55; color: var(--muted-foreground); margin: 0; }
+.idle-card__clock {
+	display: flex;
+	align-items: baseline;
+	gap: 0.65rem;
+	padding: 1rem 1.4rem;
+	border-bottom: 1px solid var(--border-light);
+}
+.idle-card__digits {
+	font-family: var(--font-mono);
+	font-size: 2.4rem;
+	font-weight: 800;
+	letter-spacing: 0.04em;
+	font-variant-numeric: tabular-nums;
+}
+.idle-card__clockcap {
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+}
+.idle-card__meter { height: 3px; background: var(--border-light); }
+.idle-card__meter i { display: block; height: 100%; background: #b45309; transition: width 1s linear; }
+.idle-card__actions { display: flex; gap: 0.65rem; padding: 1rem 1.4rem 0.75rem; }
+.idle-btn {
+	min-height: 46px;
+	font-family: var(--font-mono);
+	font-size: 0.72rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	cursor: pointer;
+	border: 1px solid var(--foreground);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	padding: 0 1.15rem;
+	border-radius: var(--radius);
+}
+.idle-btn:disabled { opacity: 0.45; cursor: default; }
+.idle-btn--pri { flex: 1; background: var(--foreground); color: var(--accent-foreground); border-top: 3px solid #b45309; }
+.idle-btn--pri:hover:not(:disabled) { background: #b45309; border-color: #b45309; }
+.idle-btn--ghost { background: transparent; color: var(--muted-foreground); border-color: var(--border-light); }
+.idle-btn--ghost:hover:not(:disabled) { border-color: var(--foreground); color: var(--foreground); }
+.idle-card__fine {
+	padding: 0 1.4rem 1rem;
+	margin: 0;
+	font-size: 0.72rem;
+	line-height: 1.5;
+	color: var(--muted-foreground);
+}

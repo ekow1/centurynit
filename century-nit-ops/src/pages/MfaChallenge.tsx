@@ -8,7 +8,7 @@ import {
 	ApiError,
 } from "../lib/api";
 import { useOpsAuth, ROLE_HOME } from "./OpsAuthContext";
-import { AuthShell, maskEmail } from "./AuthShell";
+import { AuthShell, AuthFeats, maskEmail } from "./AuthShell";
 import { OtpInput } from "./OtpInput";
 
 const ARROW_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
@@ -149,15 +149,21 @@ export function MfaChallenge() {
 					),
 				body:
 					method === "email_otp" ? (
-						<>
-							It lands at <strong>{maskedWho}</strong> and expires shortly. Check spam if
-							it hasn't arrived.
-						</>
+						<AuthFeats
+							items={[
+								{ icon: "mail", text: <>The code lands at <strong>{maskedWho}</strong> and expires shortly.</> },
+								{ icon: "eye", text: "Check spam if it hasn't arrived." },
+								{ icon: "shield", text: <>Every sign-in is <strong>audited</strong>.</> },
+							]}
+						/>
 					) : (
-						<>
-							It refreshes every 30 seconds. Lost the device entirely? A manager resets MFA
-							from Administration → Authentication → MFA roster.
-						</>
+						<AuthFeats
+							items={[
+								{ icon: "refresh", text: "The code refreshes every 30 seconds." },
+								{ icon: "code", text: <>A <strong>backup code</strong> works in place of the app.</> },
+								{ icon: "user", text: "Lost the device? A manager resets MFA from the roster." },
+							]}
+						/>
 					),
 				footLeft: maskedWho,
 			}}

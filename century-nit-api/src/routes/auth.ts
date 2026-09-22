@@ -330,17 +330,59 @@ function createAuth(config: GoogleSocialConfig) {
 					}
 
 					/*
-					 * OAuth sessions owe a second factor. The plugin's challenge only
-					 * fires on credential paths — a Google callback mints the session
-					 * without asking — so sessions created there are flagged
-					 * mfa-pending, and requireAuth's staff gate refuses data until the
-					 * challenge endpoint clears it. Credential sessions are never
-					 * flagged: they either passed the challenge or had none to pass.
+					 * Enrolled staff owe a second factor on EVERY session minted
+					 * outside the two-factor endpoints. Those paths — verify-totp,
+					 * verify-backup-code, verify-otp — are themselves the proof, so
+					 * a session created there is already cleared. Every other
+					 * sign-in path skips the plugin's challenge: OAuth callbacks,
+					 * phone or email-code sign-ins, magic links, and credential
+					 * sign-ins carried by a trust_device cookie. Flagging each of
+					 * them mfa-pending makes requireAuth's staff gate demand the
+					 * challenge no matter which route the session arrived by, and
+					 * it holds for sign-in methods added later.
+					 *
+					 * The flag is scoped to staff enrolled at creation time: an
+					 * unenrolled account cannot answer a challenge anyway, and
+					 * enrolling later must not retro-flag a session that was never
+					 * asked. The email fallback mirrors requireAuth's linking so a
+					 * staff row not yet back-filled with userId still counts.
 					 */
 					try {
 						const path = (ctx as { path?: string } | null | undefined)?.path ?? "";
-						if (path.startsWith("/callback/")) {
-							await markMfaSessionPending(session.token, session.expiresAt);
+						if (!path.startsWith("/two-factor/")) {
+							const [sessionUser] = await db
+								.select({
+									email: schema.users.email,
+									twoFactorEnabled: schema.users.twoFactorEnabled,
+									mfaEnrolled: schema.users.mfaEnrolled,
+									mfaMethod: schema.users.mfaMethod,
+								})
+								.from(schema.users)
+								.where(eq(schema.users.id, session.userId))
+								.limit(1);
+							/*
+							 * Same "enrolled" the gate means: a half-armed TOTP
+							 * (mfaEnrolled, never verified) has no code that can
+							 * answer a challenge — that session should reach
+							 * /mfa-setup via requireMfa, not stall on pending.
+							 */
+							const enrolled =
+								sessionUser?.twoFactorEnabled === true ||
+								(sessionUser?.mfaEnrolled === true && sessionUser.mfaMethod === "email_otp");
+							if (sessionUser && enrolled) {
+								const email = sessionUser.email?.toLowerCase() ?? "";
+								let staffRow = await db.query.opsUsers.findFirst({
+									where: eq(schema.opsUsers.userId, session.userId),
+								});
+								if (!staffRow && email) {
+									staffRow = await db.query.opsUsers.findFirst({
+										where: eq(schema.opsUsers.email, email),
+									});
+								}
+								if (staffRow?.active) {
+									await markMfaSessionPending(session.token, session.expiresAt);
+								}
+							}
 						}
 					} catch (err) {
 						console.error("[auth] mfa-pending session mark failed:", err);

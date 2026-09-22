@@ -278,7 +278,7 @@ export const createConversationSchema = z.object({
 	 * Idempotent: an existing open thread for the same client+context is
 	 * returned (and the creator joined) rather than forking a second one.
 	 */
-	clientUserId: z.string().uuid().optional(),
+	clientUserId: z.string().min(1).optional(),
 	/** Journey stage key for a `stage`-scoped client thread. */
 	stageKey: z.string().optional(),
 	/** Optional first message to send immediately. */

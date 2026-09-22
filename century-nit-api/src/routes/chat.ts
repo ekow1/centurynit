@@ -649,8 +649,9 @@ chatRouter.openapi(
 /* ── Request layer ────────────────────────────────────────────────────── */
 
 const logRequestSchema = z.object({
-	/** File for a client (phone/walk-in intake). Omit for an internal ticket. */
-	clientUserId: z.string().uuid().optional(),
+	/** File for a client (phone/walk-in intake). Omit for an internal ticket.
+	    Better Auth user ids are nanoid text, not UUIDs. */
+	clientUserId: z.string().min(1).optional(),
 	category: requestCategorySchema,
 	subject: z.string().min(1).max(255),
 	content: z.string().min(1).max(5000),

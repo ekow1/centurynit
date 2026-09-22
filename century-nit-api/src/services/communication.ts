@@ -272,6 +272,10 @@ async function countUnreadFor(
 
 	if (!participant) return 0;
 
+	// System rows (assignment announcements, stage completion notes) are
+	// housekeeping, not conversation — they never count as unread.
+	conditions.push(ne(messages.messageType, "system"));
+
 	// Messages not sent by the viewer, newer than their last-read cursor.
 	if (viewer.opsUserId) {
 		conditions.push(ne(messages.senderOpsUserId, viewer.opsUserId));
@@ -298,9 +302,12 @@ async function serializeConversation(
 	const participants = await getParticipants(row.id);
 	const unread = await countUnreadFor(row.id, viewer);
 
-	// The client preview must never surface a staff-only note as the
-	// conversation's last message.
-	const lastMsgConditions = [eq(messages.conversationId, row.id)];
+	// The preview shows the last real message — a staff-only note for clients,
+	// and a system housekeeping row for nobody.
+	const lastMsgConditions = [
+		eq(messages.conversationId, row.id),
+		ne(messages.messageType, "system"),
+	];
 	if (viewer.userId) {
 		lastMsgConditions.push(eq(messages.visibility, "public"));
 	}
@@ -1008,6 +1015,8 @@ export async function getCustomerMessages(
 		eq(messages.conversationId, conversationId),
 		// Staff-only notes are filtered out of every client transcript.
 		eq(messages.visibility, "public"),
+		// Assignment/completion housekeeping is not client conversation.
+		ne(messages.messageType, "system"),
 	];
 	if (opts.before) {
 		conditions.push(

@@ -24,6 +24,7 @@ import {
 	ForwardDialog,
 	type MessageActionsConfig,
 } from "century-nit-chat-ui";
+import { useOpsAiChat } from "../hooks/useOpsAiChat";
 
 /**
  * OPS Staff Communication Workstation — WhatsApp-style messaging on the
@@ -38,7 +39,7 @@ import {
 
 const HEARTBEAT_MS = 60_000;
 
-type Mode = "internal" | "external";
+type Mode = "internal" | "external" | "ai";
 
 export function CommunicationHub() {
 	const { opsRole, opsUser } = useOpsAuth();
@@ -53,6 +54,18 @@ export function CommunicationHub() {
 	const [showDirectoryDrawer, setShowDirectoryDrawer] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [error, setError] = useState<string | null>(null);
+
+	/* The staff assistant — Tier 2, streams from this worker's /ai/chat which
+	   verifies the staff session edge-side. A third channel next to STAFF
+	   DMs and CLIENTS. */
+	const ai = useOpsAiChat({
+		getContext: () => ({
+			name: opsUser?.name ?? "",
+			role: opsUser?.role ?? "",
+			branch: opsUser?.branch ?? "",
+		}),
+	});
+	const [aiDraft, setAiDraft] = useState("");
 
 	/* ── Helper to format relative conversation timestamp ── */
 	const formatConvTime = (dateStr?: string) => {
@@ -469,6 +482,19 @@ export function CommunicationHub() {
 								<span style={tabDotBadgeStyle} />
 							)}
 						</button>
+						<button
+							type="button"
+							onClick={() => {
+								setMode("ai");
+								setActiveConvId(null);
+							}}
+							style={{
+								...channelBtnStyle,
+								...(mode === "ai" ? activeChannelBtnStyle : {}),
+							}}
+						>
+							<span>AI</span>
+						</button>
 					</nav>
 
 					{/* Error Banner */}
@@ -840,6 +866,34 @@ export function CommunicationHub() {
 										))
 									)}
 								</div>
+							</div>
+						)}
+
+						{/* The staff assistant — Tier 2. Console routes in its replies
+						    are linkified so "Open → /helpdesk" actually takes you there. */}
+						{mode === "ai" && (
+							<div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+								<div style={{ flex: 1, overflowY: "auto", padding: "10px 12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+									{ai.messages.map((m) => (
+										<div key={m.id} style={m.role === "user" ? aiUserBubbleStyle : aiBotBubbleStyle}>
+											{m.role === "assistant" && <span style={aiWhoStyle}>OPS AI</span>}
+											{m.role === "assistant" ? renderAiText(m.content, navigate, () => setOpen(false)) : m.content}
+											{m.role === "assistant" && !m.content && <span style={{ color: "#71717a" }}>…</span>}
+										</div>
+									))}
+								</div>
+								{/* Same Composer as every other chat surface — one input
+								    and send affordance across the platform. */}
+								<Composer
+									value={aiDraft}
+									onChange={setAiDraft}
+									onSend={(t) => {
+										setAiDraft("");
+										void ai.send(t);
+									}}
+									sending={ai.typing}
+									placeholder="Ask about the console, a workflow, the code…"
+								/>
 							</div>
 						)}
 
@@ -1387,4 +1441,75 @@ const errorCloseStyle: CSSProperties = {
 	color: "#ffffff",
 	cursor: "pointer",
 	fontWeight: 700,
+};
+
+/* ── AI channel ─────────────────────────────────────────────────────────── */
+
+/** Linkify console routes (`/helpdesk`) in assistant replies to real navigation. */
+function renderAiText(text: string, navigate: (path: string) => void, close: () => void) {
+	return text.split(/(\s+)/).map((tok, i) => {
+		const path = tok.replace(/[.,;:!?'"()\]]+$/, "");
+		if (!/^\/[a-z][a-z0-9\-/]*$/i.test(path)) return <span key={i}>{tok}</span>;
+		const trail = tok.slice(path.length);
+		return (
+			<span key={i}>
+				<button
+					type="button"
+					onClick={() => {
+						close();
+						navigate(path);
+					}}
+					style={aiLinkStyle}
+				>
+					{path}
+				</button>
+				{trail}
+			</span>
+		);
+	});
+}
+
+const aiUserBubbleStyle: CSSProperties = {
+	alignSelf: "flex-end",
+	background: "#18181b",
+	color: "#ffffff",
+	padding: "6px 10px",
+	fontSize: "12px",
+	maxWidth: "88%",
+	lineHeight: 1.45,
+	whiteSpace: "pre-wrap",
+};
+
+const aiBotBubbleStyle: CSSProperties = {
+	alignSelf: "flex-start",
+	background: "#f4f4f5",
+	border: "1px solid #e4e4e7",
+	padding: "6px 10px",
+	fontSize: "12px",
+	maxWidth: "92%",
+	lineHeight: 1.5,
+	color: "#18181b",
+	whiteSpace: "pre-wrap",
+};
+
+const aiWhoStyle: CSSProperties = {
+	display: "block",
+	fontFamily: "monospace",
+	fontSize: "9px",
+	fontWeight: 800,
+	letterSpacing: "0.1em",
+	color: "#b45309",
+	marginBottom: "3px",
+};
+
+const aiLinkStyle: CSSProperties = {
+	background: "none",
+	border: "none",
+	borderBottom: "1px solid #e8a33d",
+	color: "#b45309",
+	fontFamily: "monospace",
+	fontSize: "11px",
+	fontWeight: 700,
+	padding: 0,
+	cursor: "pointer",
 };

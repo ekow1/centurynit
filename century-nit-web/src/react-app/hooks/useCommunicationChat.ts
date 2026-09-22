@@ -51,7 +51,7 @@ export function useCommunicationChat(enabled: boolean): CommunicationChatState {
 			setConversationId(conv.id);
 			setConversationStatus(conv.status ?? "open");
 			const res = await meApi.getCommunicationMessages(conv.id, { limit: 50 });
-			setMessages(res.messages);
+			setMessages(res.messages.filter((m) => m.messageType !== "system"));
 			void meApi.markCommunicationRead(conv.id).catch(() => {});
 			return conv.id;
 		} catch {
@@ -84,7 +84,7 @@ export function useCommunicationChat(enabled: boolean): CommunicationChatState {
 			conversationIdRef.current = convId;
 			setConversationId(convId);
 			setConversationStatus(convs?.conversations.find((c) => c.id === convId)?.status ?? "open");
-			setMessages(res.messages);
+			setMessages(res.messages.filter((m) => m.messageType !== "system"));
 			void meApi.markCommunicationRead(convId).catch(() => {});
 		} catch {
 			conversationIdRef.current = null;
@@ -123,6 +123,9 @@ export function useCommunicationChat(enabled: boolean): CommunicationChatState {
 		switch (ev.type) {
 			case "chat.message": {
 				if (ev.conversationId !== conversationId) return;
+				// System housekeeping rows are filtered from the transcript
+				// server-side; skip them on live pushes too so they never flash.
+				if (ev.message.messageType === "system") break;
 				setMessages((prev) => {
 					if (prev.some((m) => m.id === ev.message.id)) return prev;
 					return [...prev, ev.message];

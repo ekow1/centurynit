@@ -10,12 +10,16 @@
 		"enabled": true
 	},
 	"upload_source_maps": true,
+	"ai": {
+		"binding": "AI"
+	},
 	"assets": {
 		"directory": "./dist/client",
 		"binding": "ASSETS",
 		"not_found_handling": "single-page-application",
 		"run_worker_first": [
-			"/api/*"
+			"/api/*",
+			"/ai/*"
 		]
 	},
 	"vars": {

@@ -116,7 +116,7 @@ export function useChatMessages(conversationId: string | null) {
 		setLoading(true);
 		try {
 			const res = await getChatMessages(conversationId, { limit: 50 });
-			setMessages(res.messages);
+			setMessages(res.messages.filter((m) => m.messageType !== "system"));
 			setHasMore(res.hasMore);
 		} catch {
 			// ignore aborted
@@ -130,7 +130,7 @@ export function useChatMessages(conversationId: string | null) {
 		const oldest = messages[0];
 		try {
 			const res = await getChatMessages(conversationId, { limit: 50, before: oldest.id });
-			setMessages((prev) => [...res.messages, ...prev]);
+			setMessages((prev) => [...res.messages.filter((m) => m.messageType !== "system"), ...prev]);
 			setHasMore(res.hasMore);
 		} catch {
 			// silent
@@ -233,6 +233,9 @@ export function useChatMessages(conversationId: string | null) {
 		switch (ev.type) {
 			case "chat.message": {
 				if (ev.conversationId !== conversationId) return;
+				// System housekeeping rows are filtered server-side; skip them
+				// on live pushes too so they never flash into the thread.
+				if (ev.message.messageType === "system") break;
 				setMessages((prev) => {
 					if (prev.some((m) => m.id === ev.message.id)) return prev;
 					return [...prev, ev.message];

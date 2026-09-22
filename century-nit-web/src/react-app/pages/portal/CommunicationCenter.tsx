@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { meApi } from "century-nit-core";
 import type { CommunicationContext, ChatMessage, QuotedMessage } from "century-nit-shared";
 import {
@@ -1016,7 +1016,9 @@ export function CommunicationCenter() {
 													}}
 												>
 													<div style={bubbleAuthorStyle}>{isMe ? "YOU" : "CENTURY AI"}</div>
-													<div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.text}</div>
+													<div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>
+													{isMe ? m.text : renderAiText(m.text)}
+												</div>
 													<div style={bubbleTimeStyle}>
 														{new Date(m.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
 													</div>
@@ -1056,18 +1058,18 @@ export function CommunicationCenter() {
 									))}
 								</div>
 
-								<form onSubmit={(e) => handleSendAi(e)} style={aiFormStyle}>
-									<input
-										type="text"
-										value={aiDraft}
-										onChange={(e) => setAiDraft(e.target.value)}
-										placeholder="Ask Century AI..."
-										style={aiInputStyle}
-									/>
-									<button type="submit" disabled={!aiDraft.trim() || aiTyping} style={aiSendBtnStyle}>
-										ASK
-									</button>
-								</form>
+								{/* Same Composer as the Support and Officer channels — one input and
+								    send affordance across every chat surface. */}
+								<Composer
+									value={aiDraft}
+									onChange={setAiDraft}
+									onSend={(text) => {
+										setAiDraft("");
+										void aiChat.send(text);
+									}}
+									sending={aiTyping}
+									placeholder="Ask Century AI…"
+								/>
 							</div>
 						)}
 					</div>
@@ -1288,41 +1290,34 @@ const aiQuickChipStyle: CSSProperties = {
 	cursor: "pointer",
 };
 
-const aiFormStyle: CSSProperties = {
-	display: "flex",
-	padding: "12px 16px",
-	background: "#ffffff",
-	borderTop: "1px solid #f4f4f5",
-	gap: "10px",
-	alignItems: "center",
-};
+/**
+ * Linkify portal routes in CENTURY AI replies. Only `/portal/*` tokens become
+ * links — the signed-in tier may point into the account, but nothing else
+ * (no staff console paths, no external URLs) is ever made clickable.
+ */
+function renderAiText(text: string) {
+	return text.split(/(\s+)/).map((tok, i) => {
+		const path = tok.replace(/[.,;:!?'"()\]]+$/, "");
+		if (!/^\/portal\/[a-z0-9\-/]*$/i.test(path)) return <span key={i}>{tok}</span>;
+		const trail = tok.slice(path.length);
+		return (
+			<span key={i}>
+				<Link to={path} style={aiLinkStyle}>
+					{path}
+				</Link>
+				{trail}
+			</span>
+		);
+	});
+}
 
-const aiInputStyle: CSSProperties = {
-	flex: 1,
-	background: "#f4f4f5",
-	border: "1px solid transparent",
-	borderRadius: "0",
-	borderColor: "#e4e4e7",
-	color: "#18181b",
-	padding: "10px 14px",
-	fontSize: "13px",
-	fontFamily: "system-ui, -apple-system, sans-serif",
-	outline: "none",
-	transition: "background 0.2s ease",
-};
-
-const aiSendBtnStyle: CSSProperties = {
-	background: "#18181b",
-	color: "#ffffff",
-	border: "none",
-	borderRadius: "0",
-	width: "36px",
-	height: "36px",
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "center",
-	cursor: "pointer",
-	transition: "transform 0.1s ease, background 0.2s ease",
+const aiLinkStyle: CSSProperties = {
+	color: "#b45309",
+	borderBottom: "1px solid #e8a33d",
+	fontFamily: "monospace",
+	fontSize: "11px",
+	fontWeight: 700,
+	textDecoration: "none",
 };
 
 const errorBannerStyle: CSSProperties = {

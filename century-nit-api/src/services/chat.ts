@@ -180,6 +180,9 @@ async function countUnread(conversationId: string, opsUserId: string): Promise<n
 				// so plain `ne` silently dropped every applicant message from the
 				// staff-side unread count.
 				sql`${messages.senderOpsUserId} IS DISTINCT FROM ${opsUserId}`,
+				// System housekeeping (assignments, stage completions) is not
+				// conversation — it must not badge a thread as unread.
+				ne(messages.messageType, "system"),
 				participant.lastReadAt
 					? gt(messages.createdAt, participant.lastReadAt)
 					: sql`true`,
@@ -343,6 +346,7 @@ export async function listConversations(
 			and(
 				inArray(messages.conversationId, conversationIds),
 				ne(messages.senderOpsUserId, opsUserId),
+				ne(messages.messageType, "system"),
 				sql`${messages.createdAt} > (
 					SELECT COALESCE(cp.last_read_at, '1970-01-01T00:00:00Z')
 					FROM ${conversationParticipants} cp
@@ -371,6 +375,7 @@ export async function listConversations(
 				SELECT DISTINCT ON (conversation_id) id
 				FROM ${messages}
 				WHERE ${inArray(messages.conversationId, conversationIds)}
+				AND message_type <> 'system'
 				ORDER BY conversation_id, created_at DESC
 			)`,
 		);
@@ -392,6 +397,7 @@ export async function listConversations(
 				FROM ${messages}
 				WHERE ${inArray(messages.conversationId, conversationIds)}
 				AND visibility = 'public'
+				AND message_type <> 'system'
 				ORDER BY conversation_id, created_at DESC
 			)`,
 		);
@@ -521,13 +527,13 @@ export async function getConversation(
 		db
 			.select()
 			.from(messages)
-			.where(eq(messages.conversationId, conversationId))
+			.where(and(eq(messages.conversationId, conversationId), ne(messages.messageType, "system")))
 			.orderBy(desc(messages.createdAt))
 			.limit(1),
 		db
 			.select()
 			.from(messages)
-			.where(and(eq(messages.conversationId, conversationId), eq(messages.visibility, "public")))
+			.where(and(eq(messages.conversationId, conversationId), eq(messages.visibility, "public"), ne(messages.messageType, "system")))
 			.orderBy(desc(messages.createdAt))
 			.limit(1),
 	]);
@@ -692,7 +698,13 @@ export async function getMessages(
 
 	const limit = Math.min(opts.limit ?? 50, 100);
 
-	const conditions = [eq(messages.conversationId, conversationId)];
+	// System housekeeping rows (stage assignment announcements, completion
+	// notes) are event-feed material, not thread content — the helpdesk and
+	// staff chat read them as noise. The audit events still record them.
+	const conditions = [
+		eq(messages.conversationId, conversationId),
+		ne(messages.messageType, "system"),
+	];
 	if (opts.before) {
 		conditions.push(sql`${messages.createdAt} < (SELECT created_at FROM ${messages} WHERE id = ${opts.before})`);
 	}

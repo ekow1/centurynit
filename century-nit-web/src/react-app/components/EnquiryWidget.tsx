@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo, type FormEvent } from "react";
 import { company } from "century-nit-core";
+import { Composer } from "century-nit-chat-ui";
 import { useEnquiry, type EnquiryTab } from "./EnquiryContext";
 import { useAiChat } from "../hooks/useAiChat";
 
@@ -47,15 +48,6 @@ function CloseIcon() {
 		<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
 			<line x1="18" y1="6" x2="6" y2="18" />
 			<line x1="6" y1="6" x2="18" y2="18" />
-		</svg>
-	);
-}
-
-function SendIcon() {
-	return (
-		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-			<line x1="22" y1="2" x2="11" y2="13" />
-			<polygon points="22 2 15 22 11 13 2 9 22 2" />
 		</svg>
 	);
 }
@@ -140,12 +132,10 @@ export function EnquiryWidget() {
 		}
 	}, [aiMessages, aiTyping, open]);
 
-	function handleSubmit(e: FormEvent) {
-		e.preventDefault();
-		const trimmed = input.trim();
-		if (!trimmed || !canSend) return;
+	function handleSend(text: string) {
+		if (!canSend) return;
 		setInput("");
-		void aiChat.send(trimmed);
+		void aiChat.send(text);
 	}
 
 	function handleSuggestion(text: string) {
@@ -365,54 +355,15 @@ export function EnquiryWidget() {
 								) : null}
 							</div>
 
-						<form
-							onSubmit={handleSubmit}
-							style={{
-								padding: "0.6rem 0.75rem",
-								display: "flex",
-								gap: "0.5rem",
-								background: "var(--card)",
-							}}
-						>
-							<input
-								type="text"
-								value={input}
-								onChange={(e) => setInput(e.target.value)}
-								placeholder="Ask about studying abroad..."
-								style={{
-									flex: 1,
-									border: "1px solid var(--border-light)",
-									borderRadius: "0",
-									padding: "0.5rem 0.75rem",
-									fontSize: "0.85rem",
-									background: "var(--background)",
-									color: "var(--foreground)",
-									outline: "none",
-								}}
-							/>
-							<button
-								type="submit"
-								disabled={!canSend}
-								style={{
-									width: "36px",
-									height: "36px",
-									display: "flex",
-									alignItems: "center",
-									justifyContent: "center",
-									background: "var(--foreground)",
-									color: "var(--background)",
-									border: "none",
-									borderRadius: "0",
-									cursor: canSend ? "pointer" : "default",
-									opacity: canSend ? 1 : 0.4,
-									flexShrink: 0,
-									transition: "opacity 150ms",
-								}}
-								aria-label="Send message"
-							>
-								<SendIcon />
-							</button>
-						</form>
+						{/* Shared Composer — same input + send affordance as the
+						    portal, ops hub, and every other chat surface. */}
+						<Composer
+							value={input}
+							onChange={setInput}
+							onSend={handleSend}
+							sending={aiTyping}
+							placeholder="Ask about studying abroad…"
+						/>
 					</>
 					)}
 

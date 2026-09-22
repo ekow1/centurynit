@@ -88,17 +88,17 @@ export function signIn(email: string, password: string, rememberMe?: boolean): P
 	});
 }
 
-export function verifyTotp(code: string, trustDevice?: boolean): Promise<unknown> {
+export function verifyTotp(code: string): Promise<unknown> {
 	return apiFetch("/api/auth/two-factor/verify-totp", {
 		method: "POST",
-		body: JSON.stringify({ code, trustDevice }),
+		body: JSON.stringify({ code }),
 	});
 }
 
-export function verifyBackupCode(code: string, trustDevice?: boolean): Promise<unknown> {
+export function verifyBackupCode(code: string): Promise<unknown> {
 	return apiFetch("/api/auth/two-factor/verify-backup-code", {
 		method: "POST",
-		body: JSON.stringify({ code, trustDevice }),
+		body: JSON.stringify({ code }),
 	});
 }
 
@@ -135,10 +135,10 @@ export function sendTwoFactorOtp(): Promise<{ status?: boolean }> {
 }
 
 /** Verify the emailed second-factor code; on success the session is issued. */
-export function verifyTwoFactorOtp(code: string, trustDevice?: boolean): Promise<unknown> {
+export function verifyTwoFactorOtp(code: string): Promise<unknown> {
 	return apiFetch("/api/auth/two-factor/verify-otp", {
 		method: "POST",
-		body: JSON.stringify({ code, trustDevice }),
+		body: JSON.stringify({ code }),
 	});
 }
 

@@ -21,7 +21,6 @@ export function OpsLogin() {
 	const [mfaEmail, setMfaEmail] = useState<string | null>(null);
 	const [twoFactorCode, setTwoFactorCode] = useState("");
 	const [useBackupCode, setUseBackupCode] = useState(false);
-	const [trustDevice, setTrustDevice] = useState(false);
 	const [otpSent, setOtpSent] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
@@ -128,9 +127,9 @@ export function OpsLogin() {
 		try {
 			let user;
 			if (mfaMethod === "email_otp") {
-				user = await opsVerifyEmailOtp(twoFactorCode, trustDevice);
+				user = await opsVerifyEmailOtp(twoFactorCode);
 			} else {
-				user = await opsVerifyTwoFactor(twoFactorCode, useBackupCode, trustDevice);
+				user = await opsVerifyTwoFactor(twoFactorCode, useBackupCode);
 			}
 			navigate(ROLE_HOME[user.role] ?? ROLE_HOME.manager);
 		} catch (err) {
@@ -336,15 +335,6 @@ export function OpsLogin() {
 							{loading ? null : <span dangerouslySetInnerHTML={{ __html: ARROW_SVG }} />}
 						</button>
 
-						<label className="ops-login__remember">
-							<input
-								type="checkbox"
-								checked={trustDevice}
-								onChange={(e) => setTrustDevice(e.target.checked)}
-								disabled={loading}
-							/>
-							Trust this device for 30 days
-						</label>
 					</form>
 				</>
 			) : (

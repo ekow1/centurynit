@@ -103,17 +103,60 @@ function createAuth(config: GoogleSocialConfig) {
 	 */
 	hooks: {
 		before: createAuthMiddleware(async (ctx) => {
-			if (ctx.path !== "/sign-in/email") return;
-			const email =
-				typeof (ctx.body as { email?: unknown } | undefined)?.email === "string"
-					? (ctx.body as { email: string }).email.trim().toLowerCase()
-					: "";
+			const isEmailSignIn = ctx.path === "/sign-in/email";
+			const isPhoneSignIn = ctx.path === "/sign-in/phone-number";
+			if (!isEmailSignIn && !isPhoneSignIn) return;
+
+			let email = "";
+			if (isEmailSignIn) {
+				email =
+					typeof (ctx.body as { email?: unknown } | undefined)?.email === "string"
+						? (ctx.body as { email: string }).email.trim().toLowerCase()
+						: "";
+			} else {
+				// Phone sign-ins carry no email — resolve the account's address so
+				// the same staff rules apply to every credential path.
+				const phone =
+					typeof (ctx.body as { phoneNumber?: unknown } | undefined)?.phoneNumber === "string"
+						? (ctx.body as { phoneNumber: string }).phoneNumber
+						: "";
+				if (phone) {
+					const [u] = await db
+						.select({ email: schema.users.email })
+						.from(schema.users)
+						.where(eq(schema.users.phoneNumber, phone))
+						.limit(1);
+					email = u?.email?.toLowerCase() ?? "";
+				}
+			}
 			if (!email) return;
 			const [staff] = await db
 				.select({ active: schema.opsUsers.active })
 				.from(schema.opsUsers)
 				.where(eq(schema.opsUsers.email, email))
 				.limit(1);
+			/*
+			 * Staff answer a second factor on every sign-in — it is not an
+			 * option. The twoFactor plugin's trust_device cookie would let a
+			 * previously "trusted" browser skip the challenge entirely, so the
+			 * cookie is removed from the request before the plugin sees it.
+			 * Cookies already issued stay issued but are never honoured for
+			 * staff; clients keep the feature untouched.
+			 */
+			if (staff?.active && ctx.headers) {
+				const cookie = ctx.headers.get("cookie");
+				if (cookie && cookie.includes("trust_device")) {
+					const kept = cookie
+						.split(";")
+						.filter((pair) => !pair.split("=")[0].trim().endsWith("trust_device"))
+						.join(";");
+					if (kept.trim()) ctx.headers.set("cookie", kept);
+					else ctx.headers.delete("cookie");
+				}
+			}
+			// Everything below governs the password path: the staff/portal
+			// password toggles and the email-keyed lockout counter.
+			if (isPhoneSignIn) return;
 			const settings = await getAuthSettings();
 			if (staff?.active) {
 				if (!settings["ops.email_password"]) {

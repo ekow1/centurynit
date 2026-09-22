@@ -138,9 +138,9 @@ interface OpsAuthContextValue {
 		mfaMethod?: string | null;
 	}>;
 	/** Complete sign in via 2FA TOTP or backup recovery code. */
-	opsVerifyTwoFactor: (code: string, isBackupCode?: boolean, trustDevice?: boolean) => Promise<OpsUser>;
+	opsVerifyTwoFactor: (code: string, isBackupCode?: boolean) => Promise<OpsUser>;
 	/** Complete sign in via email OTP MFA. */
-	opsVerifyEmailOtp: (code: string, trustDevice?: boolean) => Promise<OpsUser>;
+	opsVerifyEmailOtp: (code: string) => Promise<OpsUser>;
 	/** Send email OTP for MFA verification. */
 	opsSendMfaOtp: () => Promise<void>;
 	opsSignOut: () => void;
@@ -339,12 +339,12 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		return { user };
 	}, [refreshPermissions, applyPolicy]);
 
-	const opsVerifyTwoFactor = useCallback(async (code: string, isBackupCode?: boolean, trustDevice?: boolean) => {
+	const opsVerifyTwoFactor = useCallback(async (code: string, isBackupCode?: boolean) => {
 		const cleanCode = code.trim().replace(/\s+/g, "");
 		if (isBackupCode) {
-			await apiVerifyBackupCode(cleanCode, trustDevice);
+			await apiVerifyBackupCode(cleanCode);
 		} else {
-			await apiVerifyTotp(cleanCode.replace(/\D/g, ""), trustDevice);
+			await apiVerifyTotp(cleanCode.replace(/\D/g, ""));
 		}
 		const sess = await getSession();
 		applyPolicy(sess);
@@ -357,12 +357,12 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		return user;
 	}, [refreshPermissions, applyPolicy]);
 
-	const opsVerifyEmailOtp = useCallback(async (code: string, trustDevice?: boolean) => {
+	const opsVerifyEmailOtp = useCallback(async (code: string) => {
 		const cleanCode = code.trim().replace(/\s+/g, "");
 		// Better Auth's verify-otp — works in the pending window and issues the
 		// session on success. The custom /auth-settings/mfa/verify-otp needs a
 		// session already, so it could never serve this flow.
-		await verifyTwoFactorOtp(cleanCode, trustDevice);
+		await verifyTwoFactorOtp(cleanCode);
 		const sess = await getSession();
 		applyPolicy(sess);
 		const { staff } = sess;

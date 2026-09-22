@@ -2482,7 +2482,7 @@ function AuthSettings() {
 						<PolicyNum label="Lockout duration (min)" hint="How long the lock holds" value={policyDraft.lockoutMinutes ?? authPolicy.lockoutMinutes} min={5} max={1440} onChange={(v) => setPolicyDraft((p) => ({ ...p, lockoutMinutes: v }))} />
 						<PolicyNum label="Password min length" hint="New passwords only" value={policyDraft.passwordMinLength ?? authPolicy.passwordMinLength} min={8} max={64} onChange={(v) => setPolicyDraft((p) => ({ ...p, passwordMinLength: v }))} />
 						<PolicyNum label="MFA grace (days)" hint="Require-by deadline for staff" value={policyDraft.mfaGraceDays ?? authPolicy.mfaGraceDays} min={0} max={30} onChange={(v) => setPolicyDraft((p) => ({ ...p, mfaGraceDays: v }))} />
-						<PolicyNum label="Remember device (days)" hint="Skip MFA on a trusted device" value={policyDraft.rememberDeviceDays ?? authPolicy.rememberDeviceDays} min={0} max={90} onChange={(v) => setPolicyDraft((p) => ({ ...p, rememberDeviceDays: v }))} />
+
 						<label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "var(--text-sm)", padding: "0.5rem 0" }}>
 							<input
 								type="checkbox"

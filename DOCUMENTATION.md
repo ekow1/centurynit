@@ -600,7 +600,7 @@ with the reason attached.
 
 Clients upload through a vault in two phases: the API mints a temporary
 signed link, the browser sends the file straight to private storage, then
-the client confirms — and the API *checks the object actually landed in
+the client confirms, and the API *checks the object actually landed in
 storage* before marking it uploaded, preferring the size storage recorded
 over whatever the request claimed. Nobody can mark a document uploaded
 without a file behind it.
@@ -617,8 +617,25 @@ Verification progress feeds the client's checklist and the journey on
 both sides. Staff can request a specific document by name ("passport data
 page"), which appears as a task in the portal. Nothing is publicly
 reachable; every download goes through a short-lived signed link the API
-mints — five minutes by default. Uploads accept PDF only, up to fifteen
+mints (five minutes by default). Uploads accept PDF only, up to fifteen
 megabytes.
+
+### Viewing, not just downloading
+
+Both apps open files where they sit rather than making people download
+first. The same endpoint serves two modes: an ordinary request returns a
+link that downloads the file under its original name, while an `inline`
+request returns one the browser renders directly. The client's vault row
+opens a sheet with the PDF rendered in a frame, plus replace, remove,
+download and open-in-new-tab; the visa checklist deep-links straight into
+that sheet by document type. The console goes further: its document
+viewer renders the signed file inline with zoom presets, rotation,
+download and a full-screen mode, so a reviewer reads the actual page
+they're being asked to verify. A record whose upload never completed
+can't be viewed at all; the API says so rather than serving an empty
+link. And the release hold above is enforced at this exact point: a held
+file's owner gets the lock message instead of a link, while staff and
+the owner's own uploads pass straight through.
 
 One deliberate hold: the documents the agency produces as the client's
 agent, the admission letter and the visa outcome, are visible in the vault
@@ -985,9 +1002,9 @@ lock everyone out.
 constants.** An authentication policy lives in the console's
 Administration page, every field bounded and every change audited:
 
-- **Session lifetime** — how long a sign-in lasts at all: fourteen days
-  by default, settable from one to ninety.
-- **Idle sign-out** — a staff session that sees no input ends itself.
+- **Session lifetime**: how long a sign-in lasts at all (fourteen days
+  by default, settable from one to ninety).
+- **Idle sign-out**: a staff session that sees no input ends itself.
   The console learns the limit from the session itself (two hours by
   default, settable from one to seventy-two), warns with a countdown five
   minutes before the end, and "stay signed in" re-validates the session
@@ -995,14 +1012,14 @@ Administration page, every field bounded and every change audited:
   permission sync, and the signed-out login screen quotes the real
   number. The portal applies the same pattern with a fixed twelve-hour
   window for clients.
-- **Account lockout** — five failed sign-ins inside ten minutes locks
+- **Account lockout**: five failed sign-ins inside ten minutes locks
   the account for fifteen minutes (all three numbers tunable). The lock
   is derived from the audit stream, not a flag, and only an audited
   unlock event or the clock clears it.
-- **Passwords** — a minimum length (twelve by default), a
+- **Passwords**: a minimum length (twelve by default), a
   breached-password check that can be toggled, and a rotation age for
   staff passwords (six months by default).
-- **Second-factor windows** — a grace period before a staff account must
+- **Second-factor windows**: a grace period before a staff account must
   have enrolled (seven days), and how long a trusted device skips the
   second factor (thirty days).
 
@@ -1192,7 +1209,7 @@ why they can't disagree with the payments table.
 
 Upload is three steps: the API mints a short-lived upload link, the file
 goes straight from the browser to private storage, then the client tells
-the API it's complete — at which point the API asks storage whether the
+the API it's complete; the API then asks storage whether the
 object really exists before the record lands, because trusting the claim
 would let a reviewer open nothing. Review changes the record's state
 (verified, or rejected with a note the client sees) and that state

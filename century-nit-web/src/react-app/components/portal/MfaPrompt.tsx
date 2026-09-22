@@ -7,6 +7,13 @@ import {
 	type MfaEnrollmentStatus,
 } from "../../lib/api";
 import { useAppState } from "../../context/AppState";
+import {
+	bumpMfaNudgeCount,
+	readMfaSheetSeen,
+	readMfaSkipped,
+	writeMfaSheetSeen,
+	writeMfaSkipped,
+} from "../../lib/mfa-nudge";
 
 /**
  * The MFA nudge ladder. Three surfaces off one status read:
@@ -17,61 +24,10 @@ import { useAppState } from "../../context/AppState";
  * - The sheet: a proper ask on the first portal visit of an account,
  *   dismissible, then gone.
  * - The banner: every sign-in after, while unenrolled. "Skip for now" is a
- *   sessionStorage flag. It dies with the tab, so the next sign-in asks
- *   again, forever until enrolled. There is deliberately no "don't ask".
+ *   sessionStorage flag, also cleared when the session ends (AppState watches
+ *   the unauthenticated transition), so the next sign-in asks again, forever
+ *   until enrolled. There is deliberately no "don't ask".
  */
-const SKIP_KEY = "mfa_prompt_skipped_session";
-const sheetKey = (uid: string) => `mfa_sheet_seen_${uid}`;
-const nudgeKey = (uid: string) => `mfa_nudge_count_${uid}`;
-const countedKey = (uid: string) => `mfa_nudge_counted_${uid}`;
-
-function readSkipped(): boolean {
-	try {
-		return sessionStorage.getItem(SKIP_KEY) === "1";
-	} catch {
-		return false;
-	}
-}
-
-function writeSkipped() {
-	try {
-		sessionStorage.setItem(SKIP_KEY, "1");
-	} catch {
-		/* ignore. Private mode etc. */
-	}
-}
-
-function readSheetSeen(uid: string): boolean {
-	try {
-		return localStorage.getItem(sheetKey(uid)) === "1";
-	} catch {
-		return false;
-	}
-}
-
-function writeSheetSeen(uid: string) {
-	try {
-		localStorage.setItem(sheetKey(uid), "1");
-	} catch {
-		/* ignore */
-	}
-}
-
-/** Bump the nudge count once per browser session. StrictMode-safe via the
- * sessionStorage flag rather than render counting. */
-function bumpNudgeCount(uid: string): number {
-	try {
-		if (sessionStorage.getItem(countedKey(uid)) !== "1") {
-			sessionStorage.setItem(countedKey(uid), "1");
-			const next = (parseInt(localStorage.getItem(nudgeKey(uid)) ?? "0", 10) || 0) + 1;
-			localStorage.setItem(nudgeKey(uid), String(next));
-			return next;
-		}
-		return parseInt(localStorage.getItem(nudgeKey(uid)) ?? "0", 10) || 0;
-	} catch {
-		return 0;
-	}
-}
 
 const shieldIcon = (
 	<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -289,7 +245,7 @@ export function MfaPrompt() {
 	const { authUser, sessionStatus } = useAppState();
 	const [status, setStatus] = useState<MfaEnrollmentStatus | null>(null);
 	const [loaded, setLoaded] = useState(false);
-	const [skipped, setSkipped] = useState(readSkipped);
+	const [skipped, setSkipped] = useState(readMfaSkipped);
 	const [sheetDismissed, setSheetDismissed] = useState(false);
 	const [nudgeCount, setNudgeCount] = useState(0);
 	const counted = useRef(false);
@@ -319,7 +275,7 @@ export function MfaPrompt() {
 		if (!loaded || !authUser || counted.current) return;
 		if (status && !status.enrolled && status.applicable !== false && !skipped && authUser.id) {
 			counted.current = true;
-			setNudgeCount(bumpNudgeCount(authUser.id));
+			setNudgeCount(bumpMfaNudgeCount(authUser.id));
 		}
 	}, [loaded, authUser, status, skipped]);
 
@@ -341,17 +297,17 @@ export function MfaPrompt() {
 	if (skipped) return null;
 
 	const isRequired = status?.required === true;
-	const sheetUnseen = authUser.id ? !readSheetSeen(authUser.id) : false;
+	const sheetUnseen = authUser.id ? !readMfaSheetSeen(authUser.id) : false;
 
 	// First visit. The sheet, once.
 	if (sheetUnseen && !sheetDismissed) {
 		return (
 			<MfaSheet
 				required={isRequired}
-				onSetUp={() => authUser.id && writeSheetSeen(authUser.id)}
+				onSetUp={() => authUser.id && writeMfaSheetSeen(authUser.id)}
 				onDismiss={() => {
-					if (authUser.id) writeSheetSeen(authUser.id);
-					writeSkipped();
+					if (authUser.id) writeMfaSheetSeen(authUser.id);
+					writeMfaSkipped();
 					setSheetDismissed(true);
 					setSkipped(true);
 				}}
@@ -383,7 +339,7 @@ export function MfaPrompt() {
 							type="button"
 							className="btn btn--ghost btn--sm"
 							onClick={() => {
-								writeSkipped();
+								writeMfaSkipped();
 								setSkipped(true);
 							}}
 						>

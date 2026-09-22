@@ -13,6 +13,7 @@ import {
 	signOut as authSignOut,
 } from "./authStore";
 import { safeGetJSON, safeRemoveItem, safeSetJSON, meApi } from "century-nit-core";
+import { clearMfaSessionNudge } from "../lib/mfa-nudge";
 import { useNotifier } from "../components/notifier/Notifier";
 import { usePushNotifications } from "../hooks/usePushNotifications";
 import {
@@ -2165,6 +2166,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		void probeSession();
 	}, [probeSession]);
+
+	// "Skip for now. Remind me next sign-in" is a per-sitting promise: the
+	// moment the session ends — sign-out, an expired cookie, a failed probe —
+	// the flag clears so the next sign-in nudges again. sessionStorage alone
+	// cannot express this: it outlives sign-out inside the same tab.
+	useEffect(() => {
+		if (sessionStatus === "unauthenticated") clearMfaSessionNudge();
+	}, [sessionStatus]);
 
 	useEffect(() => {
 		const onFocus = () => void probeSession();

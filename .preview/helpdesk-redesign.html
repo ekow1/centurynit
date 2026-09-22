@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ops · Helpdesk — redesign mock</title>
+<style>
+	:root {
+		--ink: #17161a;
+		--paper: #f5f4f0;
+		--card: #ffffff;
+		--line: #ddd9cd;
+		--line-ink: #17161a;
+		--muted: #6e6a60;
+		--amber: #b97a10;
+		--amber-ink: #8a5a0a;
+		--amber-soft: #f4ead3;
+		--red: #a33b2e;
+		--red-soft: #f9efec;
+		--blue: #31577a;
+		--blue-soft: #edf2f7;
+		--green: #2e6b34;
+		--green-soft: #e9f2ea;
+	}
+	* { box-sizing: border-box; margin: 0; padding: 0; border-radius: 0 !important; }
+	html { font-size: 14px; }
+	body { font-family: Georgia, "Times New Roman", serif; background: var(--paper); color: var(--ink); }
+	.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+	button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; text-align: left; }
+
+	/* ── app frame ── */
+	.app { display: grid; grid-template-columns: 210px 1fr; min-height: 100vh; }
+
+	/* sidebar */
+	.side { background: var(--ink); color: #d8d5cb; display: flex; flex-direction: column; padding: 1.1rem 0.9rem 0.9rem; }
+	.side .wm { font-size: 1.05rem; color: #fff; }
+	.side .wm small { display: block; font-family: ui-monospace, monospace; font-size: 0.5rem; letter-spacing: 0.22em; color: var(--amber); margin-top: 0.3rem; text-transform: uppercase; }
+	.side .who { font-family: ui-monospace, monospace; font-size: 0.52rem; letter-spacing: 0.14em; color: rgba(255,255,255,.4); border: 1px solid rgba(255,255,255,.16); padding: 0.22rem 0.5rem; margin-top: 0.8rem; width: fit-content; text-transform: uppercase; }
+	.side nav { margin-top: 1.4rem; display: flex; flex-direction: column; gap: 0.15rem; }
+	.side .grp { font-family: ui-monospace, monospace; font-size: 0.5rem; letter-spacing: 0.18em; color: rgba(255,255,255,.35); text-transform: uppercase; padding: 0.9rem 0.4rem 0.35rem; }
+	.side a { display: flex; justify-content: space-between; align-items: center; padding: 0.42rem 0.5rem; font-size: 0.74rem; color: #b9b5a9; text-decoration: none; }
+	.side a.on { background: rgba(255,255,255,.07); color: #fff; border-left: 2px solid var(--amber); padding-left: calc(0.5rem - 2px); }
+	.side a:hover { color: #fff; }
+	.side .n { font-family: ui-monospace, monospace; font-size: 0.56rem; color: rgba(255,255,255,.45); }
+	.side a.on .n { color: var(--amber); }
+	.side .foot { margin-top: auto; border-top: 1px solid rgba(255,255,255,.12); padding-top: 0.8rem; display: flex; align-items: center; gap: 0.55rem; }
+	.side .av { width: 24px; height: 24px; background: var(--amber); color: #fff; font-family: ui-monospace, monospace; font-size: 0.58rem; display: grid; place-items: center; }
+	.side .whoami { font-size: 0.66rem; color: #e8e5db; line-height: 1.3; }
+	.side .whoami small { display: block; font-family: ui-monospace, monospace; font-size: 0.5rem; color: rgba(255,255,255,.4); letter-spacing: 0.08em; text-transform: uppercase; }
+
+	/* main column */
+	.main { display: flex; flex-direction: column; min-width: 0; }
+	.topbar { display: flex; align-items: center; gap: 1rem; padding: 0.65rem 1.4rem; border-bottom: 1px solid var(--line); background: var(--card); }
+	.crumb { font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+	.crumb b { color: var(--ink); font-weight: 400; }
+	.topbar .grow { flex: 1; }
+	.search { border: 1px solid var(--line); background: var(--paper); padding: 0.4rem 0.7rem; font-family: ui-monospace, monospace; font-size: 0.62rem; color: var(--muted); width: 240px; display: flex; justify-content: space-between; }
+	.bell { font-family: ui-monospace, monospace; font-size: 0.6rem; border: 1px solid var(--line); padding: 0.4rem 0.55rem; position: relative; }
+	.bell i { position: absolute; top: -5px; right: -5px; background: var(--red); color: #fff; font-style: normal; font-size: 0.5rem; padding: 0.1rem 0.28rem; }
+
+	.pagehead { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; padding: 1.3rem 1.4rem 1rem; }
+	.pagehead h1 { font-size: 1.5rem; font-weight: 400; letter-spacing: -0.01em; }
+	.pagehead .lead { font-size: 0.78rem; color: var(--muted); margin-top: 0.25rem; }
+	.actions { display: flex; gap: 0.5rem; }
+	.btn { font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0.55rem 0.9rem; border: 1px solid var(--ink); }
+	.btn--pri { background: var(--ink); color: #fff; }
+	.btn--ghost { background: var(--card); color: var(--ink); }
+	.btn--warn { border-color: var(--red); color: var(--red); background: var(--card); }
+
+	/* stat strip */
+	.stats { display: flex; align-items: stretch; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--card); }
+	.stat { padding: 0.6rem 1.1rem; border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+	.stat b { font-size: 1.05rem; font-weight: 400; }
+	.stat span { font-family: ui-monospace, monospace; font-size: 0.52rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+	.stat.hot b { color: var(--red); } .stat.hot span { color: var(--red); }
+	.stat.amber b { color: var(--amber-ink); } .stat.amber span { color: var(--amber-ink); }
+	.stats .wl { margin-left: auto; display: flex; align-items: center; padding: 0 1.2rem; font-family: ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--blue); }
+
+	/* ── the three panes ── */
+	.panes { flex: 1; display: grid; grid-template-columns: 300px minmax(0, 1fr) 250px; min-height: 0; }
+
+	/* queue */
+	.queue { border-right: 1px solid var(--line); background: var(--card); display: flex; flex-direction: column; min-height: 0; }
+	.q-head { padding: 0.7rem 0.7rem 0.6rem; border-bottom: 1px solid var(--line); }
+	.q-filters { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+	.chip { font-family: ui-monospace, monospace; font-size: 0.55rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.3rem 0.5rem; border: 1px solid var(--line); color: var(--muted); }
+	.chip.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+	.chip.hot { border-color: var(--red); color: var(--red); }
+	.chip.more { border-style: dashed; }
+	.q-search { margin-top: 0.5rem; border: 1px solid var(--line); background: var(--paper); padding: 0.45rem 0.6rem; font-family: ui-monospace, monospace; font-size: 0.62rem; color: var(--muted); }
+	.q-body { flex: 1; overflow-y: auto; }
+	.band { display: flex; justify-content: space-between; align-items: baseline; padding: 0.55rem 0.75rem 0.3rem; font-family: ui-monospace, monospace; font-size: 0.52rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+	.band b { color: var(--ink); font-weight: 400; }
+	.band.bad b, .band.bad { color: var(--red); }
+	.qrow { display: block; width: 100%; padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--line); border-left: 3px solid transparent; }
+	.qrow:hover { background: var(--paper); }
+	.qrow.on { background: var(--ink); color: #fff; border-left-color: var(--amber); }
+	.qrow .kick { font-family: ui-monospace, monospace; font-size: 0.5rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+	.qrow.on .kick { color: var(--amber); }
+	.qrow .who { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.76rem; margin-top: 0.15rem; }
+	.qrow .who .t { font-family: ui-monospace, monospace; font-size: 0.55rem; color: var(--muted); }
+	.qrow.on .who .t { color: rgba(255,255,255,.55); }
+	.qrow .snip { font-size: 0.68rem; color: var(--muted); line-height: 1.4; margin-top: 0.15rem; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+	.qrow.on .snip { color: rgba(255,255,255,.6); }
+	.qrow .tail { display: flex; gap: 0.35rem; margin-top: 0.3rem; font-family: ui-monospace, monospace; font-size: 0.5rem; letter-spacing: 0.06em; text-transform: uppercase; }
+	.tag { border: 1px solid var(--line); padding: 0.08rem 0.35rem; color: var(--muted); }
+	.tag.red { border-color: var(--red); color: var(--red); }
+	.tag.blue { border-color: var(--blue); color: var(--blue); }
+	.qrow.on .tag { border-color: rgba(255,255,255,.4); color: rgba(255,255,255,.75); }
+	.qrow .unread { margin-left: auto; background: var(--amber); color: #fff; padding: 0.05rem 0.3rem; }
+
+	/* thread */
+	.thread { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+	.t-head { background: var(--card); border-bottom: 1px solid var(--line); border-left: 3px solid var(--blue); padding: 0.75rem 1.1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+	.t-head .kick { font-family: ui-monospace, monospace; font-size: 0.52rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--blue); }
+	.t-head h2 { font-size: 1.05rem; font-weight: 400; margin: 0.2rem 0 0.15rem; }
+	.t-head .sub { font-family: ui-monospace, monospace; font-size: 0.55rem; color: var(--muted); }
+	.t-actions { display: flex; gap: 0.35rem; flex-shrink: 0; }
+	.t-actions .btn { font-size: 0.54rem; padding: 0.42rem 0.65rem; }
+	.t-body { flex: 1; overflow-y: auto; padding: 1.1rem; display: flex; flex-direction: column; gap: 0.75rem; }
+	.day { text-align: center; font-family: ui-monospace, monospace; font-size: 0.52rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+	.sys { align-self: center; font-size: 0.66rem; color: var(--muted); border: 1px dashed var(--line); padding: 0.3rem 0.7rem; background: var(--card); }
+	.msg { max-width: 70%; background: var(--card); border: 1px solid var(--line); padding: 0.6rem 0.75rem; font-size: 0.78rem; line-height: 1.55; }
+	.msg .meta { font-family: ui-monospace, monospace; font-size: 0.5rem; letter-spacing: 0.08em; color: var(--muted); margin-top: 0.35rem; text-transform: uppercase; }
+	.msg.me { align-self: flex-end; background: var(--ink); color: #ece9e0; border-color: var(--ink); }
+	.msg.me .meta { color: rgba(255,255,255,.5); }
+	.msg.note { border-color: var(--amber); background: var(--amber-soft); }
+	.msg.note .meta { color: var(--amber-ink); }
+	.msg.note .meta::before { content: "INTERNAL NOTE · "; font-weight: 700; }
+	.typing { font-family: ui-monospace, monospace; font-size: 0.55rem; color: var(--muted); letter-spacing: 0.1em; }
+	.typing i { color: var(--amber); font-style: normal; }
+
+	/* composer */
+	.composer { border-top: 1px solid var(--line); background: var(--card); }
+	.comp-tabs { display: flex; border-bottom: 1px solid var(--line); }
+	.comp-tabs span { font-family: ui-monospace, monospace; font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 0.5rem 0.9rem; color: var(--muted); border-right: 1px solid var(--line); }
+	.comp-tabs span.on { background: var(--ink); color: #fff; }
+	.comp-tabs .sp { flex: 1; border-right: none; }
+	.comp-tabs .aux { color: var(--blue); }
+	.comp-in { display: flex; align-items: flex-end; gap: 0.7rem; padding: 0.7rem 0.9rem; }
+	.comp-in .field { flex: 1; border: 1px solid var(--line); background: var(--paper); min-height: 2.4rem; padding: 0.55rem 0.65rem; font-size: 0.76rem; color: var(--muted); }
+	.comp-tools { display: flex; gap: 0.4rem; padding: 0 0.9rem 0.7rem; }
+	.comp-tools .chip { font-size: 0.5rem; }
+
+	/* client rail */
+	.rail { border-left: 1px solid var(--line); background: var(--card); display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
+	.rail-sect { border-bottom: 1px solid var(--line); padding: 0.75rem 0.85rem; }
+	.rail-sect h4 { font-family: ui-monospace, monospace; font-size: 0.5rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.5rem; display: flex; justify-content: space-between; }
+	.rail-sect h4 a { color: var(--blue); }
+	.client .nm { font-size: 0.95rem; }
+	.client .ln { font-family: ui-monospace, monospace; font-size: 0.58rem; color: var(--muted); margin-top: 0.15rem; }
+	.kv { display: flex; justify-content: space-between; gap: 0.6rem; padding: 0.22rem 0; font-size: 0.7rem; }
+	.kv b { font-weight: 400; font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; padding-top: 0.1rem; }
+	.kv span { text-align: right; }
+	.journey { border: 1px solid var(--line); margin-top: 0.3rem; }
+	.journey .jrow { display: flex; justify-content: space-between; padding: 0.35rem 0.55rem; font-size: 0.68rem; border-bottom: 1px solid var(--line); }
+	.journey .jrow:last-child { border-bottom: none; }
+	.st { font-family: ui-monospace, monospace; font-size: 0.5rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0.1rem 0.35rem; border: 1px solid; }
+	.st.ok { color: var(--green); background: var(--green-soft); border-color: #cfe3d2; }
+	.st.open { color: var(--blue); background: var(--blue-soft); border-color: #cfdbe6; }
+	.st.bad { color: var(--red); background: var(--red-soft); border-color: #ecd3cd; }
+	.money .kv span.paid { color: var(--green); }
+	.money .kv span.due { color: var(--amber-ink); }
+	.money .tot { border-top: 1px solid var(--line); margin-top: 0.3rem; padding-top: 0.35rem; font-weight: 700; }
+
+	/* annotations on the mock itself */
+	.notes { border-top: 2px solid var(--ink); margin: 2.5rem 1.4rem 0; padding: 1rem 0 3rem; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+	.notes h3 { font-size: 0.85rem; font-weight: 400; margin-bottom: 0.5rem; }
+	.notes h3 span { font-family: ui-monospace, monospace; font-size: 0.52rem; color: var(--amber-ink); letter-spacing: 0.12em; display: block; margin-bottom: 0.3rem; text-transform: uppercase; }
+	.notes ul { list-style: none; font-size: 0.72rem; color: var(--muted); line-height: 1.7; }
+	.notes li b { color: var(--ink); font-weight: 400; }
+
+	@media (max-width: 1180px) { .panes { grid-template-columns: 260px minmax(0,1fr); } .rail { display: none; } }
+	@media (max-width: 860px) { .app { grid-template-columns: 52px 1fr; } .side .lbl, .side .n, .side .grp, .side .wm small, .side .who, .side .whoami { display: none; } .side a { justify-content: center; } .panes { grid-template-columns: 1fr; } .queue { max-height: 300px; border-right: none; border-bottom: 1px solid var(--line); } }
+</style>
+</head>
+<body>
+<div class="app">
+
+	<!-- ── sidebar ── -->
+	<aside class="side">
+		<div class="wm">Century NIT<small>Operations Center</small></div>
+		<span class="who">Super admin</span>
+		<nav>
+			<p class="grp">Today</p>
+			<a href="#"><span class="lbl">Workspace</span><span class="n">1</span></a>
+			<a href="#"><span class="lbl">Inbox</span><span class="n">22</span></a>
+			<a href="#" class="on"><span class="lbl">Helpdesk</span></a>
+			<a href="#"><span class="lbl">Documents</span><span class="n">1</span></a>
+			<p class="grp">Work</p>
+			<a href="#"><span class="lbl">Dashboard</span></a>
+			<a href="#"><span class="lbl">Cases</span></a>
+			<a href="#"><span class="lbl">Leads</span></a>
+			<a href="#"><span class="lbl">Appointments</span></a>
+			<a href="#"><span class="lbl">Live meetings</span></a>
+			<p class="grp">Setup</p>
+			<a href="#"><span class="lbl">Catalogue</span></a>
+			<a href="#"><span class="lbl">Billing</span></a>
+		</nav>
+		<div class="foot"><span class="av">SA</span><div class="whoami">Super Admin<small>Platform</small></div></div>
+	</aside>
+
+	<!-- ── main ── -->
+	<div class="main">
+		<div class="topbar">
+			<span class="crumb">Today / <b>Helpdesk</b></span>
+			<span class="grow"></span>
+			<span class="search">Search everywhere <span>⌘K</span></span>
+			<span class="bell">◈ <i>22</i></span>
+			<span class="side-av" style="width:24px;height:24px;background:var(--ink);color:#fff;font-family:ui-monospace,monospace;font-size:0.58rem;display:grid;place-items:center">SA</span>
+		</div>
+
+		<div class="pagehead">
+			<div>
+				<h1>Helpdesk</h1>
+				<p class="lead">Every client conversation — the ones waiting on you first.</p>
+			</div>
+			<div class="actions">
+				<button class="btn btn--ghost">+ Log request</button>
+				<button class="btn btn--pri">+ New conversation</button>
+			</div>
+		</div>
+
+		<div class="stats">
+			<div class="stat"><b>9</b><span>Open</span></div>
+			<div class="stat amber"><b>1</b><span>Awaiting reply</span></div>
+			<div class="stat"><b>3</b><span>Unclaimed</span></div>
+			<div class="stat"><b>0</b><span>Unread</span></div>
+			<div class="stat"><b>24h</b><span>Longest wait</span></div>
+			<div class="stat hot"><b>7</b><span>Breaching</span></div>
+			<div class="stat"><b>38m</b><span>Median first reply</span></div>
+			<a class="wl" href="#">Open the worklist →</a>
+		</div>
+
+		<div class="panes">
+
+			<!-- queue -->
+			<div class="queue">
+				<div class="q-head">
+					<div class="q-filters">
+						<span class="chip on">All · 9</span>
+						<span class="chip">Awaiting reply · 1</span>
+						<span class="chip">Waiting on client</span>
+						<span class="chip">Unclaimed · 3</span>
+						<span class="chip">Mine</span>
+						<span class="chip hot">Breaching · 7</span>
+						<span class="chip more">Filters ▾</span>
+					</div>
+					<div class="q-search">Search client, request…</div>
+				</div>
+				<div class="q-body">
+					<div class="band bad"><span><b>Breaching · 7</b></span><span>past target</span></div>
+
+					<button class="qrow">
+						<span class="kick">Support · Payment &amp; invoices</span>
+						<span class="who"><span>Enock Yaw Enu</span><span class="t">1:01 PM</span></span>
+						<span class="snip">Receipt for INV-2026-0887 hasn't arrived in my…</span>
+						<span class="tail"><span class="tag red">25h wait</span><span class="tag">unclaimed</span></span>
+					</button>
+					<button class="qrow">
+						<span class="kick">Support · Documents</span>
+						<span class="who"><span>Enock Yaw Enu</span><span class="t">1:01 PM</span></span>
+						<span class="snip">Which bank statement format do you need?</span>
+						<span class="tail"><span class="tag red">25h wait</span><span class="tag">unclaimed</span></span>
+					</button>
+					<button class="qrow">
+						<span class="kick">Support · General</span>
+						<span class="who"><span>Enock Yaw Enu</span><span class="t">1:01 PM</span></span>
+						<span class="snip">Is the Accra office open on Saturdays?</span>
+						<span class="tail"><span class="tag red">25h wait</span><span class="tag">unclaimed</span></span>
+					</button>
+
+					<div class="band"><span><b>Awaiting reply · 1</b></span><span>longest first</span></div>
+					<button class="qrow on">
+						<span class="kick">Stage · Departure</span>
+						<span class="who"><span>APP-2026-0001 · Departure</span><span class="t">7:19 AM</span></span>
+						<span class="snip">Your Departure stage has been assigned to…</span>
+						<span class="tail"><span class="tag blue">stage thread</span><span class="unread">2</span></span>
+					</button>
+					<button class="qrow">
+						<span class="kick">Stage · Visa</span>
+						<span class="who"><span>APP-2026-0001 · Visa</span><span class="t">7:40 AM</span></span>
+						<span class="snip">Your Visa stage has been assigned to…</span>
+						<span class="tail"><span class="tag blue">stage thread</span></span>
+					</button>
+
+					<div class="band"><span><b>Resolved · 2</b></span><span>show ▸</span></div>
+				</div>
+			</div>
+
+			<!-- thread -->
+			<div class="thread">
+				<div class="t-head">
+					<div>
+						<p class="kick">Stage · APP-2026-0001 · Departure</p>
+						<h2>Departure thread — Enock Yaw Enu</h2>
+						<p class="sub">Opened Apr 27 · client: enockenu@gmail.com · reply goes to the portal</p>
+					</div>
+					<div class="t-actions">
+						<button class="btn btn--ghost">Open case</button>
+						<button class="btn btn--pri">Resolve ✓</button>
+						<button class="btn btn--ghost">Reassign</button>
+						<button class="btn btn--ghost">Set waiting</button>
+						<button class="btn btn--warn">Escalate</button>
+					</div>
+				</div>
+
+				<div class="t-body">
+					<p class="day">Yesterday</p>
+					<p class="sys">Departure stage assigned to Enock Yaw Enu · by Super Admin</p>
+					<div class="msg">
+						Hi — just checking whether my flight paperwork checklist is final. I see "travel insurance" still pending.
+						<div class="meta">Enock · 6:58 PM · via portal</div>
+					</div>
+					<div class="msg me">
+						Looking at your file now — insurance cert is the last item. Give me ten minutes.
+						<div class="meta">You · 7:02 PM · read ✓✓</div>
+					</div>
+					<div class="msg note">
+						Insurance cert came in on DMS-0917 — attached to the case. Confirm it covers UK arrival, then reply.
+						<div class="meta">K. Mensah · 7:05 PM · staff only</div>
+					</div>
+					<div class="msg">
+						Any update?
+						<div class="meta">Enock · 7:41 PM · via portal</div>
+					</div>
+					<p class="typing"><i>●</i>&nbsp; Enock is typing…</p>
+				</div>
+
+				<div class="composer">
+					<div class="comp-tabs">
+						<span class="on">Reply</span>
+						<span>Note</span>
+						<span>Snippets ▾</span>
+						<span class="sp"></span>
+						<span class="aux">Attach</span>
+						<span class="aux">Waiting on client ▾</span>
+					</div>
+					<div class="comp-in">
+						<div class="field">Reply to Enock…</div>
+						<button class="btn btn--pri">Send ↵</button>
+					</div>
+					<div class="comp-tools">
+						<span class="chip">Acknowledge</span>
+						<span class="chip">Request documents</span>
+						<span class="chip">Payment received</span>
+						<span class="chip">Visa update</span>
+						<span class="chip">Resolve + close</span>
+					</div>
+				</div>
+			</div>
+
+			<!-- client rail -->
+			<aside class="rail">
+				<div class="rail-sect client">
+					<h4>Client <a href="#">Directory →</a></h4>
+					<p class="nm">Enock Yaw Enu</p>
+					<p class="ln">enockenu@gmail.com<br/>Ghana — Accra → United Kingdom<br/>Client since Apr 27, 2026</p>
+				</div>
+				<div class="rail-sect">
+					<h4>Journey</h4>
+					<div class="journey">
+						<div class="jrow"><span>APP-2026-0001</span><span class="st open">Departure</span></div>
+						<div class="jrow"><span>Stage 0 · Consultation</span><span class="st ok">Done</span></div>
+						<div class="jrow"><span>Stage I · Admissions</span><span class="st ok">Accepted</span></div>
+						<div class="jrow"><span>Stage II · Visa</span><span class="st ok">Granted</span></div>
+						<div class="jrow"><span>Stage III · Departure</span><span class="st open">Active</span></div>
+					</div>
+				</div>
+				<div class="rail-sect money">
+					<h4>Money <a href="#">Ledger →</a></h4>
+					<div class="kv"><b>INV-0889</b><span class="paid">Travel · paid</span></div>
+					<div class="kv"><b>INV-0888</b><span class="paid">Visa · paid</span></div>
+					<div class="kv"><b>INV-0887</b><span class="paid">Application · paid</span></div>
+					<div class="kv"><b>INV-0886</b><span class="due">Agency · partial</span></div>
+					<div class="kv tot"><b>Balance</b><span class="due">GH₵ 4,200</span></div>
+				</div>
+				<div class="rail-sect">
+					<h4>Next appointment</h4>
+					<div class="kv"><b>—</b><span>None booked</span></div>
+					<div class="kv"><b>Pre-dep briefing</b><span class="st bad">Overdue</span></div>
+				</div>
+				<div class="rail-sect">
+					<h4>Thread</h4>
+					<div class="kv"><b>Owner</b><span>Super Admin</span></div>
+					<div class="kv"><b>Messages</b><span>1</span></div>
+					<div class="kv"><b>Status</b><span class="st open">Open</span></div>
+					<div class="kv"><b>Waiting on</b><span>us · 24h</span></div>
+				</div>
+			</aside>
+		</div>
+
+		<!-- mock annotations -->
+		<div class="notes">
+			<div>
+				<h3><span>Queue — what changed</span>One job per row</h3>
+				<ul>
+					<li><b>Bands, not a wall</b> — Breaching (red) floats to the top, then Awaiting reply, then Resolved folded.</li>
+					<li><b>Rows read at a glance</b> — kicker (type · subject), name + time, one-line snippet, then tags: wait age + owner only.</li>
+					<li><b>Chips wrap inside the column</b> — nothing clips; Breaching stays visible in red.</li>
+					<li>Selected row is <b>ink + amber spine</b>, not a heavier border.</li>
+				</ul>
+			</div>
+			<div>
+				<h3><span>Thread — what changed</span>Head, body, composer</h3>
+				<ul>
+					<li><b>Head states the contract</b> — ref, who, and "reply goes to the portal" so internal/external is never ambiguous.</li>
+					<li><b>Internal notes are amber</b> — impossible to send to the client by accident.</li>
+					<li><b>Composer tabs</b> — Reply / Note / Snippets; waiting-on and attach live as quiet aux actions.</li>
+					<li>Action row stays in the head: Open case, Resolve, Reassign, Set waiting, Escalate.</li>
+				</ul>
+			</div>
+			<div>
+				<h3><span>Rail + breakpoints</span>Context, not clutter</h3>
+				<ul>
+					<li><b>Client → Journey → Money → Appointment → Thread</b> — the four answers an agent needs, in order.</li>
+					<li>Balance shows as a number, not a label; overdue briefing is a red chip.</li>
+					<li><b>&lt;1180px:</b> rail collapses into a sheet (thread keeps full width).</li>
+					<li><b>&lt;860px:</b> single column — queue becomes a 300px strip above the thread.</li>
+				</ul>
+			</div>
+		</div>
+	</div>
+</div>
+</body>
+</html>

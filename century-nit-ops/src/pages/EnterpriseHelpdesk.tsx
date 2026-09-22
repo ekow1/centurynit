@@ -183,6 +183,7 @@ export function EnterpriseHelpdesk() {
 	const [snippets, setSnippets] = useState<CannedReply[]>([]);
 	const [showClosed, setShowClosed] = useState(false);
 	const [drawerOpen, setDrawerOpen] = useState(false);
+	const [railOpen, setRailOpen] = useState(false);
 	const [search, setSearch] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [draft, setDraft] = useState("");
@@ -379,6 +380,7 @@ export function EnterpriseHelpdesk() {
 		setPendingFiles([]);
 		setShowSnippets(false);
 		setShowReassign(false);
+			setRailOpen(false);
 		// Raw history.replaceState bypasses React Router - useSearchParams never
 		// sees it, so the detail pane never opens. setSearchParams notifies it.
 		setSearchParams((prev) => {
@@ -641,7 +643,7 @@ export function EnterpriseHelpdesk() {
 						{/* Queue list */}
 						<div className="ops-split__list hd-list">
 							<div className="hd-list__head">
-								<div className="cn-scaffold__chips" role="tablist" aria-label="Conversations">
+								<div className="hd-filters" role="tablist" aria-label="Conversations">
 									{FILTERS.map((f) => {
 										const n = counts[f];
 										const on = filter === f;
@@ -651,76 +653,40 @@ export function EnterpriseHelpdesk() {
 												type="button"
 												role="tab"
 												aria-selected={on}
-												className="ops-pill"
+												className={`hd-chip${on ? " hd-chip--on" : ""}${f === "breaching" && n > 0 && !on ? " hd-chip--hot" : ""}`}
 												onClick={() => setFilter(f)}
-												style={{
-													cursor: "pointer",
-													marginLeft: 0,
-													border: "1px solid var(--border)",
-													background: on ? "var(--foreground)" : "transparent",
-													color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
-													fontWeight: f === "awaiting" && n > 0 && !on ? 700 : 500,
-												}}
 											>
-												{FILTER_LABELS[f]}
-												<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
-													{n}
-												</span>
+												{FILTER_LABELS[f]} · {n}
 											</button>
 										);
 									})}
 									<button
 										type="button"
-										className="ops-pill"
+										className={`hd-chip hd-chip--more${drawerActive ? " hd-chip--on" : ""}`}
 										aria-expanded={drawerActive}
 										onClick={() => setDrawerOpen((v) => !v)}
-										style={{
-											cursor: "pointer",
-											marginLeft: 0,
-											border: `1px ${drawerActive ? "solid" : "dashed"} var(--border)`,
-											background: "transparent",
-											color: drawerActive ? "var(--foreground)" : "var(--muted-foreground)",
-											fontWeight: drawerActive ? 700 : 500,
-										}}
 									>
 										Filters {drawerActive ? "▴" : "▾"}
 									</button>
 								</div>
 								{drawerActive && (
-									<div className="cn-scaffold__chips" role="group" aria-label="Refine" style={{ marginTop: "0.5rem" }}>
-										{TYPE_FACETS.map((t) => {
-											const on = typeFacet === t.id;
-											return (
-												<button
-													key={t.id || "any"}
-													type="button"
-													className="ops-pill"
-													aria-pressed={on}
-													onClick={() => setTypeFacet(t.id)}
-													style={{
-														cursor: "pointer",
-														marginLeft: 0,
-														border: "1px solid var(--border)",
-														background: on ? "var(--foreground)" : "transparent",
-														color: on ? "var(--background)" : "var(--foreground)",
-													}}
-												>
-													{t.label}
-												</button>
-											);
-										})}
+									<div className="hd-filters" role="group" aria-label="Refine" style={{ marginTop: "0.5rem" }}>
+										{TYPE_FACETS.map((t) => (
+											<button
+												key={t.id || "any"}
+												type="button"
+												className={`hd-chip${typeFacet === t.id ? " hd-chip--on" : ""}`}
+												aria-pressed={typeFacet === t.id}
+												onClick={() => setTypeFacet(t.id)}
+											>
+												{t.label}
+											</button>
+										))}
 										<button
 											type="button"
-											className="ops-pill"
+											className={`hd-chip${unreadOnly === "1" ? " hd-chip--on" : ""}`}
 											aria-pressed={unreadOnly === "1"}
 											onClick={() => setUnreadOnly(unreadOnly === "1" ? "" : "1")}
-											style={{
-												cursor: "pointer",
-												marginLeft: 0,
-												border: "1px solid var(--border)",
-												background: unreadOnly === "1" ? "var(--foreground)" : "transparent",
-												color: unreadOnly === "1" ? "var(--background)" : "var(--foreground)",
-											}}
 										>
 											Unread only
 										</button>
@@ -772,7 +738,7 @@ export function EnterpriseHelpdesk() {
 									bands.map((band) => (
 										<div key={band.id}>
 											<div
-												className={`ops-band hd-band${band.id === "closed" ? " ops-band--toggle" : ""}`}
+												className={`ops-band hd-band${band.id === "breaching" ? " ops-band--hot" : ""}${band.id === "closed" ? " ops-band--toggle" : ""}`}
 												role={band.id === "closed" ? "button" : undefined}
 												tabIndex={band.id === "closed" ? 0 : undefined}
 												onClick={band.id === "closed" ? () => setShowClosed((v) => !v) : undefined}
@@ -804,33 +770,27 @@ export function EnterpriseHelpdesk() {
 															className={`hd-row${activeConvId === c.id ? " hd-row--active" : ""}${hours >= 24 ? " hd-row--wait" : ""}`}
 															onClick={() => openConversation(c)}
 														>
-															<span className="hd-row__line">
-																<span className="hd-row__main">
-																	<span className="hd-row__ref mono">{kickerOf(c)}</span>
-																	<span className="hd-row__title">{clientName(c)}</span>
-																	<span className="hd-row__meta">
-																		{c.lastMessage
-																			? `${c.lastMessage.senderUserId ? c.lastMessage.senderName : "You"}: ${c.lastMessage.content}`
-																			: link
-																				? link.label.replace("Open ", "")
-																				: c.participants.map((p) => p.name).join(", ")}
-																	</span>
-																</span>
-																<span className="hd-row__side">
-																	<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
-																		{convTime(c.lastMessage?.createdAt ?? c.lastMessageAt ?? c.updatedAt)}
-																	</span>
-																	{c.unreadCount > 0 ? <span className="hd-row__unread mono">{c.unreadCount}</span> : null}
-																	{hours > 0 && band.id === "waiting" ? <span className={`hd-row__wait mono${hours >= 24 ? " hd-row__wait--long" : ""}`}>waiting {waitLabel(hours)}</span> : null}
-																	{isClosed(c) ? (
-																		<span className="hd-row__owner mono">{c.status}</span>
-																	) : (
-																		<span className="hd-row__owner mono">
-																			{owner ? (owner.opsUserId === opsUser?.opsUserId ? "you" : owner.name) : "unclaimed"}
-																		</span>
-																	)}
-																</span>
-															</span>
+										<span className="hd-row__kick">{kickerOf(c)}</span>
+										<span className="hd-row__who">
+											<span className="hd-row__name">{clientName(c)}</span>
+											<span className="hd-row__time">{convTime(c.lastMessage?.createdAt ?? c.lastMessageAt ?? c.updatedAt)}</span>
+										</span>
+										<span className="hd-row__snip">
+											{c.lastMessage
+												? `${c.lastMessage.senderUserId ? c.lastMessage.senderName : "You"}: ${c.lastMessage.content}`
+												: link
+													? link.label
+													: c.participants.map((p) => p.name).join(", ")}
+										</span>
+										<span className="hd-row__tail">
+											{hours > 0 ? <span className={`hd-tag${hours >= 24 ? " hd-tag--red" : ""}`}>waiting {waitLabel(hours)}</span> : null}
+											{isClosed(c) ? (
+												<span className="hd-tag">{c.status}</span>
+											) : (
+												<span className="hd-tag">{owner ? (owner.opsUserId === opsUser?.opsUserId ? "you" : owner.name) : "unclaimed"}</span>
+											)}
+											{c.unreadCount > 0 ? <span className="hd-unread">{c.unreadCount}</span> : null}
+										</span>
 														</button>
 													);
 												})}
@@ -895,13 +855,14 @@ export function EnterpriseHelpdesk() {
 												return p;
 											}, { replace: true });
 										}}
+									onToggleRail={() => setRailOpen((v) => !v)}
 										onReact={(messageId, emoji) => void react(messageId, emoji)}
 										onQuoteClick={(messageId) => {
 											const el = document.getElementById(`msg-${messageId}`);
 											if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
 										}}
 									/>
-									<ContextRail context={context} conversation={activeConv} />
+								<ContextRail context={context} conversation={activeConv} open={railOpen} onClose={() => setRailOpen(false)} />
 								</div>
 							)}
 						</div>
@@ -974,62 +935,78 @@ export function EnterpriseHelpdesk() {
 function ContextRail({
 	context,
 	conversation,
+	open,
+	onClose,
 }: {
 	context: ChatConversationContext | null;
 	conversation: ChatConversation;
+	open: boolean;
+	onClose: () => void;
 }) {
+	const stClass = (s: string) =>
+		/paid|settled|done|complet|accept|granted|resolved|closed/i.test(s)
+			? "hd-st hd-st--ok"
+			: /overdue|declin|breach|fail/i.test(s)
+				? "hd-st hd-st--bad"
+				: "hd-st hd-st--open";
 	return (
-		<aside className="hd-rail">
-			<div className="hd-rail__block">
-				<div className="hd-rail__label">Client</div>
+		<aside className={`hd-rail${open ? " hd-rail--open" : ""}`}>
+			<div className="hd-sect">
+				<h4 className="hd-sect__h">
+					Client
+					<button type="button" className="hd-sect__x" onClick={onClose} aria-label="Close details">×</button>
+				</h4>
 				{context?.client ? (
 					<>
-						<div className="hd-rail__title">{context.client.name}</div>
-						<div className="hd-rail__line">{context.client.email ?? "-"}</div>
-						<div className="hd-rail__line">
-							{[context.client.branch, context.client.targetCountry].filter(Boolean).join(" · ") || "-"}
-						</div>
+						<p className="hd-sect__title">{context.client.name}</p>
+						<p className="hd-kvline">{context.client.email ?? "-"}</p>
+						<p className="hd-kvline">
+							{[context.client.branch, context.client.targetCountry].filter(Boolean).join(" → ") || "-"}
+						</p>
 						{context.client.memberSince && (
-							<div className="hd-rail__line">Client since {new Date(context.client.memberSince).toLocaleDateString()}</div>
+							<p className="hd-kvline">Client since {new Date(context.client.memberSince).toLocaleDateString()}</p>
 						)}
 					</>
 				) : (
-					<div className="hd-rail__line">No applicant record linked.</div>
+					<p className="hd-kvline">No applicant record linked.</p>
 				)}
 			</div>
 
-			<div className="hd-rail__block">
-				<div className="hd-rail__label">Journey</div>
+			<div className="hd-sect">
+				<h4 className="hd-sect__h">Journey</h4>
 				{context && context.cases.length > 0 ? (
-					context.cases.map((c) => (
-						<Link key={c.id} to={`/applications?id=${c.id}`} className="hd-rail__link">
-							<span className="mono">{c.appNumber}</span>
-							<span className="hd-rail__line">{c.stageLabel} · {c.status}</span>
-						</Link>
-					))
+					<div className="hd-journey">
+						{context.cases.map((c) => (
+							<Link key={c.id} to={`/applications?id=${c.id}`} className="hd-jrow">
+								<span className="mono">{c.appNumber}</span>
+								<span className={stClass(c.status)}>{c.stageLabel} · {c.status}</span>
+							</Link>
+						))}
+					</div>
 				) : (
-					<div className="hd-rail__line">No open cases.</div>
+					<p className="hd-kvline">No open cases.</p>
 				)}
 			</div>
 
-			<div className="hd-rail__block">
-				<div className="hd-rail__label">Money</div>
+			<div className="hd-sect">
+				<h4 className="hd-sect__h">Money</h4>
 				{context && context.money.length > 0 ? (
 					context.money.map((m, i) => (
-						<div key={i} className="hd-rail__line">
-							<span className="mono">{m.invoiceNumber}</span> - {m.type} · {m.status}
+						<div key={i} className="hd-kv">
+							<b className="mono">{m.invoiceNumber}</b>
+							<span className={stClass(m.status)}>{m.type} · {m.status}</span>
 						</div>
 					))
 				) : (
-					<div className="hd-rail__line">No invoices.</div>
+					<p className="hd-kvline">No invoices.</p>
 				)}
 			</div>
 
-			<div className="hd-rail__block">
-				<div className="hd-rail__label">Next appointment</div>
+			<div className="hd-sect">
+				<h4 className="hd-sect__h">Next appointment</h4>
 				{context?.nextAppointment ? (
-					<div className="hd-rail__line">
-						{context.nextAppointment.serviceName} -{" "}
+					<p className="hd-kvline">
+						{context.nextAppointment.serviceName} —{" "}
 						{new Date(context.nextAppointment.startsAt).toLocaleString([], {
 							weekday: "short",
 							month: "short",
@@ -1037,19 +1014,18 @@ function ContextRail({
 							hour: "numeric",
 							minute: "2-digit",
 						})}
-					</div>
+					</p>
 				) : (
-					<div className="hd-rail__line">None booked.</div>
+					<p className="hd-kvline">None booked.</p>
 				)}
 			</div>
 
-			<div className="hd-rail__block">
-				<div className="hd-rail__label">Thread</div>
-				<div className="hd-rail__line">
-					{context?.owner ? `Owner: ${context.owner.name}` : "Unclaimed"}
-				</div>
-				<div className="hd-rail__line">{context?.messageCount ?? conversation.participants.length ? `${context?.messageCount ?? 0} messages` : ""}</div>
-				<div className="hd-rail__line">{conversation.status}</div>
+			<div className="hd-sect">
+				<h4 className="hd-sect__h">Thread</h4>
+				<div className="hd-kv"><b>Owner</b><span>{context?.owner ? context.owner.name : "Unclaimed"}</span></div>
+				<div className="hd-kv"><b>Messages</b><span>{context?.messageCount ?? 0}</span></div>
+				<div className="hd-kv"><b>Status</b><span className={stClass(conversation.status)}>{conversation.status}</span></div>
+				<div className="hd-kv"><b>Waiting on</b><span>{conversation.waitingOn === "client" ? "client" : "us"}</span></div>
 			</div>
 		</aside>
 	);
@@ -1103,6 +1079,7 @@ interface ConversationThreadProps {
 	onEscalate: (reason: string) => void;
 	onLoadMore: () => void;
 	onBack: () => void;
+	onToggleRail: () => void;
 	onReact: (messageId: string, emoji: string) => void;
 	onQuoteClick: (messageId: string) => void;
 }
@@ -1148,6 +1125,7 @@ function ConversationThread({
 	onEscalate,
 	onLoadMore,
 	onBack,
+	onToggleRail,
 	onReact,
 	onQuoteClick,
 }: ConversationThreadProps) {
@@ -1177,119 +1155,77 @@ function ConversationThread({
 
 	return (
 		<div style={streamContainerStyle}>
-			<div style={threadHeaderStyle}>
-				<button
-					type="button"
-					onClick={onBack}
-					style={backBtnStyle}
-					aria-label="Back to conversations"
-				>
-					←
-				</button>
-				<div style={{ minWidth: 0, flex: 1 }}>
-					<div className="cn-detailhead__kicker" style={{ marginBottom: 0 }}>{kickerOf(conversation)}</div>
-					<div style={{ fontWeight: 700, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{clientName(conversation)}</div>
-					<div style={{ fontSize: 10, color: "#52525b", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "monospace" }}>
+			<div className="hd-thead">
+				<button type="button" onClick={onBack} className="hd-back" aria-label="Back to conversations">←</button>
+				<div className="hd-thead__id">
+					<p className="hd-thead__kick">{kickerOf(conversation)}</p>
+					<h2 className="hd-thead__title">{clientName(conversation)}</h2>
+					<p className="hd-thead__sub">
 						{conversation.participants.length > 0 ? `with ${conversation.participants.map((p) => p.name).join(", ")}` : ""}
 						{conversation.status !== "open" ? ` · ${conversation.status}` : ""}
 						{owner ? ` · ${isOwner ? "you" : owner.name}` : " · unclaimed"}
+						{" · replies go to the portal"}
+					</p>
+				</div>
+				<div className="hd-thead__actions">
+					{(() => {
+						const link = entityLink(conversation);
+						return link ? (
+							<Link to={link.to} className="btn btn--ghost btn--sm">{link.label} →</Link>
+						) : conversation.linkedEntityType ? (
+							<span className="hd-st">{conversation.linkedEntityType}</span>
+						) : null;
+					})()}
+					{closed ? (
+						<button type="button" className="btn btn--ghost btn--sm" onClick={onReopen} disabled={statusBusy}>Reopen</button>
+					) : (
+						<button type="button" className="btn btn--primary btn--sm" onClick={onResolve} disabled={statusBusy}>Resolve ✓</button>
+					)}
+					{!owner && !closed && (
+						<button type="button" className="btn btn--ghost btn--sm" onClick={onClaim} disabled={statusBusy}>Claim</button>
+					)}
+					<div className="hd-popwrap">
+						<button type="button" className="btn btn--ghost btn--sm" onClick={onToggleReassign} disabled={statusBusy}>Reassign</button>
+						{showReassign && (
+							<div className="hd-pop">
+								{owner && (
+									<button type="button" className="hd-pop__row" onClick={() => onReassign(null)}>- Release (unclaim)</button>
+								)}
+								{directory.map((s) => (
+									<button key={s.opsUserId} type="button" className="hd-pop__row" onClick={() => onReassign(s.opsUserId)}>
+										{s.name} <span className="muted mono" style={{ fontSize: 10 }}>{s.role.toUpperCase()}</span>
+									</button>
+								))}
+							</div>
+						)}
 					</div>
-				</div>
-				{(() => {
-					const link = entityLink(conversation);
-					return link ? (
-						<Link to={link.to} className="btn btn--ghost btn--sm" style={{ flexShrink: 0 }}>
-							{link.label} →
-						</Link>
-					) : conversation.linkedEntityType ? (
-						<span style={stagePillMiniStyle}>{conversation.linkedEntityType.toUpperCase()}</span>
-					) : null;
-				})()}
-				{/* Lifecycle + ownership controls */}
-				{closed ? (
-					<button type="button" className="btn btn--ghost btn--sm" onClick={onReopen} disabled={statusBusy}>
-						Reopen
-					</button>
-				) : (
-					<button type="button" className="btn btn--primary btn--sm" onClick={onResolve} disabled={statusBusy}>
-						Resolve ✓
-					</button>
-				)}
-				{!owner && !closed && (
-					<button type="button" className="btn btn--ghost btn--sm" onClick={onClaim} disabled={statusBusy}>
-						Claim
-					</button>
-				)}
-				<div style={{ position: "relative" }}>
-					<button type="button" className="btn btn--ghost btn--sm" onClick={onToggleReassign} disabled={statusBusy}>
-						Reassign
-					</button>
-					{showReassign && (
-						<div className="hd-pop">
-							{owner && (
-								<button type="button" className="hd-pop__row" onClick={() => onReassign(null)}>
-									- Release (unclaim)
-								</button>
-							)}
-							{directory.map((s) => (
-								<button
-									key={s.opsUserId}
-									type="button"
-									className="hd-pop__row"
-									onClick={() => onReassign(s.opsUserId)}
-								>
-									{s.name} <span className="muted mono" style={{ fontSize: 10 }}>{s.role.toUpperCase()}</span>
-								</button>
-							))}
-						</div>
+					{!closed && (
+						<button type="button" className="btn btn--ghost btn--sm" onClick={onToggleWaiting} disabled={statusBusy} title="Flip whose move it is — the queue bands on this">
+							{conversation.waitingOn === "client" ? "⌛ client" : "⌛ us"}
+						</button>
 					)}
-				</div>
-				{/* Whose move + escalation */}
-				{!closed && (
-					<button
-						type="button"
-						className="btn btn--ghost btn--sm"
-						onClick={onToggleWaiting}
-						disabled={statusBusy}
-						title="Flip whose move it is — the queue bands on this"
-					>
-						{conversation.waitingOn === "client" ? "⌛ client" : "⌛ us"}
-					</button>
-				)}
-				<div style={{ position: "relative" }}>
-					<button
-						type="button"
-						className="btn btn--ghost btn--sm"
-						onClick={() => setEscalateOpen((v) => !v)}
-						disabled={statusBusy}
-						title="Send to the manager queue"
-					>
-						Escalate
-					</button>
-					{escalateOpen && (
-						<div className="hd-pop" style={{ minWidth: "16rem", padding: "0.6rem" }}>
-							<input
-								className="cn-search"
-								style={{ width: "100%", marginTop: 0, marginBottom: "0.5rem" }}
-								placeholder="Why escalate? (one line)"
-								value={escalateReason}
-								onChange={(e) => setEscalateReason(e.target.value)}
-								onKeyDown={(e) => {
-									if (e.key === "Enter" && escalateReason.trim()) onEscalate(escalateReason);
-								}}
-								autoFocus
-							/>
-							<button
-								type="button"
-								className="btn btn--primary btn--sm"
-								style={{ width: "100%" }}
-								disabled={!escalateReason.trim() || statusBusy}
-								onClick={() => onEscalate(escalateReason)}
-							>
-								Escalate to managers
-							</button>
-						</div>
-					)}
+					<div className="hd-popwrap">
+						<button type="button" className="btn btn--ghost btn--sm hd-btn--warn" onClick={() => setEscalateOpen((v) => !v)} disabled={statusBusy} title="Send to the manager queue">Escalate</button>
+						{escalateOpen && (
+							<div className="hd-pop" style={{ minWidth: "16rem", padding: "0.6rem" }}>
+								<input
+									className="cn-search"
+									style={{ width: "100%", marginTop: 0, marginBottom: "0.5rem" }}
+									placeholder="Why escalate? (one line)"
+									value={escalateReason}
+									onChange={(e) => setEscalateReason(e.target.value)}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" && escalateReason.trim()) onEscalate(escalateReason);
+									}}
+									autoFocus
+								/>
+								<button type="button" className="btn btn--primary btn--sm" style={{ width: "100%" }} disabled={!escalateReason.trim() || statusBusy} onClick={() => onEscalate(escalateReason)}>
+									Escalate to managers
+								</button>
+							</div>
+						)}
+					</div>
+					<button type="button" className="btn btn--ghost btn--sm hd-railtoggle" onClick={onToggleRail}>Details</button>
 				</div>
 			</div>
 
@@ -1341,33 +1277,36 @@ function ConversationThread({
 			)}
 
 			{/* Reply ⇄ Note toggle + tools */}
-			<div className="hd-composer-bar">
-				<div className="hd-composer-bar__mode" role="tablist" aria-label="Message mode">
-					<button
-						type="button"
-						role="tab"
-						aria-selected={!noteMode}
-						className={`hd-mode${noteMode ? "" : " hd-mode--on"}`}
-						onClick={() => noteMode && onToggleNote()}
-					>
-						Reply
-					</button>
-					<button
-						type="button"
-						role="tab"
-						aria-selected={noteMode}
-						className={`hd-mode${noteMode ? " hd-mode--on" : ""}`}
-						onClick={() => !noteMode && onToggleNote()}
-						title="Staff-only note - the client never sees it"
-					>
-						Note
-					</button>
-				</div>
-				<button type="button" className="hd-tool" onClick={onToggleSnippets} title="Canned replies">
-					Snippets
+			<div className="hd-tabs" role="tablist" aria-label="Message mode">
+				<button
+					type="button"
+					role="tab"
+					aria-selected={!noteMode}
+					className={`hd-tab${noteMode ? "" : " hd-tab--on"}`}
+					onClick={() => noteMode && onToggleNote()}
+				>
+					Reply
 				</button>
-				<button type="button" className="hd-tool" onClick={onAttach} disabled={uploading} title="Attach a file">
-					{uploading ? "Uploading…" : "📎"}
+				<button
+					type="button"
+					role="tab"
+					aria-selected={noteMode}
+					className={`hd-tab hd-tab--note${noteMode ? " hd-tab--on" : ""}`}
+					onClick={() => !noteMode && onToggleNote()}
+					title="Staff-only note - the client never sees it"
+				>
+					Note
+				</button>
+				<button
+					type="button"
+					className={`hd-tab${showSnippets ? " hd-tab--on" : ""}`}
+					onClick={onToggleSnippets}
+				>
+					Snippets {showSnippets ? "▴" : "▾"}
+				</button>
+				<span className="hd-tabs__sp" />
+				<button type="button" className="hd-tab hd-tab--aux" onClick={onAttach} disabled={uploading}>
+					{uploading ? "Uploading…" : "Attach"}
 				</button>
 			</div>
 			{showSnippets && (
@@ -1693,38 +1632,7 @@ const streamContainerStyle: CSSProperties = {
 	minHeight: 0,
 };
 
-const threadHeaderStyle: CSSProperties = {
-	display: "flex",
-	alignItems: "center",
-	gap: 10,
-	padding: "10px 16px",
-	background: "#ffffff",
-	borderBottom: "1px solid #f4f4f5",
-	flexShrink: 0,
-};
 
-const backBtnStyle: CSSProperties = {
-	background: "none",
-	border: "none",
-	cursor: "pointer",
-	padding: 0,
-	fontSize: 16,
-	color: "#18181b",
-	flexShrink: 0,
-	lineHeight: 1,
-};
-
-const stagePillMiniStyle: CSSProperties = {
-	fontSize: "9px",
-	fontFamily: "monospace",
-	fontWeight: 700,
-	color: "#52525b",
-	background: "#ffffff",
-	border: "1px solid #e4e4e7",
-	padding: "2px 5px",
-	borderRadius: "0px",
-	flexShrink: 0,
-};
 
 /* ── Log-request sheet — staff intake for phone/walk-in requests and
     internal tickets. Same object the portal intake produces. ───────────── */

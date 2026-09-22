@@ -3228,6 +3228,9 @@
 .hd-page {
 	display: flex;
 	flex-direction: column;
+	--hd-amber: #b97a10;
+	--hd-amber-ink: #8a5a0a;
+	--hd-red: #b91c1c;
 }
 
 .hd-page > .admin-section-head,
@@ -3244,9 +3247,9 @@
 }
 
 .hd-list {
-	flex: 0 0 35%;
-	min-width: 260px;
-	max-width: 420px;
+	flex: 0 0 300px;
+	min-width: 240px;
+	max-width: 320px;
 	max-height: calc(100vh - 220px);
 	position: sticky;
 	top: 1.5rem;
@@ -3258,10 +3261,52 @@
 }
 
 .hd-list__head {
-	padding: 0.75rem;
+	padding: 0.6rem 0.75rem;
 	background: var(--muted);
 	border-bottom: 1px solid var(--border-light);
 	flex-shrink: 0;
+}
+
+/* Filter chips wrap inside the queue column — they never bleed past the edge */
+
+.hd-filters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.3rem;
+}
+
+.hd-chip {
+	border: 1px solid var(--border);
+	background: var(--background);
+	color: var(--muted-foreground);
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	padding: 0.32rem 0.55rem;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.hd-chip:hover {
+	border-color: var(--foreground);
+	color: var(--foreground);
+}
+
+.hd-chip--on {
+	background: var(--foreground);
+	border-color: var(--foreground);
+	color: var(--background);
+}
+
+.hd-chip--hot {
+	color: var(--hd-red);
+	border-color: var(--hd-red);
+}
+
+.hd-chip--more {
+	border-style: dashed;
 }
 
 .hd-list__body {
@@ -3295,67 +3340,113 @@
 	background: var(--muted);
 }
 
+/* Selected row: ink fill with an amber spine — matches the auth grammar */
+
 .hd-row--active {
 	background: var(--foreground);
 	color: var(--background);
-	border-left-color: var(--foreground);
+	border-left-color: var(--hd-amber);
 }
 
-.hd-row--active .hd-row__meta,
-.hd-row--active .hd-row__ref,
-.hd-row--active .hd-row__owner {
-	color: #ffffff;
+.hd-row--active .hd-row__kick,
+.hd-row--active .hd-row__time,
+.hd-row--active .hd-row__snip {
+	color: rgba(255, 255, 255, 0.7);
 }
 
-.hd-row__top {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 0.5rem;
-}
-
-.hd-row__unread {
-	background: var(--foreground);
+.hd-row--active .hd-tag {
 	color: var(--background);
-	font-size: 0.62rem;
-	font-weight: 800;
-	padding: 0.1rem 0.45rem;
-	border-radius: 999px;
+	border-color: rgba(255, 255, 255, 0.4);
 }
 
-.hd-row__ref {
-	font-size: 0.62rem;
-	letter-spacing: 0.08em;
+.hd-row--active .hd-tag--red {
+	color: #fca5a5;
+	border-color: #fca5a5;
+}
+
+.hd-row__kick {
+	display: block;
+	font-family: var(--font-mono);
+	font-size: 0.55rem;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
 	color: var(--muted-foreground);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
-.hd-row__title {
-	font-size: 0.9rem;
-	font-weight: 500;
-	line-height: 1.35;
-}
-
-.hd-row__meta {
-	font-size: 0.62rem;
-	color: var(--muted-foreground);
-	text-transform: none;
-	letter-spacing: 0.02em;
-}
-
-.hd-row__foot {
+.hd-row__who {
 	display: flex;
-	align-items: center;
+	align-items: baseline;
 	justify-content: space-between;
 	gap: 0.5rem;
-	margin-top: 0.15rem;
 }
 
-.hd-row__owner {
+.hd-row__name {
+	font-size: 0.85rem;
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+}
+
+.hd-row__time {
+	font-family: var(--font-mono);
 	font-size: 0.6rem;
 	color: var(--muted-foreground);
-	text-transform: none;
-	letter-spacing: 0.02em;
-	text-align: right;
+	flex-shrink: 0;
+}
+
+.hd-row__snip {
+	display: block;
+	font-size: 0.72rem;
+	color: var(--muted-foreground);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.hd-row__tail {
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+	flex-wrap: wrap;
+	margin-top: 0.1rem;
+}
+
+.hd-tag {
+	font-family: var(--font-mono);
+	font-size: 0.55rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	border: 1px solid var(--border-light);
+	color: var(--muted-foreground);
+	padding: 0.08rem 0.4rem;
+	white-space: nowrap;
+}
+
+.hd-tag--red {
+	color: var(--hd-red);
+	border-color: var(--hd-red);
+}
+
+.hd-unread {
+	margin-left: auto;
+	background: var(--foreground);
+	color: var(--background);
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	font-weight: 800;
+	padding: 0.05rem 0.4rem;
+}
+
+.hd-row--active .hd-unread {
+	background: var(--hd-amber);
+	color: #ffffff;
 }
 
 /* ---------- Detail ---------- */
@@ -3552,6 +3643,310 @@
 	gap: 0.5rem;
 	margin-top: 0.6rem;
 	flex-wrap: wrap;
+}
+
+/* ---------- Thread head ---------- */
+/* States the contract up front: who, which thread, where replies land */
+
+.hd-thead {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.9rem;
+	padding: 0.7rem 1rem;
+	background: var(--muted);
+	border-bottom: 1px solid var(--border-light);
+	flex-shrink: 0;
+	flex-wrap: wrap;
+	row-gap: 0.5rem;
+}
+
+.hd-back {
+	border: 1px solid var(--border);
+	background: var(--background);
+	width: 1.9rem;
+	height: 1.9rem;
+	font-size: 0.85rem;
+	line-height: 1;
+	cursor: pointer;
+	flex-shrink: 0;
+	margin-top: 0.1rem;
+}
+
+.hd-back:hover {
+	border-color: var(--foreground);
+}
+
+.hd-thead__id {
+	flex: 1 1 200px;
+	min-width: 0;
+}
+
+.hd-thead__kick {
+	font-family: var(--font-mono);
+	font-size: 0.55rem;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	margin: 0 0 0.15rem;
+}
+
+.hd-thead__title {
+	font-family: var(--font-display);
+	font-size: 1.05rem;
+	line-height: 1.2;
+	margin: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.hd-thead__sub {
+	margin: 0.15rem 0 0;
+	font-size: 0.62rem;
+	color: var(--muted-foreground);
+	letter-spacing: 0.02em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.hd-thead__actions {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	flex: 0 1 auto;
+	margin-left: auto;
+}
+
+.hd-popwrap {
+	position: relative;
+}
+
+.hd-btn--warn {
+	color: var(--hd-red);
+	border-color: var(--hd-red);
+}
+
+.hd-btn--warn:hover {
+	background: #fef2f2;
+}
+
+.hd-railtoggle {
+	display: none;
+}
+
+/* ---------- Composer tabs ---------- */
+/* Reply | Note | Snippets — the mode is a tab, so an internal note can't
+   go out to the client by accident */
+
+.hd-tabs {
+	display: flex;
+	align-items: center;
+	gap: 0;
+	padding: 0.5rem 0.75rem 0;
+	border-top: 1px solid var(--border-light);
+	flex-shrink: 0;
+	flex-wrap: wrap;
+	row-gap: 0.25rem;
+}
+
+.hd-tab {
+	border: none;
+	background: transparent;
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	font-weight: 800;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	padding: 0.35rem 0.65rem;
+	cursor: pointer;
+	border-bottom: 2px solid transparent;
+}
+
+.hd-tab:hover {
+	color: var(--foreground);
+}
+
+.hd-tab--on {
+	color: var(--foreground);
+	border-bottom-color: var(--foreground);
+}
+
+.hd-tab--note.hd-tab--on {
+	color: var(--hd-amber-ink);
+	border-bottom-color: var(--hd-amber);
+	background: #fdf6e7;
+}
+
+.hd-tabs__sp {
+	flex: 1;
+}
+
+/* ---------- Context rail sections ---------- */
+/* Client → Journey → Money → Next appointment → Thread, in that order */
+
+.hd-sect {
+	flex-shrink: 0;
+}
+
+.hd-sect__h {
+	font-family: var(--font-mono);
+	font-size: 0.56rem;
+	font-weight: 800;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	margin: 0 0 0.45rem;
+	padding-bottom: 0.3rem;
+	border-bottom: 1px solid var(--border-light);
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+}
+
+.hd-sect__x {
+	display: none;
+	border: none;
+	background: none;
+	font-size: 0.95rem;
+	line-height: 1;
+	cursor: pointer;
+	color: var(--muted-foreground);
+	padding: 0;
+}
+
+.hd-sect__title {
+	font-size: 0.85rem;
+	font-weight: 650;
+	margin: 0 0 0.2rem;
+}
+
+.hd-kvline {
+	font-size: 0.68rem;
+	color: var(--muted-foreground);
+	margin: 0 0 0.15rem;
+	line-height: 1.45;
+	word-break: break-word;
+}
+
+.hd-kv {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 0.5rem;
+	font-size: 0.68rem;
+	padding: 0.28rem 0;
+	border-bottom: 1px dashed var(--border-light);
+}
+
+.hd-kv:last-child {
+	border-bottom: none;
+}
+
+.hd-kv b {
+	font-weight: 600;
+	font-size: 0.68rem;
+}
+
+.hd-kv span {
+	color: var(--muted-foreground);
+	text-align: right;
+}
+
+.hd-st {
+	font-family: var(--font-mono);
+	font-size: 0.55rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	padding: 0.08rem 0.4rem;
+	border: 1px solid var(--border-light);
+	white-space: nowrap;
+}
+
+.hd-st--ok {
+	color: #166534;
+	border-color: #86efac;
+	background: #f0fdf4;
+}
+
+.hd-st--bad {
+	color: var(--hd-red);
+	border-color: #fecaca;
+	background: #fef2f2;
+}
+
+.hd-st--open {
+	color: var(--hd-amber-ink);
+	border-color: #fcd34d;
+	background: #fffbeb;
+}
+
+.hd-journey {
+	display: flex;
+	flex-direction: column;
+}
+
+.hd-jrow {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.35rem 0;
+	border-bottom: 1px dashed var(--border-light);
+	font-size: 0.68rem;
+	color: inherit;
+	text-decoration: none;
+}
+
+.hd-jrow:last-child {
+	border-bottom: none;
+}
+
+.hd-jrow:hover {
+	color: var(--foreground);
+	text-decoration: underline;
+}
+
+/* The selected queue row keeps its amber spine even when it's the
+   long-waiting one — .hd-row--wait also inks the left edge */
+
+.hd-row--active.hd-row--wait {
+	border-left-color: var(--hd-amber);
+}
+
+/* Under ~1180px the client rail stops squeezing the thread and becomes
+   a slide-over sheet instead, toggled from the thread head */
+
+@media (max-width: 1179.98px) {
+	.hd-rail {
+		position: absolute;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		width: min(300px, 88%);
+		display: none;
+		border-left: 1px solid var(--border);
+		box-shadow: -6px 0 0 rgba(0, 0, 0, 0.08);
+		z-index: 25;
+	}
+
+	.hd-rail--open {
+		display: flex;
+	}
+
+	.hd-sect__x {
+		display: block;
+	}
+
+	.hd-railtoggle {
+		display: inline-flex;
+	}
 }
 
 /* ---------- Tags ---------- */

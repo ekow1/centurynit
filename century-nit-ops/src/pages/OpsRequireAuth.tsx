@@ -14,7 +14,7 @@ function Spinner() {
 }
 
 export function OpsRequireAuth({ children }: { children: ReactNode }) {
-	const { opsUser, authInitializing } = useOpsAuth();
+	const { opsUser, authInitializing, opsSignOut } = useOpsAuth();
 	const location = useLocation();
 
 	/**
@@ -34,6 +34,11 @@ export function OpsRequireAuth({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		if (!opsUser) return;
 		let active = true;
+		// A 401 here means the cookie died while the sessionStorage copy lived
+		// on — the user is signed out, not unenrolled. Dropping the stale
+		// session lets the !opsUser branch below send them to /login; treating
+		// it as "not enrolled" sent them to /mfa-setup on every expired session.
+		const expired = (err: unknown) => (err as { status?: number })?.status === 401;
 		getMfaEnrollment()
 			.then((s) =>
 				active &&
@@ -42,18 +47,26 @@ export function OpsRequireAuth({ children }: { children: ReactNode }) {
 					challenge: Boolean(s.challengeRequired),
 				}),
 			)
-			.catch(() => {
+			.catch((err) => {
+				if (expired(err)) {
+					opsSignOut();
+					return;
+				}
 				staffApi
 					.mfaStatus()
 					.then((s) => active && setMfaState({ ok: !s.required || s.enabled, challenge: false }))
-					.catch(() => {
+					.catch((err2) => {
+						if (expired(err2)) {
+							opsSignOut();
+							return;
+						}
 						if (active) setMfaState({ ok: false, challenge: false });
 					});
 			});
 		return () => {
 			active = false;
 		};
-	}, [opsUser]);
+	}, [opsUser, opsSignOut]);
 
 	if (authInitializing) return <Spinner />;
 

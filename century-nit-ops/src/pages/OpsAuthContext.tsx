@@ -254,6 +254,12 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 
 	const opsRole = opsUser?.role ?? null;
 
+	/** Drop the sessionStorage copy when the server says there is no session. */
+	const dropStaleSession = useCallback(() => {
+		setOpsUser(null);
+		saveSession(null);
+	}, []);
+
 	const refreshPermissions = useCallback(async () => {
 		try {
 			const res = await apiFetch<{ roles: RoleSummary[] }>(`${API_PREFIX}/roles`);
@@ -271,11 +277,14 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 			// API error or unauthenticated, fallback to built-in map
 		}
 		// Re-probe the session too: a changed idle policy reaches open tabs here
-		// rather than only at the next sign-in.
+		// rather than only at the next sign-in, and a cookie that died while the
+		// tab sat open drops the stale session instead of bouncing to /mfa-setup.
 		try {
-			applyPolicy(await getSession());
+			const sess = await getSession();
+			applyPolicy(sess);
+			if (!sess.staff) dropStaleSession();
 		} catch {}
-	}, [applyPolicy]);
+	}, [applyPolicy, dropStaleSession]);
 
 	// On mount, check for an existing API session and load role permissions.
 	useEffect(() => {
@@ -291,6 +300,12 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 					setOpsUser(user);
 					saveSession(user);
 					void refreshPermissions();
+				} else {
+					// /me answered but found no staff session — the cookie is
+					// dead or belongs to a portal account, so the sessionStorage
+					// copy is stale. Without this the guards keep a phantom user
+					// and their MFA probes 401 into /mfa-setup instead of /login.
+					dropStaleSession();
 				}
 			} catch {
 				// API not reachable — no session.
@@ -299,7 +314,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 			}
 		})();
 		return () => { cancelled = true; };
-	}, [refreshPermissions, applyPolicy]);
+	}, [refreshPermissions, applyPolicy, dropStaleSession]);
 
 	const opsSignInWithCredentials = useCallback(async (email: string, password: string, rememberMe?: boolean) => {
 		const res = await apiSignIn(email, password, rememberMe);

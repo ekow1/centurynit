@@ -58,7 +58,29 @@ export function OpsResetPassword() {
 	}
 
 	return (
-		<AuthShell>
+		<AuthShell
+			aside={{
+				chip: "Recovery",
+				label: "Password reset",
+				title: <>Choose a password you haven't used <em>elsewhere</em>.</>,
+				body: (
+					<>
+						This link works once. Saving a new password <strong>ends every other
+						session</strong> on this account — including this one.
+					</>
+				),
+			}}
+			card={{
+				barLeft: "Console access",
+				barRight: "Recovery",
+				foot: (
+					<>
+						<span />
+						<Link to="/login">Back to sign in</Link>
+					</>
+				),
+			}}
+		>
 			<div className="ops-login__head">
 				<h1 className="ops-login__title">Set a new password</h1>
 				<p className="ops-login__subtitle">

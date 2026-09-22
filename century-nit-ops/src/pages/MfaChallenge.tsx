@@ -8,9 +8,9 @@ import {
 	ApiError,
 } from "../lib/api";
 import { useOpsAuth, ROLE_HOME } from "./OpsAuthContext";
-import { AuthShell } from "./AuthShell";
+import { AuthShell, maskEmail } from "./AuthShell";
+import { OtpInput } from "./OtpInput";
 
-const LOCK_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
 const ARROW_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
 
 /**
@@ -124,6 +124,8 @@ export function MfaChallenge() {
 		navigate("/login", { replace: true });
 	}
 
+	const maskedWho = maskEmail(email ?? opsUser?.email);
+
 	if (loading) {
 		return (
 			<AuthShell>
@@ -135,73 +137,85 @@ export function MfaChallenge() {
 	}
 
 	return (
-		<AuthShell>
+		<AuthShell
+			aside={{
+				chip: "Step 2 of 2",
+				label: "Two-factor check",
+				title:
+					method === "email_otp" ? (
+						<>A 6-digit code went to your <em>account email</em>.</>
+					) : (
+						<>The code is in your <em>authenticator</em>, under Century NIT Ops.</>
+					),
+				body:
+					method === "email_otp" ? (
+						<>
+							It lands at <strong>{maskedWho}</strong> and expires shortly — check spam if
+							it hasn't arrived.
+						</>
+					) : (
+						<>
+							It refreshes every 30 seconds. Lost the device entirely? A manager resets MFA
+							from Administration → Authentication → MFA roster.
+						</>
+					),
+				footLeft: maskedWho,
+			}}
+			card={{
+				barLeft: `${maskedWho} — verify`,
+				barRight: method === "email_otp" ? "Email code" : "Authenticator · TOTP",
+				foot: (
+					<>
+						{method === "email_otp" ? (
+							<button
+								type="button"
+								className="ops-login__footlink"
+								disabled={resendCooldown > 0 || busy}
+								onClick={resend}
+							>
+								{resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+							</button>
+						) : (
+							<span />
+						)}
+						<button type="button" className="ops-login__footlink" onClick={useDifferentMethod}>
+							Use a different sign-in method
+						</button>
+					</>
+				),
+			}}
+		>
 			<div className="ops-login__head">
-				<span className="ops-login__badge">{opsUser?.email ?? "Signed in"}</span>
-				<h1 className="ops-login__title">Verify it's you</h1>
+				<span className="ops-login__badge">{email ?? opsUser?.email ?? "Signed in"}</span>
+				<h1 className="ops-login__title">
+					{method === "email_otp" ? "Check your inbox" : "Verification code"}
+				</h1>
 				<p className="ops-login__subtitle">
 					{method === "email_otp"
 						? otpSent
-							? `Enter the 6-digit code sent to ${email ?? "your email"}.`
-							: "Sending you a verification code..."
-						: "Enter the 6-digit code from your authenticator app to finish signing in."}
+							? `A 6-digit code went to ${maskedWho}.`
+							: "Sending you a verification code…"
+						: "From your authenticator app — Century NIT Ops."}
 				</p>
 			</div>
 
 			<form id="mfa-challenge-form" onSubmit={submit} className="ops-login__form">
-				<div className="ops-login__field">
-					<label className="ops-login__label">
-						<span dangerouslySetInnerHTML={{ __html: LOCK_SVG }} />
-						{method === "email_otp" ? "Email Code" : "Authenticator Code"}
-					</label>
-					<input
-						type="text"
-						value={code}
-						onChange={(e) => {
-							if (error) setError(null);
-							setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
-						}}
-						placeholder="000000"
-						inputMode="numeric"
-						autoComplete="one-time-code"
-						pattern="[0-9]{6}"
-						maxLength={6}
-						className="ops-login__input mono"
-						required
-						autoFocus
-					/>
-				</div>
-
 				{error ? <p className="ops-login__error" role="alert">{error}</p> : null}
 
+				<OtpInput
+					id="mfa-challenge-otp"
+					value={code}
+					disabled={busy}
+					onChange={(v) => {
+						if (error) setError(null);
+						setCode(v);
+					}}
+				/>
+
 				<button type="submit" disabled={busy || code.length !== 6} className="btn btn--primary ops-login__submit">
-					<span>{busy ? "Verifying..." : "Verify"}</span>
+					<span>{busy ? "Verifying…" : "Verify & sign in"}</span>
 					{busy ? null : <span dangerouslySetInnerHTML={{ __html: ARROW_SVG }} />}
 				</button>
-
-				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "var(--text-xs)" }}>
-					{method === "email_otp" ? (
-						<button
-							type="button"
-							disabled={resendCooldown > 0 || busy}
-							onClick={resend}
-							className="btn btn--ghost btn--xs"
-							style={{ padding: "0.25rem 0.5rem" }}
-						>
-							{resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
-						</button>
-					) : (
-						<span />
-					)}
-					<button
-						type="button"
-						onClick={useDifferentMethod}
-						className="ops-login__back"
-						style={{ margin: 0, width: "auto" }}
-					>
-						Use a different sign-in method
-					</button>
-				</div>
 			</form>
 		</AuthShell>
 	);

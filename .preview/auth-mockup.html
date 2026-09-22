@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Century NIT · Ops — Auth, final mock</title>
+<style>
+	:root {
+		--ink: #17161a;
+		--ink-2: #242329;
+		--paper: #f5f4f0;
+		--card: #ffffff;
+		--line: #d8d4c9;
+		--line-strong: #17161a;
+		--muted: #6e6a60;
+		--amber: #b97a10;
+		--amber-ink: #8a5a0a;
+		--amber-soft: #f4ead3;
+		--green: #2e6b34;
+		--red: #a33b2e;
+		--blue: #31577a;
+		/* no rounded corners anywhere — every radius is 0 */
+	}
+	* { box-sizing: border-box; margin: 0; padding: 0; border-radius: 0 !important; }
+	html { font-size: 15px; }
+	body {
+		font-family: Georgia, "Times New Roman", serif;
+		background: #dcd9d0;
+		color: var(--ink);
+	}
+	.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+	/* ── page chrome ── */
+	.wrap { max-width: 1180px; margin: 0 auto; padding: 2rem 1.5rem 6rem; }
+	.doc-tag { font-family: ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--amber-ink); }
+	.doc-title { font-size: 1.7rem; font-weight: 400; letter-spacing: -0.01em; margin: 0.35rem 0 0.4rem; }
+	.doc-note { font-size: 0.82rem; color: var(--muted); line-height: 1.6; max-width: 78ch; }
+
+	.sect { margin-top: 3rem; }
+	.sect-head { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 2px solid var(--ink); padding-bottom: 0.5rem; margin-bottom: 1.25rem; }
+	.sect-head h2 { font-size: 1.05rem; font-weight: 400; }
+	.sect-head .n { font-family: ui-monospace, monospace; font-size: 0.62rem; letter-spacing: 0.14em; color: var(--amber-ink); text-transform: uppercase; }
+	.sect-note { font-size: 0.78rem; color: var(--muted); line-height: 1.6; max-width: 80ch; margin-bottom: 1.25rem; }
+	.sect-note b { color: var(--ink); font-weight: 400; border-bottom: 1px solid var(--amber); }
+
+	/* ═══ THE SCREEN — one frame for every auth page ═══ */
+	.screen {
+		display: grid;
+		grid-template-columns: 44% 56%;
+		min-height: 560px;
+		background: var(--card);
+		border: 1px solid var(--line-strong);
+		box-shadow: 0 24px 60px rgba(23, 22, 26, 0.14);
+	}
+
+	/* aside — dark, typographic */
+	.aside {
+		background: var(--ink);
+		color: #ece9e0;
+		padding: 2.4rem 2.2rem 2rem;
+		display: flex;
+		flex-direction: column;
+		position: relative;
+		overflow: hidden;
+	}
+	.aside::before {
+		content: "";
+		position: absolute;
+		inset: 0;
+		background:
+			linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px) 0 0 / 100% 56px;
+		pointer-events: none;
+	}
+	.aside-top { display: flex; justify-content: space-between; align-items: flex-start; }
+	.aside .wordmark { font-size: 1.35rem; letter-spacing: -0.01em; }
+	.aside .wordmark small { display: block; font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.22em; color: var(--amber); margin-top: 0.4rem; text-transform: uppercase; }
+	.aside .chip { font-family: ui-monospace, monospace; font-size: 0.55rem; letter-spacing: 0.14em; color: #a39f94; border: 1px solid #3a3a42; padding: 0.28rem 0.55rem; text-transform: uppercase; }
+
+	.aside-mid { margin-top: auto; margin-bottom: auto; padding: 2rem 0; position: relative; z-index: 1; }
+	.aside .ctx-label { font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--amber); display: flex; align-items: center; gap: 0.6rem; }
+	.aside .ctx-label::after { content: ""; flex: 1; border-top: 1px solid #3a3a42; }
+	.aside .ctx-title { font-size: 1.5rem; font-weight: 400; line-height: 1.25; margin: 0.8rem 0 0.7rem; max-width: 20ch; }
+	.aside .ctx-title em { color: var(--amber); font-style: italic; }
+	.aside .ctx-body { font-size: 0.82rem; line-height: 1.65; color: #b5b1a6; max-width: 40ch; }
+	.aside .ctx-body strong { color: #ece9e0; font-weight: 400; }
+
+	.aside-steps { margin-top: 1.6rem; }
+	.aside-step { display: flex; align-items: center; gap: 0.8rem; padding: 0.55rem 0; font-size: 0.82rem; color: #6f6c63; }
+	.aside-step .num { font-family: ui-monospace, monospace; font-size: 0.6rem; width: 20px; height: 20px; border: 1px solid #3d3d45; display: grid; place-items: center; flex: none; }
+	.aside-step.on { color: #ece9e0; }
+	.aside-step.on .num { border-color: var(--amber); color: var(--amber); }
+	.aside-step.done { color: #7d9c7d; }
+	.aside-step.done .num { border-color: #4d6b4d; color: #7d9c7d; }
+	.aside-step .hint { font-family: ui-monospace, monospace; font-size: 0.56rem; color: #6f6c63; margin-left: auto; }
+
+	.aside-foot { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid #33333b; padding-top: 1rem; font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.06em; color: #6f6c63; }
+
+	/* main — paper stage, framed card */
+	.main { background: var(--paper); display: flex; flex-direction: column; position: relative; }
+	.main-bar { display: flex; justify-content: space-between; align-items: center; padding: 1.1rem 1.6rem; border-bottom: 1px solid var(--line); font-family: ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+	.main-bar .b { color: var(--amber-ink); }
+	.stage { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem 2.4rem; }
+
+	.card {
+		width: 100%; max-width: 400px; background: var(--card);
+		border: 1px solid var(--line-strong);
+		padding: 0;
+	}
+	.card .card-rule { height: 3px; background: var(--amber); }
+	.card-inner { padding: 1.7rem 1.8rem 1.4rem; }
+	.card .who { display: inline-flex; align-items: center; gap: 0.45rem; font-family: ui-monospace, monospace; font-size: 0.62rem; border: 1px solid var(--line); padding: 0.28rem 0.6rem; color: var(--muted); margin-bottom: 0.9rem; }
+	.card .who::before { content: ""; width: 6px; height: 6px; background: var(--amber); }
+	.card h1 { font-size: 1.55rem; font-weight: 400; letter-spacing: -0.015em; }
+	.card .lead { font-size: 0.82rem; color: var(--muted); line-height: 1.6; margin: 0.5rem 0 1.5rem; }
+	.card .eyebrow { font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber-ink); margin-bottom: 0.55rem; }
+
+	.fld { margin-bottom: 1.05rem; }
+	.fld label { display: block; font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem; }
+	.fld .in { border: 1px solid var(--line-strong); background: #fff; padding: 0.68rem 0.8rem; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; }
+	.fld .in .ph { color: #bdb9ad; }
+	.fld .in .mark { font-family: ui-monospace, monospace; font-size: 0.58rem; color: var(--muted); letter-spacing: 0.08em; }
+	.fld .fine { font-family: ui-monospace, monospace; font-size: 0.58rem; color: var(--muted); margin-top: 0.35rem; }
+	.fld .fine.ok { color: var(--green); }
+	.meter { display: flex; gap: 3px; margin-top: 0.4rem; }
+	.meter i { height: 3px; flex: 1; background: #e9e6dc; }
+	.meter i.on { background: var(--green); } .meter i.w { background: var(--amber); }
+
+	.otp { display: flex; gap: 0.55rem; justify-content: center; margin: 0.6rem 0 1.3rem; }
+	.otp i { width: 44px; height: 54px; border: 1px solid var(--line-strong); background: #fff; display: grid; place-items: center; font-family: ui-monospace, monospace; font-size: 1.25rem; font-style: normal; }
+	.otp i.f { background: var(--ink); color: #fff; }
+	.otp i.c { box-shadow: inset 0 0 0 2px var(--amber); }
+
+	.btn {
+		display: flex; align-items: center; justify-content: space-between;
+		width: 100%; padding: 0.8rem 0.95rem;
+		background: var(--ink); color: #fff; border: 1px solid var(--ink);
+		font-family: ui-monospace, monospace; font-size: 0.64rem; letter-spacing: 0.1em; text-transform: uppercase;
+	}
+	.btn .arr { font-size: 0.85rem; }
+	.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line-strong); }
+	.metaline { display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; margin: 0.55rem 0 1rem; color: var(--muted); }
+	.metaline a { color: var(--blue); text-decoration: none; }
+	.chk { display: flex; align-items: center; gap: 0.45rem; font-size: 0.74rem; }
+
+	.card-foot { border-top: 1px solid var(--line); padding: 0.8rem 1.8rem; display: flex; justify-content: space-between; align-items: center; font-family: ui-monospace, monospace; font-size: 0.6rem; }
+	.card-foot a { color: var(--blue); text-decoration: none; }
+	.card-foot span { color: var(--muted); }
+
+	.err { border-left: 3px solid var(--red); background: #f9efec; padding: 0.6rem 0.75rem; font-size: 0.75rem; color: var(--red); margin-bottom: 1rem; }
+	.lockbox { border: 1px solid var(--red); margin-bottom: 1.1rem; }
+	.lockbox .lh { display: flex; justify-content: space-between; align-items: center; background: #f9efec; padding: 0.55rem 0.75rem; font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--red); border-bottom: 1px solid #e8d3cd; }
+	.lockbox .lb { padding: 0.7rem 0.75rem; font-size: 0.74rem; color: #5c4038; line-height: 1.55; }
+	.lockbox .lb .cd { font-family: ui-monospace, monospace; font-size: 1.3rem; color: var(--red); display: block; margin-bottom: 0.25rem; }
+
+	.enrol { display: grid; grid-template-columns: 138px 1fr; gap: 1.1rem; margin-bottom: 1.15rem; align-items: start; }
+	.enrol .qr { width: 138px; height: 138px; border: 1px solid var(--line-strong); display: grid; place-items: center; font-size: 2rem; color: var(--muted); background: #fff; }
+	.enrol h5 { font-family: ui-monospace, monospace; font-size: 0.56rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.35rem; }
+	.enrol p { font-size: 0.74rem; line-height: 1.55; color: var(--muted); }
+	.keybox { display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--line-strong); padding: 0.5rem 0.65rem; margin-top: 0.55rem; font-family: ui-monospace, monospace; font-size: 0.7rem; letter-spacing: 0.06em; }
+	.keybox b { font-weight: 400; font-size: 0.56rem; color: var(--blue); letter-spacing: 0.1em; }
+
+	.warn { border: 1px solid var(--amber); background: var(--amber-soft); padding: 0.65rem 0.75rem; font-size: 0.74rem; line-height: 1.55; color: #6d4f0c; margin-bottom: 0.95rem; }
+	.codes { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--line-strong); margin-bottom: 1rem; }
+	.codes span { font-family: ui-monospace, monospace; font-size: 0.74rem; padding: 0.5rem 0.65rem; border-bottom: 1px solid var(--line); letter-spacing: 0.04em; }
+	.codes span:nth-child(odd) { border-right: 1px solid var(--line); }
+	.codes span:nth-last-child(-n+2) { border-bottom: none; }
+
+	.btnrow { display: flex; gap: 0.6rem; }
+	.btnrow .btn { flex: 1; justify-content: center; }
+
+	.specs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line-strong); border: 1px solid var(--line-strong); }
+	.specs .cell { background: var(--card); padding: 1rem 1.1rem; }
+	.specs h4 { font-family: ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber-ink); margin-bottom: 0.6rem; }
+	.specs ul { list-style: none; font-size: 0.74rem; line-height: 1.85; color: var(--muted); }
+	.specs li b { color: var(--ink); font-weight: 400; }
+
+	.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; align-items: start; }
+	.cap { font-family: ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.5rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+	<p class="doc-tag">Ops Console · Authentication — presentation mock</p>
+	<h1 class="doc-title">One frame, four screens. Sharp corners. No decoration that doesn't work.</h1>
+	<p class="doc-note">
+		The split screen stays — dark aside, paper stage, framed card. This pass tightens it into a real
+		composition: typographic aside with a single context block per screen, a thin stage bar carrying the
+		screen's position, a card with a hard border and an amber rule, and a footer strip for secondary
+		actions. Every radius is zero.
+	</p>
+
+	<!-- ═══ 1 · SIGN IN ═══ -->
+	<section class="sect">
+		<div class="sect-head"><h2>Sign in</h2><span class="n">01 · entry point</span></div>
+		<div class="screen">
+			<div class="aside">
+				<div class="aside-top">
+					<div class="wordmark">Century NIT<small>Operations Center</small></div>
+					<span class="chip">Staff only</span>
+				</div>
+				<div class="aside-mid">
+					<p class="ctx-label">Sign in</p>
+					<h3 class="ctx-title">Every case, queue and ledger — behind two factors.</h3>
+					<p class="ctx-body">Credentials only; there is no social sign-in on the console. Staff accounts are created by invitation — <strong>ask your manager</strong> if you don't have one.</p>
+				</div>
+				<div class="aside-foot"><span>Accra · Kumasi</span><span>Attempts audited</span></div>
+			</div>
+			<div class="main">
+				<div class="main-bar"><span>Console access</span><span class="b">Step 1 of 2</span></div>
+				<div class="stage">
+					<div class="card">
+						<div class="card-rule"></div>
+						<div class="card-inner">
+							<p class="eyebrow">Welcome back</p>
+							<h1>Sign in</h1>
+							<p class="lead">Your staff credentials — the same email and password on file.</p>
+							<div class="fld"><label>Email</label><div class="in"><span>efua@centurynit.com</span></div></div>
+							<div class="fld"><label>Password</label><div class="in"><span>••••••••••••</span><span class="mark">SHOW</span></div></div>
+							<div class="metaline"><label class="chk"><input type="checkbox" checked /> Keep me signed in</label><a href="#">Forgot password?</a></div>
+							<button class="btn"><span>Sign in</span><span class="arr">→</span></button>
+						</div>
+						<div class="card-foot"><span>Locked out?</span><a href="#">Reset via email</a></div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- ═══ 2 · MFA CHALLENGE ═══ -->
+	<section class="sect">
+		<div class="sect-head"><h2>Two-factor challenge</h2><span class="n">02 · the code screen</span></div>
+		<p class="sect-note">
+			The screen says <b>who</b> is being verified (badge), <b>where</b> the code lives (aside title),
+			and <b>what to do when it fails</b> (aside body + card footer). Six segment boxes — paste fills all,
+			auto-submits on the sixth digit.
+		</p>
+		<div class="screen">
+			<div class="aside">
+				<div class="aside-top">
+					<div class="wordmark">Century NIT<small>Operations Center</small></div>
+					<span class="chip">Step 2 of 2</span>
+				</div>
+				<div class="aside-mid">
+					<p class="ctx-label">Two-factor check</p>
+					<h3 class="ctx-title">The code is in your <em>authenticator</em>, under Century NIT Ops.</h3>
+					<p class="ctx-body">It refreshes every 30 seconds. <strong>8 backup codes remain</strong> — one works in place of the app.<br/><br/>Lost the device entirely? A manager resets MFA from Administration → Authentication → MFA roster.</p>
+				</div>
+				<div class="aside-foot"><span>efua@centurynit.com</span><span>Attempts audited</span></div>
+			</div>
+			<div class="main">
+				<div class="main-bar"><span>efua@centurynit.com — verify</span><span class="b">Authenticator · TOTP</span></div>
+				<div class="stage">
+					<div class="card">
+						<div class="card-rule"></div>
+						<div class="card-inner">
+							<span class="who">efua@centurynit.com</span>
+							<h1>Verification code</h1>
+							<p class="lead">From your authenticator app — <span class="mono" style="font-size:0.72rem">Century NIT Ops</span>.</p>
+							<div class="otp"><i class="f">4</i><i class="f">9</i><i class="f">1</i><i class="c">&nbsp;</i><i>&nbsp;</i><i>&nbsp;</i></div>
+							<button class="btn"><span>Verify &amp; sign in</span><span class="arr">→</span></button>
+							<div class="metaline" style="margin-top:0.75rem"><label class="chk"><input type="checkbox" /> Trust this device — 30 days</label></div>
+						</div>
+						<div class="card-foot"><a href="#">Use a backup code</a><a href="#">Email a code</a><a href="#">Back</a></div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="pair" style="margin-top:1.25rem">
+			<div>
+				<p class="cap">Email-OTP variant — address masked, expiry stated</p>
+				<div class="card" style="max-width:none">
+					<div class="card-rule"></div>
+					<div class="card-inner">
+						<span class="who">e***@centurynit.com</span>
+						<h1>Check your inbox</h1>
+						<p class="lead">A 6-digit code went to your account email. Expires in <strong>9:41</strong>.</p>
+						<div class="otp"><i>&nbsp;</i><i>&nbsp;</i><i>&nbsp;</i><i>&nbsp;</i><i>&nbsp;</i><i>&nbsp;</i></div>
+						<button class="btn"><span>Verify &amp; sign in</span><span class="arr">→</span></button>
+					</div>
+					<div class="card-foot"><a href="#">Resend in 28s</a><a href="#">Use authenticator</a><a href="#">Back</a></div>
+				</div>
+			</div>
+			<div>
+				<p class="cap">Locked — a state, not an error line</p>
+				<div class="card" style="max-width:none">
+					<div class="card-rule" style="background:var(--red)"></div>
+					<div class="card-inner">
+						<div class="lockbox">
+							<div class="lh"><span>Account locked</span><span>Audit ref logged</span></div>
+							<div class="lb"><span class="cd">11:42</span>5 failed attempts in 10 minutes, recorded with your IP and device. A manager can unlock you from Authentication → Events — or wait it out.</div>
+						</div>
+						<button class="btn ghost"><span>Back to sign in</span></button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- ═══ 3 · INVITE ACCEPT ═══ -->
+	<section class="sect">
+		<div class="sect-head"><h2>Invitation — the "sign up"</h2><span class="n">03 · joining</span></div>
+		<p class="sect-note">
+			The aside runs the <b>stepper</b> (accepted → password → two-factor → in) plus a
+			<b>who-you're-joining-as</b> block. The card shows password rules as you type.
+		</p>
+		<div class="screen">
+			<div class="aside">
+				<div class="aside-top">
+					<div class="wordmark">Century NIT<small>Operations Center</small></div>
+					<span class="chip">Invitation</span>
+				</div>
+				<div class="aside-mid">
+					<p class="ctx-label">You're joining as</p>
+					<h3 class="ctx-title" style="font-size:1.2rem">nana@centurynit.com</h3>
+					<p class="ctx-body">Counsellor · Accra branch<br/>Invited by efua@centurynit.com · link expires in 5 days</p>
+					<div class="aside-steps">
+						<div class="aside-step done"><span class="num">✓</span>Invitation accepted</div>
+						<div class="aside-step on"><span class="num">2</span>Set your password<span class="hint">now</span></div>
+						<div class="aside-step"><span class="num">3</span>Set up two-factor</div>
+						<div class="aside-step"><span class="num">4</span>You're in</div>
+					</div>
+				</div>
+				<div class="aside-foot"><span>Wrong person? Close the tab</span><span>Audited</span></div>
+			</div>
+			<div class="main">
+				<div class="main-bar"><span>Invitation · nana@centurynit.com</span><span class="b">Step 2 of 4</span></div>
+				<div class="stage">
+					<div class="card">
+						<div class="card-rule"></div>
+						<div class="card-inner">
+							<p class="eyebrow">Create your password</p>
+							<h1>Welcome, Nana</h1>
+							<p class="lead">One password, then two-factor — the account activates when both are done.</p>
+							<div class="fld"><label>Your name</label><div class="in"><span>Nana Owusu</span></div></div>
+							<div class="fld"><label>Password</label><div class="in"><span>Kumasi-Drum-2841</span><span class="mark">SHOW</span></div>
+								<div class="meter"><i class="on"></i><i class="on"></i><i class="on"></i><i class="w"></i></div>
+								<div class="fine ok">✓ 14+ characters &nbsp;·&nbsp; ✓ not a breached password</div>
+							</div>
+							<div class="fld"><label>Confirm</label><div class="in"><span>Kumasi-Drum-2841</span></div>
+								<div class="fine ok">✓ matches</div>
+							</div>
+							<button class="btn"><span>Continue to two-factor</span><span class="arr">→</span></button>
+						</div>
+						<div class="card-foot"><span>Already have access?</span><a href="#">Sign in</a></div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- ═══ 4 · MFA SETUP ═══ -->
+	<section class="sect">
+		<div class="sect-head"><h2>MFA setup</h2><span class="n">04 · enrolment</span></div>
+		<p class="sect-note">
+			QR and manual key sit <b>side by side</b> — most people need both. Backup codes are a
+			<b>deliverable</b>: warning, ruled grid, copy and download.
+		</p>
+		<div class="screen">
+			<div class="aside">
+				<div class="aside-top">
+					<div class="wordmark">Century NIT<small>Operations Center</small></div>
+					<span class="chip">Setup</span>
+				</div>
+				<div class="aside-mid">
+					<p class="ctx-label">Two-factor setup</p>
+					<h3 class="ctx-title">No skip — every staff account carries <em>two factors</em>.</h3>
+					<div class="aside-steps">
+						<div class="aside-step done"><span class="num">✓</span>Confirm password</div>
+						<div class="aside-step on"><span class="num">2</span>Add the authenticator<span class="hint">now</span></div>
+						<div class="aside-step"><span class="num">3</span>Prove it works</div>
+						<div class="aside-step"><span class="num">4</span>Save backup codes</div>
+					</div>
+				</div>
+				<div class="aside-foot"><span>1Password · Google · Microsoft · Authy</span><span>Enrolment audited</span></div>
+			</div>
+			<div class="main">
+				<div class="main-bar"><span>Authenticator setup</span><span class="b">Step 2 of 4</span></div>
+				<div class="stage">
+					<div class="card" style="max-width:440px">
+						<div class="card-rule"></div>
+						<div class="card-inner">
+							<p class="eyebrow">Add your authenticator</p>
+							<h1>Scan with your app</h1>
+							<p class="lead">Camera on the code — or type the key on the right.</p>
+							<div class="enrol">
+								<div class="qr">▦</div>
+								<div>
+									<h5>Manual entry</h5>
+									<p>"Enter setup key" in your app:</p>
+									<div class="keybox"><span>JBSW Y3DP EHPK 3PXP</span><b>COPY</b></div>
+									<p style="margin-top:0.5rem">Enrols as <strong>Century NIT Ops · efua@…</strong></p>
+								</div>
+							</div>
+							<div class="btnrow">
+								<button class="btn ghost"><span>Back</span></button>
+								<button class="btn"><span>I've scanned it</span><span class="arr">→</span></button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="pair" style="margin-top:1.25rem">
+			<div>
+				<p class="cap">Step 3 — prove it works</p>
+				<div class="card" style="max-width:none">
+					<div class="card-rule"></div>
+					<div class="card-inner">
+						<p class="eyebrow">Verify the pairing</p>
+						<h1>Type the first code</h1>
+						<p class="lead">The app now shows a code under <strong>Century NIT Ops</strong>.</p>
+						<div class="otp"><i>&nbsp;</i><i>&nbsp;</i><i>&nbsp;</i><i>&nbsp;</i><i>&nbsp;</i><i>&nbsp;</i></div>
+						<button class="btn"><span>Confirm pairing</span><span class="arr">→</span></button>
+					</div>
+					<div class="card-foot"><a href="#">Back to the code</a><span>Clock must be automatic</span></div>
+				</div>
+			</div>
+			<div>
+				<p class="cap">Step 4 — codes are a deliverable</p>
+				<div class="card" style="max-width:none">
+					<div class="card-rule"></div>
+					<div class="card-inner">
+						<p class="eyebrow">Backup codes</p>
+						<h1>Your only way back in</h1>
+						<div class="warn">Shown once. Each works once. Without these <em>and</em> your phone, only an admin reset recovers the account.</div>
+						<div class="codes"><span>7KQ2-9X4M</span><span>3PLM-8CNA</span><span>9DRF-2HJK</span><span>4TYU-0ZXC</span><span>6QZB-1WPE</span><span>8HGF-5NMD</span></div>
+						<div class="btnrow">
+							<button class="btn ghost"><span>Copy all</span></button>
+							<button class="btn"><span>Download &amp; continue</span><span class="arr">→</span></button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- ═══ 5 · THE GRAMMAR ═══ -->
+	<section class="sect">
+		<div class="sect-head"><h2>The grammar — what every screen shares</h2><span class="n">05 · rules</span></div>
+		<div class="specs">
+			<div class="cell">
+				<h4>Aside</h4>
+				<ul>
+					<li><b>Top:</b> wordmark + screen chip</li>
+					<li><b>Middle:</b> one context block — a statement + the recovery path, or the stepper on flows</li>
+					<li><b>Foot:</b> location/identity left, audit note right</li>
+					<li>No feature lists, no marketing</li>
+				</ul>
+			</div>
+			<div class="cell">
+				<h4>Stage</h4>
+				<ul>
+					<li>Thin bar: screen position left, method/step right</li>
+					<li>Card centred, hard 1px border, <b>3px amber rule on top</b></li>
+					<li>Zero border-radius on every element, always</li>
+					<li>Mobile: aside collapses to a slim header strip</li>
+				</ul>
+			</div>
+			<div class="cell">
+				<h4>Card</h4>
+				<ul>
+					<li>Order: who badge → eyebrow → title → lead → banner → fields → primary</li>
+					<li><b>Footer strip</b> for all secondary actions — nothing floats</li>
+					<li>Six segment OTP boxes; lockout is a bordered state card</li>
+					<li>Errors as banners above the form, not under fields</li>
+				</ul>
+			</div>
+		</div>
+	</section>
+
+	<p class="mono" style="font-size:0.6rem;letter-spacing:0.1em;color:var(--muted);margin-top:3rem">MOCK · zero-radius · aside + stage-bar + ruled card + footer strip · say "build" to implement on the ops auth screens</p>
+</div>
+</body>
+</html>

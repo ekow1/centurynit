@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, staffApi } from "century-nit-core/api";
 import type { InvitationPreview } from "century-nit-shared";
 import { useOpsAuth } from "./OpsAuthContext";
-import { AuthShell } from "./AuthShell";
+import { AuthShell, type AuthStep } from "./AuthShell";
 import { PasswordField, PASSWORD_MIN_LENGTH } from "./PasswordField";
 
 /**
@@ -142,7 +142,25 @@ export function AcceptInvite() {
 
 	if (failure) {
 		return (
-			<AuthShell>
+			<AuthShell
+				aside={{
+					chip: "Invitation",
+					label: "Invitation",
+					title: <>This link can't be used.</>,
+					body: "Invitations are single-use and expire after seven days — whoever invited you can send a fresh one from the staff directory.",
+					footLeft: "Wrong link? Close the tab",
+					footRight: "Audited",
+				}}
+				card={{
+					barLeft: "Invitation",
+					foot: (
+						<>
+							<span />
+							<Link to="/login">Go to sign in</Link>
+						</>
+					),
+				}}
+			>
 				<div className="ops-login__head">
 					<h1 className="ops-login__title">{failure.title}</h1>
 					<p className="ops-login__subtitle">{failure.body}</p>
@@ -154,22 +172,68 @@ export function AcceptInvite() {
 		);
 	}
 
+	const roleLabel = ROLE_LABEL[preview?.role ?? ""] ?? preview?.role;
+	const expires = preview?.expiresAt
+		? `link expires ${new Date(preview.expiresAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+		: null;
+
+	const steps: AuthStep[] = preview?.hasExistingLogin
+		? [
+				{ label: "Invitation accepted", state: "done" },
+				{ label: "Confirm your password", hint: "now", state: "on" },
+				{ label: "You're in", state: "todo" },
+			]
+		: [
+				{ label: "Invitation accepted", state: "done" },
+				{ label: "Set your password", hint: "now", state: "on" },
+				{ label: "Set up two-factor", state: "todo" },
+				{ label: "You're in", state: "todo" },
+			];
+
 	return (
-		<AuthShell>
+		<AuthShell
+			aside={{
+				chip: "Invitation",
+				label: "You're joining as",
+				title: <>{preview?.email}</>,
+				body: (
+					<>
+						{roleLabel}
+						{preview?.branch ? ` · ${preview.branch}` : ""}
+						<br />
+						{preview?.organisation}
+						{expires ? ` · ${expires}` : ""}
+					</>
+				),
+				steps,
+				footLeft: "Wrong person? Close the tab",
+				footRight: "Audited",
+			}}
+			card={{
+				barLeft: `Invitation · ${preview?.email ?? ""}`,
+				barRight: `Step 2 of ${steps.length}`,
+				foot: (
+					<>
+						<span>Already have access?</span>
+						<Link to="/login">Sign in</Link>
+					</>
+				),
+			}}
+		>
 			<div className="ops-login__head">
-				<span className="ops-login__badge">{preview?.organisation ?? "Invitation"}</span>
+				<p className="ops-login__eyebrow">{preview?.hasExistingLogin ? "Join the team" : "Create your password"}</p>
 				<h1 className="ops-login__title">
-					{preview?.hasExistingLogin ? "Join the team" : "Set your password"}
+					{preview?.name ? `Welcome, ${preview.name.split(" ")[0]}` : "Accept the invitation"}
 				</h1>
 				<p className="ops-login__subtitle">
-					You have been invited as{" "}
-					<strong>{ROLE_LABEL[preview?.role ?? ""] ?? preview?.role}</strong>
-					{preview?.branch ? ` at ${preview.branch}` : ""}.
+					{preview?.hasExistingLogin
+						? "This email already has a login — confirm the password you already use."
+						: "One password, then two-factor — the account activates when both are done."}
 				</p>
-				<p className="ops-login__subtitle mono" style={{ fontSize: "var(--text-xs)" }}>{preview?.email}</p>
 			</div>
 
 			<form onSubmit={submit} className="ops-login__form">
+				{error && <p className="ops-login__error" role="alert">{error}</p>}
 				<div className="ops-login__field">
 					<label className="ops-login__label" htmlFor="invite-name">Your name</label>
 					<input
@@ -205,8 +269,6 @@ export function AcceptInvite() {
 					matchWith={password}
 				/>
 
-				{error && <p className="ops-login__error" role="alert">{error}</p>}
-
 				<button
 					type="submit"
 					className="btn btn--primary ops-login__submit"
@@ -216,12 +278,8 @@ export function AcceptInvite() {
 						? "Setting up…"
 						: preview?.hasExistingLogin
 							? "Accept invitation"
-							: "Create account"}
+							: "Continue to two-factor"}
 				</button>
-
-				<Link to="/login" className="ops-login__back" style={{ margin: 0 }}>
-					Already have access? Sign in
-				</Link>
 			</form>
 		</AuthShell>
 	);

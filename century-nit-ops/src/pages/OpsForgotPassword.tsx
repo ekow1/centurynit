@@ -100,7 +100,30 @@ export function OpsForgotPassword() {
 	}
 
 	return (
-		<AuthShell>
+		<AuthShell
+			aside={{
+				chip: "Recovery",
+				label: "Password reset",
+				title: <>A one-time link, straight to your <em>inbox</em>.</>,
+				body: (
+					<>
+						It works once and expires shortly. Signing back in <strong>ends every other
+						session</strong> on this account. No email? A manager resets staff access from
+						the staff directory.
+					</>
+				),
+			}}
+			card={{
+				barLeft: sent ? `${email} — sent` : "Console access",
+				barRight: "Recovery",
+				foot: (
+					<>
+						<span />
+						<Link to="/login">Back to sign in</Link>
+					</>
+				),
+			}}
+		>
 			<div className="ops-login__head">
 				<h1 className="ops-login__title">Reset your password</h1>
 				<p className="ops-login__subtitle">

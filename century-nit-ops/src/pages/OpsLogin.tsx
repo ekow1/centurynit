@@ -2,7 +2,8 @@ import { useNavigate, Navigate, Link } from "react-router-dom";
 import { useOpsAuth, ROLE_HOME } from "./OpsAuthContext";
 import { useState, useEffect } from "react";
 import { getPendingMfaMethod } from "../lib/api";
-import { AuthShell } from "./AuthShell";
+import { AuthShell, maskEmail } from "./AuthShell";
+import { OtpInput } from "./OtpInput";
 import { PasswordField } from "./PasswordField";
 
 const LOCK_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
@@ -51,7 +52,7 @@ export function OpsLogin() {
 	// #35: auto-submit the MFA form once the user types the full 6 digits.
 	useEffect(() => {
 		if (!twoFactorRequired || loading) return;
-		if (mfaMethod === "email_otp" || (!useBackupCode && twoFactorCode.length === 6)) {
+		if ((mfaMethod === "email_otp" || !useBackupCode) && twoFactorCode.length === 6) {
 			const form = document.getElementById("mfa-form") as HTMLFormElement | null;
 			if (form && form.requestSubmit) {
 				form.requestSubmit();
@@ -131,63 +132,186 @@ export function OpsLogin() {
 		}
 	}
 
+	const lockedOut = !!error && /lock|too many|temporar/i.test(error);
+	const maskedWho = maskEmail(mfaEmail ?? email);
+
+	function resetMfa() {
+		setTwoFactorRequired(false);
+		setMfaMethod(null);
+		setMfaEmail(null);
+		setTwoFactorCode("");
+		setUseBackupCode(false);
+		setError(null);
+		setOtpSent(false);
+	}
+
 	return (
-		<AuthShell>
+		<AuthShell
+			aside={
+				twoFactorRequired
+					? {
+							chip: "Step 2 of 2",
+							label: "Two-factor check",
+							title:
+								mfaMethod === "email_otp" ? (
+									<>A 6-digit code went to your <em>account email</em>.</>
+								) : (
+									<>The code is in your <em>authenticator</em>, under Century NIT Ops.</>
+								),
+							body:
+								mfaMethod === "email_otp" ? (
+									<>
+										It lands at <strong>{maskedWho}</strong> and expires shortly — check
+										spam if it hasn't arrived.
+									</>
+								) : (
+									<>
+										It refreshes every 30 seconds — a <strong>backup code</strong> works in
+										place of the app. Lost the device entirely? A manager resets MFA from
+										Administration → Authentication → MFA roster.
+									</>
+								),
+							footLeft: maskedWho,
+						}
+					: {
+							chip: "Staff only",
+							label: "Sign in",
+							title: <>Every case, queue and ledger — behind <em>two factors</em>.</>,
+							body: (
+								<>
+									Credentials only; there is no social sign-in on the console. Staff accounts
+									are created by invitation — <strong>ask your manager</strong> if you don't
+									have one.
+								</>
+							),
+						}
+			}
+			card={
+				twoFactorRequired
+					? {
+							barLeft: `${maskedWho} — verify`,
+							barRight: mfaMethod === "email_otp" ? "Email code" : "Authenticator · TOTP",
+							foot: (
+								<>
+									{mfaMethod !== "email_otp" ? (
+										<button
+											type="button"
+											className="ops-login__footlink"
+											onClick={() => {
+												setUseBackupCode(!useBackupCode);
+												setTwoFactorCode("");
+												setError(null);
+											}}
+										>
+											{useBackupCode ? "Use authenticator" : "Use a backup code"}
+										</button>
+									) : (
+										<button
+											type="button"
+											className="ops-login__footlink"
+											disabled={resendCooldown > 0}
+											onClick={async () => {
+												setError(null);
+												try {
+													await opsSendMfaOtp();
+													setOtpSent(true);
+													setResendCooldown(30);
+												} catch {
+													setError("Could not resend code");
+												}
+											}}
+										>
+											{resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+										</button>
+									)}
+									<button type="button" className="ops-login__footlink" onClick={resetMfa}>
+										Back
+									</button>
+								</>
+							),
+						}
+					: {
+							barLeft: "Console access",
+							barRight: "Step 1 of 2",
+							foot: (
+								<>
+									<span>Locked out?</span>
+									<Link to="/forgot-password">Reset via email</Link>
+								</>
+							),
+						}
+			}
+		>
 			{twoFactorRequired ? (
 				<>
 					<div className="ops-login__head">
-						<h1 className="ops-login__title">Two-Factor Authentication</h1>
+						<span className="ops-login__badge">{mfaEmail ?? email}</span>
+						<h1 className="ops-login__title">
+							{mfaMethod === "email_otp" ? "Check your inbox" : "Verification code"}
+						</h1>
 						<p className="ops-login__subtitle">
 							{mfaMethod === "email_otp"
-								? (otpSent
-									? `Enter the 6-digit code sent to ${mfaEmail ?? email}`
-									: "Sending you a verification code...")
-								: (useBackupCode
-									? "Enter one of your 10-character backup recovery codes"
-									: "Enter the current 6-digit code from your authenticator app")}
+								? otpSent
+									? `A 6-digit code went to ${maskedWho}.`
+									: "Sending you a verification code…"
+								: useBackupCode
+									? "Enter one of your single-use backup codes."
+									: "From your authenticator app — Century NIT Ops."}
 						</p>
 					</div>
 
 					<form id="mfa-form" onSubmit={handleTwoFactorSubmit} className="ops-login__form">
-						<div className="ops-login__field">
-							<label className="ops-login__label">
-								<span dangerouslySetInnerHTML={{ __html: LOCK_SVG }} />
-								{mfaMethod === "email_otp"
-									? "Email Code"
-									: (useBackupCode ? "Backup Recovery Code" : "Authenticator Code")}
-							</label>
-							<input
-								type="text"
-								value={twoFactorCode}
-								onChange={(e) => {
-									if (error) setError(null);
-									setTwoFactorCode(
-										(mfaMethod === "email_otp" || !useBackupCode)
-											? e.target.value.replace(/\D/g, "").slice(0, 6)
-											: e.target.value.trim(),
-									);
-								}}
-								placeholder={
-									mfaMethod === "email_otp"
-										? "000000"
-										: (useBackupCode ? "e.g. a1b2c3d4e5" : "000000")
-								}
-								inputMode={(mfaMethod === "email_otp" || !useBackupCode) ? "numeric" : "text"}
-								autoComplete="one-time-code"
-								pattern={(mfaMethod === "email_otp" || !useBackupCode) ? "[0-9]{6}" : undefined}
-								maxLength={mfaMethod === "email_otp" ? 6 : (useBackupCode ? 32 : 6)}
-								className="ops-login__input mono"
-								required
-								autoFocus
-							/>
-						</div>
-
 						{error ? (
-							<p className="ops-login__error" role="alert">{error}</p>
+							lockedOut ? (
+								<div className="ops-lockbox" role="alert">
+									<div className="ops-lockbox__head">
+										<span>Sign-in locked</span>
+										<span>Logged</span>
+									</div>
+									<div className="ops-lockbox__body">
+										{error} A manager can unlock you from Authentication → Events — or
+										wait it out.
+									</div>
+								</div>
+							) : (
+								<p className="ops-login__error" role="alert">{error}</p>
+							)
 						) : null}
 
+						{useBackupCode && mfaMethod !== "email_otp" ? (
+							<div className="ops-login__field">
+								<label className="ops-login__label">
+									<span dangerouslySetInnerHTML={{ __html: LOCK_SVG }} />
+									Backup recovery code
+								</label>
+								<input
+									type="text"
+									value={twoFactorCode}
+									onChange={(e) => {
+										if (error) setError(null);
+										setTwoFactorCode(e.target.value.trim());
+									}}
+									placeholder="e.g. a1b2c3d4e5"
+									maxLength={32}
+									className="ops-login__input mono"
+									required
+									autoFocus
+								/>
+							</div>
+						) : (
+							<OtpInput
+								id="mfa-otp"
+								value={twoFactorCode}
+								disabled={loading}
+								onChange={(v) => {
+									if (error) setError(null);
+									setTwoFactorCode(v);
+								}}
+							/>
+						)}
+
 						<button type="submit" disabled={loading || !twoFactorCode} className="btn btn--primary ops-login__submit">
-							<span>{loading ? "Verifying..." : "Verify & Sign In"}</span>
+							<span>{loading ? "Verifying…" : "Verify & sign in"}</span>
 							{loading ? null : <span dangerouslySetInnerHTML={{ __html: ARROW_SVG }} />}
 						</button>
 
@@ -198,112 +322,76 @@ export function OpsLogin() {
 								onChange={(e) => setTrustDevice(e.target.checked)}
 								disabled={loading}
 							/>
-							Trust this device for 30 days
+							Trust this device — 30 days
 						</label>
-
-						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "var(--text-xs)" }}>
-							{mfaMethod !== "email_otp" && (
-								<button
-									type="button"
-									onClick={() => {
-										setUseBackupCode(!useBackupCode);
-										setTwoFactorCode("");
-										setError(null);
-									}}
-									className="btn btn--ghost btn--xs"
-									style={{ padding: "0.25rem 0.5rem" }}
-								>
-									{useBackupCode ? "Use Authenticator App" : "Use a backup recovery code"}
-								</button>
-							)}
-							{mfaMethod === "email_otp" && (
-								<button
-									type="button"
-									disabled={resendCooldown > 0}
-									onClick={async () => {
-										setError(null);
-										try {
-											await opsSendMfaOtp();
-											setOtpSent(true);
-											setResendCooldown(30);
-										} catch {
-											setError("Could not resend code");
-										}
-									}}
-									className="btn btn--ghost btn--xs"
-									style={{ padding: "0.25rem 0.5rem" }}
-								>
-									{resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
-								</button>
-							)}
-							<button
-								type="button"
-								onClick={() => {
-									setTwoFactorRequired(false);
-									setMfaMethod(null);
-									setMfaEmail(null);
-									setTwoFactorCode("");
-									setError(null);
-									setOtpSent(false);
-								}}
-								className="ops-login__back"
-								style={{ margin: 0, width: "auto" }}
-							>
-								Back to login
-							</button>
-						</div>
 					</form>
 				</>
 			) : (
 				<>
 					<div className="ops-login__head">
-						<h1 className="ops-login__title">Welcome back</h1>
-						<p className="ops-login__subtitle">Sign in to your operations account</p>
+						<p className="ops-login__eyebrow">Welcome back</p>
+						<h1 className="ops-login__title">Sign in</h1>
+						<p className="ops-login__subtitle">
+							Your staff credentials — the same email and password on file.
+						</p>
 					</div>
 
 					<form onSubmit={handleFormSubmit} className="ops-login__form">
-							<div className="ops-login__field">
-								<label className="ops-login__label">
-									<span dangerouslySetInnerHTML={{ __html: MAIL_SVG }} />
-									Email
-								</label>
-								<input
-									type="email"
-									value={email}
-									onChange={(e) => { setEmail(e.target.value); if (error) setError(null); }}
-									placeholder="you@century-nit.com"
-									className="ops-login__input"
-									required
-									autoFocus
-								/>
-							</div>
-							<PasswordField
-								label={<><span dangerouslySetInnerHTML={{ __html: LOCK_SVG }} />Password</>}
-								value={password}
-								onChange={(v) => { setPassword(v); if (error) setError(null); }}
-								placeholder="••••••••"
-							/>
-							<div className="ops-login__meta-row">
-								<label className="ops-login__remember">
-									<input
-										type="checkbox"
-										checked={rememberMe}
-										onChange={(e) => setRememberMe(e.target.checked)}
-									/>
-									Keep me signed in
-								</label>
-								<Link to="/forgot-password" className="ops-login__back" style={{ margin: 0, width: "auto", padding: 0 }}>
-									Forgot password?
-								</Link>
-							</div>
-							{error ? (
+						{error ? (
+							lockedOut ? (
+								<div className="ops-lockbox" role="alert">
+									<div className="ops-lockbox__head">
+										<span>Account locked</span>
+										<span>Logged</span>
+									</div>
+									<div className="ops-lockbox__body">
+										{error} A manager can unlock you from Authentication → Events — or
+										wait it out.
+									</div>
+								</div>
+							) : (
 								<p className="ops-login__error" role="alert">{error}</p>
-							) : null}
-							<button type="submit" disabled={loading || !email || !password} className="btn btn--primary ops-login__submit">
-								<span>{loading ? "Signing in…" : "Sign In"}</span>
-								{loading ? null : <span dangerouslySetInnerHTML={{ __html: ARROW_SVG }} />}
-							</button>
-						</form>
+							)
+						) : null}
+						<div className="ops-login__field">
+							<label className="ops-login__label">
+								<span dangerouslySetInnerHTML={{ __html: MAIL_SVG }} />
+								Email
+							</label>
+							<input
+								type="email"
+								value={email}
+								onChange={(e) => { setEmail(e.target.value); if (error) setError(null); }}
+								placeholder="you@century-nit.com"
+								className="ops-login__input"
+								required
+								autoFocus
+							/>
+						</div>
+						<PasswordField
+							label={<><span dangerouslySetInnerHTML={{ __html: LOCK_SVG }} />Password</>}
+							value={password}
+							onChange={(v) => { setPassword(v); if (error) setError(null); }}
+							placeholder="••••••••"
+						/>
+						<div className="ops-login__meta-row">
+							<label className="ops-login__remember">
+								<input
+									type="checkbox"
+									checked={rememberMe}
+									onChange={(e) => setRememberMe(e.target.checked)}
+								/>
+								Keep me signed in
+							</label>
+							<Link to="/forgot-password" className="ops-login__back" style={{ margin: 0, width: "auto", padding: 0 }}>
+								Forgot password?
+							</Link>
+						</div>
+						<button type="submit" disabled={loading || !email || !password} className="btn btn--primary ops-login__submit">
+							<span>{loading ? "Signing in…" : "Sign In"}</span>
+							{loading ? null : <span dangerouslySetInnerHTML={{ __html: ARROW_SVG }} />}
+						</button>
+					</form>
 				</>
 			)}
 		</AuthShell>

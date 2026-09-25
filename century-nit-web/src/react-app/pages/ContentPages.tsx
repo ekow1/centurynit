@@ -880,7 +880,9 @@ export function Scholarships() {
 					</div>
 					<div className="scholar-list">
 						{list.map((s) => {
-							const amt = dualAmount(s.amountUsd);
+							// A row without a USD figure shows its own amount text
+							// rather than a meaningless GH₵0 / $0 pair.
+							const amt = s.amountUsd ? dualAmount(s.amountUsd) : null;
 							return (
 								<Link key={s.id} to={`/scholarships/${s.id}`} className="scholar-card card--hover">
 									<div className="scholar-card__body">
@@ -900,8 +902,14 @@ export function Scholarships() {
 										{s.amountQualifier ? (
 											<span className="scholar-card__qualifier mono">{s.amountQualifier}</span>
 										) : null}
-										<span className="scholar-card__ghs display">{amt.ghs}</span>
-										<span className="scholar-card__usd mono">{amt.usd} USD</span>
+										{amt ? (
+											<>
+												<span className="scholar-card__ghs display">{amt.ghs}</span>
+												<span className="scholar-card__usd mono">{amt.usd} USD</span>
+											</>
+										) : (
+											<span className="scholar-card__ghs display">{s.amount}</span>
+										)}
 										{s.amountNote ? (
 											<span className="scholar-card__note mono">{s.amountNote}</span>
 										) : null}
@@ -926,7 +934,11 @@ export function ScholarshipDetail() {
 	return (
 		<>
 			<PageHeader
-				eyebrow={`${s.type} · ${dualAmount(s.amountUsd).ghs} · ${dualAmount(s.amountUsd).usd}`}
+				eyebrow={
+					s.amountUsd
+						? `${s.type} · ${dualAmount(s.amountUsd).ghs} · ${dualAmount(s.amountUsd).usd}`
+						: `${s.type} · ${s.amount}`
+				}
 				title={s.name}
 				lead={`${s.eligibility} · Deadline ${s.deadline}`}
 			/>
@@ -939,28 +951,34 @@ export function ScholarshipDetail() {
 					<div>
 						<p style={{ fontSize: "1.1rem", lineHeight: 1.7 }}>{s.description}</p>
 
-						<div className="detail-two-col">
-							<div>
-								<h2 className="section-title mb-3">Eligibility Criteria</h2>
-								<ul style={{ paddingLeft: "1.25rem", lineHeight: 1.8, margin: 0 }}>
-									{s.criteria.map((c, i) => (
-										<li key={i} style={{ marginBottom: "0.4rem" }}>
-											{c}
-										</li>
-									))}
-								</ul>
+						{(s.criteria?.length ?? 0) > 0 || (s.apply?.length ?? 0) > 0 ? (
+							<div className="detail-two-col">
+								{(s.criteria?.length ?? 0) > 0 ? (
+									<div>
+										<h2 className="section-title mb-3">Eligibility Criteria</h2>
+										<ul style={{ paddingLeft: "1.25rem", lineHeight: 1.8, margin: 0 }}>
+											{s.criteria.map((c, i) => (
+												<li key={i} style={{ marginBottom: "0.4rem" }}>
+													{c}
+												</li>
+											))}
+										</ul>
+									</div>
+								) : null}
+								{(s.apply?.length ?? 0) > 0 ? (
+									<div>
+										<h2 className="section-title mb-3">How to Apply</h2>
+										<ol style={{ paddingLeft: "1.25rem", lineHeight: 1.8, margin: 0 }}>
+											{s.apply.map((a, i) => (
+												<li key={i} style={{ marginBottom: "0.4rem" }}>
+													{a}
+												</li>
+											))}
+										</ol>
+									</div>
+								) : null}
 							</div>
-							<div>
-								<h2 className="section-title mb-3">How to Apply</h2>
-								<ol style={{ paddingLeft: "1.25rem", lineHeight: 1.8, margin: 0 }}>
-									{s.apply.map((a, i) => (
-										<li key={i} style={{ marginBottom: "0.4rem" }}>
-											{a}
-										</li>
-									))}
-								</ol>
-							</div>
-						</div>
+						) : null}
 
 						{s.benefits && s.benefits.length > 0 ? (
 							<section style={{ marginTop: "3rem" }}>

@@ -80,12 +80,36 @@ async function fetchCatalog(): Promise<Catalog> {
 				intake: x.intake ?? [],
 				description: x.description ?? "",
 			})),
-			scholarships: ((s?.scholarships as Scholarship[] | undefined) ?? staticScholarships).map((x) => ({
-				...x,
-				type: x.type ?? "",
-				deadline: x.deadline ?? "",
-				eligibility: x.eligibility ?? "",
-			})),
+			scholarships: ((s?.scholarships as Scholarship[] | undefined) ?? staticScholarships)
+				// isActive is an ops toggle; the compiled rows predate it and stay
+				// visible.
+				.filter((x) => (x as Scholarship & { isActive?: boolean | null }).isActive !== false)
+				.map((x) => {
+					// The catalog table stores only the summary fields. The seeded
+					// rows share ids with the compiled copy, which still holds the
+					// detail sections the schema has no columns for (apply steps,
+					// benefits, FAQ); merge so a live row regains them. An
+					// ops-created row with no static twin just renders what the
+					// DB has.
+					const base = staticScholarships.find((b) => b.id === x.id);
+					return {
+						...base,
+						...x,
+						type: x.type ?? "",
+						amount: x.amount ?? "",
+						deadline: x.deadline ?? "",
+						eligibility: x.eligibility ?? "",
+						image: x.image ?? "",
+						description: x.description ?? "",
+						amountUsd: x.amountUsd ?? base?.amountUsd ?? 0,
+						amountQualifier: x.amountQualifier ?? base?.amountQualifier,
+						amountNote: x.amountNote ?? base?.amountNote,
+						criteria: x.criteria ?? base?.criteria ?? [],
+						apply: x.apply ?? base?.apply ?? [],
+						benefits: x.benefits ?? base?.benefits ?? [],
+						faq: x.faq ?? base?.faq ?? [],
+					};
+				}),
 		};
 		cache = next;
 		return next;

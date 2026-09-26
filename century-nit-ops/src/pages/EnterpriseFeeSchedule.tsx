@@ -1,20 +1,25 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
 	API_PREFIX,
+	CHAPTER_LABELS,
 	DEFAULT_ADMISSIONS_START_PERCENT,
 	DUE_TRIGGER_LABELS,
 	FEE_KIND_LABELS,
+	FEE_CHAPTERS,
 	SERVICE_STAGES,
 	SERVICE_STAGE_LABELS,
 	defaultStagePrices,
+	feeItemKeySchema,
 	milestoneLines,
 	quoteTotal,
 	scopeLabel,
 	type ServiceStage,
+	type CreateFeeItem,
 	type DestinationTariff,
 	type FeeCatalogue,
 	type FeeItem,
+	type FeeKind,
 	type UpdateFeeItem,
 } from "century-nit-shared";
 import { Sheet } from "century-nit-core/ui";
@@ -36,7 +41,7 @@ import { Toast } from "./OpsDialogs";
  * prices from this same payload (`GET /api/v1/fees`).
  */
 
-const CHAPTER_LABELS: Record<string, string> = { consult: "Consultation", apply: "Applications", visa: "Visa", depart: "Departure" };
+const chapterLabel = (chapter: string) => (CHAPTER_LABELS as Record<string, string>)[chapter] ?? chapter;
 
 const usd = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 const toCents = (dollars: string): number => {
@@ -45,63 +50,111 @@ const toCents = (dollars: string): number => {
 };
 
 export function EnterpriseFeeSchedule() {
-	const { hasCapability } = useOpsAuth();
-	const canEdit = hasCapability("manage_settings");
+	const { hasPermission, hasCapability } = useOpsAuth();
+	// Two different server gates: the fee items write through the
+	// manage_settings capability, the exchange rate through the settings
+	// module. One flag per surface or a custom role sees controls that 403.
+	const canEditItems = hasCapability("manage_settings");
+	const canEditRate = hasPermission("settings");
 	const [cat, setCat] = useState<FeeCatalogue | null>(null);
 	const [items, setItems] = useState<FeeItem[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [toast, setToast] = useState<{ type: "error" | "success" | "info"; message: string } | null>(null);
 	const say = (type: "error" | "success" | "info", message: string) => setToast({ type, message });
 
+	// A save triggers a reload; a slower earlier response must not land last.
+	const loadSeq = useRef(0);
 	const load = useCallback(async () => {
+		const seq = ++loadSeq.current;
 		setLoading(true);
 		try {
 			const [catalogue, all] = await Promise.all([apiFetch<FeeCatalogue>(`${API_PREFIX}/fees`), apiFetch<{ items: FeeItem[] }>(`${API_PREFIX}/fees/items`)]);
+			if (seq !== loadSeq.current) return;
 			setCat(catalogue);
 			setItems(all.items);
 		} catch (err) {
+			if (seq !== loadSeq.current) return;
 			say("error", err instanceof ApiError ? err.message : "Could not load the fee schedule");
 		} finally {
-			setLoading(false);
+			if (seq === loadSeq.current) setLoading(false);
 		}
 	}, []);
 	useEffect(() => {
 		void load();
 	}, [load]);
 
-	// ── item editor ─────────────────────────────────────────────────────
-	const [editing, setEditing] = useState<FeeItem | null>(null);
-	const [draft, setDraft] = useState<{ name: string; clientLabel: string; description: string; amount: string; optional: boolean; active: boolean }>({
-		name: "",
-		clientLabel: "",
-		description: "",
-		amount: "",
-		optional: false,
-		active: true,
-	});
+	// ── item editor (edit + create share the sheet) ────────────────────
+	const [sheet, setSheet] = useState<{ mode: "edit"; item: FeeItem } | { mode: "create" } | null>(null);
+	const blankDraft = { key: "", kind: "century" as FeeKind, chapter: "visa", name: "", clientLabel: "", description: "", amount: "", optional: false, active: true, sortOrder: "100" };
+	const [draft, setDraft] = useState(blankDraft);
+	// The key auto-slugs from the name until the officer types one themselves.
+	const keyEdited = useRef(false);
 	const [saving, setSaving] = useState(false);
 	const [sheetError, setSheetError] = useState<string | null>(null);
-	function openItem(item: FeeItem) {
-		setDraft({ name: item.name, clientLabel: item.clientLabel, description: item.description ?? "", amount: (item.amountCents / 100).toFixed(2), optional: item.optional, active: item.active });
-		setSheetError(null);
-		setEditing(item);
+	const draftDirty = sheet
+		? sheet.mode === "edit"
+			? draft.name !== sheet.item.name ||
+				draft.clientLabel !== sheet.item.clientLabel ||
+				draft.description !== (sheet.item.description ?? "") ||
+				toCents(draft.amount) !== sheet.item.amountCents ||
+				draft.optional !== sheet.item.optional ||
+				draft.active !== sheet.item.active
+			: JSON.stringify(draft) !== JSON.stringify(blankDraft)
+		: false;
+	function closeSheet() {
+		if (draftDirty && !window.confirm("Discard the unsaved changes?")) return;
+		setSheet(null);
 	}
+	function openItem(item: FeeItem) {
+		setDraft({ ...blankDraft, name: item.name, clientLabel: item.clientLabel, description: item.description ?? "", amount: (item.amountCents / 100).toFixed(2), optional: item.optional, active: item.active, chapter: item.chapter, kind: item.kind, sortOrder: String(item.sortOrder) });
+		setSheetError(null);
+		setSheet({ mode: "edit", item });
+	}
+	function openCreate() {
+		setDraft(blankDraft);
+		keyEdited.current = false;
+		setSheetError(null);
+		setSheet({ mode: "create" });
+	}
+	const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64);
+	function onDraftName(name: string) {
+		setDraft((prev) => ({ ...prev, name, key: keyEdited.current ? prev.key : slugify(name) }));
+	}
+	const keyOk = sheet?.mode === "create" ? feeItemKeySchema.safeParse(draft.key).success : true;
+	const sheetValid = draft.name.trim().length > 0 && draft.clientLabel.trim().length > 0 && keyOk && Number.parseInt(draft.sortOrder, 10) >= 0;
 	async function saveItem() {
-		if (!editing) return;
+		if (!sheet) return;
 		setSaving(true);
 		setSheetError(null);
 		try {
-			const patch: UpdateFeeItem = {
-				name: draft.name.trim(),
-				clientLabel: draft.clientLabel.trim(),
-				description: draft.description.trim() || null,
-				amountCents: toCents(draft.amount),
-				optional: draft.optional,
-				active: draft.active,
-			};
-			await apiFetch(`${API_PREFIX}/fees/items/${editing.key}`, { method: "PUT", body: JSON.stringify(patch) });
-			say("success", `${patch.name} saved.`);
-			setEditing(null);
+			if (sheet.mode === "create") {
+				const body: CreateFeeItem = {
+					key: draft.key.trim(),
+					kind: draft.kind,
+					chapter: draft.chapter as CreateFeeItem["chapter"],
+					name: draft.name.trim(),
+					clientLabel: draft.clientLabel.trim(),
+					description: draft.description.trim() || null,
+					amountCents: toCents(draft.amount),
+					optional: draft.optional,
+					active: draft.active,
+					sortOrder: Number.parseInt(draft.sortOrder, 10) || 0,
+				};
+				await apiFetch(`${API_PREFIX}/fees/items`, { method: "POST", body: JSON.stringify(body) });
+				say("success", `${body.name} added to the catalogue.`);
+			} else {
+				const patch: UpdateFeeItem = {
+					name: draft.name.trim(),
+					clientLabel: draft.clientLabel.trim(),
+					description: draft.description.trim() || null,
+					amountCents: toCents(draft.amount),
+					optional: draft.optional,
+					active: draft.active,
+				};
+				await apiFetch(`${API_PREFIX}/fees/items/${sheet.item.key}`, { method: "PUT", body: JSON.stringify(patch) });
+				say("success", `${patch.name} saved.`);
+			}
+			setSheet(null);
 			await load();
 		} catch (err) {
 			setSheetError(err instanceof ApiError ? err.message : "Could not save the item");
@@ -112,9 +165,12 @@ export function EnterpriseFeeSchedule() {
 
 	// ── destination tariffs (inline) ────────────────────────────────────
 	const [tariffDraft, setTariffDraft] = useState<Record<string, { visa: string; biometrics: string }>>({});
+	const [tariffSaving, setTariffSaving] = useState<string | null>(null);
 	const tariffValue = (d: DestinationTariff) => tariffDraft[d.id] ?? { visa: (d.visaFeeCents / 100).toFixed(2), biometrics: (d.biometricsFeeCents / 100).toFixed(2) };
 	async function saveTariff(d: DestinationTariff) {
+		if (tariffSaving) return;
 		const v = tariffValue(d);
+		setTariffSaving(d.id);
 		try {
 			await apiFetch(`${API_PREFIX}/fees/destinations/${d.id}`, {
 				method: "PUT",
@@ -129,23 +185,38 @@ export function EnterpriseFeeSchedule() {
 			await load();
 		} catch (err) {
 			say("error", err instanceof ApiError ? err.message : `Could not save ${d.name}`);
+		} finally {
+			setTariffSaving(null);
 		}
 	}
 
 	// ── exchange rate + split (settings) ────────────────────────────────
 	const [rate, setRate] = useState<string>("");
+	// The catalogue reloads after every save in this page; only overwrite the
+	// rate field when it still holds the last synced value (i.e. not dirty).
+	const rateBaseline = useRef<string | null>(null);
 	useEffect(() => {
 		if (!cat) return;
-		setRate(String(cat.exchangeRate));
+		const next = String(cat.exchangeRate);
+		setRate((cur) => (rateBaseline.current !== null && cur !== rateBaseline.current ? cur : next));
+		rateBaseline.current = next;
 	}, [cat]);
 	// The packages, for the worked example — the service fee is theirs.
 	const [packages, setPackages] = useState<ServicePackage[]>([]);
-	useEffect(() => {
+	const [packagesError, setPackagesError] = useState<string | null>(null);
+	const loadPackages = useCallback(() => {
+		setPackagesError(null);
 		packagesApi
 			.list()
 			.then((res) => setPackages(res.packages.filter((x) => x.active)))
-			.catch(() => setPackages([]));
+			.catch((e) => {
+				setPackages([]);
+				setPackagesError(e instanceof Error ? e.message : "Could not load packages");
+			});
 	}, []);
+	useEffect(() => {
+		loadPackages();
+	}, [loadPackages]);
 	const [examplePackage, setExamplePackage] = useState<string>("");
 	const [exampleScope, setExampleScope] = useState<"admissions" | "visa" | "departure">("departure");
 	const [exampleDestination, setExampleDestination] = useState<string>("");
@@ -166,8 +237,10 @@ export function EnterpriseFeeSchedule() {
 
 	const century = items.filter((i) => i.kind === "century");
 	const passThrough = items.filter((i) => i.kind === "pass_through");
+	const activeCentury = century.filter((i) => i.active).length;
+	const activePass = passThrough.filter((i) => i.active).length;
 	const ghs = (cents: number) => (cat ? `GH₵ ${((cents / 100) * cat.exchangeRate).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : usd(cents));
-	const whenLabel = (i: FeeItem) => (!i.active ? "off" : i.optional ? "when ticked" : "automatic");
+	const whenLabel = (i: FeeItem) => (!i.active ? "inactive" : i.optional ? "when ticked" : "automatic");
 
 	function ItemRows({ rows, empty }: { rows: FeeItem[]; empty: string }) {
 		if (rows.length === 0) return <p className="ops-panel__muted" style={{ padding: "0.75rem 1rem" }}>{empty}</p>;
@@ -177,7 +250,7 @@ export function EnterpriseFeeSchedule() {
 					<div key={i.key} className="ops-item" style={{ opacity: i.active ? 1 : 0.55 }}>
 						<div>
 							<div className="ops-item__k">
-								{FEE_KIND_LABELS[i.kind]} · {CHAPTER_LABELS[i.chapter] ?? i.chapter}
+								{FEE_KIND_LABELS[i.kind]} · {chapterLabel(i.chapter)}
 							</div>
 							<div className="ops-item__n">{i.name}</div>
 							<div className="ops-item__s">
@@ -190,7 +263,7 @@ export function EnterpriseFeeSchedule() {
 						</span>
 						<span className="ops-item__k" style={{ textAlign: "right", minWidth: "7rem" }}>
 							{whenLabel(i)}
-							{canEdit && (
+							{canEditItems && (
 								<>
 									<br />
 									<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => openItem(i)}>
@@ -208,7 +281,10 @@ export function EnterpriseFeeSchedule() {
 	// The worked example: one package, one country, the items that apply.
 	const pkg = packages.find((x) => x.id === examplePackage) ?? packages[0] ?? null;
 	const dest = cat?.destinations.find((d) => d.id === exampleDestination) ?? cat?.destinations[0] ?? null;
-	const centuryLines = century.filter((i) => i.active && !i.optional);
+	// stage_visa / stage_departure enter the bill through `quote` (flatOf
+	// below) — listing them in centuryLines too charged each stage twice.
+	const STAGE_ITEM_KEYS: ReadonlySet<string> = new Set(["stage_visa", "stage_departure"]);
+	const centuryLines = century.filter((i) => i.active && !i.optional && !STAGE_ITEM_KEYS.has(i.key));
 	const passLines = passThrough.filter((i) => i.active && !i.optional);
 	const exampleStages: ServiceStage[] = exampleScope === "admissions" ? ["admissions"] : exampleScope === "visa" ? ["admissions", "visa"] : ["admissions", "visa", "departure"];
 	// The same function the portal builder and the raise use — the example can never drift from the invoice.
@@ -238,6 +314,11 @@ export function EnterpriseFeeSchedule() {
 					<p className="muted" style={{ marginTop: "0.25rem" }}>What a client pays — Century's fee, and what is paid on their behalf at cost. Prices are set in USD; the client is charged in GHS at the rate on the right.</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+					{canEditItems && (
+						<button type="button" className="btn btn--sm btn--primary" onClick={openCreate}>
+							+ Fee item
+						</button>
+					)}
 					<Link to="/packages" className="btn btn--sm btn--ghost">
 						Packages →
 					</Link>
@@ -255,10 +336,10 @@ export function EnterpriseFeeSchedule() {
 					<strong>{cat ? cat.exchangeRate.toFixed(2) : "—"}</strong> <span className="dash-day__date">GHS per USD</span>
 				</span>
 				<span>
-					<strong>{century.length}</strong> <span className="dash-day__date">Century item{century.length === 1 ? "" : "s"}</span>
+					<strong>{activeCentury}</strong> <span className="dash-day__date">Century item{activeCentury === 1 ? "" : "s"} · active</span>
 				</span>
 				<span>
-					<strong>{passThrough.length}</strong> <span className="dash-day__date">pass-through item{passThrough.length === 1 ? "" : "s"}</span>
+					<strong>{activePass}</strong> <span className="dash-day__date">pass-through item{activePass === 1 ? "" : "s"} · active</span>
 				</span>
 				<span>
 					<strong>{cat?.destinations.length ?? 0}</strong> <span className="dash-day__date">countries priced</span>
@@ -277,29 +358,28 @@ export function EnterpriseFeeSchedule() {
 					<div className="cn-stack" style={{ gap: "1rem" }}>
 						<section style={{ border: "1px solid var(--border-light)" }}>
 							<div className="ops-band hd-band" style={{ borderTop: "none" }}>
-								<span className="ops-band__name">Century's fee · {century.length + 2}</span>
+								<span className="ops-band__name">Century's fee · {activeCentury + 2}</span>
 								<span className="ops-band__note">ours · in the service fee or on top</span>
 							</div>
-							{SERVICE_STAGES.map((st) => {
-								// Visa and Departure are the flat `stage_visa` / `stage_departure` items, listed with the other Century items below.
-								if (st !== "admissions") return null;
-								const prices = packages.map((x) => (x.stagePrices ?? defaultStagePrices(x.priceCents))[st]);
+							{/* Admissions is priced by track on the packages; Visa and Departure are the flat stage_visa / stage_departure items below. */}
+							{(() => {
+								const prices = packages.map((x) => (x.stagePrices ?? defaultStagePrices(x.priceCents)).admissions);
 								const lo = prices.length ? Math.min(...prices) : 0;
 								const hi = prices.length ? Math.max(...prices) : 0;
 								return (
-									<div key={st} className="ops-item">
+									<div className="ops-item">
 										<div>
-											<div className="ops-item__k">Century · service fee · {SERVICE_STAGE_LABELS[st]}</div>
-											<div className="ops-item__n">{SERVICE_STAGE_LABELS[st]} stage</div>
+											<div className="ops-item__k">Century · service fee · {SERVICE_STAGE_LABELS.admissions}</div>
+											<div className="ops-item__n">{SERVICE_STAGE_LABELS.admissions} stage</div>
 											<div className="ops-item__s">
-												By track — {packages.length > 0 ? packages.map((x) => `${x.name} ${ghs((x.stagePrices ?? defaultStagePrices(x.priceCents))[st])}`).join(" · ") : "no active packages"} · edited under Packages
+												By track — {packages.length > 0 ? packages.map((x) => `${x.name} ${ghs((x.stagePrices ?? defaultStagePrices(x.priceCents)).admissions)}`).join(" · ") : "no active packages"} · edited under Packages
 											</div>
 										</div>
 										<span className="cn-money" style={{ fontSize: "var(--text-sm)", fontWeight: 700, textAlign: "right" }}>
 											{lo === hi ? ghs(lo) : `${ghs(lo)} – ${ghs(hi)}`}
 										</span>
 										<span className="ops-item__k" style={{ textAlign: "right", minWidth: "7rem" }}>
-											{st === "admissions" ? "always on" : "if on the plan"}
+											always on
 											<br />
 											<Link to="/packages" className="dash-link">
 												packages →
@@ -307,7 +387,7 @@ export function EnterpriseFeeSchedule() {
 										</span>
 									</div>
 								);
-							})}
+							})()}
 							<div className="ops-item">
 								<div>
 									<div className="ops-item__k">Century · service fee · bundle</div>
@@ -326,7 +406,7 @@ export function EnterpriseFeeSchedule() {
 
 						<section style={{ border: "1px solid var(--border-light)" }}>
 							<div className="ops-band hd-band" style={{ borderTop: "none" }}>
-								<span className="ops-band__name">Paid on the client's behalf · {passThrough.length + 3}</span>
+								<span className="ops-band__name">Paid on the client's behalf · {activePass + 3}</span>
 								<span className="ops-band__note">at cost · ticked when the invoice is raised</span>
 							</div>
 							<div className="ops-item">
@@ -390,17 +470,17 @@ export function EnterpriseFeeSchedule() {
 												<span className="ops-tariff__n">{d.name}</span>
 												<label className="ops-tariff__row">
 													<span>Visa fee</span>
-													<input className="ops-tariff__in" inputMode="decimal" value={v.visa} disabled={!canEdit} onChange={(e) => setTariffDraft({ ...tariffDraft, [d.id]: { ...v, visa: e.target.value } })} aria-label={`${d.name} visa fee`} />
+													<input className="ops-tariff__in" inputMode="decimal" value={v.visa} disabled={!canEditItems} onChange={(e) => setTariffDraft({ ...tariffDraft, [d.id]: { ...v, visa: e.target.value } })} aria-label={`${d.name} visa fee`} />
 												</label>
 												<label className="ops-tariff__row">
 													<span>Biometrics</span>
-													<input className="ops-tariff__in" inputMode="decimal" value={v.biometrics} disabled={!canEdit} onChange={(e) => setTariffDraft({ ...tariffDraft, [d.id]: { ...v, biometrics: e.target.value } })} aria-label={`${d.name} biometrics fee`} />
+													<input className="ops-tariff__in" inputMode="decimal" value={v.biometrics} disabled={!canEditItems} onChange={(e) => setTariffDraft({ ...tariffDraft, [d.id]: { ...v, biometrics: e.target.value } })} aria-label={`${d.name} biometrics fee`} />
 												</label>
 												<div className="ops-tariff__foot">
 													<span className="ops-item__s">{ghs(d.visaFeeCents + d.biometricsFeeCents)} together</span>
-													{canEdit && dirty && (
-														<button type="button" className="btn btn--sm btn--primary" onClick={() => void saveTariff(d)}>
-															Save
+													{canEditItems && dirty && (
+														<button type="button" className="btn btn--sm btn--primary" disabled={tariffSaving === d.id} onClick={() => void saveTariff(d)}>
+															{tariffSaving === d.id ? "Saving…" : "Save"}
 														</button>
 													)}
 												</div>
@@ -417,6 +497,14 @@ export function EnterpriseFeeSchedule() {
 					<div className="cn-stack" style={{ gap: "1rem" }}>
 						<section className="ops-bill">
 							<p className="cn-detail__eyebrow" style={{ marginBottom: "0.5rem" }}>What a client pays · example</p>
+							{packagesError && (
+								<p className="ops-panel__muted" style={{ margin: "0 0 0.5rem" }}>
+									Packages could not be loaded — {packagesError}.{" "}
+									<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={loadPackages}>
+										Retry
+									</button>
+								</p>
+							)}
 							<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
 								<select className="cn-filter__select" value={pkg?.id ?? ""} onChange={(e) => setExamplePackage(e.target.value)} aria-label="Example package">
 									{packages.map((x) => (
@@ -534,10 +622,10 @@ export function EnterpriseFeeSchedule() {
 								<span>
 									GHS per USD<small>the client is charged at this</small>
 								</span>
-								<input className="ops-tariff__in" style={{ width: "100%" }} inputMode="decimal" value={rate} disabled={!canEdit} onChange={(e) => setRate(e.target.value)} />
+								<input className="ops-tariff__in" style={{ width: "100%" }} inputMode="decimal" value={rate} disabled={!canEditRate} onChange={(e) => setRate(e.target.value)} aria-label="GHS per USD" />
 							</label>
 							<p className="cn-detailhead__meta" style={{ marginTop: "0.5rem" }}>Changes apply to invoices raised from now on; drafts and issued invoices keep their figures.</p>
-							{canEdit && (
+							{canEditRate && (
 								<div className="cn-now__actions">
 									<button type="button" className="btn btn--sm btn--primary" onClick={() => void saveRate()}>
 										Save rate
@@ -558,15 +646,60 @@ export function EnterpriseFeeSchedule() {
 				</div>
 			)}
 
-			<Sheet open={Boolean(editing)} onClose={() => setEditing(null)} title={editing ? `Edit · ${editing.name}` : "Edit"}>
-				{editing && (
+			<Sheet open={Boolean(sheet)} onClose={closeSheet} title={sheet?.mode === "create" ? "New fee item" : sheet ? `Edit · ${sheet.item.name}` : "Edit"}>
+				{sheet && (
 					<div className="cn-stack">
-						<p className="muted text-sm">
-							{FEE_KIND_LABELS[editing.kind]} · {CHAPTER_LABELS[editing.chapter] ?? editing.chapter} · key <code>{editing.key}</code>
-						</p>
+						{sheet.mode === "edit" && (
+							<p className="muted text-sm">
+								{FEE_KIND_LABELS[sheet.item.kind]} · {chapterLabel(sheet.item.chapter)} · key <code>{sheet.item.key}</code>
+							</p>
+						)}
+						{sheet.mode === "create" && (
+							<>
+								<label>
+									<span className="muted text-xs">Key — permanent, lowercase (e.g. airport_pickup)</span>
+									<input
+										className="input input--sm"
+										value={draft.key}
+										onChange={(e) => {
+											keyEdited.current = true;
+											setDraft({ ...draft, key: e.target.value });
+										}}
+										aria-invalid={!keyOk}
+									/>
+								</label>
+								<div style={{ display: "flex", gap: "0.5rem" }}>
+									<label style={{ flex: 1 }}>
+										<span className="muted text-xs">Kind</span>
+										<select className="input input--sm" value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as FeeKind })}>
+											{(Object.keys(FEE_KIND_LABELS) as FeeKind[]).map((k) => (
+												<option key={k} value={k}>
+													{FEE_KIND_LABELS[k]}
+												</option>
+											))}
+										</select>
+									</label>
+									<label style={{ flex: 1 }}>
+										<span className="muted text-xs">Chapter</span>
+										<select className="input input--sm" value={draft.chapter} onChange={(e) => setDraft({ ...draft, chapter: e.target.value })}>
+											{FEE_CHAPTERS.map((ch) => (
+												<option key={ch} value={ch}>
+													{chapterLabel(ch)}
+												</option>
+											))}
+										</select>
+									</label>
+								</div>
+								<label>
+									<span className="muted text-xs">Sort order</span>
+									<input className="input input--sm" inputMode="numeric" value={draft.sortOrder} onChange={(e) => setDraft({ ...draft, sortOrder: e.target.value })} />
+								</label>
+								<p className="muted text-xs">Kind and chapter are fixed after creation; the key is what the portal and stages look the fee up by. To retire an item later, uncheck Active — issued invoices keep the line.</p>
+							</>
+						)}
 						<label>
 							<span className="muted text-xs">Name (ops)</span>
-							<input className="input input--sm" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+							<input className="input input--sm" value={draft.name} onChange={(e) => (sheet.mode === "create" ? onDraftName(e.target.value) : setDraft({ ...draft, name: e.target.value }))} />
 						</label>
 						<label>
 							<span className="muted text-xs">What the client reads on the invoice</span>
@@ -586,14 +719,14 @@ export function EnterpriseFeeSchedule() {
 						</label>
 						<label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
 							<input type="checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} />
-							<span className="text-sm">Active</span>
+							<span className="text-sm">Active — uncheck to retire; the item stops charging but issued invoices keep the line</span>
 						</label>
 						<div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-							<button type="button" className="btn btn--sm btn--ghost" onClick={() => setEditing(null)} disabled={saving}>
+							<button type="button" className="btn btn--sm btn--ghost" onClick={closeSheet} disabled={saving}>
 								Cancel
 							</button>
-							<button type="button" className="btn btn--sm btn--primary" onClick={() => void saveItem()} disabled={saving || !draft.name.trim() || !draft.clientLabel.trim()}>
-								{saving ? "Saving…" : "Save"}
+							<button type="button" className="btn btn--sm btn--primary" onClick={() => void saveItem()} disabled={saving || !sheetValid}>
+								{saving ? "Saving…" : sheet.mode === "create" ? "Add item" : "Save"}
 							</button>
 						</div>
 						{sheetError && <p className="cn-assign__error">{sheetError}</p>}

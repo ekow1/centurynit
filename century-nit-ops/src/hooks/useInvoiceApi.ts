@@ -91,24 +91,41 @@ function toIso(date?: string) {
 	return `${date}T00:00:00.000Z`;
 }
 
+const PAGE = 200;
+
 export function useInvoiceApi() {
 	const { hasPermission } = useOpsAuth();
 	const [invoices, setInvoices] = useState<Invoice[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	/**
+	 * Whether this user may read invoices at all. Without it a permissionless
+	 * role and an empty ledger look identical — "nobody is behind" stated as
+	 * fact when the page simply never saw the data.
+	 */
+	const [permitted, setPermitted] = useState(true);
 
 	const refresh = useCallback(async () => {
 		if (!hasPermission("invoices")) {
 			setInvoices([]);
+			setPermitted(false);
 			setError(null);
 			setLoading(false);
 			return;
 		}
+		setPermitted(true);
 		setLoading(true);
 		setError(null);
 		try {
-			const { invoices: rows } = await apiListInvoices({ limit: 200 });
-			setInvoices(rows.map(adaptInvoice));
+			// Walk every page so the behind/coverage tiles count the whole
+			// ledger, not a silent first-200 sample of it.
+			const all: ApiInvoice[] = [];
+			for (let offset = 0; ; offset += PAGE) {
+				const page = await apiListInvoices({ limit: PAGE, offset });
+				all.push(...page.invoices);
+				if (all.length >= page.total || page.invoices.length < PAGE) break;
+			}
+			setInvoices(all.map(adaptInvoice));
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to load invoices");
 		} finally {
@@ -221,6 +238,7 @@ export function useInvoiceApi() {
 		invoices,
 		loading,
 		error,
+		permitted,
 		refresh,
 		createInvoice,
 		issueInvoice,

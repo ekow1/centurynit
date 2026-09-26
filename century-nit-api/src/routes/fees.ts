@@ -2,6 +2,7 @@ import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { validationHook } from "../middleware/error.js";
 import { z } from "zod";
 import {
+	createFeeItemSchema,
 	destinationTariffSchema,
 	feeCatalogueSchema,
 	feeItemSchema,
@@ -9,7 +10,7 @@ import {
 	updateFeeItemSchema,
 } from "century-nit-shared";
 import { requireAuth, requireCapability, requireMfa, type AuthVariables } from "../middleware/auth.js";
-import { feeCatalogue, listFeeItems, updateDestinationTariff, updateFeeItem } from "../services/fees.js";
+import { createFeeItem, feeCatalogue, listFeeItems, updateDestinationTariff, updateFeeItem } from "../services/fees.js";
 
 const router = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
@@ -41,6 +42,33 @@ router.openapi(
 		},
 	}),
 	async (c) => c.json({ items: await listFeeItems() }),
+);
+
+router.openapi(
+	createRoute({
+		method: "post",
+		path: "/items",
+		tags: ["Fees"],
+		summary: "Mint a fee item",
+		description:
+			"Creates a catalogue row. The caller supplies the key (a lowercase slug, " +
+			"frozen at creation — pricing code resolves items by literal key). A " +
+			"duplicate key is a 409, not an upsert. Retirement stays `active: false` " +
+			"so issued invoice lines keep resolving the key.",
+		middleware: [requireAuth, requireMfa, requireCapability("manage_settings")] as const,
+		request: {
+			body: { content: { "application/json": { schema: createFeeItemSchema } }, required: true },
+		},
+		responses: {
+			201: { content: { "application/json": { schema: feeItemSchema } }, description: "The item as created" },
+			409: { description: "The key is already taken" },
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const created = await createFeeItem(c.req.valid("json"), { opsUserId: staff.opsUserId, email: staff.email });
+		return c.json(created, 201);
+	},
 );
 
 router.openapi(

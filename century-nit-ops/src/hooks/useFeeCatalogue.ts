@@ -13,33 +13,46 @@ let cached: FeeCatalogue | null = null;
 let inflight: Promise<FeeCatalogue> | null = null;
 const listeners = new Set<(c: FeeCatalogue) => void>();
 
-async function load(force = false): Promise<FeeCatalogue> {
-	if (cached && !force) return cached;
-	if (!inflight) {
-		inflight = feesApi
-			.catalogue()
-			.then((c) => {
-				cached = c;
-				listeners.forEach((fn) => fn(c));
-				return c;
-			})
-			.finally(() => {
-				inflight = null;
-			});
-	}
-	return inflight;
+function fetchCatalogue(): Promise<FeeCatalogue> {
+	const p = feesApi
+		.catalogue()
+		.then((c) => {
+			cached = c;
+			listeners.forEach((fn) => fn(c));
+			return c;
+		})
+		.finally(() => {
+			if (inflight === p) inflight = null;
+		});
+	inflight = p;
+	return p;
 }
 
-export function useFeeCatalogue(): { catalogue: FeeCatalogue | null; reload: () => Promise<FeeCatalogue> } {
+async function load(force = false): Promise<FeeCatalogue> {
+	if (cached && !force) return cached;
+	if (inflight) {
+		if (!force) return inflight;
+		// A forced reload must not resolve with a request that started before
+		// it — that would hand back pre-save data. Chain the fresh fetch behind
+		// the one already running.
+		return inflight.then(fetchCatalogue, fetchCatalogue);
+	}
+	return fetchCatalogue();
+}
+
+export function useFeeCatalogue(): { catalogue: FeeCatalogue | null; error: string | null; reload: () => Promise<FeeCatalogue> } {
 	const [catalogue, setCatalogue] = useState<FeeCatalogue | null>(cached);
+	const [error, setError] = useState<string | null>(null);
 	useEffect(() => {
 		listeners.add(setCatalogue);
-		if (!cached) load().catch(() => {});
+		if (!cached) {
+			load().catch((e) => setError(e instanceof Error ? e.message : "Could not load the fee schedule"));
+		}
 		return () => {
 			listeners.delete(setCatalogue);
 		};
 	}, []);
-	return { catalogue, reload: () => load(true) };
+	return { catalogue, error, reload: () => load(true) };
 }
 
 /** The chapter an invoice type's optional items belong to. */

@@ -18,6 +18,25 @@ import { rankOfRole } from "../services/roles.js";
 
 export const rolesRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
+/**
+ * A role editor may only hand out permissions their own role holds — without
+ * this, "copy from Super Administrator" (or a hand-built PUT) mints a role
+ * more powerful than its creator, and any manage_roles holder self-promotes.
+ * The root role holds everything implicitly, so it is exempt.
+ */
+function assertWithinCeiling(staff: { role: string; permissions: readonly string[] }, permissions: readonly string[]): void {
+	if (staff.role === "super_admin") return;
+	const held = new Set(staff.permissions);
+	const over = permissions.filter((p) => !held.has(p));
+	if (over.length > 0) {
+		throw new HttpError(
+			403,
+			"FORBIDDEN",
+			`A role cannot be granted permissions your own role does not hold: ${over.join(", ")}`,
+		);
+	}
+}
+
 const roleSchema = z.object({
 	id: z.string(),
 	name: z.string(),
@@ -102,6 +121,7 @@ rolesRouter.openapi(
 		const staff = c.get("staff")!;
 		const ceiling = await rankOfRole(staff.role);
 		const rank = Math.min(body.rank ?? DEFAULT_CUSTOM_ROLE_RANK, staff.role === "super_admin" ? 99 : Math.max(1, ceiling - 1));
+		assertWithinCeiling(staff, body.permissions);
 		try {
 			const role = await createRole({
 				id: body.id,
@@ -159,6 +179,9 @@ rolesRouter.openapi(
 		const ceiling = await rankOfRole(staff.role);
 		if (body.rank !== undefined && staff.role !== "super_admin" && body.rank >= ceiling) {
 			throw new HttpError(400, "VALIDATION_ERROR", "A role cannot be ranked at or above your own.");
+		}
+		if (body.permissions !== undefined) {
+			assertWithinCeiling(staff, body.permissions);
 		}
 		try {
 			const role = await updateRole(id, {

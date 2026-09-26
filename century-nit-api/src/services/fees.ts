@@ -13,6 +13,7 @@ import {
 	type StagePrices,
 	defaultStagePrices,
 	type PostArrivalFrequency,
+	type CreateFeeItem,
 	type ServiceFeeSplit,
 	type UpdateDestinationTariff,
 	type UpdateFeeItem,
@@ -58,6 +59,45 @@ export async function listFeeItems(): Promise<FeeItem[]> {
 export async function activeFeeItem(key: string): Promise<FeeItem | null> {
 	const [row] = await db.select().from(feeItems).where(eq(feeItems.key, key)).limit(1);
 	return row && row.active ? serializeItem(row) : null;
+}
+
+/**
+ * Mint a catalogue item. The key is caller-supplied and frozen at creation —
+ * pricing code resolves items by literal key, so a rename would silently
+ * break lookups. A duplicate key is a conflict, not an upsert.
+ */
+export async function createFeeItem(
+	input: CreateFeeItem,
+	actor: { opsUserId?: string | null; email?: string | null },
+): Promise<FeeItem> {
+	const [existing] = await db.select({ key: feeItems.key }).from(feeItems).where(eq(feeItems.key, input.key)).limit(1);
+	if (existing) {
+		throw new HttpError(409, "FEE_ITEM_KEY_TAKEN", `A fee item with the key "${input.key}" already exists`);
+	}
+	const [inserted] = await db
+		.insert(feeItems)
+		.values({
+			key: input.key,
+			kind: input.kind,
+			chapter: input.chapter,
+			name: input.name,
+			clientLabel: input.clientLabel,
+			description: input.description ?? null,
+			amountCents: input.amountCents,
+			optional: input.optional,
+			active: input.active,
+			sortOrder: input.sortOrder,
+		})
+		.returning();
+	await db.insert(settingsAudit).values({
+		key: `fee:${input.key}`.slice(0, 64),
+		actorId: actor.opsUserId ?? null,
+		actorEmail: actor.email ?? null,
+		action: "Created fee item",
+		oldValueMasked: null,
+		newValueMasked: `kind=${input.kind}, chapter=${input.chapter}, amountCents=${input.amountCents}, optional=${input.optional}, active=${input.active}`,
+	});
+	return serializeItem(inserted);
 }
 
 export async function updateFeeItem(
@@ -189,7 +229,12 @@ export async function postArrivalCatalogue(): Promise<PostArrivalCatalogue> {
 	};
 	return {
 		durations: durations.length > 0 ? [...new Set(durations)].sort((a, b) => a - b) : d.durations,
-		frequencies: frequencies.length > 0 ? [...new Set(frequencies)] : d.frequencies,
+		frequencies:
+			frequencies.length > 0
+				? [...new Set(frequencies)].sort(
+						(a, b) => POST_ARRIVAL_FREQUENCIES.indexOf(a) - POST_ARRIVAL_FREQUENCIES.indexOf(b),
+					)
+				: d.frequencies,
 		graceDays: await days("POST_ARRIVAL_GRACE_DAYS", d.graceDays, 180),
 		remindDays: await days("POST_ARRIVAL_REMIND_DAYS", d.remindDays, 60),
 		interestPct: await days("POST_ARRIVAL_INTEREST_PCT", d.interestPct, 100),

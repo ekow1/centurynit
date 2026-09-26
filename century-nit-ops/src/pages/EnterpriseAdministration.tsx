@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { CmsManager } from "./CmsManager";
 import { useOpsAuth, ROLE_LABELS, type OpsRole } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
 import { OPS_BRANCHES, staffBranchName } from "century-nit-core/ops";
 import { ApiError, staffApi, notificationsApi, auditApi, type NotificationLogItem, type AuditEvent, type AuthPolicy, type NotificationEventCatalogueItem, type NotificationHealth, type NotificationPreferences } from "century-nit-core/api";
-import { MODULE_GROUPS, API_PREFIX, CAPABILITIES, defaultPermissionsOf, type Capability, type OpsModule, type SystemRole } from "century-nit-shared";
+import { MODULE_GROUPS, ALL_OPS_MODULES, API_PREFIX, CAPABILITIES, capabilitySchema, defaultPermissionsOf, type Capability, type OpsModule, type SystemRole } from "century-nit-shared";
 import { apiFetch, getAuthSettings, updateAuthSettings as updateAuthSettingsApi, type AuthSettingsResponse } from "../lib/api";
 import { PlatformSettings } from "./PlatformSettings";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
@@ -375,7 +375,26 @@ interface DynamicRole {
 
 function UsersAndRoles() {
 	const { opsUser, opsRole, roleCatalog, refreshPermissions, hasCapability } = useOpsAuth();
-	const [activeSubTab, setActiveSubTab] = useState<"staff" | "matrix" | "invites">("staff");
+	// The sub-tab and the selected role live in the URL so the matrix view is
+	// linkable and survives a refresh — ?view=matrix&role=manager.
+	const [params, setParams] = useSearchParams();
+	const activeSubTab: "staff" | "matrix" | "invites" = params.get("view") === "matrix" || params.get("view") === "invites" ? (params.get("view") as "matrix" | "invites") : "staff";
+	const selectedRoleId = params.get("role") ?? "super_admin";
+	const setActiveSubTab = (id: "staff" | "matrix" | "invites") =>
+		setParams((prev) => {
+			const n = new URLSearchParams(prev);
+			if (id === "staff") n.delete("view");
+			else n.set("view", id);
+			return n;
+		});
+	const setSelectedRoleId = (id: string) =>
+		setParams((prev) => {
+			const n = new URLSearchParams(prev);
+			n.set("view", "matrix");
+			n.set("role", id);
+			return n;
+		});
+	const canManageRoles = hasCapability("manage_roles");
 	const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
 	const [unownedConvs, setUnownedConvs] = useState(0);
 	const [revokingSessions, setRevokingSessions] = useState(false);
@@ -387,7 +406,6 @@ function UsersAndRoles() {
 	// Seeded from the auth context's copy so the matrix is not blank while
 	// this page's own fetch is in flight; the fetch is the fresh one.
 	const [roles, setRoles] = useState<DynamicRole[]>(roleCatalog);
-	const [selectedRoleId, setSelectedRoleId] = useState<string>("super_admin");
 	const [invitations, setInvitations] = useState<
 		{ id: string; email: string; name: string | null; role: string; status: string; expiresAt: string; acceptUrl?: string }[]
 	>([]);
@@ -602,6 +620,7 @@ function UsersAndRoles() {
 	}
 
 	async function togglePermission(roleId: string, module: OpsModule | Capability, enabled: boolean) {
+		if (!canManageRoles) return;
 		const target = roles.find((r) => r.id === roleId);
 		if (!target || target.id === "super_admin") return;
 
@@ -630,6 +649,7 @@ function UsersAndRoles() {
 	}
 
 	async function bulkSetRolePermissions(roleId: string, moduleIds: string[], grant: boolean) {
+		if (!canManageRoles) return;
 		const target = roles.find((r) => r.id === roleId);
 		if (!target || target.id === "super_admin") return;
 
@@ -659,6 +679,15 @@ function UsersAndRoles() {
 	}
 
 	async function saveRank(roleId: string, rank: number) {
+		if (!Number.isInteger(rank) || rank < 1 || rank > 99) {
+			setError("Rank must be a whole number between 1 and 99.");
+			return;
+		}
+		// The server's rule: below your own rank (the root role exempt).
+		if (opsRole !== "super_admin" && rank >= (roles.find((r) => r.id === opsRole)?.rank ?? 0)) {
+			setError("A role cannot be ranked at or above your own.");
+			return;
+		}
 		try {
 			const saved = await apiFetch<DynamicRole>(`${API_PREFIX}/roles/${roleId}`, { method: "PUT", body: JSON.stringify({ rank }) });
 			setRoles((prev) => prev.map((r) => (r.id === roleId ? saved : r)));
@@ -689,27 +718,38 @@ function UsersAndRoles() {
 		}
 	}
 
+	const ROLE_ID_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/;
+	const normalizedRoleId = newRoleDraft.id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+	const roleIdTaken = roles.some((r) => r.id === normalizedRoleId);
+	const roleIdError = !newRoleDraft.id.trim()
+		? null
+		: !ROLE_ID_RE.test(normalizedRoleId)
+			? "At least 2 characters — lowercase letters, digits, _ and -, starting with a letter or digit."
+			: roleIdTaken
+				? "That slug is already taken by another role."
+				: null;
+
 	async function handleCreateRole(e: React.FormEvent) {
 		e.preventDefault();
-		if (!newRoleDraft.name.trim() || !newRoleDraft.id.trim()) return;
+		if (!newRoleDraft.name.trim() || !newRoleDraft.id.trim() || roleIdError) return;
 
 		try {
 			await apiFetch(`${API_PREFIX}/roles`, {
 				method: "POST",
 				body: JSON.stringify({
-					id: newRoleDraft.id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_"),
+					id: normalizedRoleId,
 					name: newRoleDraft.name.trim(),
 					description: newRoleDraft.description.trim() || undefined,
-					permissions: newRoleDraft.permissions,
+					// Ceiling: never hand out a permission the creator does not hold.
+					permissions: ceilingFilter(newRoleDraft.permissions),
 				}),
 			});
 			say(`Custom role "${newRoleDraft.name}" created successfully.`);
 			void refreshPermissions();
 			setCreatingRole(false);
-			const newId = newRoleDraft.id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_");
 			setNewRoleDraft({ id: "", name: "", description: "", permissions: ["dashboard"] });
 			await refresh();
-			setSelectedRoleId(newId);
+			setSelectedRoleId(normalizedRoleId);
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Failed to create role");
 		}
@@ -734,15 +774,23 @@ function UsersAndRoles() {
 		);
 	}
 
-	const allModuleIds = useMemo(() => {
-		const list: OpsModule[] = [];
-		for (const g of MODULE_GROUPS) {
-			for (const m of g.modules) {
-				list.push(m.id);
-			}
-		}
-		return list;
-	}, []);
+	// The schema is the single source of truth — MODULE_GROUPS is checked
+	// against it at load, and counts run off this list, never a hand count.
+	const allModuleIds = useMemo(() => [...ALL_OPS_MODULES], []);
+	const moduleIdSet = useMemo(() => new Set<string>(ALL_OPS_MODULES), []);
+	const capabilityIdSet = useMemo(() => new Set<string>(capabilitySchema.options), []);
+	const moduleCountOf = useCallback((perms: readonly string[] | undefined) => (perms ?? []).filter((p) => moduleIdSet.has(p)).length, [moduleIdSet]);
+	const capCountOf = useCallback((perms: readonly string[] | undefined) => (perms ?? []).filter((p) => capabilityIdSet.has(p)).length, [capabilityIdSet]);
+	// What the signed-in role holds — the ceiling a template copy or a new
+	// role may hand out (the server enforces the same subset rule).
+	const myPermissions = useMemo(() => {
+		if (opsRole === "super_admin") return null; // unlimited
+		return new Set(roles.find((r) => r.id === opsRole)?.permissions ?? []);
+	}, [opsRole, roles]);
+	const ceilingFilter = useCallback(
+		(perms: readonly string[]) => (myPermissions === null ? [...perms] : perms.filter((p) => myPermissions.has(p))),
+		[myPermissions],
+	);
 
 	const filteredModuleGroups = useMemo(() => {
 		if (!moduleSearch.trim()) return MODULE_GROUPS;
@@ -759,6 +807,15 @@ function UsersAndRoles() {
 		})).filter((g) => g.modules.length > 0);
 	}, [moduleSearch]);
 
+	// The one search field filters both lists — modules and capabilities.
+	const filteredCapabilities = useMemo(() => {
+		if (!moduleSearch.trim()) return CAPABILITIES;
+		const q = moduleSearch.toLowerCase();
+		return CAPABILITIES.filter(
+			(c) => c.label.toLowerCase().includes(q) || c.id.toLowerCase().includes(q) || c.hint.toLowerCase().includes(q) || c.group.toLowerCase().includes(q),
+		);
+	}, [moduleSearch]);
+
 	const filteredRoles = useMemo(() => {
 		if (!roleSearch.trim()) return roles;
 		const q = roleSearch.toLowerCase();
@@ -771,10 +828,13 @@ function UsersAndRoles() {
 
 	const selectedRoleStats = useMemo(() => {
 		const total = allModuleIds.length;
-		const count = !selectedRole ? 0 : selectedRole.id === "super_admin" ? total : (selectedRole.permissions?.length ?? 0);
+		// Modules only — counting capabilities against the module total put a
+		// manager at "38 / 30 modules (127 %)".
+		const count = !selectedRole ? 0 : selectedRole.id === "super_admin" ? total : moduleCountOf(selectedRole.permissions);
+		const caps = !selectedRole ? 0 : selectedRole.id === "super_admin" ? CAPABILITIES.length : capCountOf(selectedRole.permissions);
 		const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-		return { count, total, pct };
-	}, [selectedRole, allModuleIds]);
+		return { count, total, caps, pct };
+	}, [selectedRole, allModuleIds, moduleCountOf, capCountOf]);
 
 	const rows = useMemo(() => {
 		return staff.filter(
@@ -785,6 +845,8 @@ function UsersAndRoles() {
 					u.email.toLowerCase().includes(search.toLowerCase())),
 		);
 	}, [staff, roleFilter, search]);
+
+	const staffOnRole = useCallback((roleId: string) => staff.filter((u) => u.role === roleId).length, [staff]);
 
 	const pending = useMemo(() => {
 		return invitations.filter((i) => i.status === "PENDING");
@@ -819,9 +881,9 @@ function UsersAndRoles() {
 	const moduleCountFor = useCallback(
 		(roleId: string) => {
 			if (roleId === "super_admin") return allModuleIds.length;
-			return roles.find((r) => r.id === roleId)?.permissions.length ?? 0;
+			return moduleCountOf(roles.find((r) => r.id === roleId)?.permissions);
 		},
-		[roles, allModuleIds],
+		[roles, allModuleIds, moduleCountOf],
 	);
 
 	async function revokeAllSessions(u: StaffRow) {
@@ -861,7 +923,7 @@ function UsersAndRoles() {
 				<div className="cn-scaffold__chips" role="tablist" aria-label="Staff sections">
 					{([
 						["staff", "Directory", staff.length],
-						["matrix", "Role matrix", null],
+						["matrix", "Roles & permissions", null],
 						["invites", `Invites`, pending.length],
 					] as const).map(([id, label, n]) => {
 						const on = activeSubTab === id;
@@ -978,10 +1040,10 @@ function UsersAndRoles() {
 											<select
 												id="inv-role"
 												className="input input--full-border"
-												value={draft.role}
+												value={(inviteable as string[]).includes(draft.role) ? draft.role : (inviteable[0] ?? draft.role)}
 												onChange={(e) => setDraft({ ...draft, role: e.target.value as OpsRole })}
 											>
-												{roles.map((r) => (
+												{roles.filter((r) => (inviteable as string[]).includes(r.id)).map((r) => (
 													<option key={r.id} value={r.id}>{r.name}</option>
 												))}
 											</select>
@@ -1510,6 +1572,8 @@ function UsersAndRoles() {
 									type="button"
 									className="btn btn--primary btn--sm"
 									style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem" }}
+									disabled={!canManageRoles}
+									title={canManageRoles ? undefined : "Your role cannot manage roles"}
 									onClick={() => setCreatingRole(true)}
 								>
 									+ Add Role
@@ -1529,21 +1593,20 @@ function UsersAndRoles() {
 								{filteredRoles.map((r) => {
 									const isSuper = r.id === "super_admin";
 									const isSelected = r.id === selectedRoleId;
-									const stats = isSuper
-										? { count: allModuleIds.length, total: allModuleIds.length, pct: 100 }
-										: {
-												count: r.permissions?.length ?? 0,
-												total: allModuleIds.length,
-												pct: Math.round(((r.permissions?.length ?? 0) / (allModuleIds.length || 1)) * 100),
-										  };
-									const staffCount = staff.filter((u) => u.role === r.id).length;
+									const mods = isSuper ? allModuleIds.length : moduleCountOf(r.permissions);
+									const caps = isSuper ? CAPABILITIES.length : capCountOf(r.permissions);
+									const stats = { count: mods, total: allModuleIds.length, pct: Math.round((mods / (allModuleIds.length || 1)) * 100) };
+									const staffCount = staffOnRole(r.id);
 
 									return (
 										<button
 											key={r.id}
 											type="button"
 											className={`perm-role-nav-item${isSelected ? " perm-role-nav-item--active" : ""}`}
-											onClick={() => setSelectedRoleId(r.id)}
+											onClick={() => {
+												setSelectedRoleId(r.id);
+												setModuleSearch("");
+											}}
 										>
 											<div className="perm-role-nav-item__head">
 												<strong style={{ fontSize: "var(--text-sm)" }}>
@@ -1565,8 +1628,8 @@ function UsersAndRoles() {
 											</div>
 
 											<div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-xs)", marginTop: "0.35rem" }}>
-												<span className="muted">{staffCount} {staffCount === 1 ? "staff" : "staff"}</span>
-												<span className="mono muted">{stats.count}/{stats.total} modules</span>
+												<span className="muted">{staffCount} staff</span>
+												<span className="mono muted">{stats.count}/{stats.total} modules · {caps} caps</span>
 											</div>
 
 											<div className="perm-progress-bar" style={{ marginTop: "0.35rem" }}>
@@ -1612,27 +1675,46 @@ function UsersAndRoles() {
 									</code>
 								</div>
 
-								{selectedRole.id !== "super_admin" && (
+								{selectedRole.id !== "super_admin" && canManageRoles && (
 									<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
 										<button
 											type="button"
 											className="perm-quick-btn"
-											onClick={() => bulkSetRolePermissions(selectedRole.id, allModuleIds, true)}
+											onClick={() =>
+												confirm(
+													`Grant all ${allModuleIds.length} modules to "${selectedRole.name}"?`,
+													`Every page becomes visible to this role — capabilities are not granted here. ${staffOnRole(selectedRole.id)} staff member(s) currently hold it.`,
+													() => void bulkSetRolePermissions(selectedRole.id, allModuleIds, true),
+												)
+											}
 										>
-											Grant All ({allModuleIds.length})
+											Grant all modules ({allModuleIds.length})
 										</button>
 										<button
 											type="button"
 											className="perm-quick-btn"
-											onClick={() => bulkSetRolePermissions(selectedRole.id, allModuleIds, false)}
+											onClick={() =>
+												confirm(
+													`Revoke every permission from "${selectedRole.name}"?`,
+													`All ${allModuleIds.length} modules and every capability are removed — staff on it see an empty console. ${staffOnRole(selectedRole.id)} staff member(s) currently hold it.`,
+													() => void bulkSetRolePermissions(selectedRole.id, [...allModuleIds, ...CAPABILITIES.map((c) => c.id)], false),
+													true,
+												)
+											}
 										>
-											Revoke All
+											Revoke everything
 										</button>
 										{selectedRole.isSystem && (
 											<button
 												type="button"
 												className="perm-quick-btn"
-												onClick={() => handleResetRoleDefaults(selectedRole.id)}
+												onClick={() =>
+													confirm(
+														`Reset "${selectedRole.name}" to system defaults?`,
+														`Replaces its current permission list with the factory one. ${staffOnRole(selectedRole.id)} staff member(s) currently hold it.`,
+														() => void handleResetRoleDefaults(selectedRole.id),
+													)
+												}
 												title="Reset to factory system defaults"
 											>
 												Reset Defaults
@@ -1662,13 +1744,13 @@ function UsersAndRoles() {
 										fontSize: "var(--text-xs)",
 									}}
 								>
-									<strong>Root Authority:</strong> System Administrator always retains full, un-revocable permissions across all 28 modules, security settings, and data assets.
+									<strong>Root Authority:</strong> System Administrator always retains full, un-revocable permissions across all {allModuleIds.length} modules and {CAPABILITIES.length} capabilities, security settings, and data assets.
 								</div>
 							) : (
 								<div style={{ marginTop: "1rem" }}>
 									<div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-xs)" }}>
 										<span className="muted">Scope Completeness</span>
-										<span className="mono"><strong>{selectedRoleStats.count} / {selectedRoleStats.total} modules granted ({selectedRoleStats.pct}%)</strong></span>
+										<span className="mono"><strong>{selectedRoleStats.count} / {selectedRoleStats.total} modules ({selectedRoleStats.pct}%) · {selectedRoleStats.caps} / {CAPABILITIES.length} capabilities</strong></span>
 									</div>
 									<div className="perm-progress-bar" style={{ marginTop: "0.35rem" }}>
 										<div className="perm-progress-fill" style={{ width: `${selectedRoleStats.pct}%` }} />
@@ -1697,33 +1779,37 @@ function UsersAndRoles() {
 								</span>
 							</div>
 							<p className="muted text-xs" style={{ marginBottom: "0.75rem" }}>
-								A module lets a role see a page; a capability lets it act. The server checks both from this list.
+								A module lets a role see a page; a capability lets it act. The server checks both from this list.{!canManageRoles && " Read-only for your role — editing needs the manage_roles capability."}
 							</p>
-							{Array.from(new Set(CAPABILITIES.map((c) => c.group))).map((group) => (
-								<div key={group} style={{ marginBottom: "0.75rem" }}>
-									<p className="text-xs mono muted" style={{ textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.35rem" }}>{group}</p>
-									<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(16rem, 1fr))", gap: "0.35rem 1rem" }}>
-										{CAPABILITIES.filter((c) => c.group === group).map((cap) => {
-											const isSuper = selectedRole.id === "super_admin";
-											const on = isSuper || (selectedRole.permissions ?? []).includes(cap.id);
-											return (
-												<label key={cap.id} className="text-sm" style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }} title={cap.hint}>
-													<input
-														type="checkbox"
-														checked={on}
-														disabled={isSuper}
-														onChange={(e) => togglePermission(selectedRole.id, cap.id, e.target.checked)}
-													/>
-													<span>
-														{cap.label}
-														{cap.hint && <span className="muted text-xs" style={{ display: "block" }}>{cap.hint}</span>}
-													</span>
-												</label>
-											);
-										})}
+							{filteredCapabilities.length === 0 ? (
+								<p className="muted text-xs">No capabilities match "{moduleSearch}".</p>
+							) : (
+								Array.from(new Set(filteredCapabilities.map((c) => c.group))).map((group) => (
+									<div key={group} style={{ marginBottom: "0.75rem" }}>
+										<p className="text-xs mono muted" style={{ textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.35rem" }}>{group}</p>
+										<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(16rem, 1fr))", gap: "0.35rem 1rem" }}>
+											{filteredCapabilities.filter((c) => c.group === group).map((cap) => {
+												const isSuper = selectedRole.id === "super_admin";
+												const on = isSuper || (selectedRole.permissions ?? []).includes(cap.id);
+												return (
+													<label key={cap.id} className="text-sm" style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }} title={cap.hint}>
+														<input
+															type="checkbox"
+															checked={on}
+															disabled={isSuper || !canManageRoles}
+															onChange={(e) => togglePermission(selectedRole.id, cap.id, e.target.checked)}
+														/>
+														<span>
+															{cap.label}
+															{cap.hint && <span className="muted text-xs" style={{ display: "block" }}>{cap.hint}</span>}
+														</span>
+													</label>
+												);
+											})}
+										</div>
 									</div>
-								</div>
-							))}
+								))
+							)}
 							{!selectedRole.isSystem && (
 								<div className="mt-3" style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
 									<label className="text-sm" htmlFor="role-rank">Rank</label>
@@ -1736,9 +1822,11 @@ function UsersAndRoles() {
 										style={{ width: "6rem" }}
 										defaultValue={selectedRole.rank}
 										key={`${selectedRole.id}-${selectedRole.rank}`}
+										disabled={!canManageRoles}
 										onBlur={(e) => {
 											const next = Number(e.target.value);
-											if (Number.isFinite(next) && next !== selectedRole.rank) void saveRank(selectedRole.id, next);
+											if (next !== selectedRole.rank) void saveRank(selectedRole.id, next);
+											else e.target.value = String(selectedRole.rank);
 										}}
 									/>
 									<span className="muted text-xs">Who may invite or change this role: anyone holding "invite staff" with a higher rank. Manager is 70, coordinator 50, consultant 30.</span>
@@ -1749,7 +1837,7 @@ function UsersAndRoles() {
 						{/* Categorized Permissions Cards */}
 						{filteredModuleGroups.length === 0 ? (
 							<div className="card" style={{ padding: "2rem", textAlign: "center" }}>
-								<p className="muted">No capabilities match "{moduleSearch}".</p>
+								<p className="muted">No modules match "{moduleSearch}".</p>
 							</div>
 						) : (
 							filteredModuleGroups.map((group) => {
@@ -1775,19 +1863,32 @@ function UsersAndRoles() {
 												<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
 													{grantedInGroup}/{groupIds.length}
 												</span>
-												{!isSuper && (
+												{!isSuper && canManageRoles && (
 													<div style={{ display: "flex", gap: "0.25rem" }}>
 														<button
 															type="button"
 															className="perm-quick-btn"
-															onClick={() => bulkSetRolePermissions(selectedRole.id, groupIds, true)}
+															onClick={() =>
+																confirm(
+																	`Grant all of "${group.group}" to "${selectedRole.name}"?`,
+																	`${groupIds.length} modules — ${staffOnRole(selectedRole.id)} staff member(s) hold this role.`,
+																	() => void bulkSetRolePermissions(selectedRole.id, groupIds, true),
+																)
+															}
 														>
 															+ Group
 														</button>
 														<button
 															type="button"
 															className="perm-quick-btn"
-															onClick={() => bulkSetRolePermissions(selectedRole.id, groupIds, false)}
+															onClick={() =>
+																confirm(
+																	`Revoke all of "${group.group}" from "${selectedRole.name}"?`,
+																	`${groupIds.length} modules — ${staffOnRole(selectedRole.id)} staff member(s) hold this role.`,
+																	() => void bulkSetRolePermissions(selectedRole.id, groupIds, false),
+																	true,
+																)
+															}
 														>
 															- Group
 														</button>
@@ -1821,7 +1922,7 @@ function UsersAndRoles() {
 																<input
 																	type="checkbox"
 																	checked={hasIt}
-																	disabled={isSuper}
+																	disabled={isSuper || !canManageRoles}
 																	onChange={(e) => togglePermission(selectedRole.id, mod.id, e.target.checked)}
 																	aria-label={`Toggle ${mod.label} for ${selectedRole.name}`}
 																/>
@@ -1864,14 +1965,16 @@ function UsersAndRoles() {
 									onChange={(e) => {
 										const selected = roles.find((r) => r.id === e.target.value);
 										if (selected) {
+											// Ceiling: a template can only carry what the creator holds —
+											// the server enforces the same subset rule.
 											setNewRoleDraft((prev) => ({
 												...prev,
-												permissions: [...selected.permissions],
+												permissions: ceilingFilter(selected.permissions),
 											}));
 										} else if (e.target.value === "all") {
 											setNewRoleDraft((prev) => ({
 												...prev,
-												permissions: [...allModuleIds],
+												permissions: ceilingFilter(allModuleIds),
 											}));
 										} else if (e.target.value === "none") {
 											setNewRoleDraft((prev) => ({
@@ -1882,10 +1985,10 @@ function UsersAndRoles() {
 									}}
 								>
 									<option value="none">Custom / Blank (Dashboard only)</option>
-									<option value="all">Full Access (All 28 Modules)</option>
+									<option value="all">All {allModuleIds.length} modules — no capabilities</option>
 									{roles.map((r) => (
 										<option key={r.id} value={r.id}>
-											Copy from {r.name} ({r.permissions.length} modules)
+											Copy from {r.name} ({moduleCountOf(r.permissions)} modules · {capCountOf(r.permissions)} capabilities)
 										</option>
 									))}
 								</select>
@@ -1922,7 +2025,9 @@ function UsersAndRoles() {
 										value={newRoleDraft.id}
 										onChange={(e) => setNewRoleDraft({ ...newRoleDraft, id: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "_") })}
 										required
+										aria-invalid={Boolean(roleIdError)}
 									/>
+									{roleIdError && <p className="muted text-xs" style={{ color: "#b91c1c", margin: "0.25rem 0 0" }}>{roleIdError}</p>}
 								</div>
 							</div>
 
@@ -1941,13 +2046,13 @@ function UsersAndRoles() {
 							<div className="field" style={{ borderTop: "var(--thin)", paddingTop: "1rem", marginTop: "0.5rem" }}>
 								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
 									<label style={{ margin: 0, fontWeight: 700 }}>
-										Assign Permissions ({newRoleDraft.permissions.length} selected)
+										Modules ({moduleCountOf(newRoleDraft.permissions)} selected)
 									</label>
 									<div style={{ display: "flex", gap: "0.3rem" }}>
 										<button
 											type="button"
 											className="perm-quick-btn"
-											onClick={() => setNewRoleDraft((prev) => ({ ...prev, permissions: [...allModuleIds] }))}
+											onClick={() => setNewRoleDraft((prev) => ({ ...prev, permissions: ceilingFilter(allModuleIds) }))}
 										>
 											Select All
 										</button>
@@ -1981,7 +2086,7 @@ function UsersAndRoles() {
 																if (allSelected) {
 																	for (const id of groupIds) current.delete(id);
 																} else {
-																	for (const id of groupIds) current.add(id);
+																	for (const id of ceilingFilter(groupIds)) current.add(id);
 																}
 																return { ...prev, permissions: Array.from(current) };
 															});
@@ -1992,11 +2097,13 @@ function UsersAndRoles() {
 												</div>
 												{g.modules.map((m) => {
 													const checked = newRoleDraft.permissions.includes(m.id);
+													const beyondCeiling = myPermissions !== null && !myPermissions.has(m.id);
 													return (
-														<label key={m.id} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "var(--text-xs)", margin: "0.2rem 0", cursor: "pointer" }}>
+														<label key={m.id} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "var(--text-xs)", margin: "0.2rem 0", cursor: beyondCeiling ? "not-allowed" : "pointer", opacity: beyondCeiling ? 0.45 : 1 }} title={beyondCeiling ? "Your own role does not hold this" : undefined}>
 															<input
 																type="checkbox"
 																checked={checked}
+																disabled={beyondCeiling}
 																onChange={(e) => {
 																	const c = e.target.checked;
 																	setNewRoleDraft((prev) => ({
@@ -2017,6 +2124,38 @@ function UsersAndRoles() {
 								</div>
 							</div>
 
+							{/* Capabilities — what the new role may do, capped at the creator's own */}
+							<div className="field" style={{ borderTop: "var(--thin)", paddingTop: "1rem", marginTop: "0.5rem" }}>
+								<label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700 }}>
+									Capabilities ({capCountOf(newRoleDraft.permissions)} selected)
+								</label>
+								<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.25rem 1rem", maxHeight: "10rem", overflowY: "auto", border: "var(--thin)", padding: "0.75rem", background: "var(--surface-subtle, #fcfcfc)" }}>
+									{CAPABILITIES.map((c) => {
+										const checked = newRoleDraft.permissions.includes(c.id);
+										const beyondCeiling = myPermissions !== null && !myPermissions.has(c.id);
+										return (
+											<label key={c.id} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "var(--text-xs)", cursor: beyondCeiling ? "not-allowed" : "pointer", opacity: beyondCeiling ? 0.45 : 1 }} title={beyondCeiling ? "Your own role does not hold this capability" : c.hint}>
+												<input
+													type="checkbox"
+													checked={checked}
+													disabled={beyondCeiling}
+													onChange={(e) => {
+														const on = e.target.checked;
+														setNewRoleDraft((prev) => ({
+															...prev,
+															permissions: on
+																? [...new Set([...prev.permissions, c.id])]
+																: prev.permissions.filter((id) => id !== c.id),
+														}));
+													}}
+												/>
+												<span>{c.label}</span>
+											</label>
+										);
+									})}
+								</div>
+							</div>
+
 							<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
 								<button type="button" className="btn btn--ghost btn--sm" onClick={() => setCreatingRole(false)}>
 									Cancel
@@ -2026,7 +2165,7 @@ function UsersAndRoles() {
 										This role can see pages but can't act on anything yet — add capabilities after creating it, or it stays read-only.
 									</p>
 								)}
-								<button type="submit" className="btn btn--primary" disabled={!newRoleDraft.name.trim() || !newRoleDraft.id.trim()}>
+								<button type="submit" className="btn btn--primary" disabled={!newRoleDraft.name.trim() || !newRoleDraft.id.trim() || Boolean(roleIdError)}>
 									Create Role
 								</button>
 							</div>

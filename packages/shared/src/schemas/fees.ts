@@ -37,6 +37,36 @@ export const feeItemSchema = z.object({
 });
 export type FeeItem = z.infer<typeof feeItemSchema>;
 
+/**
+ * The catalogue item keys code refers to literally (`stage_visa`), so a key
+ * is chosen once at creation and frozen: lowercase slugs only, and the
+ * update schema deliberately has no `key` field.
+ */
+export const feeItemKeySchema = z
+	.string()
+	.min(2)
+	.max(64)
+	.regex(/^[a-z0-9_]+$/, "Lowercase letters, digits and underscores only (e.g. airport_pickup)");
+
+/** The journey chapter an item is raised in — same ids as `ChapterId`. */
+export const FEE_CHAPTERS = ["consult", "enrol", "apply", "visa", "depart", "done"] as const;
+export const feeChapterSchema = z.enum(FEE_CHAPTERS);
+export type FeeChapter = z.infer<typeof feeChapterSchema>;
+
+export const createFeeItemSchema = z.object({
+	key: feeItemKeySchema,
+	kind: feeKindSchema,
+	chapter: feeChapterSchema,
+	name: z.string().min(1).max(120),
+	clientLabel: z.string().min(1).max(160),
+	description: z.string().max(500).nullable().optional(),
+	amountCents: z.number().int().min(0).max(100_000_000),
+	optional: z.boolean().default(false),
+	active: z.boolean().default(true),
+	sortOrder: z.number().int().min(0).max(100_000).default(100),
+});
+export type CreateFeeItem = z.infer<typeof createFeeItemSchema>;
+
 export const updateFeeItemSchema = z.object({
 	name: z.string().min(1).max(120).optional(),
 	clientLabel: z.string().min(1).max(160).optional(),

@@ -135,7 +135,9 @@ export function EnterpriseInvoices() {
 		for (const r of filtered) by[bandOf(r.derived)].push(r);
 		by.approve.sort((a, b) => a.inv.issuedAt.localeCompare(b.inv.issuedAt));
 		by.overdue.sort((a, b) => (b.age ?? 0) - (a.age ?? 0));
-		by.open.sort((a, b) => (a.inv.dueAt ?? "9").localeCompare(b.inv.dueAt ?? "9"));
+		// Undated first — an invoice with no due date is at least as urgent as
+		// one dated ahead; "" sorts before every ISO date.
+		by.open.sort((a, b) => (a.inv.dueAt ?? "").localeCompare(b.inv.dueAt ?? ""));
 		by.settled.sort((a, b) => b.inv.issuedAt.localeCompare(a.inv.issuedAt));
 		const oldest = by.overdue[0]?.age ?? 0;
 		return (

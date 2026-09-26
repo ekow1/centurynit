@@ -674,6 +674,56 @@ export async function writeSetting(
 }
 
 /**
+ * Write several settings as one unit: every item is validated and prepared
+ * before the transaction opens, so a bad value cannot leave a half-applied
+ * batch, and the upserts + audit rows commit or roll back together.
+ */
+export async function writeSettingsBulk(
+	items: Array<{ key: SettingKey; value: string | null }>,
+	actor: { opsUserId: string; email: string; ip?: string | null },
+): Promise<void> {
+	await loadCache();
+	const prepared = items.map(({ key, value }) => {
+		const def = SETTING_DEFS[key];
+		if (!def) throw new Error(`Unknown setting key: ${key}`);
+		validateSettingValue(key, value);
+		const oldValue = cache.get(key) ?? null;
+		return {
+			key,
+			value,
+			encryptedValue: value ? encrypt(value) : null,
+			oldMasked: oldValue ? mask(oldValue, def.secret) : null,
+			newMasked: value ? mask(value, def.secret) : null,
+			action: value === null ? `Cleared ${key}` : `Updated ${key}`,
+		};
+	});
+
+	const now = new Date();
+	await db.transaction(async (tx) => {
+		for (const p of prepared) {
+			await tx
+				.insert(platformSettings)
+				.values({ key: p.key, encryptedValue: p.encryptedValue, updatedBy: actor.opsUserId })
+				.onConflictDoUpdate({
+					target: platformSettings.key,
+					set: { encryptedValue: p.encryptedValue, updatedBy: actor.opsUserId, updatedAt: now },
+				});
+			await tx.insert(settingsAudit).values({
+				key: p.key,
+				actorId: actor.opsUserId,
+				actorEmail: actor.email,
+				actorIp: actor.ip ?? null,
+				action: p.action,
+				oldValueMasked: p.oldMasked,
+				newValueMasked: p.newMasked,
+			});
+		}
+	});
+
+	for (const p of prepared) cache.set(p.key, p.value);
+}
+
+/**
  * Write a setting on behalf of the system (OAuth callbacks, token refreshes)
  * where no human actor is present. `updatedBy` is null and the audit entry is
  * recorded with a "system" actor email so the trail is still complete.
@@ -719,6 +769,57 @@ export async function writeSettingSystem(
 
 function validateSettingValue(key: SettingKey, value: string | null): void {
 	if (value == null) return;
+
+	/*
+	 * The finance keys are read with silent fallbacks — an out-of-range value
+	 * used to store fine and then read back as the default, so a bad save
+	 * looked like a successful save that reverted itself. Reject it at the
+	 * door instead, matching the bounds the readers apply.
+	 */
+	const intRange = (label: string, min: number, max: number) => {
+		const n = Number(value);
+		if (!Number.isInteger(n) || n < min || n > max) {
+			throw new Error(`${label} must be a whole number between ${min} and ${max}`);
+		}
+	};
+
+	if (key === "PLATFORM_EXCHANGE_RATE") {
+		const n = Number(value);
+		if (!Number.isFinite(n) || n <= 0 || n > 10000) {
+			throw new Error("The exchange rate must be a positive number under 10,000");
+		}
+	}
+	if (key === "SERVICE_FEE_DEPOSIT_PERCENT" || key === "SERVICE_FEE_PRE_DEPARTURE_PERCENT") {
+		intRange("The milestone percentage", 1, 98);
+	}
+	if (key === "SERVICE_FEE_ADMISSIONS_START_PERCENT") {
+		intRange("The on-acceptance share", 1, 99);
+	}
+	if (key === "POST_ARRIVAL_GRACE_DAYS") {
+		intRange("The grace period", 0, 180);
+	}
+	if (key === "POST_ARRIVAL_REMIND_DAYS") {
+		intRange("The reminder lead time", 0, 60);
+	}
+	if (key === "POST_ARRIVAL_INTEREST_PCT") {
+		const n = Number(value);
+		if (!Number.isFinite(n) || n < 0 || n > 100) {
+			throw new Error("The interest rate must be a number between 0 and 100");
+		}
+	}
+	if (key === "POST_ARRIVAL_DURATIONS") {
+		const months = value.split(",").map((x) => Number(x.trim()));
+		if (months.length === 0 || months.some((n) => !Number.isInteger(n) || n < 1 || n > 36)) {
+			throw new Error("Durations must be whole months between 1 and 36, comma-separated");
+		}
+	}
+	if (key === "POST_ARRIVAL_FREQUENCIES") {
+		const allowed: readonly string[] = ["monthly", "biweekly", "weekly"];
+		const freqs = value.split(",").map((x) => x.trim()).filter(Boolean);
+		if (freqs.length === 0 || freqs.some((f) => !allowed.includes(f))) {
+			throw new Error(`Frequencies must be a comma-separated list of: ${allowed.join(", ")}`);
+		}
+	}
 
 	if (key === "SLOTS_PER_DAY") {
 		const parsed = Number(value);

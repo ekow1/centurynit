@@ -2,6 +2,7 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import {
 	listSettingsForDisplay,
 	writeSetting,
+	writeSettingsBulk,
 	getAuditLog,
 	getSetting,
 	SETTING_DEFS,
@@ -87,6 +88,66 @@ export function verifyStepUpToken(token: string, expectedOpsUserId: string): boo
 }
 
 const settingsRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
+
+/*
+ * The fee schedule (amounts, the exchange rate, the milestone split) is
+ * finance's day-to-day work, not a credential: no step-up for it.
+ */
+const FEE_SCHEDULE_KEYS = new Set<string>([
+	"PLATFORM_EXCHANGE_RATE",
+	"SERVICE_FEE_DEPOSIT_PERCENT",
+	"SERVICE_FEE_PRE_DEPARTURE_PERCENT",
+	"SERVICE_FEE_ADMISSIONS_START_PERCENT",
+	"POST_ARRIVAL_DURATIONS",
+	"POST_ARRIVAL_FREQUENCIES",
+	"POST_ARRIVAL_GRACE_DAYS",
+	"POST_ARRIVAL_REMIND_DAYS",
+	"POST_ARRIVAL_INTEREST_PCT",
+]);
+
+/**
+ * Gate for settings that are credentials, not day-to-day knobs. A live
+ * step-up token passes; otherwise a fresh TOTP is required, and a
+ * successful one returns a refreshed token the caller can reuse for 15
+ * minutes.
+ */
+async function requireStepUp(
+	c: { req: { raw: { headers: Headers } } },
+	staff: { opsUserId: string; email: string },
+	needsStepUp: boolean,
+	creds: { totpCode?: string; stepUpToken?: string },
+): Promise<{ stepUpToken: string; expiresAt: string } | null> {
+	if (!needsStepUp) return null;
+	if (creds.stepUpToken && verifyStepUpToken(creds.stepUpToken, staff.opsUserId)) return null;
+
+	if (!creds.totpCode) {
+		throw new HttpError(
+			403,
+			"MFA_REQUIRED",
+			"Settings session locked. Enter your 6-digit authenticator code to proceed.",
+		);
+	}
+
+	try {
+		const authInstance = await getAuthInstance();
+		const verifyRes = await authInstance.api.verifyTOTP({
+			body: { code: creds.totpCode },
+			headers: c.req.raw.headers,
+		});
+		if (verifyRes && typeof verifyRes === "object" && "error" in verifyRes && (verifyRes as { error?: { message?: string } }).error) {
+			throw new Error((verifyRes as { error?: { message?: string } }).error?.message || "Invalid code");
+		}
+	} catch (totpErr) {
+		console.error("[Settings] TOTP verification failed:", totpErr);
+		throw new HttpError(
+			403,
+			"MFA_REQUIRED",
+			"That code was not accepted. Use the current code from your authenticator.",
+		);
+	}
+
+	return createStepUpToken(staff.opsUserId, staff.email);
+}
 
 const settingKeySchema = z.enum(
 	Object.keys(SETTING_DEFS) as [SettingKey, ...SettingKey[]],
@@ -272,56 +333,7 @@ settingsRouter.openapi(
 			throw new HttpError(403, "FORBIDDEN", "Staff access required");
 		}
 
-		let activeStepUp = false;
-		if (body.stepUpToken && verifyStepUpToken(body.stepUpToken, staff.opsUserId)) {
-			activeStepUp = true;
-		}
-
-		let refreshedStepUp: { stepUpToken: string; expiresAt: string } | null = null;
-
-		// The fee schedule (amounts, the exchange rate, the milestone split) is
-		// finance's day-to-day work, not a credential: no step-up for it.
-		const FEE_SCHEDULE_KEYS = new Set([
-			"PLATFORM_EXCHANGE_RATE",
-			"SERVICE_FEE_DEPOSIT_PERCENT",
-			"SERVICE_FEE_PRE_DEPARTURE_PERCENT",
-			"POST_ARRIVAL_DURATIONS",
-			"POST_ARRIVAL_FREQUENCIES",
-			"POST_ARRIVAL_GRACE_DAYS",
-			"POST_ARRIVAL_REMIND_DAYS",
-			"POST_ARRIVAL_INTEREST_PCT",
-		]);
-		const isSensitiveSetting = !FEE_SCHEDULE_KEYS.has(body.key);
-
-		if (isSensitiveSetting && !activeStepUp) {
-			if (!body.totpCode) {
-				throw new HttpError(
-					403,
-					"MFA_REQUIRED",
-					"Settings session locked. Enter your 6-digit authenticator code to proceed.",
-				);
-			}
-
-			try {
-				const authInstance = await getAuthInstance();
-				const verifyRes = await authInstance.api.verifyTOTP({
-					body: { code: body.totpCode },
-					headers: c.req.raw.headers,
-				});
-				if (verifyRes && typeof verifyRes === "object" && "error" in verifyRes && (verifyRes as { error?: { message?: string } }).error) {
-					throw new Error((verifyRes as { error?: { message?: string } }).error?.message || "Invalid code");
-				}
-			} catch (totpErr) {
-				console.error("[Settings] TOTP verification failed:", totpErr);
-				throw new HttpError(
-					403,
-					"MFA_REQUIRED",
-					"That code was not accepted. Use the current code from your authenticator.",
-				);
-			}
-
-			refreshedStepUp = createStepUpToken(staff.opsUserId, staff.email);
-		}
+		const refreshedStepUp = await requireStepUp(c, staff, !FEE_SCHEDULE_KEYS.has(body.key), body);
 
 		try {
 			await writeSetting(body.key, body.value, {
@@ -355,6 +367,87 @@ settingsRouter.openapi(
 			...baseResponse,
 			...(refreshedStepUp ? refreshedStepUp : {}),
 		});
+	},
+);
+
+/* ── PUT /api/v1/settings/bulk — several keys, one atomic write ───────────── */
+
+const bulkUpdateBodySchema = z.object({
+	items: z
+		.array(
+			z.object({
+				key: settingKeySchema,
+				value: z.string().nullable(),
+			}),
+		)
+		.min(1)
+		.max(50),
+	totpCode: z.string().regex(/^\d{6}$/).optional(),
+	stepUpToken: z.string().optional(),
+});
+
+settingsRouter.openapi(
+	createRoute({
+		method: "put",
+		path: "/bulk",
+		tags: ["Settings"],
+		summary: "Write several settings atomically",
+		description:
+			"Validates every item first, then writes all rows and their audit " +
+			"entries in one transaction — a bad value fails the whole batch " +
+			"rather than leaving a half-applied configuration. If any key is " +
+			"sensitive, one step-up covers the batch.",
+		middleware: [requireAuth, requireMfa, requireModule("settings")] as const,
+		request: {
+			body: { content: { "application/json": { schema: bulkUpdateBodySchema } }, required: true },
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							ok: z.boolean(),
+							stepUpToken: z.string().optional(),
+							expiresAt: z.string().optional(),
+						}),
+					},
+				},
+				description: "All items written",
+			},
+			403: { description: "Not super_admin, or the authenticator code was rejected" },
+		},
+	}),
+	async (c) => {
+		const body = c.req.valid("json" as never) as z.infer<typeof bulkUpdateBodySchema>;
+		const staff = c.get("staff");
+
+		if (!staff) {
+			throw new HttpError(403, "FORBIDDEN", "Staff access required");
+		}
+
+		const refreshedStepUp = await requireStepUp(
+			c,
+			staff,
+			body.items.some((i) => !FEE_SCHEDULE_KEYS.has(i.key)),
+			body,
+		);
+
+		try {
+			await writeSettingsBulk(body.items, {
+				opsUserId: staff.opsUserId,
+				email: staff.email,
+				ip: c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+			});
+		} catch (err) {
+			if (err instanceof HttpError) throw err;
+			throw new HttpError(
+				400,
+				"VALIDATION_ERROR",
+				err instanceof Error ? err.message : "Could not save these settings",
+			);
+		}
+
+		return c.json({ ok: true as const, ...(refreshedStepUp ? refreshedStepUp : {}) });
 	},
 );
 

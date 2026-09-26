@@ -83,7 +83,8 @@ export const MODULE_GROUPS: Array<{
 			{ id: "applications", label: "Applications", description: "Client university and program applications" },
 			{ id: "consultations", label: "Consultations", description: "Initial and follow-up advisory sessions" },
 			{ id: "applicants", label: "Applicants", description: "Client accounts and profile records" },
-			{ id: "leads", label: "CRM & Leads", description: "Inbound leads, inquiry pipeline, and CRM" },
+			{ id: "leads", label: "Lead intake", description: "Inbound leads and the inquiry pipeline" },
+			{ id: "crm", label: "CRM desk", description: "Every enquiry on the desk — the leads workspace" },
 			{ id: "appointments", label: "Appointments", description: "Calendar booking and consultant schedules" },
 			{ id: "helpdesk", label: "Helpdesk", description: "Support tickets and applicant inquiries" },
 			{ id: "chat", label: "Internal Chat", description: "Staff-to-staff messaging and team coordination" },
@@ -107,7 +108,8 @@ export const MODULE_GROUPS: Array<{
 		group: "Admissions, Visa & Travel",
 		description: "Educational placement, visa handling, and relocation.",
 		modules: [
-			{ id: "universities", label: "Universities & Programs", description: "Partner universities and course catalogs" },
+			{ id: "universities", label: "Universities", description: "Partner universities and course catalogs" },
+			{ id: "programs", label: "Programmes & Scholarships", description: "Study programmes and the scholarship catalogue" },
 			{ id: "documents", label: "Document Verification", description: "Applicant document review and verification" },
 			{ id: "workflow", label: "Case Workflow", description: "Multi-stage admissions progression" },
 			{ id: "visa", label: "Visa Processing", description: "Embassy filings, CAS, and visa outcomes" },
@@ -130,6 +132,23 @@ export const MODULE_GROUPS: Array<{
 		],
 	},
 ];
+
+/*
+ * MODULE_GROUPS must cover every module in the schema exactly once — it is a
+ * hand-maintained list, and a drift once left `crm` and `programs` out of
+ * Grant All / Revoke All and every module count. Fail loudly instead.
+ */
+{
+	const grouped = MODULE_GROUPS.flatMap((g) => g.modules.map((m) => m.id));
+	const missing = opsModuleSchema.options.filter((m) => !grouped.includes(m as OpsModule));
+	const dupes = grouped.filter((m, i) => grouped.indexOf(m) !== i);
+	if (missing.length > 0 || dupes.length > 0) {
+		throw new Error(`MODULE_GROUPS drifted from opsModuleSchema — missing: ${missing.join(", ") || "none"}; duplicated: ${dupes.join(", ") || "none"}`);
+	}
+}
+
+/** Every module id, in schema order — the denominator for module counts. */
+export const ALL_OPS_MODULES: readonly OpsModule[] = opsModuleSchema.options;
 
 /**
  * Built-in default permissions matrix (fallback when not loaded from DB).

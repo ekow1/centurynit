@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { PAYMENT_PLANS } from "century-nit-core";
 import { invoiceAgeDays, invoiceBalance, invoicePaid } from "century-nit-core/ops";
@@ -18,7 +18,7 @@ import { useFeeCatalogue } from "../hooks/useFeeCatalogue";
 import { useOpsAuth } from "./OpsAuthContext";
 import { apiFetch, ApiError } from "../lib/api";
 import { Toast } from "./OpsDialogs";
-import { fmtGhs } from "./currency";
+import { fmtGhs, toGhs } from "./currency";
 
 /**
  * Payment plans — when the service fee is paid. The fee schedule says what
@@ -37,45 +37,122 @@ const DURATION_CHOICES = [3, 6, 9, 12, 18, 24];
 const shortDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "—");
 
 export function EnterprisePaymentConfig() {
-	const { hasCapability } = useOpsAuth();
-	const canEdit = hasCapability("manage_settings");
+	const { hasPermission } = useOpsAuth();
+	// The server gates PUT /settings on the `settings` module — mirror it
+	// exactly or a custom role sees inputs that always 403.
+	const canEdit = hasPermission("settings");
 	const { applications } = useCases();
-	const { invoices } = useInvoiceApi();
-	const { catalogue, reload } = useFeeCatalogue();
+	const { invoices, permitted: invoicesPermitted } = useInvoiceApi();
+	const { catalogue, error: catalogueError, reload } = useFeeCatalogue();
 	const [deposit, setDeposit] = useState("");
 	const [preDeparture, setPreDeparture] = useState("");
 	// A plan that stops short of the full journey pays Admissions in two halves.
 	const [admissionsStart, setAdmissionsStart] = useState("");
 	const [pa, setPa] = useState<PostArrivalCatalogue>(DEFAULT_POST_ARRIVAL_CATALOGUE);
+	// The numeric catalogue fields stay strings so a field can be cleared and
+	// retyped — coercing on every keystroke made "empty" impossible.
+	const [graceDays, setGraceDays] = useState("");
+	const [remindDays, setRemindDays] = useState("");
+	const [interestPct, setInterestPct] = useState("");
 	const [toast, setToast] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 	const [saving, setSaving] = useState(false);
 
+	/*
+	 * Dirty-safe sync: a catalogue reload (e.g. after saving the other card)
+	 * must not overwrite an unsaved edit. The baseline remembers what the
+	 * last sync wrote; only a field still equal to its baseline is refreshed.
+	 */
+	const baseline = useRef<{
+		deposit: string;
+		preDeparture: string;
+		admissionsStart: string;
+		durations: string;
+		frequencies: string;
+		grace: string;
+		remind: string;
+		interest: string;
+	} | null>(null);
+
 	useEffect(() => {
 		if (!catalogue) return;
-		setDeposit(String(catalogue.serviceFeeSplit.depositPercent));
-		setPreDeparture(String(catalogue.serviceFeeSplit.preDeparturePercent));
-		setAdmissionsStart(String(catalogue.admissionsStartPercent ?? DEFAULT_ADMISSIONS_START_PERCENT));
-		setPa(catalogue.postArrival ?? DEFAULT_POST_ARRIVAL_CATALOGUE);
+		const src = catalogue.postArrival ?? DEFAULT_POST_ARRIVAL_CATALOGUE;
+		const next = {
+			deposit: String(catalogue.serviceFeeSplit.depositPercent),
+			preDeparture: String(catalogue.serviceFeeSplit.preDeparturePercent),
+			admissionsStart: String(catalogue.admissionsStartPercent ?? DEFAULT_ADMISSIONS_START_PERCENT),
+			pa: src,
+			grace: String(src.graceDays),
+			remind: String(src.remindDays),
+			interest: String(src.interestPct),
+		};
+		const prev = baseline.current;
+		setDeposit((cur) => (prev && cur !== prev.deposit ? cur : next.deposit));
+		setPreDeparture((cur) => (prev && cur !== prev.preDeparture ? cur : next.preDeparture));
+		setAdmissionsStart((cur) => (prev && cur !== prev.admissionsStart ? cur : next.admissionsStart));
+		setPa((cur) =>
+			prev && (JSON.stringify(cur.durations) !== prev.durations || JSON.stringify(cur.frequencies) !== prev.frequencies) ? cur : next.pa,
+		);
+		setGraceDays((cur) => (prev && cur !== prev.grace ? cur : next.grace));
+		setRemindDays((cur) => (prev && cur !== prev.remind ? cur : next.remind));
+		setInterestPct((cur) => (prev && cur !== prev.interest ? cur : next.interest));
+		baseline.current = {
+			deposit: next.deposit,
+			preDeparture: next.preDeparture,
+			admissionsStart: next.admissionsStart,
+			durations: JSON.stringify(next.pa.durations),
+			frequencies: JSON.stringify(next.pa.frequencies),
+			grace: next.grace,
+			remind: next.remind,
+			interest: next.interest,
+		};
 	}, [catalogue]);
 
 	const toggleDuration = (m: number) =>
 		setPa((prev) => ({ ...prev, durations: prev.durations.includes(m) ? prev.durations.filter((x) => x !== m) : [...prev.durations, m].sort((a, b) => a - b) }));
 	const toggleFrequency = (f: PostArrivalFrequency) =>
-		setPa((prev) => ({ ...prev, frequencies: prev.frequencies.includes(f) ? prev.frequencies.filter((x) => x !== f) : [...prev.frequencies, f] }));
-	const validCatalogue = pa.durations.length > 0 && pa.frequencies.length > 0 && pa.graceDays >= 0 && pa.remindDays >= 0;
+		setPa((prev) => ({
+			...prev,
+			// Canonical order regardless of click order — the client's plan
+			// sentence lists them as stored.
+			frequencies: prev.frequencies.includes(f)
+				? prev.frequencies.filter((x) => x !== f)
+				: POST_ARRIVAL_FREQUENCIES.filter((x) => prev.frequencies.includes(x) || x === f),
+		}));
+
+	const g = Number.parseInt(graceDays, 10);
+	const r = Number.parseInt(remindDays, 10);
+	const interest = Number(interestPct);
+	const graceOk = Number.isInteger(g) && g >= 0 && g <= 180;
+	const remindOk = Number.isInteger(r) && r >= 0 && r <= 60;
+	const interestOk = Number.isFinite(interest) && interest >= 0 && interest <= 100;
+	const validCatalogue = pa.durations.length > 0 && pa.frequencies.length > 0 && graceOk && remindOk && interestOk;
+	/** The catalogue as the client would read it — draft values where valid, persisted where not. */
+	const shownPa: PostArrivalCatalogue = {
+		...pa,
+		graceDays: graceOk ? g : pa.graceDays,
+		remindDays: remindOk ? r : pa.remindDays,
+		interestPct: interestOk ? interest : pa.interestPct,
+	};
+
+	const putSettingsBulk = (items: { key: string; value: string }[]) =>
+		apiFetch(`${API_PREFIX}/settings/bulk`, { method: "PUT", body: JSON.stringify({ items }) });
 
 	async function saveCatalogue() {
 		if (!validCatalogue) {
-			setToast({ tone: "error", text: "Offer at least one duration and one frequency." });
+			setToast({ tone: "error", text: "Check the catalogue — durations and frequencies need a pick each, days and interest must be in range." });
 			return;
 		}
 		setSaving(true);
 		try {
-			const put = (key: string, value: string) => apiFetch(`${API_PREFIX}/settings`, { method: "PUT", body: JSON.stringify({ key, value }) });
-			await put("POST_ARRIVAL_DURATIONS", pa.durations.join(","));
-			await put("POST_ARRIVAL_FREQUENCIES", pa.frequencies.join(","));
-			await put("POST_ARRIVAL_GRACE_DAYS", String(pa.graceDays));
-			await put("POST_ARRIVAL_REMIND_DAYS", String(pa.remindDays));
+			// One atomic write — a mid-sequence failure used to leave a
+			// half-applied catalogue.
+			await putSettingsBulk([
+				{ key: "POST_ARRIVAL_DURATIONS", value: pa.durations.join(",") },
+				{ key: "POST_ARRIVAL_FREQUENCIES", value: pa.frequencies.join(",") },
+				{ key: "POST_ARRIVAL_GRACE_DAYS", value: String(g) },
+				{ key: "POST_ARRIVAL_REMIND_DAYS", value: String(r) },
+				{ key: "POST_ARRIVAL_INTEREST_PCT", value: String(interest) },
+			]);
 			await reload();
 			setToast({ tone: "success", text: "The post-arrival catalogue is saved — clients choosing from now on see it." });
 		} catch (err) {
@@ -88,7 +165,7 @@ export function EnterprisePaymentConfig() {
 	const d = Number.parseInt(deposit, 10);
 	const p = Number.parseInt(preDeparture, 10);
 	const post = Number.isInteger(d) && Number.isInteger(p) ? 100 - d - p : NaN;
-	const validSplit = Number.isInteger(d) && Number.isInteger(p) && d >= 1 && p >= 1 && post >= 1;
+	const validSplit = Number.isInteger(d) && Number.isInteger(p) && d >= 1 && d <= 98 && p >= 1 && p <= 98 && post >= 1;
 	const a = Number.parseInt(admissionsStart, 10);
 	const validAdmissions = Number.isInteger(a) && a >= 1 && a <= 99;
 
@@ -111,13 +188,17 @@ export function EnterprisePaymentConfig() {
 
 	async function saveSplit() {
 		if (!validSplit) {
-			setToast({ tone: "error", text: "Deposit and pre-departure must be whole percentages that leave something for after arrival." });
+			setToast({ tone: "error", text: "Deposit and pre-departure must be whole percentages between 1 and 98 that leave something for after arrival." });
 			return;
 		}
 		setSaving(true);
 		try {
-			await apiFetch(`${API_PREFIX}/settings`, { method: "PUT", body: JSON.stringify({ key: "SERVICE_FEE_DEPOSIT_PERCENT", value: String(d) }) });
-			await apiFetch(`${API_PREFIX}/settings`, { method: "PUT", body: JSON.stringify({ key: "SERVICE_FEE_PRE_DEPARTURE_PERCENT", value: String(p) }) });
+			// One write — a split saved halfway used to leave the server's
+			// clamp rewriting a milestone the admin never chose.
+			await putSettingsBulk([
+				{ key: "SERVICE_FEE_DEPOSIT_PERCENT", value: String(d) },
+				{ key: "SERVICE_FEE_PRE_DEPARTURE_PERCENT", value: String(p) },
+			]);
 			await reload();
 			setToast({ tone: "success", text: "The split is saved — invoices raised from now on use it." });
 		} catch (err) {
@@ -163,12 +244,25 @@ export function EnterprisePaymentConfig() {
 		return { withPlan, full, inst, behind, postArrival, none: applications.length - withPlan.length };
 	}, [applications, invoices]);
 
-	const example = 500; // GH₵ 5.00 — the test-price service fee, as a worked example
-	const pct = (n: number) => (Number.isFinite(n) ? `${n} %` : "—");
-	const of = (n: number) => (Number.isFinite(n) ? fmtGhs((example * n) / 100 / 100) : "—");
+	const example = 500; // 500 cents — $5.00, the test-price service fee, as a worked example
+	const pct = (n: number) => (Number.isInteger(n) && n >= 0 ? `${n} %` : "—");
+	/*
+	 * The shares are whole cedis of the rounded base — format the total once
+	 * and hand out parts that sum to it exactly; rounding each share on its
+	 * own made 10/30/60 visibly add to GH₵ 76 on a GH₵ 75 fee.
+	 */
+	const exampleGhs = toGhs(example / 100);
+	const exampleShares = useMemo(() => {
+		const parts = [d, p, post].map((x) => (Number.isInteger(x) && x >= 0 ? Math.round((exampleGhs * x) / 100) : NaN));
+		if (parts.some((x) => !Number.isFinite(x))) return null;
+		const drift = exampleGhs - parts.reduce((a, b) => a + b, 0);
+		parts[parts.length - 1] += drift;
+		return parts;
+	}, [d, p, post, exampleGhs]);
+	const shareFmt = (i: number) => (exampleShares ? `GH₵ ${exampleShares[i].toLocaleString()}` : "—");
 	const sentences = feePlanSentences(
-		{ depositPercent: Number.isInteger(d) ? d : 10, preDeparturePercent: Number.isInteger(p) ? p : 30, postArrivalPercent: Number.isInteger(post) ? post : 60 },
-		validCatalogue ? pa : DEFAULT_POST_ARRIVAL_CATALOGUE,
+		{ depositPercent: Number.isInteger(d) && d >= 1 ? d : 10, preDeparturePercent: Number.isInteger(p) && p >= 1 ? p : 30, postArrivalPercent: Number.isInteger(post) && post >= 1 ? post : 60 },
+		validCatalogue ? shownPa : DEFAULT_POST_ARRIVAL_CATALOGUE,
 	);
 	const listOf = (parts: string[]) => (parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} or ${parts[parts.length - 1]}`);
 
@@ -184,6 +278,17 @@ export function EnterprisePaymentConfig() {
 					Fee schedule →
 				</Link>
 			</div>
+
+			{catalogueError && !catalogue && (
+				<p className="ops-panel__muted" style={{ margin: "0 0 1rem" }}>
+					The fee schedule could not be loaded — {catalogueError}. Figures below are defaults, not live settings.
+				</p>
+			)}
+			{!canEdit && (
+				<p className="ops-panel__muted" style={{ margin: "0 0 1rem" }}>
+					Read-only for your role — changing the schedule needs the Settings module.
+				</p>
+			)}
 
 			<div className="dash-day" style={{ margin: "0 0 1rem" }}>
 				<span>
@@ -251,15 +356,19 @@ export function EnterprisePaymentConfig() {
 									<div className="cn-detail__rows">
 										<div className="cn-detail__row">
 											<span>Over</span>
-											<span className="cn-detail__row-note">{listOf(pa.durations.map((m) => `${m} months`))}</span>
+											<span className="cn-detail__row-note">{listOf(shownPa.durations.map((m) => `${m} months`))}</span>
 										</div>
 										<div className="cn-detail__row">
 											<span>Paid</span>
-											<span className="cn-detail__row-note">{listOf(pa.frequencies.map((f) => POST_ARRIVAL_FREQUENCY_LABELS[f].toLowerCase()))}</span>
+											<span className="cn-detail__row-note">{listOf(shownPa.frequencies.map((f) => POST_ARRIVAL_FREQUENCY_LABELS[f].toLowerCase()))}</span>
 										</div>
 										<div className="cn-detail__row">
 											<span>First instalment</span>
-											<span className="cn-detail__row-note">{pa.graceDays} days after arrival · reminder {pa.remindDays} days before each</span>
+											<span className="cn-detail__row-note">{shownPa.graceDays} days after arrival · reminder {shownPa.remindDays} days before each</span>
+										</div>
+										<div className="cn-detail__row">
+											<span>Interest</span>
+											<span className="cn-detail__row-note">{shownPa.interestPct} % flat on the remainder, priced into each instalment</span>
 										</div>
 									</div>
 								</>
@@ -289,18 +398,23 @@ export function EnterprisePaymentConfig() {
 							Post-arrival<small>the remainder · instalment plan only</small>
 						</span>
 						<span className="cn-money" style={{ textAlign: "right", fontWeight: 700 }}>
-							{pct(post)}
+							{Number.isInteger(post) && post >= 1 ? pct(post) : "—"}
 						</span>
 					</div>
-					{canEdit && (
+					{Number.isInteger(d) && Number.isInteger(p) && post < 1 && (
+						<p className="cn-detailhead__meta" style={{ margin: 0, color: "#b91c1c" }}>
+							Deposit and pre-departure add to {d + p} % — they must leave at least 1 % for after arrival.
+						</p>
+					)}
+					{canEdit ? (
 						<div className="cn-now__actions">
 							<button type="button" className="btn btn--sm btn--primary" disabled={saving || !validSplit} onClick={() => void saveSplit()}>
 								{saving ? "Saving…" : "Save"}
 							</button>
 						</div>
-					)}
+					) : null}
 					<p className="cn-detailhead__meta" style={{ marginTop: "0.5rem" }}>
-						On a {fmtGhs(example / 100)} fee: deposit {of(d)} · pre-departure {of(p)} · post-arrival {of(post)}
+						On a {fmtGhs(example / 100)} fee: deposit {shareFmt(0)} · pre-departure {shareFmt(1)} · post-arrival {shareFmt(2)}
 					</p>
 				</section>
 
@@ -362,15 +476,21 @@ export function EnterprisePaymentConfig() {
 					</div>
 					<label className="ops-rule" style={{ marginTop: "0.75rem" }}>
 						<span>
-							Grace after arrival<small>days before the first instalment</small>
+							Grace after arrival<small>days before the first instalment · 0–180</small>
 						</span>
-						<input className="ops-tariff__in" style={{ width: "100%" }} inputMode="numeric" value={String(pa.graceDays)} disabled={!canEdit} onChange={(e) => setPa((prev) => ({ ...prev, graceDays: Number.parseInt(e.target.value, 10) || 0 }))} aria-label="Grace days" />
+						<input className="ops-tariff__in" style={{ width: "100%" }} inputMode="numeric" value={graceDays} disabled={!canEdit} onChange={(e) => setGraceDays(e.target.value)} aria-label="Grace days" aria-invalid={graceDays !== "" && !graceOk} />
+					</label>
+					<label className="ops-rule">
+						<span>
+							Remind before<small>days ahead of each instalment · 0–60</small>
+						</span>
+						<input className="ops-tariff__in" style={{ width: "100%" }} inputMode="numeric" value={remindDays} disabled={!canEdit} onChange={(e) => setRemindDays(e.target.value)} aria-label="Remind days" aria-invalid={remindDays !== "" && !remindOk} />
 					</label>
 					<label className="ops-rule" style={{ borderBottom: "none" }}>
 						<span>
-							Remind before<small>days ahead of each instalment</small>
+							Interest<small>flat % on the post-arrival remainder · priced into each instalment · 0–100</small>
 						</span>
-						<input className="ops-tariff__in" style={{ width: "100%" }} inputMode="numeric" value={String(pa.remindDays)} disabled={!canEdit} onChange={(e) => setPa((prev) => ({ ...prev, remindDays: Number.parseInt(e.target.value, 10) || 0 }))} aria-label="Remind days" />
+						<input className="ops-tariff__in" style={{ width: "100%" }} inputMode="decimal" value={interestPct} disabled={!canEdit} onChange={(e) => setInterestPct(e.target.value)} aria-label="Interest percent" aria-invalid={interestPct !== "" && !interestOk} />
 					</label>
 					{canEdit && (
 						<div className="cn-now__actions">
@@ -389,8 +509,10 @@ export function EnterprisePaymentConfig() {
 				</section>
 
 				<section className="card cn-now">
-					<p className="cn-detail__eyebrow">Behind · an instalment past its date · {facts.behind.length}</p>
-					{facts.behind.length === 0 ? (
+					<p className="cn-detail__eyebrow">Behind · an instalment past its date{invoicesPermitted ? ` · ${facts.behind.length}` : ""}</p>
+					{!invoicesPermitted ? (
+						<p className="ops-panel__muted">Invoice data is not available to your role — arrears here count only what you can see.</p>
+					) : facts.behind.length === 0 ? (
 						<p className="ops-panel__muted">Nobody is behind.</p>
 					) : (
 						<div className="cn-detail__rows">
@@ -406,14 +528,18 @@ export function EnterprisePaymentConfig() {
 							))}
 						</div>
 					)}
-					<p className="cn-detail__eyebrow" style={{ margin: "1rem 0 0" }}>Post-arrival · {facts.postArrival.length} running</p>
-					{facts.postArrival.length === 0 ? (
+					<p className="cn-detail__eyebrow" style={{ margin: "1rem 0 0" }}>Post-arrival{invoicesPermitted ? ` · ${facts.postArrival.length} running` : ""}</p>
+					{!invoicesPermitted ? (
+						<p className="ops-panel__muted">Not available without the invoices permission.</p>
+					) : facts.postArrival.length === 0 ? (
 						<p className="ops-panel__muted">No post-arrival balances running.</p>
 					) : (
 						<div className="cn-detail__rows">
 							{facts.postArrival.slice(0, 8).map((a) => {
 								const open = invoices.filter((i) => i.type === "Agency" && i.applicationId === a.id && i.status !== "void" && invoiceBalance(i) > 0);
-								const next = open.sort((x, y) => (x.dueAt ?? "9").localeCompare(y.dueAt ?? "9"))[0];
+								// Undated first — an invoice with no due date is at least as
+								// urgent as one with a date ahead.
+								const next = open.sort((x, y) => (x.dueAt ?? "").localeCompare(y.dueAt ?? ""))[0];
 								return (
 									<Link key={a.id} to="/ledger" className="cn-detail__row">
 										<span>

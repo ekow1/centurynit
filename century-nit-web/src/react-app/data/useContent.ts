@@ -52,6 +52,23 @@ export function useContentEntry(collection: string, slug: string | undefined): {
 	return state;
 }
 
+/**
+ * Page-copy merge: the compiled fallback (PAGE_COPY / HOME_COPY from
+ * century-nit-core) is the base; a published pages/{slug} entry overrides
+ * per key. Keys absent from the entry keep the compiled value, so partial
+ * payloads can't blank a page.
+ */
+export function usePageCopy<T extends Record<string, unknown>>(slug: string, fallback: T): T {
+	const { entry } = useContentEntry("pages", slug);
+	const payload = (entry?.payload ?? {}) as Record<string, unknown>;
+	const merged = { ...fallback };
+	for (const key of Object.keys(fallback) as (keyof T)[]) {
+		const v = payload[key as string];
+		if (v !== undefined && v !== null && v !== "") merged[key] = v as T[keyof T];
+	}
+	return merged;
+}
+
 /** media/… keys resolve through the public media redirect; anything else passes through. */
 export function contentImage(value: unknown): string {
 	if (typeof value !== "string" || !value) return "";

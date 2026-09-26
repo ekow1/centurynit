@@ -440,6 +440,20 @@ function SitePagesTab({ entries, reload }: { entries: CmsEntry[]; reload: () => 
 
 	const q = filter.trim().toLowerCase();
 	const match = (p: SitePageDef) => !q || (p.name + " " + p.route).toLowerCase().includes(q);
+	const [seeding, setSeeding] = useState<string | null>(null);
+
+	async function seed() {
+		setSeeding("…");
+		try {
+			const res = await apiFetch<{ created: number; skipped: number }>(`${API_PREFIX}/cms/seed`, { method: "POST" });
+			setSeeding(res.created > 0 ? `+${res.created}` : `${res.skipped} exist`);
+			reload();
+		} catch (e) {
+			setSeeding(e instanceof Error ? e.message : "seed failed");
+		} finally {
+			setTimeout(() => setSeeding(null), 4000);
+		}
+	}
 
 	return (
 		<div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: "1rem", alignItems: "start" }}>
@@ -447,6 +461,14 @@ function SitePagesTab({ entries, reload }: { entries: CmsEntry[]; reload: () => 
 			<div className="card" style={{ padding: 0, overflow: "hidden" }}>
 				<div style={{ padding: "0.55rem 0.8rem", borderBottom: "1px solid var(--border,#d8d5cd)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
 					<span className="mono" style={{ fontSize: "0.62rem", letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700 }}>Site map</span>
+					<button
+						style={btnSm(false)}
+						disabled={seeding === "…"}
+						title="Create published entries for every page still using compiled copy — never overwrites an existing entry"
+						onClick={() => void seed()}
+					>
+						{seeding ?? "Seed missing pages"}
+					</button>
 					<input style={{ ...field, width: "auto", flex: 1, padding: "0.25rem 0.45rem", fontSize: "0.72rem", fontFamily: "ui-monospace,monospace" }} placeholder="filter…" value={filter} onChange={(e) => setFilter(e.target.value)} />
 				</div>
 				{SITE_GROUPS.map((g) => {

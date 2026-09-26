@@ -22,9 +22,10 @@ import {
 	stats,
 	testimonials,
 	videoTestimonials,
+	PAGE_COPY,
 } from "century-nit-core";
 import { useCatalog } from "../data/useCatalog";
-import { useContentEntries, useContentEntry, contentImage } from "../data/useContent";
+import { useContentEntries, useContentEntry, usePageCopy, contentImage } from "../data/useContent";
 
 function PageHeader({
 	eyebrow,
@@ -47,6 +48,7 @@ function PageHeader({
 }
 
 export function About() {
+	const copy = usePageCopy("about", PAGE_COPY.about);
 	const pillars = [
 		{
 			t: "Licensed consultancy since 2011",
@@ -67,11 +69,7 @@ export function About() {
 	];
 	return (
 		<>
-			<PageHeader
-				eyebrow={`${company.base} · Est. ${company.founded}`}
-				title="About Century Nit Consult"
-				lead={company.summary}
-			/>
+			<PageHeader {...copy} />
 			<section className="section">
 				<div className="container split">
 					<div>
@@ -163,6 +161,7 @@ export function About() {
 }
 
 export function WhyChooseUs() {
+	const copy = usePageCopy("why-choose-us", PAGE_COPY["why-choose-us"]);
 	const pillars = [
 		{
 			t: "Licensed consultancy since 2011",
@@ -183,11 +182,7 @@ export function WhyChooseUs() {
 	];
 	return (
 		<>
-			<PageHeader
-				eyebrow="Difference"
-				title="Why Choose Us"
-				lead="Restraint over noise. Strategy over templates. A firm that treats your future as architecture."
-			/>
+			<PageHeader {...copy} />
 			<section className="section texture-grid">
 				<div className="container">
 					<div
@@ -230,14 +225,11 @@ export function WhyChooseUs() {
 }
 
 export function Destinations() {
+	const copy = usePageCopy("destinations", PAGE_COPY.destinations);
 	const catalog = useCatalog();
 	return (
 		<>
-			<PageHeader
-				eyebrow="World"
-				title="Study Destinations"
-				lead="Six regions. Hundreds of institutions. One disciplined approach to fit, funding, and future mobility."
-			/>
+			<PageHeader {...copy} />
 			<section className="section">
 				<div className="container">
 					<div className="card-grid card-grid--3">
@@ -356,6 +348,7 @@ export function DestinationDetail() {
 }
 
 export function Universities() {
+	const copy = usePageCopy("universities", PAGE_COPY.universities);
 	const [filter, setFilter] = useState("all");
 	const catalog = useCatalog();
 	const list = useMemo(() => {
@@ -363,11 +356,7 @@ export function Universities() {
 	}, [filter, catalog.universities]);
 	return (
 		<>
-			<PageHeader
-				eyebrow="Network"
-				title="Universities"
-				lead="A curated network of institutions where academic excellence meets long-term opportunity."
-			/>
+			<PageHeader {...copy} />
 			<section className="section">
 				<div className="container">
 					<div className="filters" role="tablist" aria-label="Filter by destination">
@@ -531,6 +520,7 @@ export function UniversityDetail() {
 }
 
 export function Programs() {
+	const copy = usePageCopy("programs", PAGE_COPY.programs);
 	const [level, setLevel] = useState("all");
 	const catalog = useCatalog();
 	const list = useMemo(() => {
@@ -539,11 +529,7 @@ export function Programs() {
 	const levels = ["all", "Undergraduate", "Postgraduate", "PhD", "Diploma"] as const;
 	return (
 		<>
-			<PageHeader
-				eyebrow="Curriculum"
-				title="Programs"
-				lead="From undergraduate foundations to research doctorates-programs selected for academic weight and career velocity."
-			/>
+			<PageHeader {...copy} />
 			<section className="section">
 				<div className="container">
 					<div className="filters">
@@ -851,6 +837,7 @@ export function ProgramDetail() {
 }
 
 export function Scholarships() {
+	const copy = usePageCopy("scholarships", PAGE_COPY.scholarships);
 	const [type, setType] = useState("all");
 	const types = ["all", "Merit", "Field-specific", "Need + Merit", "Destination"];
 	const catalog = useCatalog();
@@ -859,11 +846,7 @@ export function Scholarships() {
 	}, [type, catalog.scholarships]);
 	return (
 		<>
-			<PageHeader
-				eyebrow="Funding"
-				title="Scholarships"
-				lead="Merit, need, and destination awards-curated for students who plan funding as carefully as they plan applications."
-			/>
+			<PageHeader {...copy} />
 			<section className="section">
 				<div className="container" style={{ maxWidth: "64rem" }}>
 					<div className="filters">
@@ -1072,13 +1055,10 @@ export function ScholarshipDetail() {
 }
 
 export function VisaServices() {
+	const copy = usePageCopy("visa-services", PAGE_COPY["visa-services"]);
 	return (
 		<>
-			<PageHeader
-				eyebrow="Immigration"
-				title="Visa Services"
-				lead="Securing admission does not automatically guarantee a visa. We prepare embassy-ready files with professional, efficient delivery."
-			/>
+			<PageHeader {...copy} />
 			<section className="section">
 				<div className="container">
 					<div className="card-grid card-grid--2">
@@ -1112,13 +1092,10 @@ export function VisaServices() {
 }
 
 export function StudentServices() {
+	const copy = usePageCopy("student-services", PAGE_COPY["student-services"]);
 	return (
 		<>
-			<PageHeader
-				eyebrow="What we offer"
-				title="Student Services"
-				lead="What we offer at Century Nit Consult-from first counselling session through travel arrangements after your visa."
-			/>
+			<PageHeader {...copy} />
 			<section className="section texture-grid">
 				<div className="container">
 					<div className="card-grid card-grid--2">
@@ -1149,15 +1126,12 @@ export function StudentServices() {
 }
 
 export function SuccessStories() {
+	const copy = usePageCopy("success-stories", PAGE_COPY["success-stories"]);
 	const [playing, setPlaying] = useState<string | null>(null);
 
 	return (
 		<>
-			<PageHeader
-				eyebrow="The Red Seat"
-				title="In their own words"
-				lead="Clients who sat in the red seat, and where it took them."
-			/>
+			<PageHeader {...copy} />
 			<section className="section">
 				<div className="container">
 					<div className="redseat">
@@ -1297,6 +1271,7 @@ function VideoLightbox({
 }
 
 export function Events() {
+	const copy = usePageCopy("events", PAGE_COPY.events);
 	const [type, setType] = useState("all");
 	const types = ["all", "In-person", "News"];
 	const list = useMemo(
@@ -1305,11 +1280,7 @@ export function Events() {
 	);
 	return (
 		<>
-			<PageHeader
-				eyebrow="Calendar"
-				title="Events"
-				lead="Fairs, masterclasses, and campus days-structured opportunities to meet advisors and institutions."
-			/>
+			<PageHeader {...copy} />
 			<section className="section">
 				<div className="container stack--lg">
 					<div className="filters">
@@ -1346,6 +1317,7 @@ export function Events() {
 }
 
 export function Blog() {
+	const copy = usePageCopy("blog", PAGE_COPY.blog);
 	const [category, setCategory] = useState("all");
 	// Published `posts` CMS entries win when they exist; the compiled
 	// `articles` stay as fallback and first-paint.
@@ -1378,11 +1350,7 @@ export function Blog() {
 	);
 	return (
 		<>
-			<PageHeader
-				eyebrow="Journal"
-				title="Blog"
-				lead="Admissions craft, destination strategy, and funding intelligence-written for serious applicants."
-			/>
+			<PageHeader {...copy} />
 			<section className="section">
 				<div className="container">
 					<div className="filters">
@@ -1495,6 +1463,7 @@ export function BlogPost() {
 }
 
 export function FAQs() {
+	const copy = usePageCopy("faqs", PAGE_COPY.faqs);
 	// Published `faqs` CMS entries win when they exist — ops edits them in
 	// Content Management → Site pages → FAQs. Empty collection or a failed
 	// fetch keeps the compiled list, so the page never goes blank.
@@ -1507,11 +1476,7 @@ export function FAQs() {
 	const list = cmsFaqs.length ? cmsFaqs : faqs;
 	return (
 		<>
-			<PageHeader
-				eyebrow="Clarity"
-				title="FAQs"
-				lead="Direct answers to the questions applicants ask before they commit."
-			/>
+			<PageHeader {...copy} />
 			<section className="section">
 				<div className="container" style={{ maxWidth: "48rem" }}>
 					{list.map((f) => (
@@ -1533,6 +1498,7 @@ export function FAQs() {
 }
 
 export function Contact() {
+	const copy = usePageCopy("contact", PAGE_COPY.contact);
 	const [sent, setSent] = useState(false);
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [form, setForm] = useState({ name: "", email: "", topic: "", message: "" });
@@ -1550,11 +1516,7 @@ export function Contact() {
 
 	return (
 		<>
-			<PageHeader
-				eyebrow="Get in touch"
-				title="Contact Us"
-				lead={`Contact Century Nit Consult now. ${company.hours}.`}
-			/>
+			<PageHeader {...copy} />
 			<section className="section">
 				<div className="container split">
 					{sent ? (

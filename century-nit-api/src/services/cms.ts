@@ -2,6 +2,7 @@ import { and, desc, eq, isNotNull, lte } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { cmsBrand, cmsEntries, cmsNav, cmsVersions, copyKeys, media } from "../db/schema.js";
 import { brandSchema, DEFAULT_BRAND, type Brand, type NavItem } from "century-nit-shared";
+import { HOME_COPY, PAGE_COPY, company } from "century-nit-core";
 import { recordAdminEvent } from "./audit.js";
 
 /**
@@ -238,6 +239,64 @@ export async function revertEntry(id: string, versionId: string, editor: Editor)
 }
 
 /** Scheduled entries due to go live — called by the publish sweep. */
+/**
+ * Seed published pages/* entries from the compiled copy in century-nit-core.
+ * Inserts only missing (collection, slug) pairs — existing entries are never
+ * touched, so re-running after staff edits is safe. The live site merges the
+ * entry over the same compiled source, so a seeded row renders identically
+ * until someone edits it.
+ */
+export async function seedCompiledContent(editor: Editor): Promise<{ created: number; skipped: number }> {
+	const seeds: { collection: string; slug: string; payload: Record<string, unknown>; seo: Record<string, unknown> }[] = [
+		{
+			collection: "pages",
+			slug: "home",
+			payload: { ...HOME_COPY } as Record<string, unknown>,
+			seo: {
+				title: `Study abroad consultants in Ghana | ${company.brandName}`,
+				description: "Admission, visa & travel support for Ghanaian students — UK, Canada, Germany, USA. Accra & Kumasi offices.",
+			},
+		},
+		...Object.entries(PAGE_COPY).map(([slug, c]) => ({
+			collection: "pages",
+			slug,
+			payload: { eyebrow: c.eyebrow, title: c.title, lead: c.lead },
+			seo: {
+				title: `${c.title} | ${company.brandName}`,
+				description: c.lead.slice(0, 155),
+			},
+		})),
+	];
+
+	const now = new Date();
+	let created = 0;
+	let skipped = 0;
+	for (const s of seeds) {
+		const [existing] = await db
+			.select({ id: cmsEntries.id })
+			.from(cmsEntries)
+			.where(and(eq(cmsEntries.collection, s.collection), eq(cmsEntries.slug, s.slug)))
+			.limit(1);
+		if (existing) {
+			skipped += 1;
+			continue;
+		}
+		await db.insert(cmsEntries).values({
+			collection: s.collection,
+			slug: s.slug,
+			status: "published",
+			payload: s.payload,
+			seo: s.seo,
+			publishedAt: now,
+			publishedBy: editor.email ?? null,
+			updatedBy: editor.email ?? null,
+		});
+		await snapshot("entry", `${s.collection}:${s.slug}`, s.payload, editor, "seeded from compiled copy");
+		created += 1;
+	}
+	return { created, skipped };
+}
+
 export async function publishDueEntries(): Promise<number> {
 	const rows = await db
 		.update(cmsEntries)

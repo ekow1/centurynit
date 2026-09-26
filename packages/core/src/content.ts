@@ -2728,3 +2728,149 @@ export const SEED_LEADS: Lead[] = [
 		notes: "Decided to apply independently. No longer interested in agency services.",
 	},
 ];
+
+/* ── Public page copy — compiled defaults the CMS overrides ──────────────
+ * Every public page renders these strings today. The CMS seeds them into
+ * cms_entries as published overrides; the site merges a live entry over
+ * this fallback, so an empty/failed CMS fetch changes nothing.
+ */
+
+export type PageCopy = { eyebrow: string; title: string; lead: string };
+
+export const PAGE_COPY: Record<string, PageCopy> = {
+	about: {
+		eyebrow: `${company.base} · Est. ${company.founded}`,
+		title: "About Century Nit Consult",
+		lead: company.summary,
+	},
+	"why-choose-us": {
+		eyebrow: "Difference",
+		title: "Why Choose Us",
+		lead: "Restraint over noise. Strategy over templates. A firm that treats your future as architecture.",
+	},
+	destinations: {
+		eyebrow: "World",
+		title: "Study Destinations",
+		lead: "Six regions. Hundreds of institutions. One disciplined approach to fit, funding, and future mobility.",
+	},
+	universities: {
+		eyebrow: "Network",
+		title: "Universities",
+		lead: "A curated network of institutions where academic excellence meets long-term opportunity.",
+	},
+	programs: {
+		eyebrow: "Curriculum",
+		title: "Programs",
+		lead: "From undergraduate foundations to research doctorates-programs selected for academic weight and career velocity.",
+	},
+	scholarships: {
+		eyebrow: "Funding",
+		title: "Scholarships",
+		lead: "Merit, need, and destination awards-curated for students who plan funding as carefully as they plan applications.",
+	},
+	"visa-services": {
+		eyebrow: "Immigration",
+		title: "Visa Services",
+		lead: "Securing admission does not automatically guarantee a visa. We prepare embassy-ready files with professional, efficient delivery.",
+	},
+	"student-services": {
+		eyebrow: "What we offer",
+		title: "Student Services",
+		lead: "What we offer at Century Nit Consult-from first counselling session through travel arrangements after your visa.",
+	},
+	"success-stories": {
+		eyebrow: "The Red Seat",
+		title: "In their own words",
+		lead: "Clients who sat in the red seat, and where it took them.",
+	},
+	events: {
+		eyebrow: "Calendar",
+		title: "Events",
+		lead: "Fairs, masterclasses, and campus days-structured opportunities to meet advisors and institutions.",
+	},
+	blog: {
+		eyebrow: "Journal",
+		title: "Blog",
+		lead: "Admissions craft, destination strategy, and funding intelligence-written for serious applicants.",
+	},
+	faqs: {
+		eyebrow: "Clarity",
+		title: "FAQs",
+		lead: "Direct answers to the questions applicants ask before they commit.",
+	},
+	contact: {
+		eyebrow: "Get in touch",
+		title: "Contact Us",
+		lead: `Contact Century Nit Consult now. ${company.hours}.`,
+	},
+};
+
+/**
+ * The home page doesn't use PageHeader — its copy is a hero carousel plus
+ * per-section titles. heroSlides mirrors HeroCarousel's slide shape; the
+ * page casts on consume.
+ */
+export const HOME_COPY = {
+	heroSlides: [
+		{
+			id: "study",
+			kicker: company.tagline,
+			title: "Study abroad.",
+			titleEm: "With us.",
+			lead: company.promise,
+			image: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=1600&q=80",
+			imageAlt: "Students walking through a historic university courtyard",
+			meta: [
+				{ label: "Since", value: String(company.founded) },
+				{ label: "Base", value: "Ghana · Accra & Kumasi" },
+				{ label: "Focus", value: "Admission · Visa · Travel" },
+			],
+		},
+		{
+			id: "uk",
+			kicker: "United Kingdom",
+			title: "UK universities.",
+			titleEm: "Global rank.",
+			lead: "UK universities hold an impressive international reputation. We guide Ghanaian students from programme choice through study-visa success.",
+			image: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=1600&q=80",
+			imageAlt: "London cityscape with historic architecture",
+			meta: [
+				{ label: "Service", value: "Study visa" },
+				{ label: "Support", value: "Docs · Interview" },
+				{ label: "Office", value: "Accra · Kumasi" },
+			],
+		},
+		{
+			id: "germany",
+			kicker: "Germany",
+			title: "Study in",
+			titleEm: "Germany.",
+			lead: "For ambitious students seeking world-class education-strong STEM, research intensity, and clear counselling from first enquiry.",
+			image: "https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=1600&q=80",
+			imageAlt: "German architecture and university city",
+			meta: [
+				{ label: "Focus", value: "Master's & STEM" },
+				{ label: "Docs", value: "WASSCE · Degree" },
+				{ label: "After visa", value: "Travel support" },
+			],
+		},
+		{
+			id: "canada",
+			kicker: "Canada",
+			title: "Study in",
+			titleEm: "Canada.",
+			lead: "Canada hosts nearly half a million international students-world-class education with post-study opportunity. We map the path.",
+			image: "https://images.unsplash.com/photo-1517935706615-2717063c2225?w=1600&q=80",
+			imageAlt: "Canadian city skyline",
+			meta: [
+				{ label: "Pathway", value: "PGWP-ready" },
+				{ label: "Counsel", value: "Career fit" },
+				{ label: "Email", value: company.email },
+			],
+		},
+	],
+	servicesEyebrow: "What we offer",
+	servicesTitle: "Our services",
+	destinationsEyebrow: "Explore",
+	destinationsTitle: "Where could you go?",
+};

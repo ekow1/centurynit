@@ -18,9 +18,11 @@ import {
 	universities,
 	getUniversity,
 	videoTestimonials,
+	HOME_COPY,
 } from "century-nit-core";
 import { SERVICE_STAGES, SERVICE_STAGE_LABELS, type ServiceStage } from "century-nit-shared";
 import { STAGE_SHORT } from "../data/stageLabels";
+import { usePageCopy } from "../data/useContent";
 
 /** The purchasable stage strip — consultation is the entry, the rest compose. */
 const STAGE_REQ: Record<string, string> = {
@@ -133,64 +135,6 @@ const PROCESS_SCOPES = [
 ] as const;
 type ProcessScopeId = (typeof PROCESS_SCOPES)[number]["id"];
 
-const baseHeroSlides: Omit<HeroSlide, "primary" | "secondary">[] = [
-	{
-		id: "study",
-		kicker: company.tagline,
-		title: "Study abroad.",
-		titleEm: "With us.",
-		lead: company.promise,
-		image: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=1600&q=80",
-		imageAlt: "Students walking through a historic university courtyard",
-		meta: [
-			{ label: "Since", value: String(company.founded) },
-			{ label: "Base", value: "Ghana · Accra & Kumasi" },
-			{ label: "Focus", value: "Admission · Visa · Travel" },
-		],
-	},
-	{
-		id: "uk",
-		kicker: "United Kingdom",
-		title: "UK universities.",
-		titleEm: "Global rank.",
-		lead: "UK universities hold an impressive international reputation. We guide Ghanaian students from programme choice through study-visa success.",
-		image: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=1600&q=80",
-		imageAlt: "London cityscape with historic architecture",
-		meta: [
-			{ label: "Service", value: "Study visa" },
-			{ label: "Support", value: "Docs · Interview" },
-			{ label: "Office", value: "Accra · Kumasi" },
-		],
-	},
-	{
-		id: "germany",
-		kicker: "Germany",
-		title: "Study in",
-		titleEm: "Germany.",
-		lead: "For ambitious students seeking world-class education-strong STEM, research intensity, and clear counselling from first enquiry.",
-		image: "https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=1600&q=80",
-		imageAlt: "German architecture and university city",
-		meta: [
-			{ label: "Focus", value: "Master's & STEM" },
-			{ label: "Docs", value: "WASSCE · Degree" },
-			{ label: "After visa", value: "Travel support" },
-		],
-	},
-	{
-		id: "canada",
-		kicker: "Canada",
-		title: "Study in",
-		titleEm: "Canada.",
-		lead: "Canada hosts nearly half a million international students-world-class education with post-study opportunity. We map the path.",
-		image: "https://images.unsplash.com/photo-1517935706615-2717063c2225?w=1600&q=80",
-		imageAlt: "Canadian city skyline",
-		meta: [
-			{ label: "Pathway", value: "PGWP-ready" },
-			{ label: "Counsel", value: "Career fit" },
-			{ label: "Email", value: company.email },
-		],
-	},
-];
 
 function useCountUp(target: number, active: boolean) {
 	const [value, setValue] = useState(0);
@@ -235,6 +179,7 @@ function StatItem({
 }
 
 export function Home() {
+	const homeCopy = usePageCopy("home", HOME_COPY);
 	const statsRef = useRef<HTMLElement>(null);
 	const [statsActive, setStatsActive] = useState(false);
 	const [explore, setExplore] = useState<ExploreTab>("d");
@@ -271,7 +216,7 @@ export function Home() {
 		: "Start Journey";
 	const journeyTo = isAuthenticated ? "/portal/home" : "/start";
 
-	const heroSlides: HeroSlide[] = baseHeroSlides.map((s, i) => {
+	const heroSlides: HeroSlide[] = (homeCopy.heroSlides as Omit<HeroSlide, "primary" | "secondary">[]).map((s, i) => {
 		if (i === 0) {
 			return {
 				...s,
@@ -334,8 +279,8 @@ export function Home() {
 				<div className="container">
 					<div className="section__head">
 						<div>
-							<p className="eyebrow">What we offer</p>
-							<h2 className="section-title">Our services</h2>
+							<p className="eyebrow">{homeCopy.servicesEyebrow}</p>
+							<h2 className="section-title">{homeCopy.servicesTitle}</h2>
 						</div>
 						<Link to="/student-services" className="link-arrow">
 							Student services →
@@ -382,8 +327,8 @@ export function Home() {
 				<div className="container">
 					<div className="section__head">
 						<div>
-							<p className="eyebrow">Explore</p>
-							<h2 className="section-title">Where could you go?</h2>
+							<p className="eyebrow">{homeCopy.destinationsEyebrow}</p>
+							<h2 className="section-title">{homeCopy.destinationsTitle}</h2>
 						</div>
 						<Link to="/start" className="link-arrow">
 							Talk it through →

@@ -18,6 +18,7 @@ import {
 	putNav,
 	registerMedia,
 	revertEntry,
+	seedCompiledContent,
 	saveBrandDraft,
 	setEntryStatus,
 	updateMedia,
@@ -150,6 +151,15 @@ cmsRouter.get("/brand/history", requireStaff, requireModule("cms"), async (c) =>
 });
 
 /* ══ Entries ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * Seed published pages/* entries from the compiled copy. Inserts only
+ * missing rows — never overwrites an entry staff may have edited, so it is
+ * safe to run repeatedly.
+ */
+cmsRouter.post("/seed", requireStaff, requireModule("cms"), async (c) => {
+	return c.json(await seedCompiledContent(editor(c)));
+});
 
 cmsRouter.get("/entries", requireStaff, requireModule("cms"), async (c) => {
 	return c.json({ entries: await listEntries(c.req.query("collection") || undefined) });

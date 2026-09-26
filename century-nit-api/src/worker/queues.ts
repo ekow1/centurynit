@@ -95,6 +95,7 @@ export const autopayQueue = new Queue("autopay", { connection });
 export const chatReplyEmailQueue = new Queue("chatReplyEmail", { connection });
 export const helpdeskSweepQueue = new Queue("helpdeskSweep", { connection });
 export const automationSweepQueue = new Queue("automationSweep", { connection });
+export const cmsPublishQueue = new Queue("cmsPublish", { connection });
 
 /* ── Email ───────────────────────────────────────────────────────────────── */
 
@@ -348,4 +349,17 @@ export async function cancelQueuedCampaignSend(campaignId: string): Promise<void
 			/* already gone or running — nothing to do */
 		});
 	}
+}
+
+/**
+ * The scheduled-publish sweep — flips `review`-status cms_entries whose
+ * scheduledAt has passed to published. Runs every minute; BullMQ dedupes
+ * repeatables by key so every worker boot stays one timer.
+ */
+export async function scheduleCmsPublishSweep(): Promise<void> {
+	await cmsPublishQueue.add(
+		"sweep",
+		{},
+		{ repeat: { every: 60 * 1000 }, jobId: undefined },
+	);
 }

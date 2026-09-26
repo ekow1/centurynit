@@ -26,6 +26,13 @@ const STATUS_STYLE: Record<string, string> = {
 	published: "cms-status cms-status--published",
 };
 
+/** datetime-local wants local wall-clock, the API stores ISO. */
+function toLocalInput(iso: string): string {
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return "";
+	return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
 const field: CSSProperties = { width: "100%", padding: "0.45rem 0.6rem", border: "1px solid var(--border,#d8d5cd)", background: "var(--surface,#fff)", color: "inherit", fontSize: "0.85rem" };
 const label: CSSProperties = { display: "block", fontSize: "0.68rem", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--muted,#6e6a60)", marginBottom: "0.25rem", fontFamily: "ui-monospace,monospace" };
 const btn = (primary = false): CSSProperties => ({
@@ -323,7 +330,7 @@ function EntryEditor({ entry, onSaved, onClose, inline }: { entry: CmsEntry; onS
 		}
 		await apiFetch(`${API_PREFIX}/cms/entries`, {
 			method: "POST",
-			body: JSON.stringify({ id: editing.id || undefined, collection: editing.collection, slug: editing.slug, payload, seo }),
+			body: JSON.stringify({ id: editing.id || undefined, collection: editing.collection, slug: editing.slug, payload, seo, scheduledAt: editing.scheduledAt }),
 		});
 		setFlash("Saved"); setTimeout(() => setFlash(null), 2500);
 		onSaved();
@@ -357,6 +364,25 @@ function EntryEditor({ entry, onSaved, onClose, inline }: { entry: CmsEntry; onS
 					<StatusPill s={editing.id ? editing.status : "none"} />
 					<button style={btnSm(false)} onClick={() => setStructured(!structured)}>{structured ? "JSON" : "Fields"}</button>
 				</div>
+				<div style={{ display: "flex", gap: "0.75rem", marginBottom: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+					<div>
+						<label style={label}>Publish at</label>
+						<input
+							type="datetime-local"
+							style={{ ...field, width: "auto" }}
+							value={editing.scheduledAt ? toLocalInput(editing.scheduledAt) : ""}
+							onChange={(e) => setEditing({ ...editing, scheduledAt: e.target.value ? new Date(e.target.value).toISOString() : null })}
+						/>
+					</div>
+					{editing.scheduledAt ? (
+						<p className="muted" style={{ fontSize: "0.72rem", margin: 0, alignSelf: "flex-end" }}>
+							{editing.status === "review"
+								? `Goes live ${new Date(editing.scheduledAt).toLocaleString()} — the sweep publishes review entries once the time passes.`
+								: `Scheduled for ${new Date(editing.scheduledAt).toLocaleString()} — send it to review and it publishes itself at that time.`}
+							{" "}<button style={btnSm(false)} onClick={() => setEditing({ ...editing, scheduledAt: null })}>clear</button>
+						</p>
+					) : null}
+				</div>
 				{error ? <p style={{ color: "var(--danger,#a33b2e)", fontSize: "0.85rem" }}>{error}</p> : null}
 				{flash ? <p className="mono" style={{ color: "var(--success,#2e6b34)", fontSize: "0.72rem" }}>{flash}</p> : null}
 
@@ -384,6 +410,7 @@ function EntryEditor({ entry, onSaved, onClose, inline }: { entry: CmsEntry; onS
 				) : null}
 				<div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem", alignItems: "center" }}>
 					<button style={btn(true)} onClick={() => save()}>Save</button>
+					{editing.id && editing.status === "draft" ? <button style={btn(false)} onClick={() => setStatus("review")}>Send to review</button> : null}
 					{editing.id && editing.status !== "published" ? <button style={btn(false)} onClick={() => setStatus("published")}>Publish</button> : null}
 					{editing.id && editing.status === "published" ? <button style={btn(false)} onClick={() => setStatus("draft")}>Unpublish</button> : null}
 					{!inline && onClose ? <button style={btn(false)} onClick={onClose}>Close</button> : null}
@@ -473,6 +500,9 @@ function SitePagesTab({ entries, reload }: { entries: CmsEntry[]; reload: () => 
 										{entryTitle(e)}
 										<small className="mono" style={{ display: "block", color: "var(--muted,#6e6a60)", fontSize: "0.62rem" }}>{e.slug}</small>
 									</span>
+									{e.scheduledAt && e.status !== "published" ? (
+										<span className="mono" style={{ fontSize: "0.6rem", color: "var(--accent,#b97a10)" }} title={`Publishes ${new Date(e.scheduledAt).toLocaleString()}`}>→ {new Date(e.scheduledAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+									) : null}
 									<StatusPill s={e.status} />
 								</button>
 							);

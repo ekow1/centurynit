@@ -8,6 +8,7 @@ import { autopayWorker } from "./autopay.js";
 import { chatReplyEmailWorker } from "./chat-reply.js";
 import { helpdeskSweepWorker } from "./helpdesk-sweep.js";
 import { automationSweepWorker } from "./automation-sweep.js";
+import { cmsPublishWorker } from "./cms-publish.js";
 import {
 	connection,
 	emailQueue,
@@ -22,6 +23,7 @@ import {
 	scheduleAutoPaySweep,
 	scheduleHelpdeskSweep,
 	scheduleAutomationSweep,
+	scheduleCmsPublishSweep,
 	automationSweepQueue,
 	autopayQueue,
 	chatReplyEmailQueue,
@@ -60,6 +62,7 @@ const workers = [
 	{ name: "chatReplyEmail", worker: chatReplyEmailWorker },
 	{ name: "helpdeskSweep", worker: helpdeskSweepWorker },
 	{ name: "automationSweep", worker: automationSweepWorker },
+	{ name: "cmsPublish", worker: cmsPublishWorker },
 ];
 
 console.log(
@@ -88,6 +91,9 @@ scheduleHelpdeskSweep().catch((err) => console.error("[helpdesk-sweep] schedule 
 
 // Schedule the automation send sweep (every minute, idempotent).
 scheduleAutomationSweep().catch((err) => console.error("[automation-sweep] schedule error:", err.message));
+
+// Schedule the CMS scheduled-publish sweep (every minute, idempotent).
+scheduleCmsPublishSweep().catch((err) => console.error("[cms-publish] schedule error:", err.message));
 
 /**
  * Graceful shutdown.

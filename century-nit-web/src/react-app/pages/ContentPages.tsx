@@ -25,7 +25,7 @@ import {
 	PAGE_COPY,
 } from "century-nit-core";
 import { useCatalog } from "../data/useCatalog";
-import { useContentEntries, useContentEntry, usePageCopy, contentImage } from "../data/useContent";
+import { useContentEntries, useContentEntry, usePageCopy, contentImage, useFilms } from "../data/useContent";
 
 function PageHeader({
 	eyebrow,
@@ -1153,6 +1153,7 @@ export function SuccessStories() {
 	// Management → Site pages → Success stories. Compiled testimonials are
 	// the fallback when the collection is empty or unreachable.
 	const { entries, live } = useContentEntries("stories");
+	const films = useFilms(videoTestimonials);
 	const written =
 		live && entries.length
 			? entries.map((e) => ({
@@ -1201,11 +1202,11 @@ export function SuccessStories() {
 							<div className="redseat__part-head">
 								<h3 className="redseat__part-title">On camera</h3>
 								<span className="mono muted redseat__count">
-									{videoTestimonials.length} films
+									{films.length} films
 								</span>
 							</div>
 							<Carousel label="Video testimonials">
-								{videoTestimonials.map((v) => (
+								{films.map((v) => (
 									<article key={v.id} className="rs-video carousel__item">
 										<button
 											type="button"
@@ -1238,7 +1239,7 @@ export function SuccessStories() {
 
 			{playing ? (
 				<VideoLightbox
-					video={videoTestimonials.find((v) => v.id === playing)!}
+					video={films.find((v) => v.id === playing)!}
 					onClose={() => setPlaying(null)}
 				/>
 			) : null}

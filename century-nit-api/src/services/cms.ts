@@ -2,7 +2,7 @@ import { and, desc, eq, isNotNull, lte } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { cmsBrand, cmsEntries, cmsNav, cmsVersions, copyKeys, media } from "../db/schema.js";
 import { brandSchema, DEFAULT_BRAND, type Brand, type NavItem } from "century-nit-shared";
-import { HOME_COPY, PAGE_COPY, articles, company, coreServices, events, faqs, testimonials } from "century-nit-core";
+import { HOME_COPY, PAGE_COPY, articles, company, coreServices, events, faqs, testimonials, videoTestimonials } from "century-nit-core";
 import { recordAdminEvent } from "./audit.js";
 
 /**
@@ -285,6 +285,12 @@ export async function seedCompiledContent(editor: Editor): Promise<{ created: nu
 			slug: id,
 			payload: rest as Record<string, unknown>,
 			seo: { title: `${rest.title} | Events | ${company.brandName}` },
+		})),
+		...videoTestimonials.map(({ id, ...rest }) => ({
+			collection: "films",
+			slug: id,
+			payload: rest as Record<string, unknown>,
+			seo: { title: `${rest.name} — on camera | ${company.brandName}` },
 		})),
 		...articles.map(({ id, ...rest }) => ({
 			collection: "posts",

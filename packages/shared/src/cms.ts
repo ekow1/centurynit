@@ -106,6 +106,7 @@ export const CMS_COLLECTIONS = [
 	"events",
 	"stories",
 	"services",
+	"films",
 	"team",
 	"branches",
 ] as const;

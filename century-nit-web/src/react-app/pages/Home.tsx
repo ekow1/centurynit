@@ -22,7 +22,7 @@ import {
 } from "century-nit-core";
 import { SERVICE_STAGES, SERVICE_STAGE_LABELS, type ServiceStage } from "century-nit-shared";
 import { STAGE_SHORT } from "../data/stageLabels";
-import { usePageCopy } from "../data/useContent";
+import { usePageCopy, useFilms } from "../data/useContent";
 
 /** The purchasable stage strip — consultation is the entry, the rest compose. */
 const STAGE_REQ: Record<string, string> = {
@@ -190,6 +190,7 @@ export function Home() {
 		(a, b) => Number(FEATURED_DESTINATION_IDS.has(b.id)) - Number(FEATURED_DESTINATION_IDS.has(a.id)),
 	);
 	const [playing, setPlaying] = useState<string | null>(null);
+	const films = useFilms(videoTestimonials);
 	const { isAuthenticated, journeyPhase } = useAppState();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const nav = useNavigate();
@@ -511,11 +512,11 @@ export function Home() {
 							<div className="redseat__part-head">
 								<h3 className="redseat__part-title">On camera</h3>
 								<span className="mono muted redseat__count">
-									{videoTestimonials.length} films
+									{films.length} films
 								</span>
 							</div>
 							<Carousel label="Video testimonials">
-								{videoTestimonials.map((v) => (
+								{films.map((v) => (
 									<article key={v.id} className="rs-video carousel__item">
 										<button
 											type="button"
@@ -545,7 +546,7 @@ export function Home() {
 			{/* Video lightbox */}
 			{playing ? (
 				<VideoLightbox
-					video={videoTestimonials.find((v) => v.id === playing)!}
+					video={films.find((v) => v.id === playing)!}
 					onClose={() => setPlaying(null)}
 				/>
 			) : null}

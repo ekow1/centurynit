@@ -107,6 +107,124 @@ function mediaSrc(key: string | null): string | null {
 	return key && key.startsWith("media/") ? `${API_PREFIX}/media/${key}` : key;
 }
 
+/** Presigned-upload pipeline shared by the Media tab and the editor picker. */
+async function uploadMediaFile(file: File): Promise<MediaItem> {
+	const up = await apiFetch<{ key: string; url: string; headers: Record<string, string> }>(`${API_PREFIX}/cms/media/upload-url`, {
+		method: "POST",
+		body: JSON.stringify({ fileName: file.name, mime: file.type || "application/octet-stream" }),
+	});
+	const put = await fetch(up.url, { method: "PUT", headers: { "Content-Type": file.type, ...up.headers }, body: file });
+	if (!put.ok) throw new Error(`upload failed (${put.status})`);
+	const res = await apiFetch<{ media: MediaItem }>(`${API_PREFIX}/cms/media`, {
+		method: "POST",
+		body: JSON.stringify({ key: up.key, fileName: file.name, mime: file.type, sizeBytes: file.size, alt: file.name.replace(/\.[^.]+$/, "") }),
+	});
+	return res.media;
+}
+
+function mediaKind(m: MediaItem): "image" | "video" | "doc" {
+	if (m.mime.startsWith("image/")) return "image";
+	if (m.mime.startsWith("video/")) return "video";
+	return "doc";
+}
+
+/* ── Media picker — browse the library, upload, and pick for a field ────── */
+
+function MediaPicker({
+	open,
+	onPick,
+	onClose,
+	prefer,
+}: {
+	open: boolean;
+	onPick: (key: string) => void;
+	onClose: () => void;
+	prefer?: "image" | "video";
+}) {
+	const [items, setItems] = useState<MediaItem[]>([]);
+	const [kind, setKind] = useState<"all" | "image" | "video" | "doc">("all");
+	const [q, setQ] = useState("");
+	const [sel, setSel] = useState<string | null>(null);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		if (!open) return;
+		setSel(null); setKind(prefer ?? "all"); setError(null);
+		void apiFetch<{ media: MediaItem[] }>(`${API_PREFIX}/cms/media`)
+			.then((r) => setItems(r.media))
+			.catch((e) => setError(e instanceof Error ? e.message : "failed to load media"));
+	}, [open, prefer]);
+
+	if (!open) return null;
+
+	const query = q.trim().toLowerCase();
+	const shown = items
+		.filter((m) => (kind === "all" ? true : mediaKind(m) === kind))
+		.filter((m) => (query ? (m.key + " " + m.alt + " " + m.fileName).toLowerCase().includes(query) : true));
+
+	async function upload(file: File) {
+		setBusy(true); setError(null);
+		try {
+			const m = await uploadMediaFile(file);
+			setItems((prev) => [m, ...prev]);
+			setSel(m.key);
+		} catch (e) { setError(e instanceof Error ? e.message : "upload failed"); }
+		finally { setBusy(false); }
+	}
+
+	return (
+		<div style={{ position: "fixed", inset: 0, zIndex: 60 }}>
+			<div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(23,22,26,0.35)" }} />
+			<div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: 430, maxWidth: "94vw", background: "var(--surface,#fffdf8)", borderLeft: "1px solid var(--border,#ddd8cb)", boxShadow: "-18px 0 40px rgba(23,22,26,.18)", display: "flex", flexDirection: "column" }}>
+				<div style={{ padding: "0.8rem 1rem", borderBottom: "1px solid var(--border,#ddd8cb)", display: "flex", alignItems: "center", gap: "0.6rem" }}>
+					<h3 style={{ margin: 0, fontFamily: "var(--font-display,Georgia,serif)", fontSize: "1.05rem" }}>Media library</h3>
+					<span style={{ flex: 1 }} />
+					<button style={btnSm(false)} onClick={onClose}>✕</button>
+				</div>
+				<label style={{ ...btn(true), display: "block", margin: "0.8rem 1rem 0", textAlign: "center", borderStyle: "dashed", background: "var(--surface-alt,#fbfaf7)", color: "var(--muted,#6e6a60)", borderColor: "var(--border,#ddd8cb)" }}>
+					{busy ? "Uploading…" : "Drop-in upload — click to browse (image · video · pdf)"}
+					<input type="file" accept="image/*,video/*,.pdf" style={{ display: "none" }} disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
+				</label>
+				<div style={{ display: "flex", gap: "0.35rem", padding: "0.7rem 1rem 0" }}>
+					{(["all", "image", "video", "doc"] as const).map((k) => (
+						<button key={k} style={{ ...btnSm(kind === k), flex: 1 }} onClick={() => setKind(k)}>{k === "image" ? "Images" : k === "video" ? "Video" : k === "doc" ? "Docs" : "All"}</button>
+					))}
+				</div>
+				<div style={{ padding: "0.6rem 1rem" }}>
+					<input style={{ ...field, fontSize: "0.75rem" }} placeholder="filter by key or alt…" value={q} onChange={(e) => setQ(e.target.value)} />
+				</div>
+				{error ? <p style={{ color: "var(--danger,#a33b2e)", fontSize: "0.75rem", padding: "0 1rem" }}>{error}</p> : null}
+				<div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "0.6rem", padding: "0 1rem 1rem", overflowY: "auto", flex: 1, alignContent: "start" }}>
+					{shown.map((m) => {
+						const k = mediaKind(m);
+						return (
+							<button key={m.id} type="button" onClick={() => setSel(m.key)} style={{ padding: 0, border: sel === m.key ? "2px solid var(--accent,#b97a10)" : "1px solid var(--border,#ddd8cb)", background: "#fff", cursor: "pointer", textAlign: "left", position: "relative" }}>
+								{k === "video" ? (
+									<div style={{ width: "100%", height: 74, background: "var(--ink,#17161a)", position: "relative", overflow: "hidden" }}>
+										<video src={`${API_PREFIX}/media/${m.key}`} preload="metadata" muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+										<span style={{ position: "absolute", top: 4, left: 4, background: "rgba(0,0,0,.65)", color: "#fff", fontFamily: "ui-monospace,monospace", fontSize: "0.5rem", padding: "0.1rem 0.3rem" }}>▶ video</span>
+									</div>
+								) : k === "image" ? (
+									<img src={`${API_PREFIX}/media/${m.key}`} alt={m.alt} loading="lazy" style={{ width: "100%", height: 74, objectFit: "cover", display: "block" }} />
+								) : (
+									<div style={{ width: "100%", height: 74, display: "grid", placeItems: "center", background: "var(--surface-alt,#fbfaf7)", fontFamily: "ui-monospace,monospace", fontSize: "0.55rem", color: "var(--muted,#6e6a60)" }}>{m.mime.split("/")[1]?.toUpperCase() ?? "FILE"}</div>
+								)}
+								<span className="mono" style={{ display: "block", fontSize: "0.52rem", padding: "0.28rem 0.35rem", color: "var(--muted,#6e6a60)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.key}</span>
+							</button>
+						);
+					})}
+					{shown.length === 0 ? <p className="muted" style={{ gridColumn: "1 / -1", fontSize: "0.75rem", padding: "1rem 0" }}>Nothing here yet — upload above.</p> : null}
+				</div>
+				<div style={{ padding: "0.7rem 1rem", borderTop: "1px solid var(--border,#ddd8cb)", display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+					<button style={btn(false)} onClick={onClose}>Cancel</button>
+					<button style={btn(true)} disabled={!sel} onClick={() => { if (sel) { onPick(`media/${sel}`); onClose(); } }}>Use selected</button>
+				</div>
+			</div>
+		</div>
+	);
+}
+
 function entryTitle(e: CmsEntry): string {
 	const p = e.payload as Record<string, unknown>;
 	const v = p.title ?? p.name ?? p.question ?? p.headline ?? p.label;
@@ -155,6 +273,7 @@ const SITE_GROUPS: { label: string; pages: SitePageDef[] }[] = [
 		label: "Company",
 		pages: [
 			{ id: "red", name: "Success stories", route: "/red-seat", kind: "list", collection: "stories", slug: "red-seat" },
+			{ id: "films", name: "Films (on camera)", route: "/red-seat", kind: "list", collection: "films", note: "Video testimonials — poster + mp4. Plays in the On camera carousel on Home and Success stories." },
 			{ id: "events", name: "Events", route: "/events", kind: "list", collection: "events" },
 			{ id: "blog", name: "Blog", route: "/blog", kind: "list", collection: "posts" },
 			{ id: "faqs", name: "FAQs", route: "/faqs", kind: "list", collection: "faqs" },
@@ -211,31 +330,53 @@ function SrcBadge({ kind }: { kind: SitePageDef["kind"] }) {
 /* ── Site-styled hero preview ────────────────────────────────────────────── */
 
 function HeroPreview({ payload }: { payload: Record<string, unknown> }) {
-	const hero = (payload.hero ?? payload) as Record<string, unknown>;
-	const image = payloadImage(payload);
+	const slides = Array.isArray(payload.heroSlides) ? (payload.heroSlides as Record<string, unknown>[]) : null;
+	const [slide, setSlide] = useState(0);
+	const hero = slides?.[Math.min(slide, slides.length - 1)] ?? ((payload.hero ?? payload) as Record<string, unknown>);
+	const image = (hero.image as string | undefined) ?? payloadImage(payload);
 	const headline = (hero.headline ?? hero.title ?? payload.title) as string | undefined;
-	const sub = (hero.sub ?? hero.subheadline ?? hero.standfirst ?? payload.description) as string | undefined;
+	const em = (hero.titleEm ?? hero.emphasis) as string | undefined;
+	const sub = (hero.sub ?? hero.subheadline ?? hero.standfirst ?? hero.lead ?? payload.lead ?? payload.description) as string | undefined;
 	const cta = (hero.cta ?? hero.ctaLabel) as string | undefined;
-	const src = mediaSrc(image);
+	const meta = Array.isArray(hero.meta) ? (hero.meta as { label?: string; value?: string }[]) : [];
+	const kicker = (hero.kicker ?? hero.eyebrow ?? payload.eyebrow) as string | undefined;
+	const src = mediaSrc(image ?? null);
 	if (!headline && !src) return null;
 	return (
 		<div style={{ borderBottom: "1px solid var(--border,#d8d5cd)" }}>
-			<div style={{ fontFamily: "ui-monospace,monospace", fontSize: "0.58rem", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--muted,#6e6a60)", padding: "0.45rem 0.9rem 0", display: "flex", gap: "0.45rem", alignItems: "center" }}>
-				<span style={{ color: "var(--success,#2e6b34)", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
-					<i style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />Live preview
-				</span>
-				<span>— as rendered on the site</span>
-			</div>
-			<div style={{ margin: "0.5rem 0.9rem 0.9rem", position: "relative", minHeight: 150, display: "flex", alignItems: "flex-end", overflow: "hidden", border: "1px solid var(--border,#d8d5cd)", background: "var(--ink,#17161a)" }}>
-				{src ? <img src={src} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : null}
-				<div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(23,22,26,0.15), rgba(23,22,26,0.78))" }} />
-				<div style={{ position: "relative", padding: "1.1rem 1.3rem", color: "#fff" }}>
-					<span style={{ fontFamily: "ui-monospace,monospace", fontSize: "0.55rem", letterSpacing: "0.16em", border: "1px solid rgba(255,255,255,0.7)", padding: "0.15rem 0.45rem" }}>CNIT</span>
-					{headline ? <h3 style={{ fontSize: "1.3rem", margin: "0.4rem 0 0.2rem", maxWidth: "30ch", lineHeight: 1.15 }}>{headline}</h3> : null}
-					{sub ? <p style={{ fontSize: "0.75rem", opacity: 0.85, maxWidth: "52ch", margin: 0 }}>{sub}</p> : null}
+			<div style={{ margin: "0.5rem 0.9rem 0", position: "relative", minHeight: 150, display: "flex", alignItems: "flex-end", overflow: "hidden", border: "1px solid var(--border,#d8d5cd)", background: "var(--ink,#17161a)" }}>
+				{src ? <img src={src} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: 0.45 }} /> : null}
+				<div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(20,19,26,0.55), rgba(20,19,26,0.85))" }} />
+				<div style={{ position: "relative", padding: "1.1rem 1.3rem", color: "#f2efe6" }}>
+					{kicker ? <p style={{ fontFamily: "ui-monospace,monospace", fontSize: "0.55rem", letterSpacing: "0.22em", textTransform: "uppercase", color: "#d8b470", margin: 0 }}>{kicker}</p> : null}
+					{headline ? (
+						<h3 style={{ fontSize: "1.35rem", margin: "0.35rem 0 0.25rem", maxWidth: "24ch", lineHeight: 1.15, fontFamily: "var(--font-display,Georgia,serif)", fontWeight: 500 }}>
+							{headline}{em ? <> <em style={{ fontStyle: "normal", color: "#d8b470", borderBottom: "2px solid #d8b470" }}>{em}</em></> : null}
+						</h3>
+					) : null}
+					{sub ? <p style={{ fontSize: "0.72rem", color: "#cfc9bb", maxWidth: "44ch", margin: 0, lineHeight: 1.5 }}>{sub}</p> : null}
+					{meta.length ? (
+						<div style={{ display: "flex", gap: "0.45rem", marginTop: "0.7rem", flexWrap: "wrap" }}>
+							{meta.map((m, i) => (
+								<span key={i} style={{ border: "1px solid rgba(255,255,255,0.25)", padding: "0.28rem 0.5rem", fontFamily: "ui-monospace,monospace", fontSize: "0.5rem", letterSpacing: "0.08em", color: "#e5e0d2" }}>
+									{m.label}<b style={{ display: "block", fontSize: "0.62rem", color: "#fff" }}>{m.value}</b>
+								</span>
+							))}
+						</div>
+					) : null}
 					{cta ? <span style={{ display: "inline-block", marginTop: "0.6rem", background: "var(--accent,#b97a10)", color: "#fff", fontFamily: "ui-monospace,monospace", fontSize: "0.58rem", letterSpacing: "0.1em", textTransform: "uppercase", padding: "0.45rem 0.9rem" }}>{cta} →</span> : null}
 				</div>
 			</div>
+			{slides && slides.length > 1 ? (
+				<div style={{ display: "flex", justifyContent: "center", gap: "0.35rem", padding: "0.45rem 0 0.2rem" }}>
+					{slides.map((_, i) => (
+						<button key={i} type="button" onClick={() => setSlide(i)} style={{ width: 18, height: 3, border: "none", padding: 0, cursor: "pointer", background: i === slide ? "var(--accent,#b97a10)" : "var(--border,#d8d5cd)" }} aria-label={`slide ${i + 1}`} />
+					))}
+				</div>
+			) : null}
+			<p className="muted" style={{ fontSize: "0.62rem", padding: "0.25rem 0.9rem 0.6rem", margin: 0 }}>
+				{slides ? `Slide ${Math.min(slide, slides.length - 1) + 1} of ${slides.length} — ` : ""}unsaved edits preview as they will render
+			</p>
 		</div>
 	);
 }
@@ -310,7 +451,7 @@ function PayloadFields({ payload, onChange }: { payload: Record<string, unknown>
 type FieldSpec = {
 	key: string;
 	label: string;
-	kind: "text" | "textarea" | "media" | "list" | "select" | "pairs" | "objects";
+	kind: "text" | "textarea" | "media" | "video" | "list" | "select" | "pairs" | "objects";
 	rows?: number;
 	options?: string[];
 	hint?: string;
@@ -389,6 +530,15 @@ const COLLECTION_SCHEMAS: Record<string, FieldSpec[]> = {
 		{ key: "type", label: "Type", kind: "select", options: ["In-person", "Online", "News"] },
 		{ key: "description", label: "Description", kind: "textarea", rows: 3 },
 	],
+	films: [
+		{ key: "name", label: "Name", kind: "text" },
+		{ key: "program", label: "Programme", kind: "text" },
+		{ key: "country", label: "Route", kind: "text", hint: "e.g. Ghana → United Kingdom" },
+		{ key: "headline", label: "Headline", kind: "textarea", rows: 2 },
+		{ key: "length", label: "Length", kind: "text", hint: "e.g. 2:14" },
+		{ key: "poster", label: "Poster image", kind: "media" },
+		{ key: "videoUrl", label: "Video file", kind: "video", hint: "mp4 upload — plays in the On camera carousel" },
+	],
 };
 
 function schemaFor(collection: string, slug: string): FieldSpec[] | null {
@@ -429,23 +579,42 @@ function OneField({
 	spec,
 	value,
 	onChange,
+	onBrowse,
 }: {
 	spec: FieldSpec;
 	value: unknown;
 	onChange: (v: unknown) => void;
+	onBrowse?: (apply: (key: string) => void, prefer?: "image" | "video") => void;
 }) {
 	switch (spec.kind) {
 		case "textarea":
 			return <textarea style={{ ...field, minHeight: (spec.rows ?? 3) * 20 }} value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)} />;
-		case "media": {
+		case "media":
+		case "video": {
 			const s = typeof value === "string" ? value : "";
 			const src = mediaSrc(s);
+			const isVideo = spec.kind === "video";
 			return (
-				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-					{s.startsWith("media/") && src ? <img src={src} alt="" style={{ width: 64, height: 44, objectFit: "cover", border: "1px solid var(--border,#d8d5cd)", flex: "none" }} /> : null}
+				<div style={{ display: "flex", gap: "0.6rem", alignItems: "flex-start" }}>
+					<div style={{ width: 96, height: 64, border: "1px solid var(--border,#d8d5cd)", background: "var(--ink-2,#26242b)", flex: "none", position: "relative", overflow: "hidden" }}>
+						{src ? (
+							isVideo ? (
+								<video src={src} preload="metadata" muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+							) : (
+								<img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+							)
+						) : (
+							<span className="mono" style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "var(--faint,#a09a8b)", fontSize: "0.55rem" }}>{isVideo ? "video" : "image"}</span>
+						)}
+						{isVideo && src ? <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,.6)" }}>▶</span> : null}
+					</div>
 					<div style={{ flex: 1 }}>
-						<input style={{ ...field, fontFamily: "ui-monospace,monospace", fontSize: "0.72rem" }} value={s} onChange={(e) => onChange(e.target.value)} placeholder="media/… or https://…" />
-						<span className="mono" style={{ fontSize: "0.62rem", color: "var(--info,#31577a)" }}>▸ media key from the Media tab, or an external URL</span>
+						<input style={{ ...field, fontFamily: "ui-monospace,monospace", fontSize: "0.68rem" }} value={s} onChange={(e) => onChange(e.target.value)} placeholder={isVideo ? "media/… (mp4) or https://…" : "media/… or https://…"} />
+						<div style={{ display: "flex", gap: "0.4rem", marginTop: "0.35rem" }}>
+							{onBrowse ? <button type="button" style={btnSm(false)} onClick={() => onBrowse((key) => onChange(key), isVideo ? "video" : "image")}>Library</button> : null}
+							{onBrowse ? <button type="button" style={btnSm(false)} onClick={() => onBrowse((key) => onChange(key), isVideo ? "video" : "image")}>Upload</button> : null}
+							{s ? <button type="button" style={{ ...btnSm(false), color: "var(--danger,#a33b2e)" }} onClick={() => onChange("")}>Remove</button> : null}
+						</div>
 					</div>
 				</div>
 			);
@@ -497,9 +666,9 @@ function OneField({
 							</div>
 							<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
 								{spec.itemFields?.map((f) => (
-									<div key={f.key} style={f.kind === "textarea" || f.kind === "media" || f.kind === "list" || f.kind === "pairs" ? { gridColumn: "1 / -1" } : undefined}>
+									<div key={f.key} style={f.kind === "textarea" || f.kind === "media" || f.kind === "video" || f.kind === "list" || f.kind === "pairs" ? { gridColumn: "1 / -1" } : undefined}>
 										<label style={label}>{f.label}</label>
-										<OneField spec={f} value={item[f.key]} onChange={(v) => onChange(items.map((x, j) => (j === i ? { ...x, [f.key]: v } : x)))} />
+										<OneField spec={f} value={item[f.key]} onChange={(v) => onChange(items.map((x, j) => (j === i ? { ...x, [f.key]: v } : x)))} onBrowse={onBrowse} />
 										{f.hint ? <p className="muted" style={{ fontSize: "0.65rem", margin: "0.2rem 0 0" }}>{f.hint}</p> : null}
 									</div>
 								))}
@@ -517,7 +686,17 @@ function OneField({
 	}
 }
 
-function SchemaFields({ schema, payload, onChange }: { schema: FieldSpec[]; payload: Record<string, unknown>; onChange: (p: Record<string, unknown>) => void }) {
+function SchemaFields({
+	schema,
+	payload,
+	onChange,
+	onBrowse,
+}: {
+	schema: FieldSpec[];
+	payload: Record<string, unknown>;
+	onChange: (p: Record<string, unknown>) => void;
+	onBrowse?: (apply: (key: string) => void, prefer?: "image" | "video") => void;
+}) {
 	const set = (k: string, v: unknown) => onChange({ ...payload, [k]: v });
 	const extra = Object.keys(payload).filter((k) => !schema.some((f) => f.key === k));
 	return (
@@ -525,7 +704,7 @@ function SchemaFields({ schema, payload, onChange }: { schema: FieldSpec[]; payl
 			{schema.map((f) => (
 				<div key={f.key}>
 					<label style={label}>{f.label}</label>
-					<OneField spec={f} value={payload[f.key]} onChange={(v) => set(f.key, v)} />
+					<OneField spec={f} value={payload[f.key]} onChange={(v) => set(f.key, v)} onBrowse={onBrowse} />
 					{f.hint ? <p className="muted" style={{ fontSize: "0.65rem", margin: "0.2rem 0 0" }}>{f.hint}</p> : null}
 				</div>
 			))}
@@ -543,15 +722,16 @@ function SchemaFields({ schema, payload, onChange }: { schema: FieldSpec[]; payl
 function EntryEditor({ entry, onSaved, onClose, inline }: { entry: CmsEntry; onSaved: () => void; onClose?: () => void; inline?: boolean }) {
 	const [editing, setEditing] = useState(entry);
 	const [json, setJson] = useState("{}");
-	const [seoJson, setSeoJson] = useState("{}");
+	const [seo, setSeo] = useState<Record<string, unknown>>({});
 	const [structured, setStructured] = useState(true);
 	const [history, setHistory] = useState<{ id: string; version: number; note: string | null; editorEmail: string | null; createdAt: string }[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [flash, setFlash] = useState<string | null>(null);
+	const [picker, setPicker] = useState<{ apply: (key: string) => void; prefer?: "image" | "video" } | null>(null);
 
 	useEffect(() => {
 		setJson(JSON.stringify(entry.payload, null, 2));
-		setSeoJson(JSON.stringify(entry.seo ?? {}, null, 2));
+		setSeo({ ...(entry.seo ?? {}) } as Record<string, unknown>);
 		if (entry.id) {
 			void apiFetch<{ versions: typeof history }>(`${API_PREFIX}/cms/entries/${entry.collection}/${entry.slug}/history`)
 				.then((h) => setHistory(h.versions)).catch(() => {});
@@ -560,13 +740,12 @@ function EntryEditor({ entry, onSaved, onClose, inline }: { entry: CmsEntry; onS
 
 	async function save(payloadOverride?: Record<string, unknown>) {
 		setError(null);
-		let payload: Record<string, unknown>; let seo: Record<string, unknown>;
+		let payload: Record<string, unknown>;
 		if (payloadOverride) {
 			payload = payloadOverride;
-			try { seo = JSON.parse(seoJson || "{}"); } catch { setError("SEO is not valid JSON"); return; }
 		} else {
-			try { payload = JSON.parse(json); seo = JSON.parse(seoJson || "{}"); }
-			catch { setError("Payload or SEO is not valid JSON"); return; }
+			try { payload = JSON.parse(json); }
+			catch { setError("Payload is not valid JSON"); return; }
 		}
 		await apiFetch(`${API_PREFIX}/cms/entries`, {
 			method: "POST",
@@ -595,18 +774,74 @@ function EntryEditor({ entry, onSaved, onClose, inline }: { entry: CmsEntry; onS
 	}, [json, structured]);
 
 	const schema = schemaFor(editing.collection, editing.slug);
+	const seoDesc = typeof seo.description === "string" ? seo.description : "";
+	const openPicker = (apply: (key: string) => void, prefer?: "image" | "video") => setPicker({ apply, prefer });
+	const setSeoKey = (k: string, v: unknown) => setSeo((s) => ({ ...s, [k]: v }));
 
 	return (
-		<div>
-			<HeroPreview payload={(payloadObj ?? editing.payload) as Record<string, unknown>} />
-			<div style={{ padding: "0.9rem" }}>
+		<div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 380px", alignItems: "start" }}>
+			{/* ── left: content + seo fields ── */}
+			<div style={{ padding: "0.9rem", minWidth: 0 }}>
 				<div style={{ display: "flex", gap: "1rem", marginBottom: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
 					<div><label style={label}>Collection</label><input style={field} value={editing.collection} disabled /></div>
 					<div style={{ flex: 1 }}><label style={label}>Slug</label><input style={{ ...field, fontFamily: "ui-monospace,monospace" }} value={editing.slug} disabled={Boolean(editing.id)} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} placeholder="home-hero" /></div>
-					<StatusPill s={editing.id ? editing.status : "none"} />
 					<button style={btnSm(false)} onClick={() => setStructured(!structured)}>{structured ? "JSON" : "Fields"}</button>
 				</div>
-				<div style={{ display: "flex", gap: "0.75rem", marginBottom: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+				{error ? <p style={{ color: "var(--danger,#a33b2e)", fontSize: "0.85rem" }}>{error}</p> : null}
+				{flash ? <p className="mono" style={{ color: "var(--success,#2e6b34)", fontSize: "0.72rem" }}>{flash}</p> : null}
+
+				<label style={label}>Content</label>
+				{structured && payloadObj ? (
+					schema ? (
+						<SchemaFields schema={schema} payload={payloadObj} onChange={(p) => setJson(JSON.stringify(p, null, 2))} onBrowse={openPicker} />
+					) : (
+						<PayloadFields payload={payloadObj} onChange={(p) => setJson(JSON.stringify(p, null, 2))} />
+					)
+				) : (
+					<textarea style={{ ...field, fontFamily: "ui-monospace,monospace", minHeight: 200 }} value={json} onChange={(e) => setJson(e.target.value)} />
+				)}
+
+				<div className="mono" style={{ fontSize: "0.58rem", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--muted,#6e6a60)", margin: "1.1rem 0 0.5rem", borderBottom: "1px solid var(--border,#eae7de)", paddingBottom: "0.3rem" }}>SEO</div>
+				<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.7rem" }}>
+					<div style={{ gridColumn: "1 / -1" }}>
+						<label style={label}>Meta title</label>
+						<input style={field} value={typeof seo.title === "string" ? seo.title : ""} onChange={(e) => setSeoKey("title", e.target.value)} />
+					</div>
+					<div>
+						<label style={label}>Canonical path</label>
+						<input style={{ ...field, fontFamily: "ui-monospace,monospace", fontSize: "0.72rem" }} value={typeof seo.canonical === "string" ? seo.canonical : ""} onChange={(e) => setSeoKey("canonical", e.target.value)} placeholder="/about" />
+					</div>
+					<div>
+						<label style={label}>Indexing</label>
+						<select style={field} value={seo.noindex === true ? "noindex" : "index"} onChange={(e) => setSeoKey("noindex", e.target.value === "noindex")}>
+							<option value="index">Index (searchable)</option>
+							<option value="noindex">Noindex (hidden from search)</option>
+						</select>
+					</div>
+					<div style={{ gridColumn: "1 / -1" }}>
+						<label style={label}>Meta description</label>
+						<textarea style={{ ...field, minHeight: 52 }} value={seoDesc} onChange={(e) => setSeoKey("description", e.target.value)} />
+						<p className="mono" style={{ fontSize: "0.6rem", color: seoDesc.length > 155 ? "var(--warn,#8a5a13)" : "var(--faint,#a09a8b)", margin: "0.2rem 0 0" }}>{seoDesc.length} / 155 characters</p>
+					</div>
+					<div style={{ gridColumn: "1 / -1" }}>
+						<label style={label}>Share image (og:image)</label>
+						<OneField spec={{ key: "ogImage", label: "", kind: "media" }} value={seo.ogImage} onChange={(v) => setSeoKey("ogImage", v)} onBrowse={openPicker} />
+					</div>
+				</div>
+			</div>
+
+			{/* ── right: draft preview + publishing rail ── */}
+			<div style={{ borderLeft: "1px solid var(--border,#eae7de)", display: "flex", flexDirection: "column" }}>
+				<div className="mono" style={{ fontSize: "0.55rem", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--muted,#6e6a60)", padding: "0.5rem 0.9rem 0" }}>Draft preview</div>
+				<HeroPreview payload={(payloadObj ?? editing.payload) as Record<string, unknown>} />
+				<div style={{ padding: "0.4rem 0.9rem 0.9rem", display: "flex", flexDirection: "column", gap: "0.8rem" }}>
+					<div>
+						<div className="mono" style={{ fontSize: "0.55rem", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--muted,#6e6a60)", marginBottom: "0.35rem" }}>Publishing</div>
+						<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem" }}>
+							<StatusPill s={editing.id ? editing.status : "none"} />
+							<span className="muted" style={{ fontSize: "0.7rem" }}>{editing.publishedAt ? `live since ${new Date(editing.publishedAt).toLocaleDateString()}` : "not published yet"}</span>
+						</div>
+					</div>
 					<div>
 						<label style={label}>Publish at</label>
 						<input
@@ -615,53 +850,40 @@ function EntryEditor({ entry, onSaved, onClose, inline }: { entry: CmsEntry; onS
 							value={editing.scheduledAt ? toLocalInput(editing.scheduledAt) : ""}
 							onChange={(e) => setEditing({ ...editing, scheduledAt: e.target.value ? new Date(e.target.value).toISOString() : null })}
 						/>
+						{editing.scheduledAt ? (
+							<p className="muted" style={{ fontSize: "0.68rem", margin: "0.3rem 0 0" }}>
+								{editing.status === "review"
+									? `Goes live ${new Date(editing.scheduledAt).toLocaleString()} — the sweep publishes review entries once the time passes.`
+									: `Scheduled — send it to review and it publishes itself at that time.`}
+								{" "}<button style={btnSm(false)} onClick={() => setEditing({ ...editing, scheduledAt: null })}>clear</button>
+							</p>
+						) : null}
 					</div>
-					{editing.scheduledAt ? (
-						<p className="muted" style={{ fontSize: "0.72rem", margin: 0, alignSelf: "flex-end" }}>
-							{editing.status === "review"
-								? `Goes live ${new Date(editing.scheduledAt).toLocaleString()} — the sweep publishes review entries once the time passes.`
-								: `Scheduled for ${new Date(editing.scheduledAt).toLocaleString()} — send it to review and it publishes itself at that time.`}
-							{" "}<button style={btnSm(false)} onClick={() => setEditing({ ...editing, scheduledAt: null })}>clear</button>
-						</p>
+					{history.length > 0 ? (
+						<div>
+							<div className="mono" style={{ fontSize: "0.55rem", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--muted,#6e6a60)", marginBottom: "0.35rem" }}>History</div>
+							<ul style={{ margin: 0, padding: 0, listStyle: "none", fontSize: "0.72rem", maxHeight: 150, overflowY: "auto" }}>
+								{history.slice(0, 8).map((v) => (
+									<li key={v.id} className="mono" style={{ padding: "0.28rem 0", borderBottom: "1px solid var(--border,#eee)", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+										<span style={{ fontSize: "0.62rem" }}>v{v.version}</span>
+										<span className="muted" style={{ fontSize: "0.68rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.note ?? "saved"} · {v.editorEmail ?? "—"}</span>
+										<span style={{ flex: 1 }} />
+										<button style={btnSm(false)} onClick={() => revertTo(v.id)}>revert</button>
+									</li>
+								))}
+							</ul>
+						</div>
 					) : null}
-				</div>
-				{error ? <p style={{ color: "var(--danger,#a33b2e)", fontSize: "0.85rem" }}>{error}</p> : null}
-				{flash ? <p className="mono" style={{ color: "var(--success,#2e6b34)", fontSize: "0.72rem" }}>{flash}</p> : null}
-
-				<label style={label}>Content</label>
-				{structured && payloadObj ? (
-					schema ? (
-						<SchemaFields schema={schema} payload={payloadObj} onChange={(p) => setJson(JSON.stringify(p, null, 2))} />
-					) : (
-						<PayloadFields payload={payloadObj} onChange={(p) => setJson(JSON.stringify(p, null, 2))} />
-					)
-				) : (
-					<textarea style={{ ...field, fontFamily: "ui-monospace,monospace", minHeight: 200 }} value={json} onChange={(e) => setJson(e.target.value)} />
-				)}
-				<label style={{ ...label, marginTop: "0.75rem" }}>SEO (JSON — title, description, ogImage, canonical, noindex)</label>
-				<textarea style={{ ...field, fontFamily: "ui-monospace,monospace", minHeight: 80 }} value={seoJson} onChange={(e) => setSeoJson(e.target.value)} />
-				{history.length > 0 ? (
-					<div style={{ marginTop: "0.75rem" }}>
-						<label style={label}>Version history</label>
-						<ul style={{ margin: 0, padding: 0, listStyle: "none", fontSize: "0.75rem" }}>
-							{history.slice(0, 6).map((v) => (
-								<li key={v.id} className="mono" style={{ padding: "0.3rem 0", borderBottom: "1px solid var(--border,#eee)", display: "flex", gap: "0.75rem" }}>
-									<span>v{v.version} · {v.note ?? "saved"} · {v.editorEmail ?? "—"}</span>
-									<span style={{ flex: 1 }} />
-									<button style={btnSm(false)} onClick={() => revertTo(v.id)}>revert</button>
-								</li>
-							))}
-						</ul>
+					<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", borderTop: "1px solid var(--border,#eae7de)", paddingTop: "0.7rem" }}>
+						<button style={btn(true)} onClick={() => save()}>Save</button>
+						{editing.id && editing.status === "draft" ? <button style={btn(false)} onClick={() => setStatus("review")}>Send to review</button> : null}
+						{editing.id && editing.status !== "published" ? <button style={btn(false)} onClick={() => setStatus("published")}>Publish</button> : null}
+						{editing.id && editing.status === "published" ? <button style={btn(false)} onClick={() => setStatus("draft")}>Unpublish</button> : null}
+						{!inline && onClose ? <button style={btn(false)} onClick={onClose}>Close</button> : null}
 					</div>
-				) : null}
-				<div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem", alignItems: "center" }}>
-					<button style={btn(true)} onClick={() => save()}>Save</button>
-					{editing.id && editing.status === "draft" ? <button style={btn(false)} onClick={() => setStatus("review")}>Send to review</button> : null}
-					{editing.id && editing.status !== "published" ? <button style={btn(false)} onClick={() => setStatus("published")}>Publish</button> : null}
-					{editing.id && editing.status === "published" ? <button style={btn(false)} onClick={() => setStatus("draft")}>Unpublish</button> : null}
-					{!inline && onClose ? <button style={btn(false)} onClick={onClose}>Close</button> : null}
 				</div>
 			</div>
+			<MediaPicker open={Boolean(picker)} prefer={picker?.prefer} onPick={(key) => picker?.apply(key)} onClose={() => setPicker(null)} />
 		</div>
 	);
 }
@@ -978,15 +1200,7 @@ function MediaTab({ usage }: { usage: Map<string, string[]> }) {
 	async function upload(file: File) {
 		setBusy(true); setError(null);
 		try {
-			const up = await apiFetch<{ key: string; url: string; headers: Record<string, string> }>(`${API_PREFIX}/cms/media/upload-url`, {
-				method: "POST", body: JSON.stringify({ fileName: file.name, mime: file.type || "application/octet-stream" }),
-			});
-			const put = await fetch(up.url, { method: "PUT", headers: { "Content-Type": file.type, ...up.headers }, body: file });
-			if (!put.ok) throw new Error(`upload failed (${put.status})`);
-			await apiFetch(`${API_PREFIX}/cms/media`, {
-				method: "POST",
-				body: JSON.stringify({ key: up.key, fileName: file.name, mime: file.type, sizeBytes: file.size, alt: file.name.replace(/\.[^.]+$/, "") }),
-			});
+			await uploadMediaFile(file);
 			void load();
 		} catch (e) { setError(e instanceof Error ? e.message : "upload failed"); }
 		finally { setBusy(false); }
@@ -1004,8 +1218,8 @@ function MediaTab({ usage }: { usage: Map<string, string[]> }) {
 		<div>
 			<div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1rem" }}>
 				<label style={{ ...btn(true), display: "inline-block" }}>
-					{busy ? "Uploading…" : "Upload image"}
-					<input type="file" accept="image/*" style={{ display: "none" }} disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
+					{busy ? "Uploading…" : "Upload media"}
+					<input type="file" accept="image/*,video/*,.pdf" style={{ display: "none" }} disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
 				</label>
 				<input style={{ ...field, width: 220 }} placeholder="filter by key or alt…" value={filter} onChange={(e) => setFilter(e.target.value)} />
 				<span className="mono muted" style={{ fontSize: "0.7rem", marginLeft: "auto" }}>public URL: {API_PREFIX}/media/{"{key}"}</span>
@@ -1017,7 +1231,13 @@ function MediaTab({ usage }: { usage: Map<string, string[]> }) {
 					return (
 						<div key={m.id} className="card" style={{ padding: "0.75rem" }}>
 							<div style={{ height: 110, background: "var(--surface-alt,#eee)", marginBottom: "0.5rem", overflow: "hidden", position: "relative" }}>
-								<img src={`${API_PREFIX}/media/${m.key}`} alt={m.alt} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${m.focalX}% ${m.focalY}%` }} />
+								{mediaKind(m) === "video" ? (
+									<video src={`${API_PREFIX}/media/${m.key}`} preload="metadata" muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+								) : mediaKind(m) === "image" ? (
+									<img src={`${API_PREFIX}/media/${m.key}`} alt={m.alt} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${m.focalX}% ${m.focalY}%` }} />
+								) : (
+									<div className="mono" style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", fontSize: "0.6rem", color: "var(--muted,#6e6a60)" }}>{m.mime.split("/")[1]?.toUpperCase() ?? "FILE"}</div>
+								)}
 								{used?.length ? (
 									<span className="mono" title={used.join("\n")} style={{ position: "absolute", top: "0.35rem", right: "0.35rem", fontSize: "0.55rem", letterSpacing: "0.05em", background: "rgba(23,22,26,0.82)", color: "#fff", padding: "0.1rem 0.35rem" }}>
 										used on {used.length}

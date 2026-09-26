@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { API_PREFIX, type CmsEntry } from "century-nit-shared";
 
 /**
@@ -73,4 +73,24 @@ export function usePageCopy<T extends Record<string, unknown>>(slug: string, fal
 export function contentImage(value: unknown): string {
 	if (typeof value !== "string" || !value) return "";
 	return value.startsWith("media/") ? `${API_PREFIX}/media/${value}` : value;
+}
+
+/**
+ * Video testimonials ("On camera") — published `films` entries merge over the
+ * compiled set by slug; poster/video resolve media/… keys. Compiled list is
+ * the fallback when the collection is empty or the fetch fails.
+ */
+export function useFilms<T extends { id: string }>(fallback: readonly T[]): T[] {
+	const { entries, live } = useContentEntries("films");
+	return useMemo(() => {
+		if (!live || !entries.length) return [...fallback];
+		const byId = new Map(fallback.map((f) => [f.id, f]));
+		const merged = entries.map((e) => ({ ...(byId.get(e.slug) ?? {}), ...e.payload, id: e.slug }) as T);
+		for (const v of merged) {
+			const m = v as { poster?: unknown; videoUrl?: unknown };
+			if (typeof m.poster === "string") m.poster = contentImage(m.poster);
+			if (typeof m.videoUrl === "string") m.videoUrl = contentImage(m.videoUrl);
+		}
+		return merged;
+	}, [entries, live, fallback]);
 }

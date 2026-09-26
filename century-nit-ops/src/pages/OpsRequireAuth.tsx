@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, useLocation, Link } from "react-router-dom";
 import { staffApi } from "century-nit-core/api";
 import { getMfaEnrollment } from "../lib/api";
-import { useOpsAuth, ROLE_HOME, ROLE_LABELS, type OpsModule } from "./OpsAuthContext";
+import { useOpsAuth, ROLE_HOME, type OpsModule } from "./OpsAuthContext";
 import type { ReactNode } from "react";
 
 function Spinner() {
@@ -108,7 +108,7 @@ export function OpsRequireModule({
 	module: OpsModule;
 	children: ReactNode;
 }) {
-	const { opsUser, opsRole, hasPermission, authInitializing } = useOpsAuth();
+	const { opsUser, opsRole, hasPermission, authInitializing, roleLabel } = useOpsAuth();
 
 	if (authInitializing) {
 		return <div className="route-loading" role="status" aria-live="polite">
@@ -122,7 +122,7 @@ export function OpsRequireModule({
 
 	if (!hasPermission(module)) {
 		const home = opsRole ? ROLE_HOME[opsRole] : "/login";
-		const roleName = opsRole ? ROLE_LABELS[opsRole] : "Staff";
+		const roleName = opsRole ? roleLabel(opsRole) : "Staff";
 		return (
 			<div className="ops-forbidden" role="alert">
 				<h1 className="ops-forbidden__title">Access restricted</h1>

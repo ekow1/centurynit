@@ -7,7 +7,7 @@ import {
 	type Capability,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { accounts, opsUsers, users } from "../db/schema.js";
+import { accounts, opsUsers, staffInvitations, users } from "../db/schema.js";
 import { getAuthInstance } from "../routes/auth.js";
 import { HttpError } from "./error.js";
 import { checkRoleCapability, checkRolePermission, permissionsOfRole } from "../services/roles.js";
@@ -173,10 +173,60 @@ export const requireAuth: MiddlewareHandler<{ Variables: AuthVariables }> = asyn
 	await next();
 };
 
+/**
+ * Why a signed-in user is not staff — the 403 the ops console reads to pick
+ * a remedy. Only queried on the denial path, so the invitation lookup costs
+ * nothing on a normal request:
+ *
+ *  - deactivated:   an ops_users row exists but `active` is false — access
+ *                   was revoked deliberately, the session should end.
+ *  - unprovisioned: no ops_users row, but a staff invitation exists for the
+ *                   email — the account was invited and never finished (or
+ *                   its row was lost). This is a data problem to surface,
+ *                   not a foreign session to silently sign out.
+ *  - none:          no ops row and no invitation — a portal account signed
+ *                   in through this origin; the console treats it as a
+ *                   foreign session and signs it out.
+ */
+async function nonStaffError(c: {
+	get: (key: "user") => SessionUser | undefined;
+}): Promise<HttpError> {
+	const user = c.get("user");
+	if (user?.email) {
+		const [opsRow] = await db
+			.select({ active: opsUsers.active })
+			.from(opsUsers)
+			.where(eq(opsUsers.email, user.email))
+			.limit(1);
+		if (opsRow && !opsRow.active) {
+			return new HttpError(
+				403,
+				"STAFF_DEACTIVATED",
+				"Your staff access has been deactivated — ask an administrator to re-enable it.",
+			);
+		}
+		if (!opsRow) {
+			const [invite] = await db
+				.select({ id: staffInvitations.id })
+				.from(staffInvitations)
+				.where(eq(staffInvitations.email, user.email))
+				.limit(1);
+			if (invite) {
+				return new HttpError(
+					403,
+					"STAFF_NOT_PROVISIONED",
+					"Your account isn't set up for the console — open your invitation link, or ask an administrator to re-invite you.",
+				);
+			}
+		}
+	}
+	return new HttpError(403, "STAFF_ACCESS_REQUIRED", "Staff access required");
+}
+
 /** Any active staff member. Applicants get 403. */
 export const requireStaff: MiddlewareHandler<{ Variables: AuthVariables }> = async (c, next) => {
 	if (!c.get("staff")) {
-		throw new HttpError(403, "STAFF_ACCESS_REQUIRED", "Staff access required");
+		throw await nonStaffError(c);
 	}
 	await next();
 };
@@ -240,7 +290,7 @@ export function requireRole(
 	return async (c, next) => {
 		const staff = c.get("staff");
 		if (!staff) {
-			throw new HttpError(403, "STAFF_ACCESS_REQUIRED", "Staff access required");
+			throw await nonStaffError(c);
 		}
 		if (!roles.includes(staff.role)) {
 			throw new HttpError(
@@ -274,7 +324,7 @@ export function requireCapability(
 	return async (c, next) => {
 		const staff = c.get("staff");
 		if (!staff) {
-			throw new HttpError(403, "STAFF_ACCESS_REQUIRED", "Staff access required");
+			throw await nonStaffError(c);
 		}
 		if (!(await checkRoleCapability(staff.role, capability))) {
 			throw new HttpError(403, "FORBIDDEN", `Your role cannot ${CAPABILITY_VERBS[capability] ?? capability}`);
@@ -303,7 +353,7 @@ export function requireModule(
 	return async (c, next) => {
 		const staff = c.get("staff");
 		if (!staff) {
-			throw new HttpError(403, "STAFF_ACCESS_REQUIRED", "Staff access required");
+			throw await nonStaffError(c);
 		}
 		const allowed = await checkRolePermission(staff.role, module);
 		if (!allowed) {
@@ -328,7 +378,7 @@ export function requireAnyModule(
 	return async (c, next) => {
 		const staff = c.get("staff");
 		if (!staff) {
-			throw new HttpError(403, "STAFF_ACCESS_REQUIRED", "Staff access required");
+			throw await nonStaffError(c);
 		}
 		for (const module of modules) {
 			if (await checkRolePermission(staff.role, module)) {

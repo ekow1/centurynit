@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
+import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { DocPreviewInline, type DocPreviewData } from "./DocPreviewInline";
 import { BranchScopeFilter } from "./BranchScopeFilter";
@@ -9,7 +9,7 @@ import type { MockApplicant, VisaStage, PaymentPlanId, PreDepartureTask } from "
 import { fmtFin } from "./currency";
 
 export function EnterpriseApplicants() {
-	const { opsRole, opsUser, canSeeAllBranches, scopeRecords, requiresAssignmentScope } = useOpsAuth();
+	const { opsRole, opsUser, canSeeAllBranches, scopeRecords, requiresAssignmentScope, roleLabel } = useOpsAuth();
 	const { applicants, error: casesError } = useCases();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
@@ -90,14 +90,14 @@ export function EnterpriseApplicants() {
 					<span style={{ fontSize: "1rem" }}>{canSeeAll ? "◱" : "◎"}</span>
 					<p style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
 						{canSeeAll
-							? `All ${roleScopedApplicants.length} applicants · ${opsRole ? ROLE_LABELS[opsRole] : "Staff"} scope`
+							? `All ${roleScopedApplicants.length} applicants · ${opsRole ? roleLabel(opsRole) : "Staff"} scope`
 							: requiresAssignmentScope
 								? `${roleScopedApplicants.length} assigned to you`
 								: `${branchName(opsUser?.branch ?? "")} branch · ${roleScopedApplicants.length} applicants`}
 					</p>
 				</div>
 				<span className="portal-pill" style={canSeeAll ? { background: "var(--background)", color: "var(--foreground)", border: "none" } : undefined}>
-					{opsRole ? ROLE_LABELS[opsRole] : "Staff"}
+					{opsRole ? roleLabel(opsRole) : "Staff"}
 				</span>
 			</div>
 

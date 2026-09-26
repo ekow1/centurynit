@@ -51,6 +51,8 @@ century-nit-api/test-*.pdf
 
 # Windows reserved-name artifact accidentally created inside .preview
 .preview/NUL
+# UI mock/scratch previews — never shipped
+.preview/
 
 .dev.vars*
 

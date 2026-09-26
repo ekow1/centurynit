@@ -660,6 +660,28 @@ auth.get("/me", async (c) => {
 		}
 	}
 
+	/*
+	 * `staff` is null for three different situations, and the ops console
+	 * needs to tell them apart: a deactivated account (row, active=false), an
+	 * invited account whose ops row never got created (or was lost), and a
+	 * foreign portal session. Without this the console treats all three as
+	 * "foreign" and signs out — a staff member missing their row bounces to
+	 * /login forever with nothing ever shown.
+	 */
+	let staffReason: "deactivated" | "unprovisioned" | null = null;
+	if (!staff || !staff.active) {
+		if (staff) {
+			staffReason = "deactivated";
+		} else if (session.user.email) {
+			const [invite] = await db
+				.select({ id: schema.staffInvitations.id })
+				.from(schema.staffInvitations)
+				.where(eq(schema.staffInvitations.email, session.user.email))
+				.limit(1);
+			if (invite) staffReason = "unprovisioned";
+		}
+	}
+
 	const resolvedName =
 		staff?.name?.trim() && !staff.name.includes("@")
 			? staff.name.trim()
@@ -683,6 +705,7 @@ auth.get("/me", async (c) => {
 						email: staff.email,
 					}
 				: null,
+		staffReason,
 		// The ops idle guard enforces this client-side; staff sessions end
 		// after `idleHours` without input. Read by the console on mount and
 		// on each keep-alive ping so a policy change reaches open tabs.

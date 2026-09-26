@@ -64,6 +64,28 @@ export async function apiFetch<T>(
 				location.assign("/mfa-setup");
 			} else if (code === "MFA_CHALLENGE_REQUIRED") {
 				location.assign("/mfa-challenge");
+			} else if (code === "STAFF_DEACTIVATED" && path.startsWith("/api/v1/") && location.pathname !== "/login") {
+				/*
+				 * A real staff identity whose ops_users row was switched off —
+				 * access was revoked, so the session ends. The login page
+				 * reads the flag once and says why.
+				 */
+				sessionStorage.removeItem("century-nit-ops-auth");
+				sessionStorage.setItem("cn-ops-login-notice", "deactivated");
+				void fetch("/api/auth/sign-out", {
+					method: "POST",
+					credentials: "include",
+				}).finally(() => location.assign("/login"));
+			} else if (code === "STAFF_NOT_PROVISIONED" && path.startsWith("/api/v1/") && location.pathname !== "/login") {
+				/*
+				 * The session is genuinely theirs (an invitation exists for the
+				 * email) but the ops_users row is missing — a provisioning
+				 * problem, not a foreign session. Keep the cookie, drop the
+				 * cached identity, and let /login explain instead of looping.
+				 */
+				sessionStorage.removeItem("century-nit-ops-auth");
+				sessionStorage.setItem("cn-ops-login-notice", "provisioning");
+				location.assign("/login");
 			} else if (
 				(code === "STAFF_ACCESS_REQUIRED" || message === "Staff access required") &&
 				path.startsWith("/api/v1/") &&
@@ -103,6 +125,12 @@ export type SessionResponse = {
 	} | null;
 	/** Admin-set inactivity limit (auth policy) the console's idle guard enforces. */
 	idleHours?: number | null;
+	/**
+	 * Set when `user` exists but `staff` is null: "deactivated" (ops row
+	 * switched off), "unprovisioned" (invited but no ops row — the session
+	 * is theirs), or null (a foreign portal session — sign it out).
+	 */
+	staffReason?: "deactivated" | "unprovisioned" | null;
 };
 
 export function getSession(): Promise<SessionResponse> {

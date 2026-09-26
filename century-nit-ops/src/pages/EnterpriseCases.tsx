@@ -4,7 +4,7 @@ import { CaseScaffold } from "./case/CaseScaffold";
 import { CaseBoard, BOARD_ORDERS, type BoardOrder } from "./case/CaseBoard";
 import { StatusPill } from "century-nit-core/ui";
 import { useSearchParams } from "react-router-dom";
-import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
+import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { StaffChatBadge } from "./StaffChatBadge";
 import { BranchScopeFilter } from "./BranchScopeFilter";
@@ -83,7 +83,7 @@ function visaInvoiceFor(invoices: Invoice[], app: MockApplication): Invoice | un
 
 export function EnterpriseCases() {
 	const [searchParams, setSearchParams] = useSearchParams();
-	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
+	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope, roleLabel } = useOpsAuth();
 	const { applications, assignees, handoffs, travelRequests, error: casesError } = useCases();
 	const { invoices: allInvoices } = useInvoiceApi();
 	// Assignment from the list: the card's chip opens the same sheet the detail uses.
@@ -260,7 +260,7 @@ export function EnterpriseCases() {
 				<span className="dash-day__sep">·</span>
 				<span className="dash-day__cut">
 					{canSeeAll
-						? `${opsRole ? ROLE_LABELS[opsRole] : "Staff"} scope`
+						? `${opsRole ? roleLabel(opsRole) : "Staff"} scope`
 						: requiresAssignmentScope
 							? "assigned to you"
 							: `${branchName(opsUser?.branch ?? "")} branch`}

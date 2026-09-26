@@ -87,8 +87,10 @@ export function EnterpriseFeeSchedule() {
 	const [sheet, setSheet] = useState<{ mode: "edit"; item: FeeItem } | { mode: "create" } | null>(null);
 	const blankDraft = { key: "", kind: "century" as FeeKind, chapter: "visa", name: "", clientLabel: "", description: "", amount: "", optional: false, active: true, sortOrder: "100" };
 	const [draft, setDraft] = useState(blankDraft);
-	// The key auto-slugs from the name until the officer types one themselves.
+	// The key auto-slugs from the name until the officer types one themselves;
+	// the client label auto-derives the same way until they override it.
 	const keyEdited = useRef(false);
+	const labelEdited = useRef(false);
 	const [saving, setSaving] = useState(false);
 	const [sheetError, setSheetError] = useState<string | null>(null);
 	const draftDirty = sheet
@@ -113,15 +115,42 @@ export function EnterpriseFeeSchedule() {
 	function openCreate() {
 		setDraft(blankDraft);
 		keyEdited.current = false;
+		labelEdited.current = false;
 		setSheetError(null);
 		setSheet({ mode: "create" });
 	}
-	const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64);
+	/*
+	 * Lowercase slug, accents transliterated ("Réunion" → reunion, not
+	 * r_union), separators collapsed, and the trailing-underscore strip runs
+	 * again after the 64-char slice so truncation can't leave one.
+	 */
+	const slugify = (s: string) =>
+		s.normalize("NFD")
+			.replace(/[̀-ͯ]/g, "")
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "_")
+			.replace(/^_+|_+$/g, "")
+			.slice(0, 64)
+			.replace(/_+$/g, "");
+	// Client labels follow the seeds: pass-through items are "… — paid on
+	// your behalf"; Century's own are plain. Always editable after the fact.
+	const deriveLabel = (name: string, kind: FeeKind) =>
+		kind === "pass_through" ? `${name.trim()} — paid on your behalf` : name.trim();
 	function onDraftName(name: string) {
-		setDraft((prev) => ({ ...prev, name, key: keyEdited.current ? prev.key : slugify(name) }));
+		setDraft((prev) => ({
+			...prev,
+			name,
+			key: keyEdited.current ? prev.key : slugify(name),
+			clientLabel: labelEdited.current ? prev.clientLabel : deriveLabel(name, prev.kind),
+		}));
 	}
 	const keyOk = sheet?.mode === "create" ? feeItemKeySchema.safeParse(draft.key).success : true;
-	const sheetValid = draft.name.trim().length > 0 && draft.clientLabel.trim().length > 0 && keyOk && Number.parseInt(draft.sortOrder, 10) >= 0;
+	// The catalogue is already loaded — catch a taken key before the 409.
+	const keyTaken = sheet?.mode === "create" && draft.key.length > 0 && items.some((i) => i.key === draft.key);
+	// True when the auto-slug had to be cut at 64 chars — worth saying.
+	const slugTruncated = sheet?.mode === "create" && !keyEdited.current &&
+		draft.name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").length > 64;
+	const sheetValid = draft.name.trim().length > 0 && draft.clientLabel.trim().length > 0 && keyOk && !keyTaken && Number.parseInt(draft.sortOrder, 10) >= 0;
 	async function saveItem() {
 		if (!sheet) return;
 		setSaving(true);
@@ -157,7 +186,13 @@ export function EnterpriseFeeSchedule() {
 			setSheet(null);
 			await load();
 		} catch (err) {
-			setSheetError(err instanceof ApiError ? err.message : "Could not save the item");
+			setSheetError(
+				err instanceof ApiError && err.code === "FEE_ITEM_KEY_TAKEN"
+					? `The key "${draft.key}" is already used — keys are permanent, so pick another.`
+					: err instanceof ApiError
+						? err.message
+						: "Could not save the item",
+			);
 		} finally {
 			setSaving(false);
 		}
@@ -665,13 +700,23 @@ export function EnterpriseFeeSchedule() {
 											keyEdited.current = true;
 											setDraft({ ...draft, key: e.target.value });
 										}}
-										aria-invalid={!keyOk}
+										aria-invalid={!keyOk || Boolean(keyTaken)}
 									/>
 								</label>
+								{keyTaken && <p className="cn-assign__error">That key is already used by another item — keys are permanent, so pick another.</p>}
+								{slugTruncated && <p className="muted text-xs">The name is longer than 64 slug characters — the key was shortened; edit it if the cut looks wrong.</p>}
+								{!keyOk && !keyTaken && <p className="muted text-xs">Lowercase letters, digits and underscores only.</p>}
 								<div style={{ display: "flex", gap: "0.5rem" }}>
 									<label style={{ flex: 1 }}>
 										<span className="muted text-xs">Kind</span>
-										<select className="input input--sm" value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as FeeKind })}>
+										<select
+											className="input input--sm"
+											value={draft.kind}
+											onChange={(e) => {
+												const kind = e.target.value as FeeKind;
+												setDraft({ ...draft, kind, clientLabel: labelEdited.current ? draft.clientLabel : deriveLabel(draft.name, kind) });
+											}}
+										>
 											{(Object.keys(FEE_KIND_LABELS) as FeeKind[]).map((k) => (
 												<option key={k} value={k}>
 													{FEE_KIND_LABELS[k]}
@@ -703,7 +748,14 @@ export function EnterpriseFeeSchedule() {
 						</label>
 						<label>
 							<span className="muted text-xs">What the client reads on the invoice</span>
-							<input className="input input--sm" value={draft.clientLabel} onChange={(e) => setDraft({ ...draft, clientLabel: e.target.value })} />
+							<input
+								className="input input--sm"
+								value={draft.clientLabel}
+								onChange={(e) => {
+									if (sheet.mode === "create") labelEdited.current = true;
+									setDraft({ ...draft, clientLabel: e.target.value });
+								}}
+							/>
 						</label>
 						<label>
 							<span className="muted text-xs">Description (ops)</span>

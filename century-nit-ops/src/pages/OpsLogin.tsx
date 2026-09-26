@@ -29,6 +29,18 @@ export function OpsLogin() {
 	// it's a fresh visit.
 	const [searchParams] = useSearchParams();
 	const signedOutIdle = searchParams.get("reason") === "idle";
+	// A session that resolved to no staff profile lands here with a flag the
+	// API layer or auth context set — "deactivated" is a revoked account,
+	// "provisioning" is an invited staff member whose ops row is missing.
+	const [staffNotice] = useState<string | null>(() => {
+		try {
+			const v = sessionStorage.getItem("cn-ops-login-notice");
+			sessionStorage.removeItem("cn-ops-login-notice");
+			return v === "deactivated" || v === "provisioning" ? v : null;
+		} catch {
+			return null;
+		}
+	});
 	// The idle guard records the live policy so this notice can quote it —
 	// the login page itself has no session to re-read it from.
 	const idleHours = (() => {
@@ -354,6 +366,18 @@ export function OpsLogin() {
 								<span>
 									Your session ended after {idleHours} {idleHours === 1 ? "hour" : "hours"} without
 									activity. Sign back in to continue.
+								</span>
+							</div>
+						) : null}
+						{staffNotice ? (
+							<div className="ops-login__idle" role="alert">
+								<span className="ops-login__idle-tag">
+									{staffNotice === "deactivated" ? "Access off" : "Setup"}
+								</span>
+								<span>
+									{staffNotice === "deactivated"
+										? "Your staff access has been deactivated — ask an administrator to re-enable it."
+										: "Your account isn't set up for the console yet — open your invitation link, or ask an administrator to re-invite you."}
 								</span>
 							</div>
 						) : null}

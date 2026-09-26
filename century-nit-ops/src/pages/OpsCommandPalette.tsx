@@ -2,12 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useOpsState } from "./OpsStateContext";
 import { useCases } from "../hooks/useCases";
-import { useOpsAuth, ROLE_LABELS, type OpsModule } from "./OpsAuthContext";
+import { useOpsAuth, type OpsModule } from "./OpsAuthContext";
 
 export function OpsCommandPalette() {
 	const { isCommandOpen, openCommandPalette, closeCommandPalette, recentRecords, pushRecentRecord } = useOpsState();
 	const { consultations, applications, applicants } = useCases();
-	const { opsRole, opsUser, hasPermission, scopeRecords } = useOpsAuth();
+	const { opsRole, opsUser, hasPermission, scopeRecords, roleLabel } = useOpsAuth();
 	const navigate = useNavigate();
 	const [query, setQuery] = useState("");
 	const [selectedIndex, setSelectedIndex] = useState(0);
@@ -189,7 +189,7 @@ export function OpsCommandPalette() {
 						aria-label="Search commands and records"
 					/>
 					<span className="portal-pill ops-command-palette__role">
-						{opsRole ? ROLE_LABELS[opsRole] : "Ops"}
+						{opsRole ? roleLabel(opsRole) : "Ops"}
 					</span>
 				</div>
 

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
+import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { CaseScaffold } from "./case/CaseScaffold";
 import { ConsultationDetail } from "./case/ConsultationDetail";
@@ -79,7 +79,7 @@ function callState(c: MockConsultation, today: string, now: number): string | nu
 
 export function EnterpriseConsultations() {
 	const [searchParams, setSearchParams] = useSearchParams();
-	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
+	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope, roleLabel } = useOpsAuth();
 	const { consultations, assignees, assignConsultation, referConsultation, error: casesError } = useCases();
 	// Assignment from the list: the card's chip opens the same control the detail uses.
 	const [assignFor, setAssignFor] = useState<MockConsultation | null>(null);
@@ -197,7 +197,7 @@ export function EnterpriseConsultations() {
 				<span className="dash-day__sep">·</span>
 				<span className="dash-day__cut">
 					{canSeeAll
-						? `${opsRole ? ROLE_LABELS[opsRole] : "Staff"} scope`
+						? `${opsRole ? roleLabel(opsRole) : "Staff"} scope`
 						: requiresAssignmentScope
 							? "assigned to you"
 							: `${branchName(opsUser?.branch ?? "")} branch`}

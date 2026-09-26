@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
-import { useOpsAuth, ROLE_LABELS, ROLE_HOME, type OpsModule } from "./OpsAuthContext";
+import { useOpsAuth, ROLE_HOME, type OpsModule } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
 
 import { usePushNotifications } from "../hooks/usePushNotifications";
@@ -326,7 +326,7 @@ function useShellSignals() {
 }
 
 function OpsShell() {
-	const { opsUser, opsRole, opsSignOut, hasPermission } = useOpsAuth();
+	const { opsUser, opsRole, opsSignOut, hasPermission, roleLabel } = useOpsAuth();
 	const brand = useBrand();
 	// Loads the fee catalogue once, which also sets the rate every GHS figure renders at.
 	useFeeCatalogue();
@@ -362,7 +362,7 @@ function OpsShell() {
 	const sections = SECTIONS.map((sec) => ({ ...sec, entries: sec.entries.filter(allowed).map((e) => (isGroup(e) ? { ...e, children: e.children.filter((c) => hasPermission(c.module)) } : e)) })).filter((sec) => sec.entries.length > 0);
 	const operationsNav = sections.filter((sec) => sec.title !== "Platform").flatMap((sec) => sec.entries);
 	const platformNav = sections.filter((sec) => sec.title === "Platform").flatMap((sec) => sec.entries);
-	const roleName = opsRole ? ROLE_LABELS[opsRole] : "Staff";
+	const roleName = opsRole ? roleLabel(opsRole) : "Staff";
 	const counts: Counts = { ...signals.counts, "/inbox": { n: inboxUnread, hot: inboxUnread > 0 } };
 	// Breadcrumb: the group (or section) the page sits in, then the page.
 	const allNav = [...operationsNav, ...platformNav];

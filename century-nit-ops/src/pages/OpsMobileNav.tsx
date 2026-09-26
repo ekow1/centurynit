@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { OpsNotificationBell } from "./OpsNotificationBell";
 import { Sheet } from "century-nit-core/ui";
-import { useOpsAuth, ROLE_LABELS, ROLE_HOME, type OpsRole } from "./OpsAuthContext";
+import { useOpsAuth, ROLE_HOME, type OpsRole } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
 import { ICONS } from "./opsIcons";
 
@@ -70,7 +70,7 @@ export function OpsAppBar({
 	operationsNav: OpsNavItem[];
 	platformNav: OpsNavItem[];
 }) {
-	const { opsUser, opsRole } = useOpsAuth();
+	const { opsUser, opsRole, roleLabel } = useOpsAuth();
 	const { openCommandPalette } = useOpsState();
 	const { pathname } = useLocation();
 
@@ -98,7 +98,7 @@ export function OpsAppBar({
 			<div className="pbar__titles">
 				<span className="pbar__title">{current?.label ?? title}</span>
 				<span className="pbar__sub mono">
-					{opsRole ? ROLE_LABELS[opsRole] : "Staff"}
+					{opsRole ? roleLabel(opsRole) : "Staff"}
 				</span>
 			</div>
 
@@ -135,7 +135,7 @@ export function OpsTabBar({
 	const [moreOpen, setMoreOpen] = useState(false);
 	const { pathname } = useLocation();
 	const navigate = useNavigate();
-	const { opsUser, opsRole, opsSignOut } = useOpsAuth();
+	const { opsUser, opsRole, opsSignOut, roleLabel } = useOpsAuth();
 
 	const all = [...operationsNav, ...platformNav];
 	const tabs = pickTabs(all, opsRole);
@@ -190,7 +190,7 @@ export function OpsTabBar({
 						<span className="sheet-account__meta">
 							<span className="sheet-account__name">{opsUser.name}</span>
 							<span className="sheet-account__sub mono">
-								{opsRole ? ROLE_LABELS[opsRole] : "Staff"}
+								{opsRole ? roleLabel(opsRole) : "Staff"}
 							</span>
 						</span>
 					</div>

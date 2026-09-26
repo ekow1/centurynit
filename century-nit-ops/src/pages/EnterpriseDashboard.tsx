@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
+import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useWorkQueue } from "../hooks/useWorkQueue";
 import { passesQueueFilter, rememberedQueueCut } from "../lib/queueCut";
@@ -49,7 +49,7 @@ function weekStart(now = new Date()) {
 }
 
 export function EnterpriseDashboard() {
-	const { opsRole, opsUser, canSeeAllBranches, scopeRecords } = useOpsAuth();
+	const { opsRole, opsUser, canSeeAllBranches, scopeRecords, roleLabel } = useOpsAuth();
 	const { consultations, applications, applicants } = useCases();
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [leads, setLeads] = useState<{ id: string; stage: string }[] | null>(null);
@@ -71,7 +71,7 @@ export function EnterpriseDashboard() {
 		};
 	}, []);
 
-	const roleName = opsRole ? ROLE_LABELS[opsRole] : "Staff";
+	const roleName = opsRole ? roleLabel(opsRole) : "Staff";
 
 	const scoped = useMemo(() => {
 		const scopedConsultations = scopeRecords(consultations, (c) => c.assignedOfficerEmail === opsUser?.email || c.assignedOfficer === opsUser?.name);

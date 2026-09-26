@@ -67,7 +67,10 @@ export interface OpsUser {
 	avatar: string;
 }
 
-// The vocabulary's role names; custom roles are added when the roster loads.
+// The vocabulary's role names — static. Custom-role names live on
+// roleCatalog; read them through the context's roleLabel(), never by
+// mutating this map (a cross-module side effect that once rewrote what
+// every page rendered).
 export const ROLE_LABELS: Record<OpsRole, string> = { ...SHARED_ROLE_LABELS };
 
 export const ROLE_DESCRIPTIONS: Record<OpsRole, string> = {
@@ -178,6 +181,8 @@ interface OpsAuthContextValue {
 	canEditUniversities: boolean;
 	/** Every role the server knows, system and custom, as last fetched. */
 	roleCatalog: RoleSummary[];
+	/** Display name for a role id — built-ins plus fetched custom roles. */
+	roleLabel: (roleId: string) => string;
 	/** Re-fetch roles and permissions — call after editing a role. */
 	refreshPermissions: () => Promise<void>;
 }
@@ -260,16 +265,32 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		saveSession(null);
 	}, []);
 
+	/*
+	 * `sess.user && !sess.staff` used to always mean "a portal account signed
+	 * in through this origin" — sign the foreign session out. The API now
+	 * says why: "deactivated" ends the session (access was revoked), while
+	 * "unprovisioned" keeps it — the account is theirs, the ops row is what
+	 * is missing, and destroying the session only hid the real error. The
+	 * login page reads the flag once to explain.
+	 */
+	const handleStafflessSession = useCallback((sess: SessionResponse) => {
+		if (!sess.user) return;
+		if (sess.staffReason === "unprovisioned") {
+			sessionStorage.setItem("cn-ops-login-notice", "provisioning");
+			return;
+		}
+		if (sess.staffReason === "deactivated") {
+			sessionStorage.setItem("cn-ops-login-notice", "deactivated");
+		}
+		void apiSignOut().catch(() => {});
+	}, []);
+
 	const refreshPermissions = useCallback(async () => {
 		try {
 			const res = await apiFetch<{ roles: RoleSummary[] }>(`${API_PREFIX}/roles`);
 			const map: Record<string, string[]> = {};
 			for (const r of res.roles) {
 				map[r.id] = r.permissions;
-				// The label maps are static for the built-in roles; custom roles
-				// are only known once fetched, so their names are filled in here.
-				ROLE_LABELS[r.id] = r.name;
-				if (r.description) ROLE_DESCRIPTIONS[r.id] = r.description;
 			}
 			setDynamicPermissions(map);
 			setRoleCatalog(res.roles);
@@ -283,15 +304,11 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 			const sess = await getSession();
 			applyPolicy(sess);
 			if (!sess.staff) {
-				// A live session with no staff profile — e.g. a portal account
-				// signed in through this origin — poisons every API call with
-				// 403s for its whole lifetime. Kill the cookie, don't just
-				// forget our copy of the user.
-				if (sess.user) void apiSignOut().catch(() => {});
+				handleStafflessSession(sess);
 				dropStaleSession();
 			}
 		} catch {}
-	}, [applyPolicy, dropStaleSession]);
+	}, [applyPolicy, dropStaleSession, handleStafflessSession]);
 
 	// On mount, check for an existing API session and load role permissions.
 	useEffect(() => {
@@ -312,7 +329,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 					// dead or belongs to a portal account, so the sessionStorage
 					// copy is stale. Without this the guards keep a phantom user
 					// and their MFA probes 401 into /mfa-setup instead of /login.
-					if (sess.user) void apiSignOut().catch(() => {});
+					handleStafflessSession(sess);
 					dropStaleSession();
 				}
 			} catch {
@@ -322,7 +339,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 			}
 		})();
 		return () => { cancelled = true; };
-	}, [refreshPermissions, applyPolicy, dropStaleSession]);
+	}, [refreshPermissions, applyPolicy, dropStaleSession, handleStafflessSession]);
 
 	const opsSignInWithCredentials = useCallback(async (email: string, password: string, rememberMe?: boolean) => {
 		const res = await apiSignIn(email, password, rememberMe);
@@ -458,6 +475,16 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		[canSeeAllBranches, requiresAssignmentScope, inBranchScope],
 	);
 
+	/* Role display names: built-ins from ROLE_LABELS, custom roles from the
+	 * fetched catalogue. Component state, not a module-scope mutation, so the
+	 * name on screen always matches the roles this session actually saw. */
+	const roleLabel = useCallback(
+		(roleId: string) =>
+			roleCatalog.find((r) => r.id === roleId)?.name ??
+			(roleId in ROLE_LABELS ? ROLE_LABELS[roleId as OpsRole] : roleId),
+		[roleCatalog],
+	);
+
 	return (
 		<OpsAuthContext.Provider
 			value={{
@@ -482,6 +509,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 				canEditPackages: hasCapability("edit_packages"),
 				canEditUniversities: hasCapability("edit_universities"),
 				roleCatalog,
+				roleLabel,
 				refreshPermissions,
 			}}
 		>

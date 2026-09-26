@@ -298,6 +298,246 @@ function PayloadFields({ payload, onChange }: { payload: Record<string, unknown>
 	);
 }
 
+/* ── Content schemas — what each page/collection actually edits ────────────
+ *
+ * The CMS manages century-nit-web's real content, so the editor renders the
+ * same fields the site consumes instead of a raw JSON dump. Keys absent from
+ * a schema are preserved untouched in the payload (still editable in JSON
+ * mode). Keep these in sync with the payload shapes in packages/core and the
+ * consumers in century-nit-web (usePageCopy / useContentEntries).
+ */
+
+type FieldSpec = {
+	key: string;
+	label: string;
+	kind: "text" | "textarea" | "media" | "list" | "select" | "pairs" | "objects";
+	rows?: number;
+	options?: string[];
+	hint?: string;
+	itemFields?: FieldSpec[];
+	newItem?: Record<string, unknown>;
+};
+
+const PAGE_HEADER_FIELDS: FieldSpec[] = [
+	{ key: "eyebrow", label: "Eyebrow", kind: "text", hint: "Small kicker above the title" },
+	{ key: "title", label: "Title", kind: "text" },
+	{ key: "lead", label: "Lead paragraph", kind: "textarea", rows: 3 },
+];
+
+const SLIDE_FIELDS: FieldSpec[] = [
+	{ key: "kicker", label: "Kicker", kind: "text", hint: "e.g. United Kingdom" },
+	{ key: "title", label: "Title", kind: "text" },
+	{ key: "titleEm", label: "Title — emphasised word(s)", kind: "text", hint: "Rendered in the accent style" },
+	{ key: "lead", label: "Lead paragraph", kind: "textarea", rows: 3 },
+	{ key: "image", label: "Image", kind: "media" },
+	{ key: "imageAlt", label: "Image alt text", kind: "text" },
+	{ key: "meta", label: "Meta chips", kind: "pairs", hint: "One per line — Label | Value, e.g. Service | Study visa" },
+];
+
+const PAGE_SCHEMAS: Record<string, FieldSpec[]> = {
+	home: [
+		{
+			key: "heroSlides",
+			label: "Hero slides",
+			kind: "objects",
+			itemFields: SLIDE_FIELDS,
+			newItem: {
+				id: "new", kicker: "", title: "", titleEm: "", lead: "",
+				image: "", imageAlt: "", meta: [],
+			},
+		},
+		{ key: "servicesEyebrow", label: "Services section — eyebrow", kind: "text" },
+		{ key: "servicesTitle", label: "Services section — title", kind: "text" },
+		{ key: "destinationsEyebrow", label: "Destinations section — eyebrow", kind: "text" },
+		{ key: "destinationsTitle", label: "Destinations section — title", kind: "text" },
+	],
+};
+
+const COLLECTION_SCHEMAS: Record<string, FieldSpec[]> = {
+	posts: [
+		{ key: "title", label: "Headline", kind: "text" },
+		{ key: "category", label: "Category", kind: "text" },
+		{ key: "readTime", label: "Read time", kind: "text", hint: "e.g. 8 min" },
+		{ key: "image", label: "Cover image", kind: "media" },
+		{ key: "excerpt", label: "Excerpt", kind: "textarea", rows: 3, hint: "Shown on the card and as the article lead-in" },
+		{ key: "body", label: "Body", kind: "textarea", rows: 10, hint: "Paragraphs separated by a blank line" },
+	],
+	faqs: [
+		{ key: "question", label: "Question", kind: "text" },
+		{ key: "answer", label: "Answer", kind: "textarea", rows: 4 },
+	],
+	services: [
+		{ key: "title", label: "Service name", kind: "text" },
+		{ key: "description", label: "Card description", kind: "textarea", rows: 3 },
+		{ key: "duration", label: "Typical duration", kind: "text", hint: "e.g. 4–8 weeks" },
+		{ key: "image", label: "Image", kind: "media" },
+		{ key: "detail", label: "Detail page — intro", kind: "textarea", rows: 5 },
+		{ key: "deliverables", label: "What you get", kind: "list", hint: "One item per line" },
+		{ key: "process", label: "How it works", kind: "list", hint: "One step per line" },
+	],
+	stories: [
+		{ key: "quote", label: "Quote", kind: "textarea", rows: 4 },
+		{ key: "name", label: "Name", kind: "text" },
+		{ key: "program", label: "Programme", kind: "text" },
+		{ key: "country", label: "Route", kind: "text", hint: "e.g. Ghana → Canada" },
+		{ key: "image", label: "Portrait", kind: "media" },
+	],
+	events: [
+		{ key: "title", label: "Event name", kind: "text" },
+		{ key: "date", label: "Date", kind: "text", hint: "e.g. 14 Aug 2026 or Rolling" },
+		{ key: "time", label: "Time / venue", kind: "text" },
+		{ key: "type", label: "Type", kind: "select", options: ["In-person", "Online", "News"] },
+		{ key: "description", label: "Description", kind: "textarea", rows: 3 },
+	],
+};
+
+function schemaFor(collection: string, slug: string): FieldSpec[] | null {
+	if (collection === "pages") return PAGE_SCHEMAS[slug] ?? PAGE_HEADER_FIELDS;
+	return COLLECTION_SCHEMAS[collection] ?? null;
+}
+
+/* ── Schema-driven field renderer ────────────────────────────────────────── */
+
+function pairsFromText(text: string): { label: string; value: string }[] {
+	return text
+		.split("\n")
+		.map((l) => l.trim())
+		.filter(Boolean)
+		.map((l) => {
+			const i = l.indexOf("|");
+			return i < 0
+				? { label: l, value: "" }
+				: { label: l.slice(0, i).trim(), value: l.slice(i + 1).trim() };
+		});
+}
+
+function pairsToText(list: unknown): string {
+	if (!Array.isArray(list)) return "";
+	return list
+		.map((m) => {
+			const o = m as Record<string, unknown>;
+			return `${o.label ?? ""} | ${o.value ?? ""}`.trim();
+		})
+		.join("\n");
+}
+
+function listToText(list: unknown): string {
+	return Array.isArray(list) ? list.map(String).join("\n") : "";
+}
+
+function OneField({
+	spec,
+	value,
+	onChange,
+}: {
+	spec: FieldSpec;
+	value: unknown;
+	onChange: (v: unknown) => void;
+}) {
+	switch (spec.kind) {
+		case "textarea":
+			return <textarea style={{ ...field, minHeight: (spec.rows ?? 3) * 20 }} value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)} />;
+		case "media": {
+			const s = typeof value === "string" ? value : "";
+			const src = mediaSrc(s);
+			return (
+				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+					{s.startsWith("media/") && src ? <img src={src} alt="" style={{ width: 64, height: 44, objectFit: "cover", border: "1px solid var(--border,#d8d5cd)", flex: "none" }} /> : null}
+					<div style={{ flex: 1 }}>
+						<input style={{ ...field, fontFamily: "ui-monospace,monospace", fontSize: "0.72rem" }} value={s} onChange={(e) => onChange(e.target.value)} placeholder="media/… or https://…" />
+						<span className="mono" style={{ fontSize: "0.62rem", color: "var(--info,#31577a)" }}>▸ media key from the Media tab, or an external URL</span>
+					</div>
+				</div>
+			);
+		}
+		case "list":
+			return (
+				<textarea
+					style={{ ...field, minHeight: (spec.rows ?? 4) * 20, fontFamily: "ui-monospace,monospace", fontSize: "0.75rem" }}
+					value={listToText(value)}
+					onChange={(e) => onChange(e.target.value.split("\n").map((l) => l.trim()).filter(Boolean))}
+				/>
+			);
+		case "select":
+			return (
+				<select style={field} value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)}>
+					{!spec.options?.includes(String(value)) && value ? <option value={String(value)}>{String(value)}</option> : null}
+					{spec.options?.map((o) => <option key={o} value={o}>{o}</option>)}
+				</select>
+			);
+		case "pairs":
+			return (
+				<textarea
+					style={{ ...field, minHeight: (spec.rows ?? 3) * 20, fontFamily: "ui-monospace,monospace", fontSize: "0.75rem" }}
+					defaultValue={pairsToText(value)}
+					onBlur={(e) => onChange(pairsFromText(e.target.value))}
+				/>
+			);
+		case "objects": {
+			const items = Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
+			const move = (i: number, dir: -1 | 1) => {
+				const next = [...items];
+				const j = i + dir;
+				if (j < 0 || j >= next.length) return;
+				[next[i], next[j]] = [next[j], next[i]];
+				onChange(next);
+			};
+			return (
+				<div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+					{items.map((item, i) => (
+						<div key={i} style={{ border: "1px solid var(--border,#d8d5cd)", padding: "0.6rem", background: "var(--surface,#fff)" }}>
+							<div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.5rem" }}>
+								<span className="mono" style={{ fontSize: "0.65rem", color: "var(--muted,#6e6a60)" }}>
+									#{i + 1} — {String(item.kicker ?? item.title ?? item.question ?? item.id ?? "item")}
+								</span>
+								<span style={{ flex: 1 }} />
+								<button type="button" style={btnSm(false)} onClick={() => move(i, -1)}>↑</button>
+								<button type="button" style={btnSm(false)} onClick={() => move(i, 1)}>↓</button>
+								<button type="button" style={btnSm(false)} onClick={() => onChange(items.filter((_, j) => j !== i))}>remove</button>
+							</div>
+							<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
+								{spec.itemFields?.map((f) => (
+									<div key={f.key} style={f.kind === "textarea" || f.kind === "media" || f.kind === "list" || f.kind === "pairs" ? { gridColumn: "1 / -1" } : undefined}>
+										<label style={label}>{f.label}</label>
+										<OneField spec={f} value={item[f.key]} onChange={(v) => onChange(items.map((x, j) => (j === i ? { ...x, [f.key]: v } : x)))} />
+										{f.hint ? <p className="muted" style={{ fontSize: "0.65rem", margin: "0.2rem 0 0" }}>{f.hint}</p> : null}
+									</div>
+								))}
+							</div>
+						</div>
+					))}
+					<button type="button" style={btn(false)} onClick={() => onChange([...items, { ...(spec.newItem ?? {}) }])}>
+						+ Add {spec.label.replace(/s$/, "").toLowerCase()}
+					</button>
+				</div>
+			);
+		}
+		default:
+			return <input style={field} value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)} />;
+	}
+}
+
+function SchemaFields({ schema, payload, onChange }: { schema: FieldSpec[]; payload: Record<string, unknown>; onChange: (p: Record<string, unknown>) => void }) {
+	const set = (k: string, v: unknown) => onChange({ ...payload, [k]: v });
+	const extra = Object.keys(payload).filter((k) => !schema.some((f) => f.key === k));
+	return (
+		<div style={{ display: "flex", flexDirection: "column", gap: "0.7rem" }}>
+			{schema.map((f) => (
+				<div key={f.key}>
+					<label style={label}>{f.label}</label>
+					<OneField spec={f} value={payload[f.key]} onChange={(v) => set(f.key, v)} />
+					{f.hint ? <p className="muted" style={{ fontSize: "0.65rem", margin: "0.2rem 0 0" }}>{f.hint}</p> : null}
+				</div>
+			))}
+			{extra.length ? (
+				<p className="mono" style={{ fontSize: "0.62rem", color: "var(--muted,#6e6a60)", margin: 0 }}>
+					{extra.length} other key{extra.length === 1 ? "" : "s"} kept as-is ({extra.join(", ")}) — switch to JSON to edit them.
+				</p>
+			) : null}
+		</div>
+	);
+}
+
 /* ── Entry editor — shared by page + list kinds ──────────────────────────── */
 
 function EntryEditor({ entry, onSaved, onClose, inline }: { entry: CmsEntry; onSaved: () => void; onClose?: () => void; inline?: boolean }) {
@@ -354,6 +594,8 @@ function EntryEditor({ entry, onSaved, onClose, inline }: { entry: CmsEntry; onS
 		try { return JSON.parse(json) as Record<string, unknown>; } catch { return null; }
 	}, [json, structured]);
 
+	const schema = schemaFor(editing.collection, editing.slug);
+
 	return (
 		<div>
 			<HeroPreview payload={(payloadObj ?? editing.payload) as Record<string, unknown>} />
@@ -386,9 +628,13 @@ function EntryEditor({ entry, onSaved, onClose, inline }: { entry: CmsEntry; onS
 				{error ? <p style={{ color: "var(--danger,#a33b2e)", fontSize: "0.85rem" }}>{error}</p> : null}
 				{flash ? <p className="mono" style={{ color: "var(--success,#2e6b34)", fontSize: "0.72rem" }}>{flash}</p> : null}
 
-				<label style={label}>Payload</label>
+				<label style={label}>Content</label>
 				{structured && payloadObj ? (
-					<PayloadFields payload={payloadObj} onChange={(p) => setJson(JSON.stringify(p, null, 2))} />
+					schema ? (
+						<SchemaFields schema={schema} payload={payloadObj} onChange={(p) => setJson(JSON.stringify(p, null, 2))} />
+					) : (
+						<PayloadFields payload={payloadObj} onChange={(p) => setJson(JSON.stringify(p, null, 2))} />
+					)
 				) : (
 					<textarea style={{ ...field, fontFamily: "ui-monospace,monospace", minHeight: 200 }} value={json} onChange={(e) => setJson(e.target.value)} />
 				)}

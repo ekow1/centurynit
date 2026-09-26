@@ -1054,15 +1054,35 @@ export function ScholarshipDetail() {
 	);
 }
 
+// Published `services` entries merge over the compiled catalogue by slug —
+// ops edits them in Content Management → Site pages → Student services.
+// Compiled rows stay as fallback when the collection is empty or unreachable.
+function useServices() {
+	const { entries, live } = useContentEntries("services");
+	return useMemo(() => {
+		if (!live || !entries.length) return coreServices;
+		const bySlug = new Map(entries.map((e) => [e.slug, e.payload]));
+		const merged = coreServices.map((s) => ({ ...s, ...(bySlug.get(s.id) ?? {}) }));
+		const fresh = entries
+			.filter((e) => !coreServices.some((s) => s.id === e.slug))
+			.map(
+				(e) =>
+					({ id: e.slug, title: e.slug, description: "", detail: "", deliverables: [], process: [], duration: "", image: "", ...e.payload }) as (typeof coreServices)[number],
+			);
+		return [...merged, ...fresh];
+	}, [entries, live]);
+}
+
 export function VisaServices() {
 	const copy = usePageCopy("visa-services", PAGE_COPY["visa-services"]);
+	const services = useServices();
 	return (
 		<>
 			<PageHeader {...copy} />
 			<section className="section">
 				<div className="container">
 					<div className="card-grid card-grid--2">
-						{coreServices
+						{services
 							.filter((s) => ["visa-docs", "study-visa", "admission-docs", "counseling"].includes(s.id))
 							.map((i) => (
 								<article key={i.id} className="card card--pad card--hover">
@@ -1093,13 +1113,14 @@ export function VisaServices() {
 
 export function StudentServices() {
 	const copy = usePageCopy("student-services", PAGE_COPY["student-services"]);
+	const services = useServices();
 	return (
 		<>
 			<PageHeader {...copy} />
 			<section className="section texture-grid">
 				<div className="container">
 					<div className="card-grid card-grid--2">
-						{coreServices.map((s) => (
+						{services.map((s) => (
 							<article key={s.id} className="card card--pad card--hover">
 								<span className="badge">{s.id}</span>
 								<h2 className="display mt-2" style={{ fontSize: "1.5rem" }}>
@@ -1128,6 +1149,21 @@ export function StudentServices() {
 export function SuccessStories() {
 	const copy = usePageCopy("success-stories", PAGE_COPY["success-stories"]);
 	const [playing, setPlaying] = useState<string | null>(null);
+	// Published `stories` entries win when they exist — edited in Content
+	// Management → Site pages → Success stories. Compiled testimonials are
+	// the fallback when the collection is empty or unreachable.
+	const { entries, live } = useContentEntries("stories");
+	const written =
+		live && entries.length
+			? entries.map((e) => ({
+					id: e.slug,
+					quote: String(e.payload.quote ?? ""),
+					name: String(e.payload.name ?? e.slug),
+					program: String(e.payload.program ?? ""),
+					image: contentImage(e.payload.image) ?? "",
+					country: String(e.payload.country ?? ""),
+				}))
+			: testimonials;
 
 	return (
 		<>
@@ -1138,10 +1174,10 @@ export function SuccessStories() {
 						<div className="redseat__part">
 							<div className="redseat__part-head">
 								<h3 className="redseat__part-title">Written</h3>
-								<span className="mono muted redseat__count">{testimonials.length} accounts</span>
+								<span className="mono muted redseat__count">{written.length} accounts</span>
 							</div>
 							<Carousel label="Written testimonials">
-								{testimonials.map((t) => (
+								{written.map((t) => (
 									<blockquote key={t.id} className="rs-quote carousel__item">
 										<span className="rs-quote__mark" aria-hidden>
 											"
@@ -1273,10 +1309,24 @@ function VideoLightbox({
 export function Events() {
 	const copy = usePageCopy("events", PAGE_COPY.events);
 	const [type, setType] = useState("all");
-	const types = ["all", "In-person", "News"];
+	// Published `events` entries win when they exist — edited in Content
+	// Management → Site pages → Events. Compiled list is the fallback.
+	const { entries, live } = useContentEntries("events");
+	const source =
+		live && entries.length
+			? entries.map((e) => ({
+					id: e.slug,
+					title: String(e.payload.title ?? e.slug),
+					date: String(e.payload.date ?? ""),
+					time: String(e.payload.time ?? ""),
+					type: String(e.payload.type ?? "In-person"),
+					description: String(e.payload.description ?? ""),
+				}))
+			: events;
+	const types = ["all", ...new Set(source.map((e) => e.type).filter(Boolean))];
 	const list = useMemo(
-		() => (type === "all" ? events : events.filter((e) => e.type === type)),
-		[type],
+		() => (type === "all" ? source : source.filter((e) => e.type === type)),
+		[type, source],
 	);
 	return (
 		<>
@@ -1625,13 +1675,22 @@ export function Contact() {
 
 export function ServiceDetail() {
 	const { id } = useParams<{ id: string }>();
-	const service = id ? getService(id) : undefined;
+	// A published `services/{id}` entry overrides the compiled service; the
+	// compiled row is the fallback when no entry exists.
+	const { entry } = useContentEntry("services", id);
+	const all = useServices();
+	const compiled = id ? getService(id) : undefined;
+	const service = compiled
+		? { ...compiled, ...(entry?.payload ?? {}) }
+		: entry
+			? ({ id: entry.slug, title: entry.slug, description: "", detail: "", deliverables: [], process: [], duration: "", image: "", ...entry.payload } as (typeof coreServices)[number])
+			: undefined;
 
 	if (!service) {
 		return <Navigate to="/student-services" replace />;
 	}
 
-	const related = coreServices.filter((s) => s.id !== service.id).slice(0, 3);
+	const related = all.filter((s) => s.id !== service.id).slice(0, 3);
 
 	return (
 		<>

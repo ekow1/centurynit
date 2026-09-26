@@ -2,7 +2,7 @@ import { and, desc, eq, isNotNull, lte } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { cmsBrand, cmsEntries, cmsNav, cmsVersions, copyKeys, media } from "../db/schema.js";
 import { brandSchema, DEFAULT_BRAND, type Brand, type NavItem } from "century-nit-shared";
-import { HOME_COPY, PAGE_COPY, company } from "century-nit-core";
+import { HOME_COPY, PAGE_COPY, articles, company, coreServices, events, faqs, testimonials } from "century-nit-core";
 import { recordAdminEvent } from "./audit.js";
 
 /**
@@ -265,6 +265,38 @@ export async function seedCompiledContent(editor: Editor): Promise<{ created: nu
 				title: `${c.title} | ${company.brandName}`,
 				description: c.lead.slice(0, 155),
 			},
+		})),
+		// List collections — one published entry per compiled item; slug = item
+		// id so live pages merge by slug over the compiled fallback.
+		...coreServices.map(({ id, ...rest }) => ({
+			collection: "services",
+			slug: id,
+			payload: rest as Record<string, unknown>,
+			seo: { title: `${rest.title} | ${company.brandName}`, description: String(rest.description).slice(0, 155) },
+		})),
+		...testimonials.map(({ id, ...rest }) => ({
+			collection: "stories",
+			slug: id,
+			payload: rest as Record<string, unknown>,
+			seo: { title: `${rest.name} — success story | ${company.brandName}` },
+		})),
+		...events.map(({ id, ...rest }) => ({
+			collection: "events",
+			slug: id,
+			payload: rest as Record<string, unknown>,
+			seo: { title: `${rest.title} | Events | ${company.brandName}` },
+		})),
+		...articles.map(({ id, ...rest }) => ({
+			collection: "posts",
+			slug: id,
+			payload: rest as Record<string, unknown>,
+			seo: { title: `${rest.title} | ${company.brandName}`, description: String(rest.excerpt).slice(0, 155) },
+		})),
+		...faqs.map((f, i) => ({
+			collection: "faqs",
+			slug: `faq-${String(i + 1).padStart(2, "0")}`,
+			payload: { question: f.q, answer: f.a } as Record<string, unknown>,
+			seo: { title: `${f.q} | FAQs | ${company.brandName}` },
 		})),
 	];
 

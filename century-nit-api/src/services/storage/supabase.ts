@@ -124,6 +124,14 @@ export class SupabaseDocumentStorage implements DocumentStorage {
 		return { url: data.signedUrl, expiresAt: new Date(Date.now() + ttl * 1000) };
 	}
 
+	async put(input: { key: string; contentType: string; body: ArrayBuffer | Uint8Array }): Promise<void> {
+		const { client, bucket } = await this.getClient();
+		const { error } = await client.storage
+			.from(bucket)
+			.upload(input.key, input.body, { contentType: input.contentType, upsert: true });
+		if (error) throw new StorageError(error.message);
+	}
+
 	async head(key: string): Promise<StoredObject | null> {
 		const { client, bucket } = await this.getClient();
 		const lastSlash = key.lastIndexOf("/");
@@ -180,6 +188,9 @@ export class DisabledDocumentStorage implements DocumentStorage {
 		this.refuse();
 	}
 	async createDownloadUrl(): Promise<SignedDownload> {
+		this.refuse();
+	}
+	async put(): Promise<void> {
 		this.refuse();
 	}
 	async head(): Promise<StoredObject | null> {

@@ -107,26 +107,16 @@ function mediaSrc(key: string | null): string | null {
 	return key && key.startsWith("media/") ? `${API_PREFIX}/media/${key}` : key;
 }
 
-/** Presigned-upload pipeline shared by the Media tab and the editor picker. */
+/** Upload through the API — the signed-URL PUT needs a project key the browser can't hold. */
 async function uploadMediaFile(file: File): Promise<MediaItem> {
 	const mime = file.type || "application/octet-stream";
 	if (!mime.startsWith("image/") && !mime.startsWith("video/")) {
 		throw new Error(`"${file.name}" isn't an image or video — the media library only accepts those`);
 	}
-	const up = await apiFetch<{ key: string; url: string; headers: Record<string, string> }>(`${API_PREFIX}/cms/media/upload-url`, {
-		method: "POST",
-		body: JSON.stringify({ fileName: file.name, mime }),
-	});
-	const put = await fetch(up.url, { method: "PUT", headers: { "Content-Type": mime, ...up.headers }, body: file });
-	if (!put.ok) {
-		let detail = "";
-		try { detail = (await put.json())?.message ?? ""; } catch { /* non-JSON body */ }
-		throw new Error(`upload failed (${put.status})${detail ? ` — ${detail}` : ""}`);
-	}
-	const res = await apiFetch<{ media: MediaItem }>(`${API_PREFIX}/cms/media`, {
-		method: "POST",
-		body: JSON.stringify({ key: up.key, fileName: file.name, mime: file.type, sizeBytes: file.size, alt: file.name.replace(/\.[^.]+$/, "") }),
-	});
+	const res = await apiFetch<{ media: MediaItem }>(
+		`${API_PREFIX}/cms/media/upload?fileName=${encodeURIComponent(file.name)}&mime=${encodeURIComponent(mime)}`,
+		{ method: "POST", headers: { "Content-Type": mime }, body: file },
+	);
 	return res.media;
 }
 

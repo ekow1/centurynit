@@ -225,6 +225,29 @@ cmsRouter.post("/media/upload-url", requireStaff, requireModule("cms"), async (c
 	return c.json({ key, url: upload.url, headers: upload.headers ?? {}, expiresAt: upload.expiresAt });
 });
 
+/**
+ * Direct upload — the browser posts the file body here and the API writes it
+ * to the bucket with the service key. The signed-URL PUT path stays for other
+ * consumers, but Supabase's gateway requires an apikey header on raw signed
+ * PUTs (the console can't hold a project key), so the CMS goes through the API.
+ */
+cmsRouter.post("/media/upload", requireStaff, requireModule("cms"), async (c) => {
+	const fileName = c.req.query("fileName") ?? "";
+	const mime = c.req.query("mime") ?? "";
+	if (!fileName || !mime) return c.json({ error: "fileName and mime are required" }, 400);
+	if (!mime.startsWith("image/") && !mime.startsWith("video/")) {
+		return c.json({ error: "Only image and video uploads are allowed in the CMS media library" }, 400);
+	}
+	const storage = await getDocumentStorage();
+	if (!storage.enabled) return c.json({ error: "storage not configured" }, 503);
+	const body = await c.req.arrayBuffer();
+	if (!body.byteLength) return c.json({ error: "empty file" }, 400);
+	const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, "-").slice(-80);
+	const key = `media/${crypto.randomUUID()}-${safe}`;
+	await storage.put({ key, contentType: mime, body });
+	return c.json({ media: await registerMedia({ key, fileName, mime, sizeBytes: body.byteLength }, editor(c)) });
+});
+
 cmsRouter.post("/media", requireStaff, requireModule("cms"), async (c) => {
 	const body = z.object({
 		key: z.string().min(1),

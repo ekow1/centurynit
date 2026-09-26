@@ -71,6 +71,9 @@ export interface DocumentStorage {
 		downloadAs?: string;
 	}): Promise<SignedDownload>;
 
+	/** Server-side upload — the file body passes through the API. */
+	put(input: { key: string; contentType: string; body: ArrayBuffer | Uint8Array }): Promise<void>;
+
 	/** Confirms an upload landed, and reports what actually arrived. */
 	head(key: string): Promise<StoredObject | null>;
 

@@ -81,6 +81,10 @@ export class MemoryDocumentStorage implements DocumentStorage {
 		};
 	}
 
+	async put(input: { key: string; contentType: string; body: ArrayBuffer | Uint8Array }): Promise<void> {
+		this.objects.set(input.key, { key: input.key, size: input.body.byteLength, contentType: input.contentType });
+	}
+
 	async head(key: string): Promise<StoredObject | null> {
 		return this.objects.get(key) ?? null;
 	}

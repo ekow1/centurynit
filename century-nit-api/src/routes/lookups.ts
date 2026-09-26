@@ -4,7 +4,7 @@ import { eq, asc } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { lookupValues } from "../db/schema.js";
 import { lookupUpsertSchema } from "century-nit-shared";
-import { requireModule } from "../middleware/auth.js";
+import { requireAuth, requireModule } from "../middleware/auth.js";
 import { HttpError, validationHook } from "../middleware/error.js";
 
 const router = new OpenAPIHono({ defaultHook: validationHook });
@@ -27,7 +27,7 @@ router.get("/", async (c) => {
  * [Ops] GET /api/v1/lookups/all
  * Returns ALL lookup values including inactive ones.
  */
-router.get("/all", requireModule("lookups"), async (c) => {
+router.get("/all", requireAuth, requireModule("lookups"), async (c) => {
 	const all = await db
 		.select()
 		.from(lookupValues)
@@ -42,7 +42,7 @@ router.get("/all", requireModule("lookups"), async (c) => {
  */
 router.post(
 	"/",
-	requireModule("lookups"),
+	requireAuth, requireModule("lookups"),
 	zValidator("json", lookupUpsertSchema, (r, c) => validationHook(r, c)),
 	async (c) => {
 		const payload = c.req.valid("json");
@@ -68,7 +68,7 @@ router.post(
  */
 router.put(
 	"/:id",
-	requireModule("lookups"),
+	requireAuth, requireModule("lookups"),
 	zValidator("json", lookupUpsertSchema, (r, c) => validationHook(r, c)),
 	async (c) => {
 		const id = c.req.param("id");
@@ -96,7 +96,7 @@ router.put(
  * [Ops] DELETE /api/v1/lookups/:id
  * Delete a lookup value.
  */
-router.delete("/:id", requireModule("lookups"), async (c) => {
+router.delete("/:id", requireAuth, requireModule("lookups"), async (c) => {
 	const id = c.req.param("id");
 
 	const [deleted] = await db.delete(lookupValues).where(eq(lookupValues.id, id)).returning();

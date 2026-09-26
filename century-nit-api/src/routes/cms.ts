@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { brandSchema, CMS_COLLECTIONS, navItemSchema, type Brand } from "century-nit-shared";
-import { requireModule, requireStaff } from "../middleware/auth.js";
+import { requireAuth, requireModule, requireStaff } from "../middleware/auth.js";
 import {
 	brandHistory,
 	entryHistory,
@@ -51,6 +51,15 @@ import type { AuthVariables } from "../middleware/auth.js";
  */
 export const cmsRouter = new Hono<{ Variables: AuthVariables }>();
 export const contentRouter = new Hono();
+
+/*
+ * requireAuth populates c.get("staff") — without it every requireStaff below
+ * saw null and denied even a valid admin session with STAFF_ACCESS_REQUIRED,
+ * which the console reads as a foreign session and signs out. Sibling routers
+ * list it per-route; a router-level use() covers all nineteen at once and
+ * can't be dropped when a route is added. contentRouter stays public.
+ */
+cmsRouter.use(requireAuth);
 
 function editor(c: { get: (k: "staff") => { opsUserId?: string; userId?: string; email?: string } | undefined }) {
 	const s = c.get("staff");

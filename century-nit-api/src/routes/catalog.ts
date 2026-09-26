@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { db } from "../db/index.js";
 import { destinations, catalogUniversities, catalogPrograms, catalogScholarships } from "../db/schema.js";
 import { and, eq } from "drizzle-orm";
-import { requireStaff } from "../middleware/auth.js";
+import { requireAuth, requireStaff } from "../middleware/auth.js";
 import { randomUUID } from "node:crypto";
 import {
 	CatalogDestinationCreateSchema,
@@ -22,13 +22,13 @@ catalogRoutes.get("/destinations", async (c) => {
 	const all = await db.select().from(destinations).where(eq(destinations.isActive, true));
 	return c.json({ destinations: all });
 });
-catalogRoutes.post("/destinations", requireStaff, async (c) => {
+catalogRoutes.post("/destinations", requireAuth, requireStaff, async (c) => {
 	const parsed = CatalogDestinationCreateSchema.parse(await c.req.json());
 	const id = parsed.id ?? randomUUID();
 	const result = await db.insert(destinations).values({ ...parsed, id }).returning();
 	return c.json({ destination: result[0] });
 });
-catalogRoutes.put("/destinations/:id", requireStaff, async (c) => {
+catalogRoutes.put("/destinations/:id", requireAuth, requireStaff, async (c) => {
 	const parsed = CatalogDestinationUpdateSchema.parse(await c.req.json());
 	const result = await db
 		.update(destinations)
@@ -37,7 +37,7 @@ catalogRoutes.put("/destinations/:id", requireStaff, async (c) => {
 		.returning();
 	return c.json({ destination: result[0] });
 });
-catalogRoutes.delete("/destinations/:id", requireStaff, async (c) => {
+catalogRoutes.delete("/destinations/:id", requireAuth, requireStaff, async (c) => {
 	await db.delete(destinations).where(eq(destinations.id, c.req.param("id")));
 	return c.json({ success: true });
 });
@@ -56,13 +56,13 @@ catalogRoutes.get("/universities", async (c) => {
 		);
 	return c.json({ universities: all });
 });
-catalogRoutes.post("/universities", requireStaff, async (c) => {
+catalogRoutes.post("/universities", requireAuth, requireStaff, async (c) => {
 	const parsed = CatalogUniversityCreateSchema.parse(await c.req.json());
 	const id = parsed.id ?? randomUUID();
 	const result = await db.insert(catalogUniversities).values({ ...parsed, id }).returning();
 	return c.json({ university: result[0] });
 });
-catalogRoutes.put("/universities/:id", requireStaff, async (c) => {
+catalogRoutes.put("/universities/:id", requireAuth, requireStaff, async (c) => {
 	const parsed = CatalogUniversityUpdateSchema.parse(await c.req.json());
 	const result = await db
 		.update(catalogUniversities)
@@ -71,7 +71,7 @@ catalogRoutes.put("/universities/:id", requireStaff, async (c) => {
 		.returning();
 	return c.json({ university: result[0] });
 });
-catalogRoutes.delete("/universities/:id", requireStaff, async (c) => {
+catalogRoutes.delete("/universities/:id", requireAuth, requireStaff, async (c) => {
 	await db.delete(catalogUniversities).where(eq(catalogUniversities.id, c.req.param("id")));
 	return c.json({ success: true });
 });
@@ -90,13 +90,13 @@ catalogRoutes.get("/programs", async (c) => {
 		);
 	return c.json({ programs: all });
 });
-catalogRoutes.post("/programs", requireStaff, async (c) => {
+catalogRoutes.post("/programs", requireAuth, requireStaff, async (c) => {
 	const parsed = CatalogProgramCreateSchema.parse(await c.req.json());
 	const id = parsed.id ?? randomUUID();
 	const result = await db.insert(catalogPrograms).values({ ...parsed, id }).returning();
 	return c.json({ program: result[0] });
 });
-catalogRoutes.put("/programs/:id", requireStaff, async (c) => {
+catalogRoutes.put("/programs/:id", requireAuth, requireStaff, async (c) => {
 	const parsed = CatalogProgramUpdateSchema.parse(await c.req.json());
 	const result = await db
 		.update(catalogPrograms)
@@ -105,7 +105,7 @@ catalogRoutes.put("/programs/:id", requireStaff, async (c) => {
 		.returning();
 	return c.json({ program: result[0] });
 });
-catalogRoutes.delete("/programs/:id", requireStaff, async (c) => {
+catalogRoutes.delete("/programs/:id", requireAuth, requireStaff, async (c) => {
 	await db.delete(catalogPrograms).where(eq(catalogPrograms.id, c.req.param("id")));
 	return c.json({ success: true });
 });
@@ -115,13 +115,13 @@ catalogRoutes.get("/scholarships", async (c) => {
 	const all = await db.select().from(catalogScholarships);
 	return c.json({ scholarships: all });
 });
-catalogRoutes.post("/scholarships", requireStaff, async (c) => {
+catalogRoutes.post("/scholarships", requireAuth, requireStaff, async (c) => {
 	const parsed = CatalogScholarshipCreateSchema.parse(await c.req.json());
 	const id = parsed.id ?? randomUUID();
 	const result = await db.insert(catalogScholarships).values({ ...parsed, id }).returning();
 	return c.json({ scholarship: result[0] });
 });
-catalogRoutes.put("/scholarships/:id", requireStaff, async (c) => {
+catalogRoutes.put("/scholarships/:id", requireAuth, requireStaff, async (c) => {
 	const parsed = CatalogScholarshipUpdateSchema.parse(await c.req.json());
 	const result = await db
 		.update(catalogScholarships)
@@ -130,7 +130,7 @@ catalogRoutes.put("/scholarships/:id", requireStaff, async (c) => {
 		.returning();
 	return c.json({ scholarship: result[0] });
 });
-catalogRoutes.delete("/scholarships/:id", requireStaff, async (c) => {
+catalogRoutes.delete("/scholarships/:id", requireAuth, requireStaff, async (c) => {
 	await db.delete(catalogScholarships).where(eq(catalogScholarships.id, c.req.param("id")));
 	return c.json({ success: true });
 });

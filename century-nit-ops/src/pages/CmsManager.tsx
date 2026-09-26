@@ -109,12 +109,20 @@ function mediaSrc(key: string | null): string | null {
 
 /** Presigned-upload pipeline shared by the Media tab and the editor picker. */
 async function uploadMediaFile(file: File): Promise<MediaItem> {
+	const mime = file.type || "application/octet-stream";
+	if (!mime.startsWith("image/") && !mime.startsWith("video/")) {
+		throw new Error(`"${file.name}" isn't an image or video — the media library only accepts those`);
+	}
 	const up = await apiFetch<{ key: string; url: string; headers: Record<string, string> }>(`${API_PREFIX}/cms/media/upload-url`, {
 		method: "POST",
-		body: JSON.stringify({ fileName: file.name, mime: file.type || "application/octet-stream" }),
+		body: JSON.stringify({ fileName: file.name, mime }),
 	});
-	const put = await fetch(up.url, { method: "PUT", headers: { "Content-Type": file.type, ...up.headers }, body: file });
-	if (!put.ok) throw new Error(`upload failed (${put.status})`);
+	const put = await fetch(up.url, { method: "PUT", headers: { "Content-Type": mime, ...up.headers }, body: file });
+	if (!put.ok) {
+		let detail = "";
+		try { detail = (await put.json())?.message ?? ""; } catch { /* non-JSON body */ }
+		throw new Error(`upload failed (${put.status})${detail ? ` — ${detail}` : ""}`);
+	}
 	const res = await apiFetch<{ media: MediaItem }>(`${API_PREFIX}/cms/media`, {
 		method: "POST",
 		body: JSON.stringify({ key: up.key, fileName: file.name, mime: file.type, sizeBytes: file.size, alt: file.name.replace(/\.[^.]+$/, "") }),
@@ -183,8 +191,8 @@ function MediaPicker({
 					<button style={btnSm(false)} onClick={onClose}>✕</button>
 				</div>
 				<label style={{ ...btn(true), display: "block", margin: "0.8rem 1rem 0", textAlign: "center", borderStyle: "dashed", background: "var(--surface-alt,#fbfaf7)", color: "var(--muted,#6e6a60)", borderColor: "var(--border,#ddd8cb)" }}>
-					{busy ? "Uploading…" : "Drop-in upload — click to browse (image · video · pdf)"}
-					<input type="file" accept="image/*,video/*,.pdf" style={{ display: "none" }} disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
+					{busy ? "Uploading…" : "Upload — image or video (jpg · png · webp · mp4 · mov)"}
+					<input type="file" accept="image/*,video/*" style={{ display: "none" }} disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
 				</label>
 				<div style={{ display: "flex", gap: "0.35rem", padding: "0.7rem 1rem 0" }}>
 					{(["all", "image", "video", "doc"] as const).map((k) => (
@@ -1219,7 +1227,7 @@ function MediaTab({ usage }: { usage: Map<string, string[]> }) {
 			<div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1rem" }}>
 				<label style={{ ...btn(true), display: "inline-block" }}>
 					{busy ? "Uploading…" : "Upload media"}
-					<input type="file" accept="image/*,video/*,.pdf" style={{ display: "none" }} disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
+					<input type="file" accept="image/*,video/*" style={{ display: "none" }} disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
 				</label>
 				<input style={{ ...field, width: 220 }} placeholder="filter by key or alt…" value={filter} onChange={(e) => setFilter(e.target.value)} />
 				<span className="mono muted" style={{ fontSize: "0.7rem", marginLeft: "auto" }}>public URL: {API_PREFIX}/media/{"{key}"}</span>

@@ -211,6 +211,12 @@ cmsRouter.post("/media/upload-url", requireStaff, requireModule("cms"), async (c
 		fileName: z.string().min(1),
 		mime: z.string().min(1),
 	}).parse(await c.req.json());
+	// CMS media is imagery + film only — the storage bucket's own MIME
+	// allowlist would reject anything else with a bare 400 anyway, so gate it
+	// here with a message the console can actually show.
+	if (!mime.startsWith("image/") && !mime.startsWith("video/")) {
+		return c.json({ error: "Only image and video uploads are allowed in the CMS media library" }, 400);
+	}
 	const storage = await getDocumentStorage();
 	if (!storage.enabled) return c.json({ error: "storage not configured" }, 503);
 	const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, "-").slice(-80);
